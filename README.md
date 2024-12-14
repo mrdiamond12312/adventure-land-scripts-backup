@@ -57,3 +57,8 @@ This repository backup automation scripts for fighters and merchant of this [gam
 > These script are implemented myself, please be observe the code carefully and be responsible for loss if anything happens to your game resource.
 > If any issues or improvements that you can suggest, make a PR or send an issue ticket, I will be there in my freetime!
 > Have fun playing!
+
+> To be Developed
+>
+> - New merchants upgrade and compound script (to upgrade them after the limit of 8 and 3)
+> - More to be configured...
