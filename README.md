@@ -2,7 +2,7 @@ https://github.com/user-attachments/assets/72960f03-5e0e-4f7e-bf1a-898976337af7
 
 # Adventure Land's Scripts
 
-This repository backup automation scripts for fighters and merchant of this [game](https://adventure.land/)
+This repository backup automation scripts for fighters and merchant of [Adventure Land - The Code MMORPG](https://adventure.land/)
 
 ## How Fighters works
 
