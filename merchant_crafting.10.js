@@ -25,11 +25,6 @@ const KEEP_THRESHOLD = {
 };
 const ITEMS_HIGHEST_LEVEL = {};
 
-//// INVENTORY functions
-function item_info(item) {
-  return parent.G.items[item.name];
-}
-
 async function retrieveMaxItemsLevel() {
   if (character.map !== "bank") return;
 

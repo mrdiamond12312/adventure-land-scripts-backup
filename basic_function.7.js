@@ -327,6 +327,10 @@ function goToBoss() {
   }
   return false;
 }
+//// INVENTORY functions
+function item_info(item) {
+  return parent.G.items[item.name];
+}
 
 function filterCompoundableAndStackable() {
   const inv = character.items;
