@@ -2,7 +2,7 @@
 // This is CODE, lets you control your character with code.
 // If you don't know how to code, don't worry, It's easy.
 // Just set attack_mode to true and ENGAGE!
-load_code(7);
+load_code(10);
 // Global Vars
 var onDuty = false;
 var isExeing = false;
