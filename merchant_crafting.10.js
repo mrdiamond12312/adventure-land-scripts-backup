@@ -115,10 +115,10 @@ function retrievedBankItemToUpgrade() {
       KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type]
   );
 
-  let inventoryEmptySlots = character.items.filter((item) => !item).length - 5;
+  let inventoryEmptySlots = character.items.filter((item) => !item).length - 7;
 
   for (const itemSlot of desiredItems) {
-    if (inventoryEmptySlots === 0) break;
+    if (inventoryEmptySlots <= 0) break;
     else inventoryEmptySlots--;
 
     bank_retrieve(itemSlot.pack, itemSlot.slot);
