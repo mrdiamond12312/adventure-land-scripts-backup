@@ -10,10 +10,6 @@ var isExeing = false;
 const fishingLocation = { map: "main", x: -1368, y: -82 };
 const miningLocation = { map: "tunnel", x: -279, y: -148 };
 
-function isInvFull(slots = 1) {
-  return character.items.filter((item) => !item).length <= slots;
-}
-
 function equipBroom() {
   const currentWeapon = character.slots.mainhand;
   if (!currentWeapon || currentWeapon.name !== "broom") {
@@ -36,16 +32,16 @@ async function holidayExchange() {
 
   const holidayItems = [
     {
-      name: "mistletoe",
-      npc: "mistletoe",
-      quantity: 1,
-      keep: 0,
-    },
-    {
       name: "ornament",
       npc: "ornaments",
       quantity: 20,
       keep: 10,
+    },
+    {
+      name: "mistletoe",
+      npc: "mistletoe",
+      quantity: 1,
+      keep: 0,
     },
     {
       name: "candycane",
@@ -280,7 +276,7 @@ setInterval(async function () {
   if (isInvFull() && !smart.moving) {
     if (!smart.move) await moveHome();
     close_stand();
-    if (!smart.move) await smart_move("bank");
+    if (!smart.move) await smart_move(bankPosition);
     if (character.map === "bank")
       Array.from({ length: 42 }, (_, i) => i)
         .filter(
@@ -341,7 +337,7 @@ character.on("cm", async function ({ name, message }) {
     case "buy_mana":
       log(`Buying some mana potions for ${name}`);
       if (isInvFull()) {
-        if (!smart.move) await smart_move("bank");
+        if (!smart.move) await smart_move(bankPosition);
         if (character.map === "bank") bank_store(0);
       }
       if (locate_item("mpot1") === -1) {
@@ -361,7 +357,7 @@ character.on("cm", async function ({ name, message }) {
     case "buy_hp":
       log(`Buying some health potions for ${name}`);
       if (isInvFull()) {
-        if (!smart.move) await smart_move("bank");
+        if (!smart.move) await smart_move(bankPosition);
         if (character.map === "bank") bank_store(0);
       }
       if (locate_item("hpot1") === -1) {
@@ -393,7 +389,7 @@ character.on("cm", async function ({ name, message }) {
       if (locate_item(message.elixir) === -1) {
         let itemBankSlot = undefined;
         let itemSlot = undefined;
-        await smart_move("bank");
+        await smart_move(bankPosition);
         Object.keys(character.bank)
           .filter((id) => id !== "gold")
           .map((slot) => {

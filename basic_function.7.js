@@ -66,7 +66,67 @@ var ignore = [
   "broom",
   "pumpkinspice",
   "tracker",
+  "sword",
 ];
+
+var storeAble = [
+  "vitscroll",
+  "snowball",
+  "pvptoken",
+  "pumpkinspice",
+  "eggnog",
+  "offeringp",
+  "offering",
+  "monstertoken",
+  "hotchocolate",
+  "gum",
+  "essenceofgreed",
+  "elixirint0",
+  "elixirdex0",
+  "egg5",
+  "cscroll2",
+  "cryptkey",
+  "cake",
+  "elixirstr0",
+  "elixirstr1",
+  "elixirvit0",
+  "elixirvit1",
+  "elixirvit2",
+  "essenceoflife",
+  "frozenkey",
+  "funtoken",
+  "gem1",
+  "whiteegg",
+  "sstinger",
+  "spores",
+  "snakefang",
+  "seashell",
+  "rattail",
+  "pstem",
+  "poison",
+  "pleather",
+  "lspores",
+  "lotusf",
+  "lostearring",
+  "leather",
+  "ink",
+  "gslime",
+  "frogt",
+  "forscroll",
+  "feather0",
+  "essenceofnature",
+  "essenceoffrost",
+  "dexscroll",
+  "cshell",
+  "crabclaw",
+  "carrot",
+  "bwing",
+  "btusk",
+  "bfur",
+  "beewings",
+  "ascale",
+];
+
 var saleAble = [
   "cclaw",
   "wattire",
@@ -92,6 +152,11 @@ var saleAble = [
   "bowofthedead",
   "swordofthedead",
   "throwingstars",
+  "hhelmet",
+  "hgloves",
+  "harmor",
+  "hpants",
+  "hboots",
   "smoke",
 ];
 var maxUpgrade = 7;
@@ -332,6 +397,10 @@ function item_info(item) {
   return parent.G.items[item.name];
 }
 
+function isInvFull(slots = 1) {
+  return character.items.filter((item) => !item).length <= slots;
+}
+
 function filterCompoundableAndStackable() {
   const inv = character.items;
   const res = Array.from({ length: inv.length }, (_, i) => i + 0).filter(
@@ -354,7 +423,6 @@ setInterval(async function () {
 
   if (isMerchant()) return;
 
-  await sortInv();
   // Fix a bug where character is stuck to corner
   const currentTarget = get_targeted_monster();
 
@@ -406,13 +474,13 @@ setInterval(async function () {
   }
 
   // Inventory check and potions
-  if (character.items[41]) {
+  if (isInvFull()) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
-  } else if (!character.items[40] && locate_item("mpot1") === -1) {
+  } else if (!isInvFull(2) && locate_item("mpot1") === -1) {
     log("Asking the merchant for some mana potions...");
     send_cm(partyMerchant, { msg: "buy_mana", ...obj });
-  } else if (!character.items[40] && locate_item("hpot1") === -1) {
+  } else if (!isInvFull(2) && locate_item("hpot1") === -1) {
     log("Asking the merchant for some health potions...");
     send_cm(partyMerchant, { msg: "buy_hp", ...obj });
   } else if (!character.slots.elixir || !character.slots.elixir.name) {
