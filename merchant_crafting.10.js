@@ -323,4 +323,4 @@ setInterval(() => {
       onDuty = false;
     });
   }
-}, 15000);
+}, 120000);
