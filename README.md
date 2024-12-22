@@ -21,17 +21,15 @@ This repository is a backup of my automation scripts for fighters and merchants 
 
 ## How Merchant works
 
-- Listening for cm (if the inventory is full or thhe merchant has another ongoing duty, these cm will be ignored)
+- Listening for cm (if the inventory is full or the merchant has another ongoing duty, these cm will be ignored)
 
-- To buy potion/desired elixir and deliver it to fighters
-
+  - To buy potion/desired elixir and deliver it to fighters
   - To collect items from fighters if they're out of space in inventory
   - To buff `mcluck`
 
 - Automating (This won't be counted as duty; the cm listener is now the top priority)
 
-- Move back to town and open the vendor if there's no action at the moment (current location at `main` near the compounding bench for the convenience of doing other things at the `main` map)
-
+  - Move back to town and open the vendor if there's no action at the moment (current location at `main` near the compounding bench for the convenience of doing other things at the `main` map)
   - Exchange exchangables at Xyn
   - Selling items from the `sellAble` array defined in `basic_function`
   - Upgrade upgradables to +8, and if their tier is below `rare` or 2
@@ -41,8 +39,7 @@ This repository is a backup of my automation scripts for fighters and merchants 
 
 - Automating (This will be counted as duty for efficiency)
 
-- Auto mining (smart move to `mine` map) -- ignore if no `pickaxe` in inventory
-
+  - Auto mining (smart move to `mine` map) -- ignore if no `pickaxe` in inventory
   - Auto fishing (smart move to `main` near the sea) -- ignore if no `rod` in inventory
   - Auto exchange `gemsfragment` (smart move to `mine` near the jeweler)
 
