@@ -236,8 +236,6 @@ setInterval(async function () {
   }
 
   await sortInv();
-  var inv = character.items;
-  const invLength = inv.length;
 
   Promise.all([
     compoundInv(),
@@ -281,9 +279,8 @@ setInterval(async function () {
       Array.from({ length: 42 }, (_, i) => i)
         .filter(
           (index) =>
-            inv[index] &&
-            !item_info(inv[index]).compound &&
-            !ignore.includes(inv[index].name)
+            character.items[index] &&
+            !ignore.includes(character.items[index].name)
         )
         .map((i) => bank_store(i));
     if (!smart.move) await moveHome();
