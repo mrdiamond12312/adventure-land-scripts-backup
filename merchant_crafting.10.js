@@ -1,6 +1,9 @@
 load_code(7);
 
 let BANK_CACHE = undefined;
+const bankPosition = { map: "bank", x: 0, y: -280 };
+
+const IGNORE_RARE_GOLD_THRESHOLD = 3e8;
 
 const KEEP_THRESHOLD = {
   // Every character needs
@@ -14,7 +17,7 @@ const KEEP_THRESHOLD = {
   // Class based
   weapon: 2,
   orb: 2,
-  shield: 1, // warrior, 0 if unneccessary
+  shield: 3, // warrior, 0 if unneccessary
   source: 2, // priest and mage
 
   // Class attribute based
@@ -25,10 +28,7 @@ const KEEP_THRESHOLD = {
 };
 const ITEMS_HIGHEST_LEVEL = {};
 
-//// INVENTORY functions
-function item_info(item) {
-  return parent.G.items[item.name];
-}
+const RETRIEVE_HISTORY = [];
 
 async function retrieveMaxItemsLevel() {
   if (character.map !== "bank") return;
@@ -41,7 +41,7 @@ async function retrieveMaxItemsLevel() {
   BANK_CACHE = character.bank;
 
   character.items
-    .filter((item) => item && !item.q)
+    .filter((item) => item && !item.q && !ignore.includes(item.name))
     .forEach((item) => {
       if (item.q) return;
 
@@ -49,22 +49,25 @@ async function retrieveMaxItemsLevel() {
         ITEMS_HIGHEST_LEVEL[item.name] = {
           level: item.level,
           quantity: 1,
+          count: 1,
           ...item_info(item),
         };
       } else {
-        if (item.level > ITEMS_HIGHEST_LEVEL[item.name].level)
+        if (item.level > ITEMS_HIGHEST_LEVEL[item.name].level) {
           ITEMS_HIGHEST_LEVEL[item.name].level = item.level;
-        else if (item.level === ITEMS_HIGHEST_LEVEL[item.name].level)
+          ITEMS_HIGHEST_LEVEL[item.name].quantity = 1;
+        } else if (item.level === ITEMS_HIGHEST_LEVEL[item.name].level)
           ITEMS_HIGHEST_LEVEL[item.name].quantity++;
+
+        ITEMS_HIGHEST_LEVEL[item.name].count++;
       }
     });
 
   for (slot in character.bank) {
     if (slot === "gold") continue;
 
-    log(slot);
     character.bank[slot]
-      .filter((item) => item && !item.q)
+      .filter((item) => item && !item.q && !ignore.includes(item.name))
       .forEach((item) => {
         if (item.q) return;
 
@@ -72,13 +75,17 @@ async function retrieveMaxItemsLevel() {
           ITEMS_HIGHEST_LEVEL[item.name] = {
             level: item.level,
             quantity: 1,
+            count: 1,
             ...item_info(item),
           };
         } else {
-          if (item.level > ITEMS_HIGHEST_LEVEL[item.name].level)
+          if (item.level > ITEMS_HIGHEST_LEVEL[item.name].level) {
             ITEMS_HIGHEST_LEVEL[item.name].level = item.level;
-          else if (item.level === ITEMS_HIGHEST_LEVEL[item.name].level)
+            ITEMS_HIGHEST_LEVEL[item.name].quantity = 1;
+          } else if (item.level === ITEMS_HIGHEST_LEVEL[item.name].level)
             ITEMS_HIGHEST_LEVEL[item.name].quantity++;
+
+          ITEMS_HIGHEST_LEVEL[item.name].count++;
         }
       });
   }
@@ -99,19 +106,30 @@ function getItemBankSlots(itemId) {
         });
     });
   }
+  if (character.gold < IGNORE_RARE_GOLD_THRESHOLD)
+    return result
+      .filter((item) => item_grade(item) < 2)
+      .sort((lhs, rhs) => lhs.level - rhs.level);
 
   return result.sort((lhs, rhs) => lhs.level - rhs.level);
 }
 
 function retrievedBankItemToUpgrade() {
   let desiredItemId = undefined;
-  let maxItemQuantity = 0;
+  let maxItemCount = 0;
   for (id in ITEMS_HIGHEST_LEVEL) {
-    if (ITEMS_HIGHEST_LEVEL[id].quantity > maxItemQuantity) {
-      maxItemQuantity = ITEMS_HIGHEST_LEVEL[id].quantity;
+    if (
+      ITEMS_HIGHEST_LEVEL[id].count > maxItemCount &&
+      !RETRIEVE_HISTORY.includes(id)
+    ) {
+      maxItemCount = ITEMS_HIGHEST_LEVEL[id].count;
       desiredItemId = id;
     }
   }
+
+  RETRIEVE_HISTORY.push(desiredItemId);
+  if (RETRIEVE_HISTORY.length >= Object.keys(ITEMS_HIGHEST_LEVEL).length - 1)
+    RETRIEVE_HISTORY.shift();
 
   let desiredItems = getItemBankSlots(desiredItemId);
   desiredItems = desiredItems.splice(
@@ -120,63 +138,48 @@ function retrievedBankItemToUpgrade() {
       KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type]
   );
 
-  let inventoryEmptySlots = character.items.filter((item) => !item).length - 5;
+  let inventoryEmptySlots = character.items.filter((item) => !item).length - 4;
 
   for (const itemSlot of desiredItems) {
-    if (inventoryEmptySlots === 0) break;
+    if (inventoryEmptySlots <= 0) break;
     else inventoryEmptySlots--;
 
     bank_retrieve(itemSlot.pack, itemSlot.slot);
   }
 }
 
-if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-  close_stand();
-  smart_move("bank").then(() => {
-    retrieveMaxItemsLevel();
-    retrievedBankItemToUpgrade();
-  });
-}
-setInterval(() => {
-  if (
-    character.map === "main" &&
-    !onDuty &&
-    !smart.moving &&
-    !character.q.exchange &&
-    !character.c.fishing &&
-    !character.c.mining
-  ) {
-    close_stand();
-    smart_move("bank").then(() => {
-      retrieveMaxItemsLevel();
-      retrievedBankItemToUpgrade();
-    });
-  }
-}, 120000);
-
 async function compoundInv() {
-  let inv = character.items;
-
   if (character.q.compound) return;
 
-  for (let i = 0; i < inv.length; i++) {
+  for (let i = 0; i < character.items.length; i++) {
     let breakFlag = false;
 
-    if (inv[i] && (inv[i]?.level > 2 || item_grade(inv[i]) === 2))
+    if (
+      character.items[i] &&
+      (character.items[i]?.level > 2 || item_grade(character.items[i]) === 2)
+    )
       if (
         !(
-          ITEMS_HIGHEST_LEVEL[inv[i]?.name] &&
-          ITEMS_HIGHEST_LEVEL[inv[i]?.name].quantity >
-            KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[inv[i]?.name].type] &&
-          inv[i]?.level === ITEMS_HIGHEST_LEVEL[inv[i]?.name].level
+          ITEMS_HIGHEST_LEVEL[character.items[i]?.name] &&
+          ITEMS_HIGHEST_LEVEL[character.items[i]?.name].quantity >
+            KEEP_THRESHOLD[
+              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
+            ] &&
+          character.items[i]?.level ===
+            ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
         )
       )
         continue;
 
-    if (item_info(inv[i]).compound) {
-      const scrollType = `cscroll${item_grade(inv[i])}`;
+    if (item_info(character.items[i]).compound) {
+      const scrollType = `cscroll${item_grade(character.items[i])}`;
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
+        if (
+          item_grade(character.items[i]) >= 2 &&
+          character.gold < IGNORE_RARE_GOLD_THRESHOLD
+        )
+          continue;
         buy(scrollType, 1)
           .then(() => {
             scrollSlot = locate_item(scrollType);
@@ -190,11 +193,17 @@ async function compoundInv() {
         use_skill("massproduction");
 
       if (
-        inv[i] !== null &&
-        new Set([inv[i]?.name, inv[i + 1]?.name, inv[i + 2]?.name]).size ===
-          1 &&
-        new Set([inv[i]?.level, inv[i + 1]?.level, inv[i + 2]?.level]).size ===
-          1
+        character.items[i] !== null &&
+        new Set([
+          character.items[i]?.name,
+          character.items[i + 1]?.name,
+          character.items[i + 2]?.name,
+        ]).size === 1 &&
+        new Set([
+          character.items[i]?.level,
+          character.items[i + 1]?.level,
+          character.items[i + 2]?.level,
+        ]).size === 1
       )
         compound(i, i + 1, i + 2, scrollSlot)
           .then((e) => {
@@ -207,33 +216,42 @@ async function compoundInv() {
 }
 
 async function upgradeInv() {
-  let inv = character.items;
-
   if (character.q.upgrade) return;
 
-  for (let i = 0; i < inv.length; i++) {
+  for (let i = 0; i < character.items.length; i++) {
     let breakFlag = false;
-    if (ignore.includes(inv[i].name)) continue;
+    if (ignore.includes(character.items[i].name)) continue;
 
     if (
-      inv[i] &&
-      (inv[i]?.level > maxUpgrade || item_grade(inv[i]) === 2) &&
-      inv[i]?.level >= ITEMS_HIGHEST_LEVEL[inv[i]?.name].level
+      character.items[i] &&
+      (character.items[i]?.level > maxUpgrade ||
+        item_grade(character.items[i]) === 2) &&
+      character.items[i]?.level >=
+        ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
     )
       if (
         !(
-          ITEMS_HIGHEST_LEVEL[inv[i]?.name] &&
-          ITEMS_HIGHEST_LEVEL[inv[i]?.name].quantity >
-            KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[inv[i]?.name].type] &&
-          inv[i]?.level === ITEMS_HIGHEST_LEVEL[inv[i]?.name].level
+          ITEMS_HIGHEST_LEVEL[character.items[i]?.name] &&
+          ITEMS_HIGHEST_LEVEL[character.items[i]?.name].quantity >
+            KEEP_THRESHOLD[
+              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
+            ] &&
+          character.items[i]?.level ===
+            ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
         )
       )
         continue;
 
-    if (item_info(inv[i]).upgrade) {
-      const scrollType = `scroll${item_grade(inv[i])}`;
+    if (item_info(character.items[i]).upgrade) {
+      const scrollType = `scroll${item_grade(character.items[i])}`;
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
+        if (
+          item_grade(character.items[i]) >= 2 &&
+          character.gold < IGNORE_RARE_GOLD_THRESHOLD
+        )
+          continue;
+
         buy(scrollType, 1)
           .then(() => {
             scrollSlot = locate_item(scrollType);
@@ -244,24 +262,28 @@ async function upgradeInv() {
       }
       if (character.mp > 20 && !is_on_cooldown("massproduction"))
         use_skill("massproduction");
+
       upgrade(i, scrollSlot)
         .then(async (e) => {
           if (e?.success === true) {
-            if (e?.level > ITEMS_HIGHEST_LEVEL[inv[i]?.name].level)
+            if (e?.level > ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level)
               ITEMS_HIGHEST_LEVEL[item.name] = {
                 level: item.level,
                 quantity: 1,
                 ...item_info(item),
               };
 
-            if (e?.level >= ITEMS_HIGHEST_LEVEL[inv[i]?.name].level - 1) {
+            if (
+              e?.level >=
+              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level - 1
+            ) {
               close_stand();
-              smart_move("bank").then(() =>
+              smart_move(bankPosition).then(() =>
                 bank_store(
                   character.items.findIndex(
                     (item) =>
                       item &&
-                      item.name === inv[i].name &&
+                      item.name === character.items[i].name &&
                       item.level === e?.level
                   )
                 )
@@ -275,3 +297,48 @@ async function upgradeInv() {
     if (breakFlag) break;
   }
 }
+
+if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
+  close_stand();
+  smart_move(bankPosition).then(() => {
+    retrieveMaxItemsLevel();
+    retrievedBankItemToUpgrade();
+  });
+}
+setInterval(() => {
+  if (
+    character.map === "main" &&
+    !onDuty &&
+    !character.q.exchange &&
+    !character.c.fishing &&
+    !character.c.mining
+  ) {
+    onDuty = true;
+    close_stand();
+    smart_move(bankPosition).then(() => {
+      character.items.forEach((item, index) => {
+        if (!item) return;
+        const isRareItem = item_grade(item) >= 2;
+        const isHighLevelItem =
+          item?.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
+
+        const isStoreable = storeAble.includes(item.name);
+        const isEquipable = item_info(item).compound || item_info(item).upgrade;
+        const shouldItemBeIgnore = ignore.includes(item.name);
+
+        if (
+          item &&
+          ((!shouldItemBeIgnore &&
+            (isRareItem || (isEquipable && isHighLevelItem))) ||
+            isStoreable ||
+            RETRIEVE_HISTORY?.[RETRIEVE_HISTORY.length - 1] === item?.name)
+        )
+          bank_store(index);
+      });
+      retrieveMaxItemsLevel();
+      retrievedBankItemToUpgrade();
+
+      onDuty = false;
+    });
+  }
+}, 120000);
