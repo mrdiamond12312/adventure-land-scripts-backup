@@ -1,6 +1,29 @@
+if (character.ctype !== "merchant") {
+  load_code(11);
+  // Strategy that Pulls Mobs and blast them with lolipops, gstaff, etc
+  load_code(13);
+  // Normal
+  load_code(12);
+  var currentStrategy = usePullStrategies;
+}
+
+const disablePullingStrategy = false;
+
+function changeToPullStrategies() {
+  currentStrategy = disablePullingStrategy
+    ? useNormalStrategy
+    : usePullStrategies;
+}
+
+function changeToNormalStrategies() {
+  currentStrategy = useNormalStrategy;
+}
+
 // Global vars
 var attack_mode = true;
 var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
+const TANKER = "MooohMoooh";
+const HEALER = "CowTheMooh";
 var partyCodeSlot = [9, 2, 4, 5];
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
@@ -24,12 +47,14 @@ var min_xp = 100;
 var max_att = 2000;
 var bossOffset = 0.99;
 var boss = ["mrpumpkin", "mrgreen"];
-var map = "winterland";
-var mapX = 73;
-var mapY = -909;
-var type = "grinch";
-var altType1 = "boar";
-var altType2 = "boar";
+var map = "main";
+var mapX = 1421;
+var mapY = 113;
+
+var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"];
+// var type = "grinch";
+// var altType1 = "boar";
+// var altType2 = "boar";
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -66,12 +91,10 @@ var ignore = [
   "broom",
   "pumpkinspice",
   "tracker",
-  "sword",
 ];
 
 var storeAble = [
   "vitscroll",
-  "snowball",
   "pvptoken",
   "pumpkinspice",
   "eggnog",
@@ -128,10 +151,10 @@ var storeAble = [
 ];
 
 var saleAble = [
+  "snowball",
   "cclaw",
   "wattire",
   "dagger",
-  "snowball",
   "rednose",
   "iceskates",
   "stinger",
@@ -152,12 +175,16 @@ var saleAble = [
   "bowofthedead",
   "swordofthedead",
   "throwingstars",
+  "ringsj",
+  "mshield",
   "hhelmet",
   "hgloves",
   "harmor",
   "hpants",
   "hboots",
   "smoke",
+  "sword",
+  "spear",
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
@@ -206,11 +233,16 @@ function isMerchant() {
 }
 
 function getMonstersOnDeclares() {
-  return (
-    get_nearest_monster({ min_xp, max_att, type }) ??
-    get_nearest_monster({ min_xp, max_att, type: altType1 }) ??
-    get_nearest_monster({ min_xp, max_att, type: altType2 })
-  );
+  for (monster of mobsToFarm) {
+    if (get_nearest_monster({ min_xp, max_att, type: monster })) {
+      return get_nearest_monster({ min_xp, max_att, type: monster });
+    }
+  }
+  // return (
+  //   get_nearest_monster({ min_xp, max_att, type }) ??
+  //   get_nearest_monster({ min_xp, max_att, type: altType1 }) ??
+  //   get_nearest_monster({ min_xp, max_att, type: altType2 })
+  // );
 }
 
 function buff() {
@@ -255,7 +287,7 @@ function getTarget() {
             (character.y - leader.y) * (character.y - leader.y)
         ) > spacial
       )
-        xmove(
+        move(
           character.x + (leader.x - character.x) / 2,
           character.y + (leader.y - character.y) / 2
         );
@@ -268,6 +300,7 @@ function getTarget() {
 
 async function leaveJail() {
   if (character.map === "jail" && !smart.moving) {
+    log("Jail escape plan!");
     smart_move(find_npc("jailer")).then(() => {
       parent.socket.emit("leave");
     });
@@ -417,6 +450,7 @@ function filterCompoundableAndStackable() {
 setInterval(async function () {
   // Xmas buffs
   if (parent.S["holidayseason"] && !character.s.holidayspirit) {
+    log("Ting ting ting");
     await smart_move({ map: "main", x: -152, y: -137 });
     parent.socket.emit("interaction", { type: "newyear_tree" });
   }
@@ -428,6 +462,7 @@ setInterval(async function () {
 
   if (currentTarget && !is_in_range(currentTarget, "attack") && !smart.moving) {
     smartmoveDebug = true;
+    log("Debug being stuck while kiting");
     smart_move({ x: currentTarget.x, y: currentTarget.y })
       .then(() => {
         smartmoveDebug = false;
@@ -474,7 +509,7 @@ setInterval(async function () {
   }
 
   // Inventory check and potions
-  if (isInvFull()) {
+  if (isInvFull(21)) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
   } else if (!isInvFull(2) && locate_item("mpot1") === -1) {
@@ -535,31 +570,14 @@ function on_party_invite(name) {
   if (name === partyMems[0]) accept_party_invite(name);
 }
 
-//// Game events
-async function on_game_event(event) {
-  if (isMerchant()) return;
-  if (boss.includes(event.name)) {
-    log("Attempting boss from game event!");
-
-    const target = getTarget();
-    while (!shouldGoToBoss()) {
-      await sleep(5000);
-    }
-
-    stop("move");
-    change_target();
-    smart_move(parent.S[event.name])
-      .then(() => targetBoss(event.name))
-      .catch(() => change_target());
-  }
-}
-
 //// Daily Events
 function changeToDailyEventTargets() {
   let target = getTarget();
   const isFightingBoss = boss.includes(getTarget()?.mtype);
 
   if (parent.S.snowman?.live && !isFightingBoss) {
+    changeToNormalStrategies();
+
     const snowmanInstance = get_nearest_monster({ type: "snowman" });
     if (!snowmanInstance) smart_move(parent.S.snowman);
     else {
@@ -574,6 +592,8 @@ function changeToDailyEventTargets() {
   }
 
   if (parent.S.crabxx?.live && !isFightingBoss) {
+    changeToNormalStrategies();
+
     const crabxxInstance = get_nearest_monster({ type: "crabxx" });
     const crabxInstance = get_nearest_monster({ type: "crabx" });
     if (!crabxxInstance) join("crabxx");
@@ -591,6 +611,7 @@ function changeToDailyEventTargets() {
     parent.S.icegolem?.hp < 0.9 * parent.S.icegolem?.max_hp &&
     !partyMems.includes(parent.S.icegolem?.target)
   ) {
+    changeToNormalStrategies();
     const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
     if (!iceGolemInstance) {
       if (character.range < 100) join("icegolem");
@@ -601,6 +622,7 @@ function changeToDailyEventTargets() {
     change_target(iceGolemInstance);
     return iceGolemInstance;
   } else if (get_nearest_monster({ type: "icegolem" })) {
+    changeToNormalStrategies();
     change_target(target);
     return get_nearest_monster({ type: "icegolem" });
   }
@@ -611,6 +633,7 @@ function changeToDailyEventTargets() {
     !isFightingBoss &&
     !partyMems.includes(parent.S.franky?.target)
   ) {
+    changeToNormalStrategies();
     const frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) join("franky");
     change_target(frankyInstance);
@@ -620,6 +643,7 @@ function changeToDailyEventTargets() {
   if (parent.S.abtesting) {
     if (character.map != "abtesting") join("abtesting");
 
+    changeToNormalStrategies();
     const priority = [
       "priest",
       "mage",
@@ -667,6 +691,7 @@ function changeToDailyEventTargets() {
     (parent.S.goobrawl || get_nearest_monster({ type: "bgoo" })) &&
     !isFightingBoss
   ) {
+    changeToPullStrategies();
     if (character.map !== "goobrawl") join("goobrawl");
 
     const rgooInstance = get_nearest_monster({ type: "rgoo" });
@@ -682,6 +707,7 @@ function changeToDailyEventTargets() {
       return rgooInstance || bgooInstance;
     }
   }
-
+  if (get_entity(HEALER)) changeToPullStrategies();
+  else changeToNormalStrategies();
   return target;
 }

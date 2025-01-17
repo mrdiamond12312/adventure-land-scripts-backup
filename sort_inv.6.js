@@ -7,8 +7,8 @@ async function sortBank(pack)
   const promises = [];
   const invLength = inv.length;
 
-  for (let i = 0; i < invLength; i++) {
-    for (let j = i; j < invLength; j++) {
+  for (let i = 0; i < invLength - 1; i++) {
+    for (let j = i + 1; j < invLength; j++) {
       const lhs = inv[i];
       const rhs = inv[j];
       if (rhs === null) continue;

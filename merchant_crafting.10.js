@@ -19,6 +19,7 @@ const KEEP_THRESHOLD = {
   orb: 2,
   shield: 3, // warrior, 0 if unneccessary
   source: 2, // priest and mage
+  staff: 4,
 
   // Class attribute based
   earring: 4,
@@ -135,7 +136,7 @@ function retrievedBankItemToUpgrade() {
   desiredItems = desiredItems.splice(
     0,
     desiredItems.length -
-      KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type]
+      (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ?? 2)
   );
 
   let inventoryEmptySlots = character.items.filter((item) => !item).length - 4;
@@ -150,28 +151,29 @@ function retrievedBankItemToUpgrade() {
 
 async function compoundInv() {
   if (character.q.compound) return;
-
-  for (let i = 0; i < character.items.length; i++) {
+  let i = 0;
+  for (i; i < 42; i++) {
     let breakFlag = false;
 
-    if (
-      character.items[i] &&
-      (character.items[i]?.level > 2 || item_grade(character.items[i]) === 2)
-    )
-      if (
-        !(
-          ITEMS_HIGHEST_LEVEL[character.items[i]?.name] &&
-          ITEMS_HIGHEST_LEVEL[character.items[i]?.name].quantity >
-            KEEP_THRESHOLD[
-              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
-            ] &&
-          character.items[i]?.level ===
-            ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
-        )
-      )
-        continue;
-
     if (item_info(character.items[i]).compound) {
+      if (
+        character.items[i] &&
+        (character.items[i]?.level > 2 || item_grade(character.items[i]) === 2)
+      )
+        if (
+          !(
+            ITEMS_HIGHEST_LEVEL[character.items[i]?.name] &&
+            ITEMS_HIGHEST_LEVEL[character.items[i]?.name].quantity >
+              (KEEP_THRESHOLD[
+                ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
+              ] ?? 2) &&
+            character.items[i]?.level ===
+              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
+          )
+        ) {
+          continue;
+        }
+
       const scrollType = `cscroll${item_grade(character.items[i])}`;
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
@@ -204,12 +206,15 @@ async function compoundInv() {
           character.items[i + 1]?.level,
           character.items[i + 2]?.level,
         ]).size === 1
-      )
+      ) {
         compound(i, i + 1, i + 2, scrollSlot)
           .then((e) => {
             breakFlag = true;
           })
-          .catch((e) => e);
+          .catch((e) => {
+            breakFlag = true;
+          });
+      }
     }
     if (breakFlag) break;
   }
@@ -222,27 +227,27 @@ async function upgradeInv() {
     let breakFlag = false;
     if (ignore.includes(character.items[i].name)) continue;
 
-    if (
-      character.items[i] &&
-      (character.items[i]?.level > maxUpgrade ||
-        item_grade(character.items[i]) === 2) &&
-      character.items[i]?.level >=
-        ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
-    )
-      if (
-        !(
-          ITEMS_HIGHEST_LEVEL[character.items[i]?.name] &&
-          ITEMS_HIGHEST_LEVEL[character.items[i]?.name].quantity >
-            KEEP_THRESHOLD[
-              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
-            ] &&
-          character.items[i]?.level ===
-            ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
-        )
-      )
-        continue;
-
     if (item_info(character.items[i]).upgrade) {
+      if (
+        character.items[i] &&
+        (character.items[i]?.level > maxUpgrade ||
+          item_grade(character.items[i]) === 2) &&
+        character.items[i]?.level >=
+          ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
+      )
+        if (
+          !(
+            ITEMS_HIGHEST_LEVEL[character.items[i]?.name] &&
+            ITEMS_HIGHEST_LEVEL[character.items[i]?.name].quantity >
+              (KEEP_THRESHOLD[
+                ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
+              ] ?? 2) &&
+            character.items[i]?.level ===
+              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
+          )
+        ) {
+          continue;
+        }
       const scrollType = `scroll${item_grade(character.items[i])}`;
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
@@ -292,8 +297,11 @@ async function upgradeInv() {
           }
           breakFlag = true;
         })
-        .catch((e) => e);
+        .catch((e) => {
+          breakFlag = true;
+        });
     }
+
     if (breakFlag) break;
   }
 }
@@ -311,7 +319,12 @@ setInterval(() => {
     !onDuty &&
     !character.q.exchange &&
     !character.c.fishing &&
-    !character.c.mining
+    !character.c.mining &&
+    !(!is_on_cooldown("fishing") &&
+    (locate_item("rod") !== -1 || character.slots.mainhand?.name === "rod")) &&
+    !(!is_on_cooldown("mining") &&
+    (locate_item("pickaxe") !== -1 ||
+      character.slots.mainhand?.name === "pickaxe"))
   ) {
     onDuty = true;
     close_stand();

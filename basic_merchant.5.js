@@ -17,18 +17,25 @@ function equipBroom() {
     if (broom !== -1) equip(broom);
   }
 }
-async function holidayExchange() {
-  if (
+
+function shouldGoExchangeXmas() {
+  return !(
     onDuty ||
     isInvFull(6) ||
     character.q.exchange ||
     smart.moving ||
-    (!is_on_cooldown("fishing") && locate_item("rod") !== -1) ||
-    (!is_on_cooldown("mining") && locate_item("pickaxe") !== -1) ||
+    (!is_on_cooldown("fishing") &&
+      (locate_item("rod") !== -1 ||
+        character.slots.mainhand?.name === "rod")) ||
+    (!is_on_cooldown("mining") &&
+      (locate_item("pickaxe") !== -1 ||
+        character.slots.mainhand?.name === "pickaxe")) ||
     character.c.mining ||
     character.c.fishing
-  )
-    return;
+  );
+}
+async function holidayExchange() {
+  if (!shouldGoExchangeXmas()) return;
 
   const holidayItems = [
     {
@@ -75,7 +82,8 @@ async function holidayExchange() {
 
 function exchangeXyn() {
   // const itemName = ['candy1', 'candycane', 'candy0', 'mistletoe', 'gem0', 'weaponbox', 'armorbox'];
-  const itemName = ["candy1", "candy0", "gem0", "weaponbox", "armorbox"];
+	if(isInvFull(6)) return;
+  const itemName = ["candy1", "candy0", "gem0", "weaponbox", "armorbox",  "mistletoe", "candycane"];
   let slot = undefined;
   itemName.map((name) => {
     if (locate_item(name) !== -1) slot = locate_item(name);
@@ -117,7 +125,9 @@ function moveHome() {
       character.real_y === -137) ||
     smart.moving ||
     character.moving ||
-    character.q.exchange
+    character.q.exchange ||
+    character.c.fishing ||
+    character.c.mining
   )
     return;
   log("Moving back Town!");
@@ -138,13 +148,9 @@ async function goFishing() {
     !character.c.fishing &&
     !is_on_cooldown("fishing")
   ) {
-    const currentWeapon = character.slots.mainhand;
+    if (character.slots.mainhand?.name !== "rod" && locate_item("rod") === -1)
+      moveHome();
 
-    if (!currentWeapon || currentWeapon.name !== "rod") {
-      const fishRod = locate_item("rod");
-      if (fishRod !== -1) equip(fishRod);
-      else return moveHome();
-    }
     if (
       character.real_x != fishingLocation.x &&
       character.real_y != fishingLocation.y
@@ -154,6 +160,12 @@ async function goFishing() {
     }
     if (character.mp > 120) {
       if (!character.c.fishing) {
+        if (
+          character.slots.mainhand?.name !== "rod" &&
+          locate_item("rod") !== -1
+        )
+          await equip(locate_item("rod"));
+
         log("Fishin!");
         use_skill("fishing");
       }
@@ -172,13 +184,12 @@ async function goMining() {
     !character.c.mining &&
     !is_on_cooldown("mining")
   ) {
-    const currentWeapon = character.slots.mainhand;
+    if (
+      character.slots.mainhand?.name !== "pickaxe" &&
+      locate_item("pickaxe") === -1
+    )
+      moveHome();
 
-    if (!currentWeapon || currentWeapon.name !== "pickaxe") {
-      const pickAxe = locate_item("pickaxe");
-      if (pickAxe !== -1) equip(pickAxe);
-      else return moveHome();
-    }
     if (
       character.real_x != miningLocation.x &&
       character.real_y != miningLocation.y
@@ -188,6 +199,12 @@ async function goMining() {
     }
     if (character.mp > 120) {
       if (!character.c.mining) {
+        if (
+          character.slots.mainhand?.name !== "pickaxe" &&
+          locate_item("pickaxe") !== -1
+        )
+          await equip(locate_item("pickaxe"));
+
         log("Minin!");
         use_skill("mining");
       }
@@ -249,15 +266,24 @@ setInterval(async function () {
           if (!character.items[i]) return false;
           return (
             saleAble.includes(character.items[i].name) &&
-            !character.items[i].shiny
+            !character.items[i].shiny && character.items[i].level <= 1
           );
         })
-        .map(async (i) => sell(i))
+        .map(async (i) => sell(i, 1000))
     ),
   ]);
 
-  if (!is_on_cooldown("fishing")) goFishing();
-  else if (!is_on_cooldown("mining")) goMining();
+  if (
+    !is_on_cooldown("mining") &&
+    (locate_item("pickaxe") !== -1 ||
+      character.slots.mainhand?.name === "pickaxe")
+  )
+    goMining();
+  else if (
+    !is_on_cooldown("fishing") &&
+    (locate_item("rod") !== -1 || character.slots.mainhand?.name === "rod")
+  )
+    goFishing();
   else if (
     locate_item("gemfragment") !== -1 &&
     character.items[locate_item("gemfragment")]?.q >= 50
@@ -420,6 +446,21 @@ character.on("cm", async function ({ name, message }) {
       log(`Unidentified '${message.msg}'`);
   }
 });
+
+// setInterval(() => {
+//   if (
+//     !isInvFull(5) &&
+//     character.map === "main" &&
+//     !(
+//       (ITEMS_HIGHEST_LEVEL.staff?.quantity ?? 0) > 3 &&
+//       (ITEMS_HIGHEST_LEVEL.staff?.level ?? 0) > 7
+//     )
+//   ) {
+//     for (let i = 0; i < 42 - character.items.filter((i) => i).length - 5; i++) {
+//       buy("staff");
+//     }
+//   }
+// }, 2000);
 
 // Learn Javascript: https://www.codecademy.com/learn/introduction-to-javascript
 // Write your own CODE: https://github.com/kaansoral/adventureland
