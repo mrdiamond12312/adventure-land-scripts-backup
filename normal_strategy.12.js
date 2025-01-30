@@ -46,20 +46,14 @@ async function useNormalStrategy(target) {
       break;
 
     case "warrior":
+      const suggestedWarriorItems = calculateWarriorItems(target);
+
       if (
-        !get_entity(HEALER) &&
-        Object.keys(parent.entities).filter(
-          (id) => parent.entities[id].target === character.name
-        ).length > 1 &&
-        !is_on_cooldown("scare")
+        Object.keys(suggestedWarriorItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot]
+        )
       ) {
-        await equipBatch({
-          orb: "jacko",
-        });
-        await use_skill("scare");
-        await equipBatch({
-          orb: "talkingskull",
-        });
+        await equipBatch(suggestedWarriorItems);
       }
       break;
   }

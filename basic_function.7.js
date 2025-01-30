@@ -6,6 +6,7 @@ if (character.ctype !== "merchant") {
   load_code(12);
   var currentStrategy = usePullStrategies;
 }
+if (!character.controller) load_code(14);
 
 const disablePullingStrategy = false;
 
@@ -153,12 +154,12 @@ var storeAble = [
 var saleAble = [
   "snowball",
   "cclaw",
-  "wattire",
   "dagger",
   "rednose",
   "iceskates",
   "stinger",
   "vitring",
+  "vitearring",
   "harmor",
   "skullamulet",
   "stinger",
@@ -263,19 +264,34 @@ function buff() {
 }
 
 function getTarget() {
+  const leader = get_entity(partyMems[0]);
   var target = get_targeted_monster();
 
   if (target && !get_nearest_monster({ type: target.mtype }))
     target = undefined;
 
   if (!target) {
-    const leader = get_entity(partyMems[0]);
-    if (leader)
-      target =
-        character.name === partyMems[0]
-          ? getMonstersOnDeclares()
-          : get_target_of(leader) ?? undefined;
-    else target = getMonstersOnDeclares();
+    if (character.name === partyMems[0]) {
+      target = getMonstersOnDeclares();
+
+      const mobsTargetingHealer = Object.keys(parent.entities)
+        .filter((id) => parent.entities[id].target === HEALER)
+        .sort(
+          (lhs, rhs) =>
+            parent.entities[lhs].attack - parent.entities[rhs].attack
+        );
+      if (
+        mobsTargetingHealer &&
+        mobsTargetingHealer.length &&
+        (!target || (target && target.target !== HEALER))
+      ) {
+        target = parent.entities[mobsTargetingHealer[0]];
+      }
+    } else {
+      if (leader) target = get_target_of(leader) ?? undefined;
+      else target = getMonstersOnDeclares();
+    }
+
     if (target) change_target(target);
     else {
       set_message("No Monsters, move to leader location");
@@ -309,11 +325,15 @@ async function leaveJail() {
 
 function hitAndRun(target, rangeRate) {
   // If for some reason we have a target but no angle, set the angle
+
+  let firstTimeKiting = false;
+
   if (!target) return;
   if (!angle && target) {
     diff_x = character.real_x - target.real_x;
     diff_y = character.real_y - target.real_y;
     angle = Math.atan2(diff_y, diff_x);
+    firstTimeKiting = true;
   }
 
   // Calculate the distance we moved since the last iteration
@@ -362,7 +382,10 @@ function hitAndRun(target, rangeRate) {
   flip_cooldown++;
   flipRotationCooldown--;
 
-  move(new_x, new_y);
+  if (!is_in_range(target, "attack")) move(new_x, new_y);
+  else if (!can_move_to(new_x, new_y)) {
+    flipRotation *= -1;
+  } else move(new_x, new_y);
 }
 
 function getLowestHealth() {
@@ -575,6 +598,18 @@ function changeToDailyEventTargets() {
   let target = getTarget();
   const isFightingBoss = boss.includes(getTarget()?.mtype);
 
+  if (parent.S.dragold?.live && !isFightingBoss) {
+    changeToNormalStrategies();
+
+    const dragoldInstance = get_nearest_monster({ type: "dragold" });
+    if (!dragoldInstance) smart_move(parent.S.dragold);
+    else {
+      change_target(dragoldInstance);
+
+      return dragoldInstance;
+    }
+  }
+
   if (parent.S.snowman?.live && !isFightingBoss) {
     changeToNormalStrategies();
 
@@ -598,8 +633,10 @@ function changeToDailyEventTargets() {
     const crabxInstance = get_nearest_monster({ type: "crabx" });
     if (!crabxxInstance) join("crabxx");
     if (!target) {
-      change_target(crabxInstance || crabxxInstance);
-      return crabxInstance || crabxxInstance;
+      const targetCrab =
+        crabxInstance || (crabxxInstance?.target ? crabxxInstance : undefined);
+      change_target(targetCrab);
+      return targetCrab;
     }
     if (target?.mtype === "crabxx" && get_nearest_monster({ type: "crabx" }))
       return crabxInstance;
@@ -707,7 +744,7 @@ function changeToDailyEventTargets() {
       return rgooInstance || bgooInstance;
     }
   }
-  if (get_entity(HEALER)) changeToPullStrategies();
+  if (get_entity(HEALER) && !get_entity(HEALER).rip) changeToPullStrategies();
   else changeToNormalStrategies();
   return target;
 }

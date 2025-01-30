@@ -83,7 +83,7 @@ async function holidayExchange() {
 function exchangeXyn() {
   // const itemName = ['candy1', 'candycane', 'candy0', 'mistletoe', 'gem0', 'weaponbox', 'armorbox'];
 	if(isInvFull(6)) return;
-  const itemName = ["candy1", "candy0", "gem0", "weaponbox", "armorbox",  "mistletoe", "candycane"];
+  const itemName = ["candy1", "candy0", "gem0", "weaponbox", "armorbox",  "mistletoe", "candycane", "greenenvelope", "goldenegg"];
   let slot = undefined;
   itemName.map((name) => {
     if (locate_item(name) !== -1) slot = locate_item(name);

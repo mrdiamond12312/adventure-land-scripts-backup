@@ -3,7 +3,8 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var rangeRate = 0.76;
+var rangeRate = 0.9;
+const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 async function fight(target) {
   if (character.rip) {
@@ -16,7 +17,15 @@ async function fight(target) {
 
     await currentStrategy(target);
 
-    attack(target);
+    // Awaiting for HEALER to come if fighting bosses
+    if (
+      (target.cooperative &&
+        get_entity(HEALER)) ||
+      !target.cooperative ||
+      (target.cooperative && target.attack < 400)
+    )
+      attack(target);
+
     if (
       !is_on_cooldown("burst") &&
       target.hp > 3000 &&
@@ -59,8 +68,9 @@ async function fight(target) {
       angle +
       flipRotation *
         Math.asin(
-          (character.speed * (1 / character.frequency)) /
-            4 /
+          (character.speed * loopInterval) /
+            1000 /
+            2 /
             (character.range * rangeRate)
         ) *
         2;
@@ -98,4 +108,4 @@ setInterval(function () {
   }
 
   fight(target);
-}, ((1 / character.frequency) * 1000) / 2);
+}, loopInterval);

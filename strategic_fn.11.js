@@ -33,10 +33,11 @@ function calculateWarriorItems() {
     mainhand: "xmace",
     offhand:
       currentStrategy === usePullStrategies
-        ? character.s.sugarrush
-          ? "fireblade"
-          : "candycanesword"
-        : "fireblade",
+        ? "glolipop"
+        : character.s.sugarrush
+        ? "fireblade"
+        : "candycanesword",
+    orb: "talkingskull",
   };
 }
 
@@ -57,7 +58,14 @@ function findMaxLevelItem(id) {
 }
 
 async function equipBatch(suggestedItems) {
-  Object.keys(suggestedItems).map(async (slot) => await unequip(slot));
+  if (character.cc > 100) return;
+
+  Promise.all(
+    Object.keys(suggestedItems).map(async (slot) => {
+      if (character.slots[slot]?.name !== suggestedItems[slot])
+        await unequip(slot);
+    })
+  );
 
   await equip_batch(
     Object.keys(suggestedItems)
@@ -120,8 +128,8 @@ function getMonstersToCBurst() {
     )
     .sort(
       (lhs, rhs) =>
-        distance(character, parent.entities[lhs]) -
-        distance(character, parent.entities[rhs])
+        distance(character, parent.entities[rhs]) -
+        distance(character, parent.entities[lhs])
     );
 
   const result = [];

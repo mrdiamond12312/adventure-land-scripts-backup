@@ -3,7 +3,8 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var rangeRate = 1;
+var rangeRate = 1.2;
+const loopInterval = ((1 / character.frequency) * 1000) / 6;
 
 async function fight(target) {
   if (character.mp > G.skills["charge"].mp && !is_on_cooldown("charge"))
@@ -21,13 +22,20 @@ async function fight(target) {
       target.target === character.name &&
       character.mp > G.skills["hardshell"].mp &&
       !is_on_cooldown("hardshell") &&
-      Object.keys(parent.entities).some(
-        (id) =>
-          parent.entities[id].atk > 500 &&
-          partyMems.includes(parent.entities[id].target)
-      )
+      avgDmgTaken(character) > 500 &&
+      character.hp < 0.5 * character.max_hp
     )
       use_skill("hardshell");
+
+    if (
+      character.mp > G.skills["stomp"].mp &&
+      !is_on_cooldown("stomp") &&
+      locate_item("basher") !== -1 &&
+      character.hp < character.max_hp * 0.7
+    ) {
+      await equipBatch({ mainhand: "basher", offhand: undefined });
+      await use_skill("stomp");
+    }
 
     if (character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt")) {
       const mobsTargetingAlly = Object.keys(parent.entities).find((id) =>
@@ -38,15 +46,34 @@ async function fight(target) {
       if (
         mobsTargetingAlly &&
         parent.entities[mobsTargetingAlly]?.attack > 120 &&
-        parent.entities[mobsTargetingAlly]?.attack < 1500
+        parent.entities[mobsTargetingAlly]?.attack < 1500 &&
+        !parent.entities[mobsTargetingAlly]?.cooperative
       )
         use_skill("taunt", parent.entities[mobsTargetingAlly]);
       if (
         !target.target ||
-        (target.target !== character.name && target.attack < 1500)
+        (target.target !== character.name &&
+          target.attack < 1500 &&
+          !target.cooperative)
       ) {
-        use_skill("taunt", parent.entities[mobsTargetingAlly]);
+        use_skill("taunt", target);
       }
+    }
+
+    if (
+      (!get_entity(HEALER) ||
+        get_entity(HEALER).rip ||
+        character.hp < 0.3 * character.max_hp) &&
+      Object.keys(parent.entities).filter(
+        (id) => parent.entities[id].target === character.name
+      ).length > 2 &&
+      !is_on_cooldown("scare") &&
+      character.mp > 100
+    ) {
+      await equipBatch({
+        orb: "jacko",
+      });
+      await use_skill("scare");
     }
 
     // if (
@@ -68,8 +95,9 @@ async function fight(target) {
       angle +
       flipRotation *
         Math.asin(
-          (character.speed * (1 / character.frequency)) /
-            12 /
+          (character.speed * loopInterval) /
+            1000 /
+            2 /
             (character.range * rangeRate)
         ) *
         2;
@@ -114,4 +142,4 @@ setInterval(function () {
     }).catch((e) => use_skill("use_town"));
 
   fight(target);
-}, ((1 / character.frequency) * 1000) / 6);
+}, loopInterval);

@@ -3,7 +3,7 @@ load_code(7);
 let BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
 
-const IGNORE_RARE_GOLD_THRESHOLD = 3e8;
+const IGNORE_RARE_GOLD_THRESHOLD = 9e8;
 
 const KEEP_THRESHOLD = {
   // Every character needs
@@ -320,11 +320,15 @@ setInterval(() => {
     !character.q.exchange &&
     !character.c.fishing &&
     !character.c.mining &&
-    !(!is_on_cooldown("fishing") &&
-    (locate_item("rod") !== -1 || character.slots.mainhand?.name === "rod")) &&
-    !(!is_on_cooldown("mining") &&
-    (locate_item("pickaxe") !== -1 ||
-      character.slots.mainhand?.name === "pickaxe"))
+    !(
+      !is_on_cooldown("fishing") &&
+      (locate_item("rod") !== -1 || character.slots.mainhand?.name === "rod")
+    ) &&
+    !(
+      !is_on_cooldown("mining") &&
+      (locate_item("pickaxe") !== -1 ||
+        character.slots.mainhand?.name === "pickaxe")
+    )
   ) {
     onDuty = true;
     close_stand();

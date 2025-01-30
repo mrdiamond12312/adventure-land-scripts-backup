@@ -49,7 +49,8 @@ function priestBuff() {
 
   const allies = parent.party_list
     .map((name) => get_entity(name))
-    .filter((e) => e);
+    .filter((visible) => visible);
+
   if (
     allies &&
     (allies.some(
@@ -59,14 +60,9 @@ function priestBuff() {
     ) ||
       allies.every((ally) => ally.hp < ally.max_hp - character.level * 10))
   )
-    if (
-      is_in_range(buffee, "partyheal") &&
-      !is_on_cooldown("partyheal") &&
-      character.mp > 500
-    ) {
-      use_skill("partyheal", buffee);
-
-      set_message("Heal" + buffee.name);
+    if (!is_on_cooldown("partyheal") && character.mp > 1000) {
+      use_skill("partyheal");
+      set_message("Party Heal");
     }
 
   partyMems

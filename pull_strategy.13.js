@@ -9,18 +9,25 @@ async function usePullStrategies(target) {
     case "mage":
       const suggestedItems = calculateMageItems(target);
 
-      if (character.slots.mainhand?.name !== suggestedItems.mainhand) {
+      if (
+        Object.keys(suggestedItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedItems[slot]
+        )
+      ) {
         await equipBatch(suggestedItems);
       }
 
-      if (!is_on_cooldown("energize") && character.mp > 1200) {
+      if (!is_on_cooldown("energize") && character.mp > 3000) {
         use_skill("energize", get_entity(TANKER));
+      } else {
+        use_skill("energize", character);
       }
 
       if (
         !is_on_cooldown("cburst") &&
         character.mp > 400 &&
-        !get_targeted_monster().hp?.["1hp"]
+        !get_targeted_monster().hp?.["1hp"] &&
+        is_in_range(get_entity(HEALER), "absorb")
       ) {
         if (getMonstersToCBurst().length >= 2)
           use_skill("cburst", getMonstersToCBurst());
@@ -31,7 +38,11 @@ async function usePullStrategies(target) {
     case "warrior":
       const suggestedWarriorItems = calculateWarriorItems(target);
 
-      if (character.slots.mainhand?.name !== suggestedWarriorItems.mainhand) {
+      if (
+        Object.keys(suggestedWarriorItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot]
+        )
+      ) {
         await equipBatch(suggestedWarriorItems);
       }
 
@@ -53,17 +64,6 @@ async function usePullStrategies(target) {
           is_in_range(parent.entities[id], "agitate") &&
           parent.entities[id] !== TANKER
       ).length;
-
-      if (
-        character.mp > G.skills["stomp"].mp &&
-        !is_on_cooldown("stomp") &&
-        locate_item("basher") !== -1 &&
-        character.hp < character.max_hp * 0.7
-      ) {
-        await equipBatch({ mainhand: "basher", offhand: undefined });
-        await use_skill("stomp");
-        await equipBatch(suggestedWarriorItems);
-      }
 
       if (
         !havePulledEnoughMobs &&
@@ -94,7 +94,8 @@ async function usePullStrategies(target) {
           partyHealer.heal * partyHealer.frequency * 0.4 &&
         !havePulledEnoughMobs &&
         character.mp > G.skills["taunt"].mp &&
-        !is_on_cooldown("taunt")
+        !is_on_cooldown("taunt") &&
+        is_in_range(get_entity(HEALER), "absorb")
       ) {
         const mobToPull = mobsList.find(
           (id) =>
@@ -114,3 +115,9 @@ async function usePullStrategies(target) {
       break;
   }
 }
+
+game.on("hit", (data) => {
+});
+
+character.on("mobbing", (data) => {
+});
