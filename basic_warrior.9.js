@@ -3,7 +3,7 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var rangeRate = 1.2;
+var rangeRate = 1.05;
 const loopInterval = ((1 / character.frequency) * 1000) / 6;
 
 async function fight(target) {
