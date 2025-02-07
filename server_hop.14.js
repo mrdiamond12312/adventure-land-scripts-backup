@@ -1,6 +1,6 @@
 const HOP_SERVERS = ["US", "ASIA", "EU"];
 
-const API = "https://aldata.earthiverse.ca/lunarnewyear";
+const API = "https://aldata.earthiverse.ca/monsters/pinkgoo";
 
 const HOME_SERVER = {
   serverRegion: "US",
@@ -12,8 +12,14 @@ const getHomeServer = () =>
   `${HOME_SERVER.serverRegion}${HOME_SERVER.serverIdentifier}`;
 
 setInterval(async () => {
-  if (["franky", "snowman", "icegolem", "crabxx"].some((boss) => shouldGoToBoss(boss)))
+  if (
+    ["franky", "snowman", "icegolem", "crabxx"].some(
+      (boss) => parent.S[boss] && parent.S[boss].target
+    )
+  )
     return;
+
+  if (["snowman", "pinkgoo"].some((boss) => parent.S[boss]?.live)) return;
 
   const response = await fetch(API);
   if (response.status === 200) {
@@ -25,7 +31,9 @@ setInterval(async () => {
 
     const hopAbleServers = data.filter(
       (serverBoss) =>
-        serverBoss.target && HOP_SERVERS.includes(serverBoss.serverRegion)
+        serverBoss.serverIdentifier !== "PVP" &&
+        HOP_SERVERS.includes(serverBoss.serverRegion) &&
+        serverBoss.id
     );
 
     if (hopAbleServers && hopAbleServers.length) {
@@ -49,4 +57,4 @@ setInterval(async () => {
       }
     }
   }
-}, 20000);
+}, 10000);

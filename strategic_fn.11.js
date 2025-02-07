@@ -29,15 +29,27 @@ function calculateMageItems(target) {
 }
 
 function calculateWarriorItems() {
+  if (["pinkgoo", "snowman"].includes(get_targeted_monster()?.mtype))
+    return {
+      mainhand: "rapier",
+      offhand: undefined,
+      orb: "talkingskull",
+    };
   return {
     mainhand: "xmace",
     offhand:
       currentStrategy === usePullStrategies
         ? "glolipop"
-        : character.s.sugarrush
+        : character.s.sugarrush || get_targeted_monster()?.cooperative
         ? "fireblade"
         : "candycanesword",
     orb: "talkingskull",
+  };
+}
+
+function calculateRangerItems() {
+  return {
+    mainhand: get_targeted_monster().armor > 120 ? "crossbow" : "merry",
   };
 }
 

@@ -3,7 +3,7 @@ load_code(7);
 let BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
 
-const IGNORE_RARE_GOLD_THRESHOLD = 9e8;
+const IGNORE_RARE_GOLD_THRESHOLD = 18e8;
 
 const KEEP_THRESHOLD = {
   // Every character needs
@@ -191,7 +191,19 @@ async function compoundInv() {
           });
       }
 
-      if (character.mp > 20 && !is_on_cooldown("massproduction"))
+      if (
+        character.mp > 200 &&
+        !is_on_cooldown("massproductionpp") &&
+        character.items[i]?.level >= 4 &&
+        !character.s.massproductionpp
+      )
+        use_skill("massproductionpp");
+      else if (
+        character.mp > 20 &&
+        !is_on_cooldown("massproduction") &&
+        !character.s.massproduction &&
+        !character.s.massproductionpp
+      )
         use_skill("massproduction");
 
       if (
@@ -207,7 +219,7 @@ async function compoundInv() {
           character.items[i + 2]?.level,
         ]).size === 1
       ) {
-        compound(i, i + 1, i + 2, scrollSlot)
+        return compound(i, i + 1, i + 2, scrollSlot)
           .then((e) => {
             breakFlag = true;
           })
@@ -265,10 +277,23 @@ async function upgradeInv() {
             breakFlag = true;
           });
       }
-      if (character.mp > 20 && !is_on_cooldown("massproduction"))
+
+      if (
+        character.mp > 200 &&
+        !is_on_cooldown("massproductionpp") &&
+        character.items[i]?.level >= 4 &&
+        !character.s.massproductionpp
+      )
+        use_skill("massproductionpp");
+      else if (
+        character.mp > 20 &&
+        !is_on_cooldown("massproduction") &&
+        !character.s.massproduction &&
+        !character.s.massproductionpp
+      )
         use_skill("massproduction");
 
-      upgrade(i, scrollSlot)
+      return upgrade(i, scrollSlot)
         .then(async (e) => {
           if (e?.success === true) {
             if (e?.level > ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level)

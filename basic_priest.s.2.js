@@ -8,7 +8,7 @@ var rangeRate = 0.5;
 function fight(target) {
   if (can_attack(target)) {
     set_message("Attacking");
-    attack(target);
+    attack(target).then(() => reduce_cooldown("attack", character.ping * 0.95));
     if (character.mp > 1100 && !is_on_cooldown("curse") && target.max_hp > 3000)
       use_skill("curse", target);
 
@@ -28,7 +28,7 @@ function fight(target) {
       flipRotation *
         Math.asin(
           (character.speed * (1 / character.frequency)) /
-            4 /
+            8 /
             (character.range * rangeRate)
         ) *
         2;
@@ -42,7 +42,9 @@ function priestBuff() {
   if (buffee.hp < buffee.max_hp - buffThreshold * character.heal) {
     if (!is_in_range(buffee, "heal")) move(buffee.x, buffee.y);
     if (!is_on_cooldown("heal")) {
-      use_skill("heal", buffee);
+      use_skill("heal", buffee).then(() => {
+        reduce_cooldown("attack", character.ping * 0.95);
+      });
       set_message("Heal" + buffee.name);
     }
   }
@@ -61,7 +63,9 @@ function priestBuff() {
       allies.every((ally) => ally.hp < ally.max_hp - character.level * 10))
   )
     if (!is_on_cooldown("partyheal") && character.mp > 1000) {
-      use_skill("partyheal");
+      use_skill("partyheal").then(() =>
+        reduce_cooldown("partyheal", character.ping * 0.95)
+      );
       set_message("Party Heal");
     }
 
@@ -89,7 +93,7 @@ function priestBuff() {
     });
 }
 
-setInterval(function () {
+setInterval(async function () {
   loot();
   buff();
 
@@ -108,10 +112,14 @@ setInterval(function () {
   if (goToBoss()) return;
 
   //// EVENTS
-  target = changeToDailyEventTargets();
+  target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
-  if (!smart.moving && !target && !get_entity(partyMems[0]))
+  if (
+    !smart.moving &&
+    !target &&
+    (partyMems[0] == character.name || !get_entity(partyMems[0]))
+  )
     smart_move({
       map,
       x: mapX,
@@ -119,4 +127,4 @@ setInterval(function () {
     }).catch((e) => use_skill("use_town"));
 
   fight(target);
-}, ((1 / character.frequency) * 1000) / 2);
+}, ((1 / character.frequency) * 1000) / 4);

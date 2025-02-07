@@ -13,7 +13,8 @@ async function fight(target) {
   if (can_attack(target)) {
     set_message("Attacking");
     await currentStrategy(target);
-    attack(target);
+
+    attack(target).then(() => reduce_cooldown("attack", character.ping * 0.95));
 
     if (character.mp > G.skills["warcry"].mp && !is_on_cooldown("warcry"))
       use_skill("warcry");
@@ -31,7 +32,8 @@ async function fight(target) {
       character.mp > G.skills["stomp"].mp &&
       !is_on_cooldown("stomp") &&
       locate_item("basher") !== -1 &&
-      character.hp < character.max_hp * 0.7
+      character.hp < character.max_hp * 0.7 &&
+      character.cc < 100
     ) {
       await equipBatch({ mainhand: "basher", offhand: undefined });
       await use_skill("stomp");
@@ -49,14 +51,18 @@ async function fight(target) {
         parent.entities[mobsTargetingAlly]?.attack < 1500 &&
         !parent.entities[mobsTargetingAlly]?.cooperative
       )
-        use_skill("taunt", parent.entities[mobsTargetingAlly]);
+        use_skill("taunt", parent.entities[mobsTargetingAlly]).then(() =>
+          reduce_cooldown("taunt", character.ping * 0.95)
+        );
       if (
         !target.target ||
         (target.target !== character.name &&
           target.attack < 1500 &&
           !target.cooperative)
       ) {
-        use_skill("taunt", target);
+        use_skill("taunt", target).then(() =>
+          reduce_cooldown("taunt", character.ping * 0.95)
+        );
       }
     }
 
@@ -114,7 +120,7 @@ async function fight(target) {
   } else rangeRate = 1;
 }
 
-setInterval(function () {
+setInterval(async function () {
   loot();
   buff();
 
@@ -131,7 +137,7 @@ setInterval(function () {
   if (goToBoss()) return;
 
   //// EVENTS
-  target = changeToDailyEventTargets();
+  target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
   if (!smart.moving && !target)

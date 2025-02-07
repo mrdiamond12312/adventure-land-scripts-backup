@@ -1,7 +1,8 @@
 // Other class message listener;
 
 character.on("cm", async function ({ name, message }) {
-  switch (message) {
+  if (!partyMems.includes(name) && name !== partyMerchant) return;
+  switch (message.msg || message) {
     case "inv_full_merchant_near":
       log("The merchant is nearby, sending compoundable");
 
@@ -44,6 +45,32 @@ character.on("cm", async function ({ name, message }) {
     case "buy_hp_merchant_near":
       log("Thanks for the potions merchant!");
       send_gold(partyMerchant, 1500000);
+      break;
+
+    case "party_heal":
+      log(`Remotely heal ${name}!`);
+      use_skill("partyheal").then(() =>
+        reduce_cooldown("partyheal", character.ping * 0.95)
+      );
+      break;
+
+    case "pinkgoo_found":
+      if (name === MAGE) {
+        log("Asking for a Magiport from " + MAGE);
+        send_cm(MAGE, "magiport");
+      } else {
+        if (character.ctype === "mage" && character.map === msg.map) {
+          use_skill("blink", [msg.x, msg.y]);
+        } else {
+          smart_move({ ...msg });
+        }
+      }
+      break;
+
+    case "magiport":
+      if (character.mp > G.skills["magiport"]?.mp) {
+        use_skill("magiport", name);
+      }
       break;
 
     default:

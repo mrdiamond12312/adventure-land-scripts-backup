@@ -7,20 +7,26 @@ async function usePullStrategies(target) {
 
   switch (character.ctype) {
     case "mage":
-      const suggestedItems = calculateMageItems(target);
+      const suggestedMageItems = calculateMageItems(target);
 
       if (
-        Object.keys(suggestedItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedItems[slot]
+        Object.keys(suggestedMageItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot]
         )
       ) {
-        await equipBatch(suggestedItems);
+        await equipBatch(suggestedMageItems);
       }
 
-      if (!is_on_cooldown("energize") && character.mp > 3000) {
-        use_skill("energize", get_entity(TANKER));
-      } else {
-        use_skill("energize", character);
+      if (!is_on_cooldown("energize")) {
+        if (character.mp > 3000)
+          use_skill("energize", get_entity(TANKER)).then(() =>
+            reduce_cooldown("energize", character.ping * 0.95)
+          );
+        else {
+          use_skill("energize", character).then(() =>
+            reduce_cooldown("energize", character.ping * 0.95)
+          );
+        }
       }
 
       if (
@@ -107,17 +113,30 @@ async function usePullStrategies(target) {
                 .includes(parent.entities[id].target))
         );
 
-        if (mobToPull) use_skill("taunt", parent.entities[mobToPull]);
+        if (mobToPull)
+          use_skill("taunt", parent.entities[mobToPull]).then(() =>
+            reduce_cooldown("taunt", character.ping * 0.95)
+          );
       }
 
+      break;
+
+    case "ranger":
+      const suggestedRangerItems = calculateRangerItems(target);
+
+      if (
+        Object.keys(suggestedRangerItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot]
+        )
+      ) {
+        await equipBatch(suggestedRangerItems);
+      }
       break;
     default:
       break;
   }
 }
 
-game.on("hit", (data) => {
-});
+game.on("hit", (data) => {});
 
-character.on("mobbing", (data) => {
-});
+character.on("mobbing", (data) => {});

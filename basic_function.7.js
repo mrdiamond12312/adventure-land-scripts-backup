@@ -23,9 +23,17 @@ function changeToNormalStrategies() {
 // Global vars
 var attack_mode = true;
 var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
+// var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
+
 const TANKER = "MooohMoooh";
+// const TANKER = "CowTheMooh";
+
+const MAGE = "MowTheCooh";
 const HEALER = "CowTheMooh";
+
 var partyCodeSlot = [9, 2, 4, 5];
+// var partyCodeSlot = [2, 4, 15, 5];
+
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
 
@@ -48,12 +56,16 @@ var min_xp = 100;
 var max_att = 2000;
 var bossOffset = 0.99;
 var boss = ["mrpumpkin", "mrgreen"];
+
+// var map = "level2s";
+// var mapX = 9;
+// var mapY = 432;
+
 var map = "main";
 var mapX = 1421;
 var mapY = 113;
 
-var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"];
-// var type = "grinch";
+var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"]; // var type = "grinch";
 // var altType1 = "boar";
 // var altType2 = "boar";
 
@@ -251,15 +263,33 @@ function buff() {
     character.hp / character.max_hp < character.mp / character.max_mp ||
     character.hp < character.max_hp * 0.6
   ) {
-    if (character.hp < 0.7 * character.max_hp && !is_on_cooldown("use_hp"))
-      use_skill("use_hp");
-    if (character.hp < character.max_hp - 50 && !is_on_cooldown("regen_hp"))
-      use_skill("regen_hp");
+    if (character.hp < 0.8 * character.max_hp && !is_on_cooldown("use_hp"))
+      use_skill("use_hp").then(() => {
+        reduce_cooldown("use_mp", character.ping * 0.95);
+        reduce_cooldown("use_hp", character.ping * 0.95);
+      });
+    else if (
+      character.hp < character.max_hp - 50 &&
+      !is_on_cooldown("regen_hp")
+    )
+      use_skill("regen_hp").then(() => {
+        reduce_cooldown("use_mp", character.ping * 0.95);
+        reduce_cooldown("use_hp", character.ping * 0.95);
+      });
   } else {
-    if (character.mp < 0.5 * character.max_mp && !is_on_cooldown("use_mp"))
-      use_skill("use_mp");
-    if (character.mp < character.max_mp - 100 && !is_on_cooldown("regen_mp"))
-      use_skill("regen_mp");
+    if (character.mp < 0.8 * character.max_mp && !is_on_cooldown("use_mp")) {
+      use_skill("use_mp").then(() => {
+        reduce_cooldown("use_mp", character.ping * 0.95);
+        reduce_cooldown("use_hp", character.ping * 0.95);
+      });
+    } else if (
+      character.mp < character.max_mp - 100 &&
+      !is_on_cooldown("regen_mp")
+    )
+      use_skill("regen_mp").then(() => {
+        reduce_cooldown("use_mp", character.ping * 0.95);
+        reduce_cooldown("use_hp", character.ping * 0.95);
+      });
   }
 }
 
@@ -358,8 +388,12 @@ function hitAndRun(target, rangeRate) {
 
   // Calculate our new desired position. It will be our max attack range
   // from the target, at the angle described by var angle.
-  var new_x = target.real_x + character.range * rangeRate * Math.cos(angle);
-  var new_y = target.real_y + character.range * rangeRate * Math.sin(angle);
+  var new_x =
+    target.real_x +
+    (character.range + character.xrange) * rangeRate * Math.cos(angle);
+  var new_y =
+    target.real_y +
+    (character.range + character.xrange) * rangeRate * Math.sin(angle);
 
   // Save current position and last position
   last_x2 = last_x; // Keep track of one more back to detect edges better
@@ -372,7 +406,7 @@ function hitAndRun(target, rangeRate) {
   if (flip_cooldown > 18) {
     if (
       parent.distance(character, target) <=
-      character.range * 0.2 * rangeRate
+      (character.range + character.xrange) * 0.1 * rangeRate
     ) {
       angle = angle + flipRotation * Math.PI * 2 * 0.35;
     }
@@ -454,7 +488,7 @@ function item_info(item) {
 }
 
 function isInvFull(slots = 1) {
-  return character.items.filter((item) => !item).length <= slots;
+  return character.esize <= slots;
 }
 
 function filterCompoundableAndStackable() {
@@ -594,7 +628,8 @@ function on_party_invite(name) {
 }
 
 //// Daily Events
-function changeToDailyEventTargets() {
+var pinkGooVisitedBoundary = [];
+async function changeToDailyEventTargets() {
   let target = getTarget();
   const isFightingBoss = boss.includes(getTarget()?.mtype);
 
@@ -607,6 +642,151 @@ function changeToDailyEventTargets() {
       change_target(dragoldInstance);
 
       return dragoldInstance;
+    }
+  }
+
+  // if (parent.S.pinkgoo?.live && !isFightingBoss) {
+  //   let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
+  //   if (!pinkgooInstance) {
+  //     if (character.map !== parent.S.pinkgoo?.map) {
+  //       await smart_move({ map: parent.S.pinkgoo?.map }).catch((e) => {
+  //         if (e.reason === "interrupted") {
+  //           pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
+  //           stop("smart");
+  //         }
+  //       });
+  //     }
+  //     pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
+
+  //     if (!pinkgooInstance) {
+  //       const mapMobSpawn = G.maps[parent.S.pinkgoo?.map].monsters.filter(
+  //         (p) => !p.boundaries
+  //       );
+
+  //       const uniqueMapMobSpawn = mapMobSpawn.reduce((acc, current) => {
+  //         const overlapped = acc.find((item) => {
+  //           return !(
+  //             item.boundary[0] >= current.boundary[2] ||
+  //             item.boundary[2] <= current.boundary[0] ||
+  //             item.boundary[1] >= current.boundary[3] ||
+  //             item.boundary[3] <= current.boundary[1]
+  //           );
+  //         });
+  //         if (!overlapped) {
+  //           acc.push(current);
+  //         }
+  //         return acc;
+  //       }, []);
+
+  //       for (const spawn of uniqueMapMobSpawn) {
+  //         const visitedSpawn = get("visitedSpawn") ?? [];
+  //         if (visitedSpawn.includes(spawn.type)) {
+  //           continue;
+  //         } else {
+  //           visitedSpawn.push(spawn.type);
+  //           set("visitedSpawn", visitedSpawn);
+  //         }
+  //         const toX = (spawn.boundary[0] + spawn.boundary[2]) / 2;
+  //         const toY = (spawn.boundary[1] + spawn.boundary[3]) / 2;
+  //         if (
+  //           character.ctype === "mage" &&
+  //           character.mp > 3400 &&
+  //           !is_on_cooldown("blink") &&
+  //           distance(character, { x: toX, y: toY }) > 300
+  //         ) {
+  //           await use_skill("blink", [toX, toY]);
+  //           reduce_cooldown("blink", character.ping * 0.95);
+  //           await sleep(1200);
+  //         } else
+  //           await smart_move({
+  //             map: parent.S.pinkgoo?.map,
+  //             x: (spawn.boundary[0] + spawn.boundary[2]) / 2,
+  //             y: (spawn.boundary[1] + spawn.boundary[3]) / 2,
+  //           }).catch((e) => {
+  //             if (e.reason === "interrupted") {
+  //               pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
+  //               stop("smart");
+  //             }
+  //           });
+  //         pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
+
+  //         if (pinkgooInstance) {
+  //           set(
+  //             "visitedSpawn",
+  //             visitedSpawn.filter((vspawn) => vspawn !== spawn.type)
+  //           );
+  //           change_target(pinkgooInstance);
+  //           return pinkgooInstance;
+  //         }
+
+  //         if (!parent.S.pinkgoo?.live) break;
+  //         break;
+  //       }
+  //     } else {
+  //       change_target(pinkgooInstance);
+  //       return pinkgooInstance;
+  //     }
+  //   } else {
+  //     changeToNormalStrategies();
+  //     if (
+  //       character.ctype === "warrior" &&
+  //       character.dreturn &&
+  //       is_in_range(pinkgooInstance, "taunt") &&
+  //       !is_on_cooldown("taunt") &&
+  //       character.mp > G.skills["taunt"].mp &&
+  //       pinkgooInstance.target !== character.name
+  //     ) {
+  //       use_skill("taunt", pinkgooInstance);
+  //     }
+
+  //     if (!get_entity(MAGE) || character.ctype === "mage")
+  //       partyMems.forEach((id) => {
+  //         if (!get_entity(id))
+  //           send_cm(id, {
+  //             msg: "pinkgoo_found",
+  //             map: character.map,
+  //             x: character.x,
+  //             y: character.y,
+  //           });
+  //       });
+  //     return pinkgooInstance;
+  //   }
+  // } else {
+  //   set("visitedSpawn", undefined);
+  // }
+  if (parent.S.pinkgoo?.live && !isFightingBoss) {
+    changeToNormalStrategies();
+    let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
+    if (!pinkgooInstance) {
+      if (parent.S.pinkgoo?.x) {
+        await smart_move(parent.S.pinkgoo);
+        change_target(get_nearest_monster({ type: "pinkgoo" }));
+        return get_nearest_monster({ type: "pinkgoo" });
+      }
+    } else {
+      change_target(pinkgooInstance);
+      if (
+        character.ctype === "warrior" &&
+        character.dreturn &&
+        is_in_range(pinkgooInstance, "taunt") &&
+        !is_on_cooldown("taunt") &&
+        character.mp > G.skills["taunt"].mp &&
+        pinkgooInstance.target !== character.name
+      ) {
+        use_skill("taunt", pinkgooInstance);
+      }
+
+      if (!get_entity(MAGE) || character.ctype === "mage")
+        partyMems.forEach((id) => {
+          if (!get_entity(id))
+            send_cm(id, {
+              msg: "pinkgoo_found",
+              map: character.map,
+              x: character.x,
+              y: character.y,
+            });
+        });
+      return pinkgooInstance;
     }
   }
 
@@ -631,10 +811,39 @@ function changeToDailyEventTargets() {
 
     const crabxxInstance = get_nearest_monster({ type: "crabxx" });
     const crabxInstance = get_nearest_monster({ type: "crabx" });
-    if (!crabxxInstance) join("crabxx");
+    if (!crabxxInstance)
+      join("crabxx")
+        .then(() => change_target(get_nearest_monster({ type: "crabxx" })))
+        .catch(() => {
+          smart_move({ map: "main", x: -960, y: 1655 }).then(() =>
+            change_target(get_nearest_monster({ type: "crabxx" }))
+          );
+        });
+
+    if (character.ctype === "warrior") {
+      if (
+        Object.keys(parent.entities).filter(
+          (id) => parent.entities[id]?.mtype === "crabx"
+        ).length <= 1 &&
+        crabxxInstance &&
+        !crabxxInstance.s.stunned &&
+        !is_on_cooldown("stomp") &&
+        character.mp > G.skills["stomp"].mp
+      ) {
+        equipBatch({ mainhand: "basher", offhand: undefined }).then(() => {
+          use_skill("stomp");
+        });
+      }
+    }
+
     if (!target) {
       const targetCrab =
-        crabxInstance || (crabxxInstance?.target ? crabxxInstance : undefined);
+        character.ctype !== "warrior"
+          ? crabxInstance ||
+            (crabxxInstance?.target ? crabxxInstance : undefined)
+          : crabxxInstance?.target
+          ? crabxxInstance
+          : crabxInstance || undefined;
       change_target(targetCrab);
       return targetCrab;
     }
@@ -672,8 +881,13 @@ function changeToDailyEventTargets() {
   ) {
     changeToNormalStrategies();
     const frankyInstance = get_nearest_monster({ type: "franky" });
-    if (!frankyInstance) join("franky");
-    change_target(frankyInstance);
+    if (!frankyInstance)
+      join("franky").catch(() =>
+        smart_move({ map: "level2s", x: -182, y: 42 }).then(() =>
+          change_target(get_nearest_monster({ type: "franky" }))
+        )
+      );
+    change_target(get_nearest_monster({ type: "franky" }));
     return frankyInstance;
   }
 
@@ -747,4 +961,10 @@ function changeToDailyEventTargets() {
   if (get_entity(HEALER) && !get_entity(HEALER).rip) changeToPullStrategies();
   else changeToNormalStrategies();
   return target;
+}
+
+function on_magiport(name) {
+  if (name === MAGE) {
+    accept_magiport(name);
+  }
 }

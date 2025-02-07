@@ -3,7 +3,7 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var rangeRate = 0.9;
+var rangeRate = 0.8;
 const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 async function fight(target) {
@@ -18,18 +18,13 @@ async function fight(target) {
     await currentStrategy(target);
 
     // Awaiting for HEALER to come if fighting bosses
-    if (
-      (target.cooperative &&
-        get_entity(HEALER)) ||
-      !target.cooperative ||
-      (target.cooperative && target.attack < 400)
-    )
-      attack(target);
+    attack(target).then(() => reduce_cooldown("attack", character.ping * 0.95));
 
     if (
       !is_on_cooldown("burst") &&
       target.hp > 3000 &&
       target.resistance > 400 &&
+      !target["1hp"] &&
       character.mp > 2000
     ) {
       log("Maxima Burst!");
@@ -79,7 +74,7 @@ async function fight(target) {
   }
 }
 
-setInterval(function () {
+setInterval(async function () {
   loot();
   buff();
 
@@ -95,7 +90,7 @@ setInterval(function () {
   if (goToBoss()) return;
 
   //// EVENTS
-  target = changeToDailyEventTargets();
+  target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
   if (!smart.moving && !target && !get_entity(partyMems[0])) {
@@ -107,5 +102,5 @@ setInterval(function () {
     }).catch((e) => use_skill("use_town"));
   }
 
-  fight(target);
+  await fight(target);
 }, loopInterval);

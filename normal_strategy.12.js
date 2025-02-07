@@ -4,10 +4,10 @@ async function useNormalStrategy(target) {
 
   switch (character.ctype) {
     case "mage":
-      const suggestedItems = calculateMageItems(target);
+      const suggestedMageItems = calculateMageItems(target);
 
-      if (character.slots.mainhand?.name !== suggestedItems.mainhand) {
-        await equipBatch(suggestedItems);
+      if (character.slots.mainhand?.name !== suggestedMageItems.mainhand) {
+        await equipBatch(suggestedMageItems);
       }
 
       if (
@@ -27,9 +27,13 @@ async function useNormalStrategy(target) {
           buffee.mp < buffee.max_mp * 0.8
         ) {
           log("Energize " + buffee?.name);
-          use_skill("energize", buffee);
+          use_skill("energize", buffee).then(() =>
+            reduce_cooldown("energize", character.ping * 0.95)
+          );
         } else {
-          use_skill("energize", get_entity(partyMems[0]));
+          use_skill("energize", get_entity(partyMems[0])).then(() =>
+            reduce_cooldown("energize", character.ping * 0.95)
+          );
         }
       }
 
@@ -54,6 +58,18 @@ async function useNormalStrategy(target) {
         )
       ) {
         await equipBatch(suggestedWarriorItems);
+      }
+      break;
+
+    case "ranger":
+      const suggestedRangerItems = calculateRangerItems();
+
+      if (
+        Object.keys(suggestedRangerItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot]
+        )
+      ) {
+        await equipBatch(suggestedRangerItems);
       }
       break;
   }

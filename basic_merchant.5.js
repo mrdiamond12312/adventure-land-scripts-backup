@@ -82,11 +82,28 @@ async function holidayExchange() {
 
 function exchangeXyn() {
   // const itemName = ['candy1', 'candycane', 'candy0', 'mistletoe', 'gem0', 'weaponbox', 'armorbox'];
-	if(isInvFull(6)) return;
-  const itemName = ["candy1", "candy0", "gem0", "weaponbox", "armorbox",  "mistletoe", "candycane", "greenenvelope", "goldenegg"];
+  if (isInvFull(6)) return;
+
+  const itemName = [
+    { name: "candy1", quantity: 1 },
+    { name: "candy0", quantity: 1 },
+    { name: "gem0", quantity: 1 },
+    { name: "weaponbox", quantity: 1 },
+    { name: "armorbox", quantity: 1 },
+    { name: "mistletoe", quantity: 1 },
+    { name: "candycane", quantity: 1 },
+    { name: "greenenvelope", quantity: 1 },
+    { name: "goldenegg", quantity: 1 },
+    { name: "5bucks", quantity: 1 },
+    { name: "candypop", quantity: 10 },
+  ];
   let slot = undefined;
-  itemName.map((name) => {
-    if (locate_item(name) !== -1) slot = locate_item(name);
+  itemName.map((item) => {
+    if (
+      locate_item(item.name) !== -1 &&
+      character.items[locate_item(item.name)].q >= item.quantity
+    )
+      slot = locate_item(item.name);
   });
 
   if (slot !== undefined)
@@ -266,7 +283,8 @@ setInterval(async function () {
           if (!character.items[i]) return false;
           return (
             saleAble.includes(character.items[i].name) &&
-            !character.items[i].shiny && character.items[i].level <= 1
+            !character.items[i].shiny &&
+            character.items[i].level <= 1
           );
         })
         .map(async (i) => sell(i, 1000))
@@ -312,7 +330,7 @@ setInterval(async function () {
     if (!smart.move) await moveHome();
     onDuty = false;
   }
-}, 3000);
+}, 2000);
 
 setInterval(function () {
   onDuty = false;
