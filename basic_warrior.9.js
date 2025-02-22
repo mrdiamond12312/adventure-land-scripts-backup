@@ -3,14 +3,13 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var rangeRate = 1.05;
+var originRangeRate = 1.1;
+var rangeRate = originRangeRate;
 const loopInterval = ((1 / character.frequency) * 1000) / 6;
 
 async function fight(target) {
-  if (character.mp > G.skills["charge"].mp && !is_on_cooldown("charge"))
-    use_skill("charge");
-
-  if (can_attack(target)) {
+  const shouldAttack = character.map === "crypt" ? get_entity(HEALER) : true;
+  if (can_attack(target) && shouldAttack) {
     set_message("Attacking");
     await currentStrategy(target);
 
@@ -54,7 +53,7 @@ async function fight(target) {
         use_skill("taunt", parent.entities[mobsTargetingAlly]).then(() =>
           reduce_cooldown("taunt", character.ping * 0.95)
         );
-      if (
+      else if (
         !target.target ||
         (target.target !== character.name &&
           target.attack < 1500 &&
@@ -74,7 +73,8 @@ async function fight(target) {
         (id) => parent.entities[id].target === character.name
       ).length > 2 &&
       !is_on_cooldown("scare") &&
-      character.mp > 100
+      character.mp > 100 &&
+      character.cc < 100
     ) {
       await equipBatch({
         orb: "jacko",
@@ -117,35 +117,54 @@ async function fight(target) {
     target.speed > character.speed
   ) {
     rangeRate = target.speed / character.speed;
-  } else rangeRate = 1;
+  } else rangeRate = originRangeRate;
 }
 
 setInterval(async function () {
   loot();
   buff();
 
+  if (
+    character.moving &&
+    character.mp > G.skills["charge"].mp &&
+    !is_on_cooldown("charge")
+  )
+    use_skill("charge");
+
   if (character.rip) {
     respawn();
     return;
   }
 
-  if (smart.moving && !smartmoveDebug) return;
+  if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
 
   let target = getTarget();
 
   //// BOSSES
   if (goToBoss()) return;
 
-  //// EVENTS
   target = await changeToDailyEventTargets();
 
+  //// THE CRYPT & EVENTS
+  if (get("cryptInstance")) target = await useCryptStrategy(target);
+  else target = await changeToDailyEventTargets();
+
   //// Logic to targets and farm places
-  if (!smart.moving && !target)
-    smart_move({
+  if (get("cryptInstance") && character.map !== "crypt") {
+    await advanceSmartMove(CRYPT_DOOR);
+    enter("crypt", get("cryptInstance"));
+  } else if (!smart.moving && !isAdvanceSmartMoving && !target) {
+    const scareInterval = setInterval(() => {
+      scareAwayMobs();
+    }, 5000);
+
+    await advanceSmartMove({
       map,
       x: mapX,
       y: mapY,
-    }).catch((e) => use_skill("use_town"));
+    });
+    clearInterval(scareInterval);
+  }
 
-  fight(target);
+  await fight(target);
 }, loopInterval);

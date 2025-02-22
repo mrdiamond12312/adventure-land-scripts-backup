@@ -3,8 +3,9 @@ load_code(7);
 load_code(8);
 
 // Kiting
+var basicRangeRate = 0.8;
 var rangeRate = 0.8;
-const loopInterval = ((1 / character.frequency) * 1000) / 4;
+const loopInterval = ((1 / character.frequency) * 1000) / 3;
 
 async function fight(target) {
   if (character.rip) {
@@ -12,13 +13,42 @@ async function fight(target) {
     return;
   }
 
-  if (can_attack(target)) {
+  aggroedMobs = Object.values(parent.entities).filter((mob) => {
+    return (
+      !haveFormidableMonsterAroundTarget(mob) &&
+      is_in_range(mob, "attack") &&
+      mob.target === TANKER &&
+      mob.type === "monster"
+    );
+  });
+
+  if (target && target.type !== "monster" && aggroedMobs.length) {
+    target =
+      aggroedMobs.sort((lhs, rhs) => {
+        const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
+          parent.entities[lhs]
+        );
+        const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
+          parent.entities[rhs]
+        );
+        if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
+          return parent.entities[rhs]?.hp - parent.entities[lhs]?.hp;
+        return rhsNumberOfSurrounding - lhsNumberOfSurrounding;
+      })[0] ?? undefined;
+    change_target(target);
+  }
+  const shouldAttack = character.map === "crypt" ? get_entity(HEALER) : true;
+  if (can_attack(target) && shouldAttack) {
     set_message("Attacking");
 
     await currentStrategy(target);
 
     // Awaiting for HEALER to come if fighting bosses
-    attack(target).then(() => reduce_cooldown("attack", character.ping * 0.95));
+    if (!is_on_cooldown("attack")) {
+      attack(target).then(() =>
+        reduce_cooldown("attack", character.ping * 0.95)
+      );
+    }
 
     if (
       !is_on_cooldown("burst") &&
@@ -30,7 +60,6 @@ async function fight(target) {
       log("Maxima Burst!");
       use_skill("burst");
     }
-
     if (
       target["damage_type"] === "magical" &&
       !is_on_cooldown("reflection") &&
@@ -75,7 +104,13 @@ async function fight(target) {
 }
 
 setInterval(async function () {
-  loot();
+  // loot();
+  if (
+    (bestLooter().name === character.name || !bestLooter()) &&
+    Object.keys(get_chests()).length
+  )
+    loot();
+
   buff();
 
   if (character.rip) {
@@ -83,23 +118,43 @@ setInterval(async function () {
     return;
   }
 
-  if (smart.moving && !smartmoveDebug) return;
+  if (character.level > 50) {
+    set("mageLocation", {
+      map: character.map,
+      x: character.x,
+      y: character.y,
+    });
+  }
+  if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
 
   let target = getTarget();
 
   if (goToBoss()) return;
 
-  //// EVENTS
-  target = await changeToDailyEventTargets();
+  //// THE CRYPT & EVENTS
+  if (get("cryptInstance")) target = await useCryptStrategy(target);
+  else target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
-  if (!smart.moving && !target && !get_entity(partyMems[0])) {
+  if (get("cryptInstance") && character.map !== "crypt") {
+    await advanceSmartMove(CRYPT_DOOR);
+    enter("crypt", get("cryptInstance"));
+  } else if (
+    !smart.moving &&
+    !isAdvanceSmartMoving &&
+    !target &&
+    !get_entity(partyMems[0])
+  ) {
     log("Moving to farming location");
-    smart_move({
+    const scareInterval = setInterval(() => {
+      scareAwayMobs();
+    }, 5000);
+    await advanceSmartMove({
       map,
       x: mapX,
       y: mapY,
-    }).catch((e) => use_skill("use_town"));
+    });
+    clearInterval(scareInterval);
   }
 
   await fight(target);

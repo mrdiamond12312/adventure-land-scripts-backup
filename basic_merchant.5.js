@@ -14,7 +14,11 @@ function equipBroom() {
   const currentWeapon = character.slots.mainhand;
   if (!currentWeapon || currentWeapon.name !== "broom") {
     const broom = locate_item("broom");
-    if (broom !== -1) equip(broom);
+    if (broom !== -1)
+      equipBatch({
+        mainhand: "broom",
+        offhand: "wbookhs",
+      });
   }
 }
 
@@ -24,6 +28,7 @@ function shouldGoExchangeXmas() {
     isInvFull(6) ||
     character.q.exchange ||
     smart.moving ||
+    isAdvanceSmartMoving ||
     (!is_on_cooldown("fishing") &&
       (locate_item("rod") !== -1 ||
         character.slots.mainhand?.name === "rod")) ||
@@ -123,8 +128,8 @@ async function exchangeMines() {
   });
 
   if (slot && character.items[slot].q >= 50) {
-    if (!smart.moving && character.map !== "tunnel") {
-      await smart_move("tunnel");
+    if (!smart.moving && !isAdvanceSmartMoving && character.map !== "tunnel") {
+      await smart_move(miningLocation);
     }
     await exchange(slot).catch((e) => {
       switch (e.response) {
@@ -141,6 +146,7 @@ function moveHome() {
       character.real_x === -152 &&
       character.real_y === -137) ||
     smart.moving ||
+    isAdvanceSmartMoving ||
     character.moving ||
     character.q.exchange ||
     character.c.fishing ||
@@ -148,16 +154,23 @@ function moveHome() {
   )
     return;
   log("Moving back Town!");
-  return smart_move({ map: "main", x: -152, y: -137 }).then(() => {
-    onDuty = false;
-    open_stand(locate_item("stand0"));
-  });
+  close_stand();
+  equipBroom();
+  return smart_move({ map: "main", x: -152, y: -137 })
+    .then(() => {
+      onDuty = false;
+      open_stand(locate_item("stand0"));
+    })
+    .catch((e) => {
+      if (e.reason === "failed" && e.failed) use_skill("use_town");
+    });
 }
 
 async function goFishing() {
   if (isInvFull()) return;
   if (
     !smart.moving &&
+    !isAdvanceSmartMoving &&
     !character.q.compound &&
     !character.q.upgrade &&
     !character.q.exchange &&
@@ -173,6 +186,7 @@ async function goFishing() {
       character.real_y != fishingLocation.y
     ) {
       close_stand();
+      equipBroom();
       await smart_move(fishingLocation);
     }
     if (character.mp > 120) {
@@ -181,7 +195,10 @@ async function goFishing() {
           character.slots.mainhand?.name !== "rod" &&
           locate_item("rod") !== -1
         )
-          await equip(locate_item("rod"));
+          await equipBatch({
+            mainhand: "rod",
+            offhand: undefined,
+          });
 
         log("Fishin!");
         use_skill("fishing");
@@ -194,6 +211,7 @@ async function goMining() {
   if (isInvFull()) return;
   if (
     !smart.moving &&
+    !isAdvanceSmartMoving &&
     !character.q.compound &&
     !character.q.upgrade &&
     !character.q.exchange &&
@@ -212,6 +230,7 @@ async function goMining() {
       character.real_y != miningLocation.y
     ) {
       close_stand();
+      equipBroom();
       await smart_move(miningLocation);
     }
     if (character.mp > 120) {
@@ -220,7 +239,10 @@ async function goMining() {
           character.slots.mainhand?.name !== "pickaxe" &&
           locate_item("pickaxe") !== -1
         )
-          await equip(locate_item("pickaxe"));
+          await equipBatch({
+            mainhand: "pickaxe",
+            offhand: undefined,
+          });
 
         log("Minin!");
         use_skill("mining");
@@ -236,6 +258,7 @@ async function craft(item) {
     isInvFull(4) ||
     character.q.exchange ||
     smart.moving ||
+    isAdvanceSmartMoving ||
     (!is_on_cooldown("fishing") && locate_item("rod") !== -1) ||
     (!is_on_cooldown("mining") && locate_item("pickaxe") !== -1) ||
     character.c.mining ||
@@ -263,11 +286,12 @@ async function craft(item) {
 setInterval(async function () {
   buff();
   loot();
-
   if (character.rip) {
     respawn();
     return;
   }
+
+  scareAwayMobs();
 
   await sortInv();
 
@@ -309,13 +333,14 @@ setInterval(async function () {
     exchangeMines();
   else if (
     !smart.moving &&
+    !isAdvanceSmartMoving &&
     !character.c.mining &&
     !character.c.fishing &&
     !character.q.exchanging
   )
     await moveHome();
 
-  if (isInvFull() && !smart.moving) {
+  if (isInvFull() && !smart.moving && !isAdvanceSmartMoving) {
     if (!smart.move) await moveHome();
     close_stand();
     if (!smart.move) await smart_move(bankPosition);
@@ -342,129 +367,10 @@ function on_party_invite(name) {
 } // called by the inviter's name
 
 function handle_death() {
-  respawn();
+  respawn().catch((e) => setTimeout(() => respawn(), e.ms + 300));
 }
 
-character.on("cm", async function ({ name, message }) {
-  if (isInvFull()) {
-    return;
-  }
-  switch (message) {
-    case "inv_ok":
-      onDuty = false;
-      moveHome();
-      break;
-  }
-  if (!onDuty) {
-    onDuty = true;
-    close_stand();
-  } else return;
-
-  equipBroom();
-  // const sender = get_characters().find(character => character.name === name);
-
-  switch (message.msg) {
-    case "inv_full":
-      log(`Go collecting ${name} compoundables at ${message.map}`);
-      await smart_move({
-        ...message,
-      });
-      send_cm(name, "inv_full_merchant_near");
-      await sleep(5000);
-      onDuty = false;
-      moveHome();
-      break;
-
-    case "buy_mana":
-      log(`Buying some mana potions for ${name}`);
-      if (isInvFull()) {
-        if (!smart.move) await smart_move(bankPosition);
-        if (character.map === "bank") bank_store(0);
-      }
-      if (locate_item("mpot1") === -1) {
-        await smart_move(find_npc("fancypots"));
-        await buy("mpot1", 10000);
-      }
-      await smart_move({
-        ...message,
-      });
-      await send_item(name, locate_item("mpot1"), 10000);
-      send_cm(name, "buy_mana_merchant_near");
-      await sleep(5000);
-      onDuty = false;
-      moveHome();
-      break;
-
-    case "buy_hp":
-      log(`Buying some health potions for ${name}`);
-      if (isInvFull()) {
-        if (!smart.move) await smart_move(bankPosition);
-        if (character.map === "bank") bank_store(0);
-      }
-      if (locate_item("hpot1") === -1) {
-        await smart_move(find_npc("fancypots"));
-        await buy("hpot1", 10000);
-      }
-      await smart_move({
-        ...message,
-      });
-      await send_item(name, locate_item("hpot1"), 10000);
-      send_cm(name, "buy_hp_merchant_near");
-      await sleep(5000);
-      onDuty = false;
-      moveHome();
-      break;
-
-    case "buff_mluck":
-      await smart_move({
-        ...message,
-      });
-      if (!is_on_cooldown("mluck") && character.mp > 20) {
-        use_skill("mluck", get_entity(name));
-      }
-      onDuty = false;
-      moveHome();
-      break;
-
-    case "elixir":
-      if (locate_item(message.elixir) === -1) {
-        let itemBankSlot = undefined;
-        let itemSlot = undefined;
-        await smart_move(bankPosition);
-        Object.keys(character.bank)
-          .filter((id) => id !== "gold")
-          .map((slot) => {
-            character.bank[slot]?.map((item, index) => {
-              if (item && item.name === message.elixir) {
-                itemBankSlot = slot;
-                itemSlot = index;
-              }
-            });
-          });
-        if (itemBankSlot && itemSlot) {
-          bank_retrieve(itemBankSlot, itemSlot);
-        } else {
-          await smart_move({ map: find_npc("wbartender").map });
-          buy(message.elixir);
-        }
-      }
-      if (!locate_item(message.elixir)) {
-        onDuty = false;
-        break;
-      }
-      await smart_move({
-        ...message,
-      });
-      await send_item(name, locate_item(message.elixir), 10);
-      onDuty = false;
-      break;
-
-    default:
-      onDuty = false;
-      log(`Unidentified '${message.msg}'`);
-  }
-});
-
+load_code(19);
 // setInterval(() => {
 //   if (
 //     !isInvFull(5) &&

@@ -52,7 +52,7 @@ setInterval(async function () {
     return;
   }
 
-  if (smart.moving && !smartmoveDebug) return;
+  if (smart.moving && isAdvanceSmartMoving && !smartmoveDebug) return;
 
   let target = getTarget();
 
@@ -63,8 +63,8 @@ setInterval(async function () {
   target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
-  if (!smart.moving && !target)
-    smart_move({
+  if (!smart.moving && !isAdvanceSmartMoving && !target)
+    advanceSmartMove({
       map,
       x: mapX,
       y: mapY,

@@ -3,12 +3,13 @@ load_code(7);
 load_code(8);
 
 // Kiting
+var basicRangeRate = 0.7;
 var rangeRate = 0.7;
 
-var rangerTarget = ["cgoo"];
-var rangerMap = "level2s";
-var rangerMapX = 9;
-var rangerMapY = 432;
+var rangerTarget = ["rat"];
+var rangerMap = "mansion";
+var rangerMapX = -9;
+var rangerMapY = -268;
 
 function getRangerTarget() {
   if (rangerTarget && rangerTarget.length) {
@@ -19,11 +20,13 @@ function getRangerTarget() {
   }
   return undefined;
 }
-function fight(target) {
-  loot();
+async function fight(target) {
+  // loot();
 
   if (can_attack(target)) {
     set_message("Attacking");
+
+    await currentStrategy(target);
     // Debuff
     if (
       !target.s.marked &&
@@ -36,43 +39,58 @@ function fight(target) {
     // Attacks
     // if (character.mp > 400 && !is_on_cooldown("supershot"))
     //   use_skill("supershot", target);
-    const targetsToThreeshot = Object.keys(parent.entities)
+    const potentialTargets = Object.values(parent.entities)
+      .filter(
+        (mobs) =>
+          is_in_range(mobs, "attack") &&
+          mobs.type === "monster" &&
+          mobs.attack * (mobs.frequency > 1 ? mobs.frequency : 1) < 500
+      )
       .sort((lhs, rhs) => {
-        if (parent.entities[lhs].hp === parent.entities[rhs].hp)
-          return (
-            distance(character, parent.entities[rhs]) -
-            distance(character, parent.entities[lhs])
-          );
-        return parent.entities[lhs].hp - parent.entities[rhs].hp;
-      })
-      ?.slice(0, 3)
-      .map((id) => parent.entities[id]);
+        if (lhs.hp === rhs.hp)
+          return distance(character, rhs) - distance(character, lhs);
+        return lhs.hp - rhs.hp;
+      });
+
+    const weakMobs = potentialTargets.filter(
+      (mob) =>
+        mob.max_hp < character.attack * 0.6 || mob.target !== character.name
+    );
+    if (
+      character.mp > 400 &&
+      !character.fear &&
+      weakMobs.length >= 4 &&
+      !is_on_cooldown("5shot") &&
+      character.hp > character.max_hp * 0.55
+    )
+      use_skill("5shot", weakMobs.slice(0, 5)).then(() =>
+        reduce_cooldown("attack", character.ping * 0.95)
+      );
+
     if (
       character.mp > 500 &&
       !character.fear &&
-      targetsToThreeshot.filter((target) => is_in_range(target, "attack"))
-        .length >= 2 &&
+      potentialTargets.length >= 2 &&
       !is_on_cooldown("3shot") &&
       target.attack < 400 &&
       character.hp > character.max_hp * 0.55
     )
-      use_skill("3shot", targetsToThreeshot).then(() =>
+      use_skill("3shot", potentialTargets.slice(0, 3)).then(() =>
         reduce_cooldown("attack", character.ping * 0.95)
       );
 
+    if (character.fear) {
+      target =
+        potentialTargets.filter((mob) => mob.target === character.name)[0] ??
+        target;
+    }
+
     if (!is_on_cooldown("attack"))
-      attack(
-        Object.keys(parent.entities)
-          .sort((lhs, rhs) => {
-            if (parent.entities[lhs].hp === parent.entities[rhs].hp)
-              return (
-                distance(character, parent.entities[rhs]) -
-                distance(character, parent.entities[lhs])
-              );
-            return parent.entities[lhs].hp - parent.entities[rhs].hp;
-          })
-          .map((id) => parent.entities[id])?.[0]
-      ).then(() => reduce_cooldown("attack", character.ping * 0.95));
+      attack(target).then(() =>
+        reduce_cooldown("attack", character.ping * 0.95)
+      );
+  } else {
+    if (character.fear) await scareAwayMobs();
   }
 
   if (!smartmoveDebug) {
@@ -95,7 +113,7 @@ function fight(target) {
       flipRotation *
         Math.asin(
           (character.speed * (1 / character.frequency)) /
-            8 /
+            6 /
             (character.range * rangeRate)
         ) *
         2;
@@ -105,7 +123,12 @@ function fight(target) {
 }
 
 setInterval(async function () {
-  loot();
+  if (
+    (bestLooter().name === character.name || !bestLooter()) &&
+    Object.keys(get_chests()).length
+  )
+    loot();
+
   buff();
 
   if (character.rip) {
@@ -113,7 +136,7 @@ setInterval(async function () {
     return;
   }
 
-  if (smart.moving && !smartmoveDebug) return;
+  if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
 
   let target = getRangerTarget() || getTarget();
 
@@ -124,16 +147,21 @@ setInterval(async function () {
   target = (await changeToDailyEventTargets()) ?? getRangerTarget();
 
   //// Logic to targets and farm places
-  if (!smart.moving && !target)
-    smart_move({
+  if (!smart.moving && !isAdvanceSmartMoving && !target) {
+    const scareInterval = setInterval(() => {
+      scareAwayMobs();
+    }, 5000);
+    await advanceSmartMove({
       map: rangerMap || map,
       x: rangerMapX || mapX,
       y: rangerMapY || mapY,
-    }).catch((e) => use_skill("use_town"));
+    });
+    clearInterval(scareInterval);
+  }
 
   if (character.hp < 0.6 * character.max_hp && !get_entity(HEALER)) {
     send_cm(HEALER, "party_heal");
   }
 
-  fight(target);
-}, ((1 / character.frequency) * 1000) / 4);
+  await fight(target);
+}, ((1 / character.frequency) * 1000) / 3);

@@ -1,5 +1,5 @@
+load_code(11);
 if (character.ctype !== "merchant") {
-  load_code(11);
   // Strategy that Pulls Mobs and blast them with lolipops, gstaff, etc
   load_code(13);
   // Normal
@@ -22,17 +22,17 @@ function changeToNormalStrategies() {
 
 // Global vars
 var attack_mode = true;
-var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
-// var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
+// var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
+var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
 
-const TANKER = "MooohMoooh";
-// const TANKER = "CowTheMooh";
+// const TANKER = "MooohMoooh";
+const TANKER = "CowTheMooh";
 
 const MAGE = "MowTheCooh";
 const HEALER = "CowTheMooh";
 
-var partyCodeSlot = [9, 2, 4, 5];
-// var partyCodeSlot = [2, 4, 15, 5];
+// var partyCodeSlot = [9, 2, 4, 5];
+var partyCodeSlot = [2, 4, 15, 5];
 
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
@@ -49,7 +49,8 @@ var flipRotationCooldown = 0;
 var angle; // Your desired angle from the monster, in radians
 var flip_cooldown = 0;
 var stuck_threshold = 2;
-var rangeRate = 0.5;
+var basicRangeRate = 0.5; // Is used to reset
+var rangeRate = basicRangeRate; // Variate range rate
 
 // Monsters selector
 var min_xp = 100;
@@ -62,8 +63,8 @@ var boss = ["mrpumpkin", "mrgreen"];
 // var mapY = 432;
 
 var map = "main";
-var mapX = 1421;
-var mapY = 113;
+var mapX = 1248;
+var mapY = -63;
 
 var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"]; // var type = "grinch";
 // var altType1 = "boar";
@@ -204,6 +205,10 @@ var maxCompound = 3;
 
 // Bank
 const bankSlots = ["items0", "items1", "items3"];
+
+load_code(20);
+load_code(16);
+
 // Pre-set function
 async function sortInv() {
   var inv = character.items;
@@ -263,7 +268,11 @@ function buff() {
     character.hp / character.max_hp < character.mp / character.max_mp ||
     character.hp < character.max_hp * 0.6
   ) {
-    if (character.hp < 0.8 * character.max_hp && !is_on_cooldown("use_hp"))
+    if (
+      character.hp < 0.8 * character.max_hp &&
+      character.hp < character.max_hp - 500 &&
+      !is_on_cooldown("use_hp")
+    )
       use_skill("use_hp").then(() => {
         reduce_cooldown("use_mp", character.ping * 0.95);
         reduce_cooldown("use_hp", character.ping * 0.95);
@@ -277,7 +286,11 @@ function buff() {
         reduce_cooldown("use_hp", character.ping * 0.95);
       });
   } else {
-    if (character.mp < 0.8 * character.max_mp && !is_on_cooldown("use_mp")) {
+    if (
+      character.mp < character.max_mp - 500 &&
+      character.mp < 0.8 * character.max_mp &&
+      !is_on_cooldown("use_mp")
+    ) {
       use_skill("use_mp").then(() => {
         reduce_cooldown("use_mp", character.ping * 0.95);
         reduce_cooldown("use_hp", character.ping * 0.95);
@@ -328,6 +341,7 @@ function getTarget() {
       if (
         leader &&
         !smart.moving &&
+        !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
             (character.y - leader.y) * (character.y - leader.y)
@@ -345,7 +359,7 @@ function getTarget() {
 }
 
 async function leaveJail() {
-  if (character.map === "jail" && !smart.moving) {
+  if (character.map === "jail" && !smart.moving && !isAdvanceSmartMoving) {
     log("Jail escape plan!");
     smart_move(find_npc("jailer")).then(() => {
       parent.socket.emit("leave");
@@ -470,8 +484,8 @@ function goToBoss() {
       stop("move");
       change_target();
       smartmoveDebug = false;
-      if (!smart.moving)
-        smart_move(parent.S[boss[i]])
+      if (!smart.moving && !isAdvanceSmartMoving)
+        advanceSmartMove(parent.S[boss[i]])
           .then(() => targetBoss(boss[i]))
           .catch((e) => {
             use_skill("use_town");
@@ -491,6 +505,22 @@ function isInvFull(slots = 1) {
   return character.esize <= slots;
 }
 
+function bestLooter() {
+  return partyMems
+    .map((id) => get_entity(id))
+    .filter((player) => player)
+    .sort((lhs, rhs) => lhs.goldm - rhs.goldm)
+    .pop();
+}
+
+function getTotalQuantityOf(item) {
+  return character.items.reduce((accummulator, current, index) => {
+    return (
+      accummulator + (current && current.name === item ? current.q || 1 : 0)
+    );
+  }, 0);
+}
+
 function filterCompoundableAndStackable() {
   const inv = character.items;
   const res = Array.from({ length: inv.length }, (_, i) => i + 0).filter(
@@ -508,7 +538,7 @@ setInterval(async function () {
   // Xmas buffs
   if (parent.S["holidayseason"] && !character.s.holidayspirit) {
     log("Ting ting ting");
-    await smart_move({ map: "main", x: -152, y: -137 });
+    await advanceSmartMove({ map: "main", x: -152, y: -137 });
     parent.socket.emit("interaction", { type: "newyear_tree" });
   }
 
@@ -517,10 +547,15 @@ setInterval(async function () {
   // Fix a bug where character is stuck to corner
   const currentTarget = get_targeted_monster();
 
-  if (currentTarget && !is_in_range(currentTarget, "attack") && !smart.moving) {
+  if (
+    currentTarget &&
+    !is_in_range(currentTarget, "attack") &&
+    !smart.moving &&
+    !isAdvanceSmartMoving
+  ) {
     smartmoveDebug = true;
     log("Debug being stuck while kiting");
-    smart_move({ x: currentTarget.x, y: currentTarget.y })
+    smart_move({ map: character.map, x: currentTarget.x, y: currentTarget.y })
       .then(() => {
         smartmoveDebug = false;
       })
@@ -569,10 +604,16 @@ setInterval(async function () {
   if (isInvFull(21)) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
-  } else if (!isInvFull(2) && locate_item("mpot1") === -1) {
+  } else if (
+    !isInvFull(2) &&
+    (locate_item("mpot1") === -1 || getTotalQuantityOf("mpot1") < 100)
+  ) {
     log("Asking the merchant for some mana potions...");
     send_cm(partyMerchant, { msg: "buy_mana", ...obj });
-  } else if (!isInvFull(2) && locate_item("hpot1") === -1) {
+  } else if (
+    !isInvFull(2) &&
+    (locate_item("hpot1") === -1 || getTotalQuantityOf("hpot1") < 100)
+  ) {
     log("Asking the merchant for some health potions...");
     send_cm(partyMerchant, { msg: "buy_hp", ...obj });
   } else if (!character.slots.elixir || !character.slots.elixir.name) {
@@ -596,6 +637,7 @@ setInterval(function () {
   const allCharacters = [...partyMems, partyMerchant];
 
   if (
+    !character.controller &&
     allCharacters.filter((characterId) => characterId !== character.name)
       .length !== loadedCharacters.length
   )
@@ -633,11 +675,33 @@ async function changeToDailyEventTargets() {
   let target = getTarget();
   const isFightingBoss = boss.includes(getTarget()?.mtype);
 
+  if (
+    (parent.S.goobrawl || get_nearest_monster({ type: "bgoo" })) &&
+    !isFightingBoss &&
+    !character.s["hopsickness"]
+  ) {
+    changeToPullStrategies();
+    if (character.map !== "goobrawl") join("goobrawl");
+
+    const rgooInstance = get_nearest_monster({ type: "rgoo" });
+    const bgooInstance = get_nearest_monster({ type: "bgoo" });
+
+    if (rgooInstance) {
+      change_target(target);
+      return get_nearest_monster({ type: "rgoo" });
+    }
+
+    if (!(target && ["bgoo", "rgoo"].includes(target.mtype))) {
+      change_target(rgooInstance || bgooInstance);
+      return rgooInstance || bgooInstance;
+    }
+  }
+
   if (parent.S.dragold?.live && !isFightingBoss) {
     changeToNormalStrategies();
 
     const dragoldInstance = get_nearest_monster({ type: "dragold" });
-    if (!dragoldInstance) smart_move(parent.S.dragold);
+    if (!dragoldInstance) advanceSmartMove(parent.S.dragold);
     else {
       change_target(dragoldInstance);
 
@@ -645,121 +709,12 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  // if (parent.S.pinkgoo?.live && !isFightingBoss) {
-  //   let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
-  //   if (!pinkgooInstance) {
-  //     if (character.map !== parent.S.pinkgoo?.map) {
-  //       await smart_move({ map: parent.S.pinkgoo?.map }).catch((e) => {
-  //         if (e.reason === "interrupted") {
-  //           pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
-  //           stop("smart");
-  //         }
-  //       });
-  //     }
-  //     pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
-
-  //     if (!pinkgooInstance) {
-  //       const mapMobSpawn = G.maps[parent.S.pinkgoo?.map].monsters.filter(
-  //         (p) => !p.boundaries
-  //       );
-
-  //       const uniqueMapMobSpawn = mapMobSpawn.reduce((acc, current) => {
-  //         const overlapped = acc.find((item) => {
-  //           return !(
-  //             item.boundary[0] >= current.boundary[2] ||
-  //             item.boundary[2] <= current.boundary[0] ||
-  //             item.boundary[1] >= current.boundary[3] ||
-  //             item.boundary[3] <= current.boundary[1]
-  //           );
-  //         });
-  //         if (!overlapped) {
-  //           acc.push(current);
-  //         }
-  //         return acc;
-  //       }, []);
-
-  //       for (const spawn of uniqueMapMobSpawn) {
-  //         const visitedSpawn = get("visitedSpawn") ?? [];
-  //         if (visitedSpawn.includes(spawn.type)) {
-  //           continue;
-  //         } else {
-  //           visitedSpawn.push(spawn.type);
-  //           set("visitedSpawn", visitedSpawn);
-  //         }
-  //         const toX = (spawn.boundary[0] + spawn.boundary[2]) / 2;
-  //         const toY = (spawn.boundary[1] + spawn.boundary[3]) / 2;
-  //         if (
-  //           character.ctype === "mage" &&
-  //           character.mp > 3400 &&
-  //           !is_on_cooldown("blink") &&
-  //           distance(character, { x: toX, y: toY }) > 300
-  //         ) {
-  //           await use_skill("blink", [toX, toY]);
-  //           reduce_cooldown("blink", character.ping * 0.95);
-  //           await sleep(1200);
-  //         } else
-  //           await smart_move({
-  //             map: parent.S.pinkgoo?.map,
-  //             x: (spawn.boundary[0] + spawn.boundary[2]) / 2,
-  //             y: (spawn.boundary[1] + spawn.boundary[3]) / 2,
-  //           }).catch((e) => {
-  //             if (e.reason === "interrupted") {
-  //               pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
-  //               stop("smart");
-  //             }
-  //           });
-  //         pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
-
-  //         if (pinkgooInstance) {
-  //           set(
-  //             "visitedSpawn",
-  //             visitedSpawn.filter((vspawn) => vspawn !== spawn.type)
-  //           );
-  //           change_target(pinkgooInstance);
-  //           return pinkgooInstance;
-  //         }
-
-  //         if (!parent.S.pinkgoo?.live) break;
-  //         break;
-  //       }
-  //     } else {
-  //       change_target(pinkgooInstance);
-  //       return pinkgooInstance;
-  //     }
-  //   } else {
-  //     changeToNormalStrategies();
-  //     if (
-  //       character.ctype === "warrior" &&
-  //       character.dreturn &&
-  //       is_in_range(pinkgooInstance, "taunt") &&
-  //       !is_on_cooldown("taunt") &&
-  //       character.mp > G.skills["taunt"].mp &&
-  //       pinkgooInstance.target !== character.name
-  //     ) {
-  //       use_skill("taunt", pinkgooInstance);
-  //     }
-
-  //     if (!get_entity(MAGE) || character.ctype === "mage")
-  //       partyMems.forEach((id) => {
-  //         if (!get_entity(id))
-  //           send_cm(id, {
-  //             msg: "pinkgoo_found",
-  //             map: character.map,
-  //             x: character.x,
-  //             y: character.y,
-  //           });
-  //       });
-  //     return pinkgooInstance;
-  //   }
-  // } else {
-  //   set("visitedSpawn", undefined);
-  // }
   if (parent.S.pinkgoo?.live && !isFightingBoss) {
     changeToNormalStrategies();
     let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
     if (!pinkgooInstance) {
       if (parent.S.pinkgoo?.x) {
-        await smart_move(parent.S.pinkgoo);
+        await advanceSmartMove(parent.S.pinkgoo);
         change_target(get_nearest_monster({ type: "pinkgoo" }));
         return get_nearest_monster({ type: "pinkgoo" });
       }
@@ -776,16 +731,6 @@ async function changeToDailyEventTargets() {
         use_skill("taunt", pinkgooInstance);
       }
 
-      if (!get_entity(MAGE) || character.ctype === "mage")
-        partyMems.forEach((id) => {
-          if (!get_entity(id))
-            send_cm(id, {
-              msg: "pinkgoo_found",
-              map: character.map,
-              x: character.x,
-              y: character.y,
-            });
-        });
       return pinkgooInstance;
     }
   }
@@ -794,7 +739,7 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
 
     const snowmanInstance = get_nearest_monster({ type: "snowman" });
-    if (!snowmanInstance) smart_move(parent.S.snowman);
+    if (!snowmanInstance) advanceSmartMove(parent.S.snowman);
     else {
       if (snowmanInstance.s?.fullguardx)
         change_target(get_nearest_monster({ type: "arcticbee" }));
@@ -810,12 +755,19 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
 
     const crabxxInstance = get_nearest_monster({ type: "crabxx" });
-    const crabxInstance = get_nearest_monster({ type: "crabx" });
+    const crabxInstance = Object.values(parent.entities)
+      .filter((mobs) => mobs.mtype === "crabx" && is_in_range(mobs, "attack"))
+      .sort((lhs, rhs) => {
+        if (lhs.hp === rhs.hp)
+          return distance(rhs, character) - distance(lhs, character);
+        return lhs.hp - rhs.hp;
+      })
+      .pop();
     if (!crabxxInstance)
       join("crabxx")
         .then(() => change_target(get_nearest_monster({ type: "crabxx" })))
         .catch(() => {
-          smart_move({ map: "main", x: -960, y: 1655 }).then(() =>
+          advanceSmartMove({ map: "main", x: -960, y: 1655 }).then(() =>
             change_target(get_nearest_monster({ type: "crabxx" }))
           );
         });
@@ -862,7 +814,7 @@ async function changeToDailyEventTargets() {
     if (!iceGolemInstance) {
       if (character.range < 100) join("icegolem");
       else {
-        smart_move({ map: "winterland", x: 771, y: 273 });
+        advanceSmartMove({ map: "winterland", x: 771, y: 273 });
       }
     }
     change_target(iceGolemInstance);
@@ -874,21 +826,31 @@ async function changeToDailyEventTargets() {
   }
 
   if (
-    parent.S.franky &&
+    parent.S.franky?.live &&
+    parent.S.franky?.target &&
     parent.S.franky?.hp < 0.9 * parent.S.franky?.max_hp &&
-    !isFightingBoss &&
-    !partyMems.includes(parent.S.franky?.target)
+    !isFightingBoss
   ) {
     changeToNormalStrategies();
-    const frankyInstance = get_nearest_monster({ type: "franky" });
-    if (!frankyInstance)
+    let frankyInstance = get_nearest_monster({ type: "franky" });
+    if (!frankyInstance) {
       join("franky").catch(() =>
-        smart_move({ map: "level2s", x: -182, y: 42 }).then(() =>
+        advanceSmartMove({ map: "level2s", x: -182, y: 42 }).then(() =>
           change_target(get_nearest_monster({ type: "franky" }))
         )
       );
-    change_target(get_nearest_monster({ type: "franky" }));
-    return frankyInstance;
+      change_target(get_nearest_monster({ type: "franky" }));
+      frankyInstance = get_nearest_monster({ type: "franky" });
+    }
+
+    if (frankyInstance)
+      if (frankyInstance.target && !partyMems.includes(frankyInstance.target)) {
+        rangeRate = 0.1;
+        return frankyInstance;
+      } else {
+        change_target();
+        await advanceSmartMove({ map: "level2w", x: -530, y: -173 });
+      }
   }
 
   if (parent.S.abtesting) {
@@ -938,28 +900,9 @@ async function changeToDailyEventTargets() {
     target = pvpTarget.entity;
   }
 
-  if (
-    (parent.S.goobrawl || get_nearest_monster({ type: "bgoo" })) &&
-    !isFightingBoss
-  ) {
-    changeToPullStrategies();
-    if (character.map !== "goobrawl") join("goobrawl");
-
-    const rgooInstance = get_nearest_monster({ type: "rgoo" });
-    const bgooInstance = get_nearest_monster({ type: "bgoo" });
-
-    if (rgooInstance) {
-      change_target(target);
-      return get_nearest_monster({ type: "rgoo" });
-    }
-
-    if (!(target && ["bgoo", "rgoo"].includes(target.mtype))) {
-      change_target(rgooInstance || bgooInstance);
-      return rgooInstance || bgooInstance;
-    }
-  }
   if (get_entity(HEALER) && !get_entity(HEALER).rip) changeToPullStrategies();
   else changeToNormalStrategies();
+  rangeRate = basicRangeRate;
   return target;
 }
 

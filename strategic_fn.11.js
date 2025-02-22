@@ -1,16 +1,34 @@
 const MAX_TARGET = 5;
-const BLAST_RADIUS = 17;
+const BLAST_RADIUS = character.blast / 3.6 || 60 / 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 3;
 const MAX_MOB_DPS = 1000;
+
+// Counting
+function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
+  if (!target) return 0;
+  return Object.keys(parent.entities).filter(
+    (entityId) =>
+      parent.distance(target, parent.entities?.[entityId]) < blastRadius &&
+      partyMems.includes(parent.entities?.[entityId].target)
+  ).length;
+}
+
+function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
+  return (
+    Object.keys(parent.entities).filter(
+      (entityId) =>
+        parent.distance(target, parent.entities?.[entityId]) < blastRadius &&
+        parent.entities[entityId]?.attack > 1100 &&
+        parent.entities[entityId]?.type === "monster"
+    ).length > 0
+  );
+}
 
 // Class Items logic
 function calculateMageItems(target) {
   const shouldUseBlaster =
-    Object.keys(parent.entities).filter(
-      (entityId) =>
-        parent.distance(target, parent.entities?.[entityId]) < BLAST_RADIUS &&
-        partyMems.includes(parent.entities?.[entityId].target)
-    ).length >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON;
+    numberOfMonsterAroundTarget(target) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON &&
+    !target["1hp"];
 
   return {
     mainhand:
@@ -23,8 +41,8 @@ function calculateMageItems(target) {
       currentStrategy === usePullStrategies
         ? shouldUseBlaster
           ? undefined
-          : "wbook0"
-        : "wbook0",
+          : "wbook1"
+        : "wbook1",
   };
 }
 
@@ -49,7 +67,20 @@ function calculateWarriorItems() {
 
 function calculateRangerItems() {
   return {
-    mainhand: get_targeted_monster().armor > 120 ? "crossbow" : "merry",
+    mainhand: get_targeted_monster()?.cooperative
+      ? "firebow"
+      : "crossbow",
+    orb: "rabbitsfoot",
+  };
+}
+
+function calculatePriestItems() {
+  const haveLowHpMobsNearby = Object.values(parent.entities).some(
+    (mobs) => partyMems.includes(mobs.target) && mobs.hp <= mobs.max_hp * 0.15
+  );
+  return {
+    mainhand: haveLowHpMobsNearby ? "lmace" : "pmace",
+    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "jacko",
   };
 }
 
@@ -72,14 +103,13 @@ function findMaxLevelItem(id) {
 async function equipBatch(suggestedItems) {
   if (character.cc > 100) return;
 
-  Promise.all(
+  await Promise.all(
     Object.keys(suggestedItems).map(async (slot) => {
-      if (character.slots[slot]?.name !== suggestedItems[slot])
-        await unequip(slot);
+      if (character.slots[slot]?.name !== suggestedItems[slot]) unequip(slot);
     })
   );
 
-  await equip_batch(
+  return equip_batch(
     Object.keys(suggestedItems)
       .filter((slot) => suggestedItems[slot] !== undefined)
       .map((slot) => ({
@@ -111,19 +141,33 @@ function calculateDamage(target, characterEntity) {
   }
 }
 
+function listOfMonsterAttacking(characterEntity) {
+  return Object.values(parent.entities).filter(
+    (entity) =>
+      entity.type === "monster" && entity.target === characterEntity.name
+  );
+}
+
+function mobbingMultiplier(numberOfMobs) {
+  return numberOfMobs < 5 ? 1.7 : numberOfMobs < 6 ? 1.8 : 2;
+}
+
 function avgDmgTaken(characterEntity) {
-  return Object.keys(parent.entities)
-    .filter(
-      (id) =>
-        parent.entities[id]?.target === characterEntity.name &&
-        parent.entities[id]?.type === "monster"
-    )
-    .reduce(
-      (accummulator, currentId) =>
-        accummulator +
-        calculateDamage(parent.entities[currentId], characterEntity),
-      0
-    );
+  const numberOfAttackingMobs = listOfMonsterAttacking(characterEntity).length;
+  return (
+    Object.keys(parent.entities)
+      .filter(
+        (id) =>
+          parent.entities[id]?.target === characterEntity.name &&
+          parent.entities[id]?.type === "monster"
+      )
+      .reduce(
+        (accummulator, currentId) =>
+          accummulator +
+          calculateDamage(parent.entities[currentId], characterEntity),
+        0
+      ) * mobbingMultiplier(numberOfAttackingMobs)
+  );
 }
 
 function getMonstersToCBurst() {
@@ -136,6 +180,7 @@ function getMonstersToCBurst() {
     .filter(
       (id) =>
         parent.entities[id]?.type === "monster" &&
+        is_in_range(parent.entities[id], "cburst") &&
         calculateDamage(parent.entities[id], partyTanker) < MAX_MOB_DPS
     )
     .sort(
@@ -146,25 +191,30 @@ function getMonstersToCBurst() {
 
   const result = [];
 
-  let tankerDmgReceive = avgDmgTaken(partyTanker);
+  if (!partyHealer) return result;
+
+  let tankerDmgReceive = avgDmgTaken(partyHealer);
+  let tankerNumberOfAggroedMobs = listOfMonsterAttacking(partyHealer).length;
+
   for (const mobId of mobsList) {
-    if (
-      tankerDmgReceive >= partyHealer.heal * partyHealer.frequency ||
-      Object.keys(parent.entities).filter(
-        (id) => parent.entities[id]?.target === TANKER
-      ).length +
-        result.length >
-        MAX_TARGET
-    )
-      break;
+    if (tankerDmgReceive >= partyHealer.heal * partyHealer.frequency) break;
 
     if (
       is_in_range(parent.entities[mobId], "cburst") &&
-      parent.entities[mobId].target === undefined
-    )
+      !parent.entities[mobId]?.target &&
+      tankerDmgReceive +
+        calculateDamage(parent.entities[mobId], partyTanker) *
+          mobbingMultiplier(tankerNumberOfAggroedMobs + 1) <
+        partyHealer.heal * partyHealer.frequency * 0.9
+    ) {
       result.push([parent.entities[mobId], 2]);
-
-    tankerDmgReceive += calculateDamage(parent.entities[mobId], partyTanker);
+      tankerNumberOfAggroedMobs += 1;
+      tankerDmgReceive =
+        (tankerDmgReceive * mobbingMultiplier(tankerNumberOfAggroedMobs + 1)) /
+          mobbingMultiplier(tankerNumberOfAggroedMobs) +
+        calculateDamage(parent.entities[mobId], partyTanker) *
+          mobbingMultiplier(tankerNumberOfAggroedMobs + 1);
+    }
   }
   return result;
 }

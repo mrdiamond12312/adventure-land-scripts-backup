@@ -3,11 +3,14 @@ load_code(7);
 load_code(8);
 
 // Kiting
+var basicRangeRate = 0.5;
 var rangeRate = 0.5;
 
-function fight(target) {
-  if (can_attack(target)) {
+async function fight(target) {
+  const shouldAttack = character.map === "crypt" ? get_entity(HEALER) : true;
+  if (can_attack(target) && shouldAttack) {
     set_message("Attacking");
+    await currentStrategy(target);
     attack(target).then(() => reduce_cooldown("attack", character.ping * 0.95));
     if (character.mp > 1100 && !is_on_cooldown("curse") && target.max_hp > 3000)
       use_skill("curse", target);
@@ -28,7 +31,7 @@ function fight(target) {
       flipRotation *
         Math.asin(
           (character.speed * (1 / character.frequency)) /
-            8 /
+            6 /
             (character.range * rangeRate)
         ) *
         2;
@@ -52,23 +55,23 @@ function priestBuff() {
   const allies = parent.party_list
     .map((name) => get_entity(name))
     .filter((visible) => visible);
-
   if (
-    allies &&
+    allies?.length &&
     (allies.some(
       (ally) =>
-        ally.hp < ally.max_hp - character.level * 10 &&
-        !is_in_range(ally, "heal")
+        (ally.hp < ally.max_hp - character.level * 10 * 2 &&
+          !is_in_range(ally, "heal")) ||
+        ally.hp < ally.max_hp * 0.3
     ) ||
-      allies.every((ally) => ally.hp < ally.max_hp - character.level * 10))
-  )
+      allies.every((ally) => ally.hp < ally.max_hp - character.level * 10 * 2))
+  ) {
     if (!is_on_cooldown("partyheal") && character.mp > 1000) {
       use_skill("partyheal").then(() =>
         reduce_cooldown("partyheal", character.ping * 0.95)
       );
       set_message("Party Heal");
     }
-
+  }
   partyMems
     .filter((member) => member !== character.name && member !== TANKER)
     .map((member) => {
@@ -94,7 +97,12 @@ function priestBuff() {
 }
 
 setInterval(async function () {
-  loot();
+  if (
+    (bestLooter().name === character.name || !bestLooter()) &&
+    Object.keys(get_chests()).length
+  )
+    loot();
+
   buff();
 
   if (character.rip) {
@@ -104,27 +112,36 @@ setInterval(async function () {
 
   priestBuff();
 
-  if (smart.moving && !smartmoveDebug) return;
+  if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
 
   let target = getTarget();
 
   //// BOSSES
   if (goToBoss()) return;
 
-  //// EVENTS
-  target = await changeToDailyEventTargets();
+  //// THE CRYPT & EVENTS
+  if (get("cryptInstance")) target = await useCryptStrategy(target);
+  else target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
-  if (
+  if (get("cryptInstance") && character.map !== "crypt") {
+    await advanceSmartMove(CRYPT_DOOR);
+    enter("crypt", get("cryptInstance"));
+  } else if (
     !smart.moving &&
     !target &&
     (partyMems[0] == character.name || !get_entity(partyMems[0]))
-  )
-    smart_move({
+  ) {
+    const scareInterval = setInterval(() => {
+      scareAwayMobs();
+    }, 5000);
+    await advanceSmartMove({
       map,
       x: mapX,
       y: mapY,
-    }).catch((e) => use_skill("use_town"));
+    });
+    clearInterval(scareInterval);
+  }
 
-  fight(target);
-}, ((1 / character.frequency) * 1000) / 4);
+  await fight(target);
+}, ((1 / character.frequency) * 1000) / 3);

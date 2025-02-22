@@ -54,19 +54,6 @@ character.on("cm", async function ({ name, message }) {
       );
       break;
 
-    case "pinkgoo_found":
-      if (name === MAGE) {
-        log("Asking for a Magiport from " + MAGE);
-        send_cm(MAGE, "magiport");
-      } else {
-        if (character.ctype === "mage" && character.map === msg.map) {
-          use_skill("blink", [msg.x, msg.y]);
-        } else {
-          smart_move({ ...msg });
-        }
-      }
-      break;
-
     case "magiport":
       if (character.mp > G.skills["magiport"]?.mp) {
         use_skill("magiport", name);

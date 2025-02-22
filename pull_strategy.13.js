@@ -8,7 +8,6 @@ async function usePullStrategies(target) {
   switch (character.ctype) {
     case "mage":
       const suggestedMageItems = calculateMageItems(target);
-
       if (
         Object.keys(suggestedMageItems).some(
           (slot) => character.slots[slot]?.name !== suggestedMageItems[slot]
@@ -18,7 +17,7 @@ async function usePullStrategies(target) {
       }
 
       if (!is_on_cooldown("energize")) {
-        if (character.mp > 3000)
+        if (character.mp > 4000)
           use_skill("energize", get_entity(TANKER)).then(() =>
             reduce_cooldown("energize", character.ping * 0.95)
           );
@@ -36,7 +35,9 @@ async function usePullStrategies(target) {
         is_in_range(get_entity(HEALER), "absorb")
       ) {
         if (getMonstersToCBurst().length >= 2)
-          use_skill("cburst", getMonstersToCBurst());
+          await use_skill("cburst", getMonstersToCBurst()).then(() =>
+            reduce_cooldown("cburst", -6000)
+          );
       }
 
       break;
@@ -122,7 +123,7 @@ async function usePullStrategies(target) {
       break;
 
     case "ranger":
-      const suggestedRangerItems = calculateRangerItems(target);
+      const suggestedRangerItems = calculateRangerItems();
 
       if (
         Object.keys(suggestedRangerItems).some(
@@ -130,6 +131,30 @@ async function usePullStrategies(target) {
         )
       ) {
         await equipBatch(suggestedRangerItems);
+      }
+      break;
+
+    case "priest":
+      const suggestedPriestItems = calculatePriestItems();
+      if (
+        Object.keys(suggestedPriestItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot]
+        )
+      ) {
+        await equipBatch(suggestedPriestItems);
+      }
+
+      if (
+        avgDmgTaken(character) > character.heal * 0.8 * character.frequency &&
+        !is_on_cooldown("scare") &&
+        character.mp > 100 &&
+        character.hp < 0.6 * character.max_hp &&
+        character.cc < 100
+      ) {
+        await equipBatch({
+          orb: "jacko",
+        });
+        await use_skill("scare");
       }
       break;
     default:

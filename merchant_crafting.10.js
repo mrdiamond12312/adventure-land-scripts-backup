@@ -3,7 +3,7 @@ load_code(7);
 let BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
 
-const IGNORE_RARE_GOLD_THRESHOLD = 18e8;
+const IGNORE_RARE_GOLD_THRESHOLD = 15e8;
 
 const KEEP_THRESHOLD = {
   // Every character needs

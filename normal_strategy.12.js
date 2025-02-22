@@ -72,5 +72,18 @@ async function useNormalStrategy(target) {
         await equipBatch(suggestedRangerItems);
       }
       break;
+
+    case "priest":
+      const suggestedPriestItems = calculatePriestItems();
+      if (
+        Object.keys(suggestedPriestItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot]
+        )
+      ) {
+        await equipBatch(suggestedPriestItems);
+      }
+
+      await scareAwayMobs();
+      break;
   }
 }
