@@ -3,8 +3,9 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var basicRangeRate = 0.7;
+var originRangeRate = 0.7;
 var rangeRate = 0.7;
+const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 var rangerTarget = ["rat"];
 var rangerMap = "mansion";
@@ -23,7 +24,7 @@ function getRangerTarget() {
 async function fight(target) {
   // loot();
 
-  if (can_attack(target)) {
+  if (!is_on_cooldown("attack")) {
     set_message("Attacking");
 
     await currentStrategy(target);
@@ -44,9 +45,14 @@ async function fight(target) {
         (mobs) =>
           is_in_range(mobs, "attack") &&
           mobs.type === "monster" &&
-          mobs.attack * (mobs.frequency > 1 ? mobs.frequency : 1) < 500
+          (mobs.attack * (mobs.frequency > 1 ? mobs.frequency : 1) < 500 ||
+            (mobs.cooperative &&
+              mobs.target &&
+              (!partyMems.includes(mobs.target) || mobs["1hp"])))
       )
       .sort((lhs, rhs) => {
+        if (lhs.cooperative && lhs.target) return -1;
+        if (rhs.cooperative && rhs.target) return 1;
         if (lhs.hp === rhs.hp)
           return distance(character, rhs) - distance(character, lhs);
         return lhs.hp - rhs.hp;
@@ -54,7 +60,8 @@ async function fight(target) {
 
     const weakMobs = potentialTargets.filter(
       (mob) =>
-        mob.max_hp < character.attack * 0.6 || mob.target !== character.name
+        mob.max_hp < character.attack * 0.6 ||
+        (mob.target && mob.target !== character.name)
     );
     if (
       character.mp > 400 &&
@@ -66,8 +73,7 @@ async function fight(target) {
       use_skill("5shot", weakMobs.slice(0, 5)).then(() =>
         reduce_cooldown("attack", character.ping * 0.95)
       );
-
-    if (
+    else if (
       character.mp > 500 &&
       !character.fear &&
       potentialTargets.length >= 2 &&
@@ -78,19 +84,16 @@ async function fight(target) {
       use_skill("3shot", potentialTargets.slice(0, 3)).then(() =>
         reduce_cooldown("attack", character.ping * 0.95)
       );
+    else if (can_attack(target))
+      attack(target).then(() =>
+        reduce_cooldown("attack", character.ping * 0.92)
+      );
 
     if (character.fear) {
       target =
         potentialTargets.filter((mob) => mob.target === character.name)[0] ??
         target;
     }
-
-    if (!is_on_cooldown("attack"))
-      attack(target).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95)
-      );
-  } else {
-    if (character.fear) await scareAwayMobs();
   }
 
   if (!smartmoveDebug) {
@@ -108,13 +111,21 @@ async function fight(target) {
         )[0] ?? target,
       rangeRate
     );
+
     angle =
       angle +
       flipRotation *
         Math.asin(
-          (character.speed * (1 / character.frequency)) /
-            6 /
-            (character.range * rangeRate)
+          (character.speed * loopInterval) /
+            1000 /
+            2 /
+            (character.range * rangeRate +
+              character.xrange * 0.3 +
+              extraDistanceWithinHitbox(
+                angle,
+                target ? get_width(target) ?? 0 : 0,
+                target ? get_height(target) ?? 0 : 0
+              ))
         ) *
         2;
   } else {
@@ -137,6 +148,10 @@ setInterval(async function () {
   }
 
   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
+
+  if (character.fear) {
+    await scareAwayMobs();
+  }
 
   let target = getRangerTarget() || getTarget();
 
@@ -164,4 +179,4 @@ setInterval(async function () {
   }
 
   await fight(target);
-}, ((1 / character.frequency) * 1000) / 3);
+}, loopInterval);

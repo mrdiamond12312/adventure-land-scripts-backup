@@ -36,6 +36,8 @@ function calculateMageItems(target) {
         ? shouldUseBlaster
           ? "gstaff"
           : "firestaff"
+        : character.map === "crypt" && !get_targeted_monster()?.s?.frozen
+        ? "froststaff"
         : "firestaff",
     offhand:
       currentStrategy === usePullStrategies
@@ -47,67 +49,110 @@ function calculateMageItems(target) {
 }
 
 function calculateWarriorItems() {
-  if (["pinkgoo", "snowman"].includes(get_targeted_monster()?.mtype))
+  const haveLowHpMobsNearby = Object.values(parent.entities).some(
+    (mobs) =>
+      (partyMems.includes(mobs.target) || mobs.cooperative) &&
+      mobs.hp <= mobs.max_hp * 0.15
+  );
+
+  if (["pinkgoo", "snowman", "wabbit"].includes(get_targeted_monster()?.mtype))
     return {
       mainhand: "rapier",
       offhand: undefined,
-      orb: "talkingskull",
+      orb: "rabbitsfoot",
+      amulet: "spookyamulet",
+      chest: "cdragon",
+      helmet: "oxhelmet",
     };
+
   return {
-    mainhand: "xmace",
+    helmet: character.map === "crypt" ? "xhelmet" : "oxhelmet",
+    mainhand: currentStrategy === usePullStrategies ? "vhammer" : "xmace",
     offhand:
-      currentStrategy === usePullStrategies
-        ? "glolipop"
-        : character.s.sugarrush || get_targeted_monster()?.cooperative
-        ? "fireblade"
-        : "candycanesword",
-    orb: "talkingskull",
+      (character.map === "crypt" &&
+        Object.values(parent.entities).some(
+          (mob) => mob.target === character.name && mob.mtype === "a2"
+        )) ||
+      haveLowHpMobsNearby
+        ? "mshield"
+        : currentStrategy === usePullStrategies
+        ? "ololipop"
+        : "fireblade",
+    amulet: haveLowHpMobsNearby ? "spookyamulet" : "t2stramulet",
+    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofstr",
+    chest: character.map === "crypt" ? "xarmor" : "cdragon",
+    pants: character.map === "crypt" ? "frankypants" : "frankypants",
   };
 }
 
 function calculateRangerItems() {
   return {
-    mainhand: get_targeted_monster()?.cooperative
-      ? "firebow"
-      : "crossbow",
+    mainhand: get_targeted_monster()?.cooperative ? "firebow" : "crossbow",
     orb: "rabbitsfoot",
   };
 }
 
 function calculatePriestItems() {
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
-    (mobs) => partyMems.includes(mobs.target) && mobs.hp <= mobs.max_hp * 0.15
+    (mobs) =>
+      (partyMems.includes(mobs.target) || mobs.cooperative) &&
+      mobs.hp <= mobs.max_hp * 0.15
   );
   return {
-    mainhand: haveLowHpMobsNearby ? "lmace" : "pmace",
-    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "jacko",
+    mainhand:
+      character.map === "crypt" &&
+      Object.values(parent.entities).some(
+        (mob) => mob.type === "monster" && mob.target === character.name
+      )
+        ? "pmace"
+        : get_targeted_monster()?.cooperative
+        ? "firestaff"
+        : haveLowHpMobsNearby
+        ? "lmace"
+        : "pmace",
+    offhand: character.map === "crypt" ? "wbook1" : "mshield",
+    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "test_orb",
+    amulet: "intamulet",
   };
 }
 
 // Equiping Items
-function findMaxLevelItem(id) {
+function findMaxLevelItem(id, offset = 0) {
   let maxSlot = -1;
   let maxLevel = 0;
+  const allItemOfId = [];
   for (let iter = 0; iter < character.items.length; iter++) {
     const currentItem = character.items[iter];
+    if (currentItem && currentItem.name === id) {
+      allItemOfId.push({ ...currentItem, slot: iter });
+    }
     if (!(currentItem && currentItem.name === id)) continue;
-    if (currentItem.level >= maxLevel) {
+    if ((currentItem.level ?? 0) >= maxLevel) {
       maxSlot = iter;
       maxLevel = currentItem.level;
     }
   }
 
-  return maxSlot;
+  if (offset === 0) return maxSlot;
+  else {
+    return allItemOfId.sort((lhs, rhs) => {
+      if (rhs.level === lhs.level) return rhs.slot - lhs.slot;
+      return rhs.level - lhs.level;
+    })[offset]?.slot;
+  }
 }
 
+var isEquipingItems = false;
 async function equipBatch(suggestedItems) {
-  if (character.cc > 100) return;
+  if (character.cc > 100 || isEquipingItems) return;
 
   await Promise.all(
     Object.keys(suggestedItems).map(async (slot) => {
       if (character.slots[slot]?.name !== suggestedItems[slot]) unequip(slot);
     })
   );
+
+  isEquipingItems = true;
 
   return equip_batch(
     Object.keys(suggestedItems)
@@ -117,7 +162,9 @@ async function equipBatch(suggestedItems) {
         num: findMaxLevelItem(suggestedItems[slot]),
       }))
       .filter((equipInfo) => equipInfo.num >= 0)
-  );
+  ).then(() => {
+    isEquipingItems = false;
+  });
 }
 
 // Utilities

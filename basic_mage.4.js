@@ -3,9 +3,9 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var basicRangeRate = 0.8;
-var rangeRate = 0.8;
-const loopInterval = ((1 / character.frequency) * 1000) / 3;
+var originRangeRate = 0.8;
+rangeRate = 0.8;
+const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 async function fight(target) {
   if (character.rip) {
@@ -38,6 +38,7 @@ async function fight(target) {
     change_target(target);
   }
   const shouldAttack = character.map === "crypt" ? get_entity(HEALER) : true;
+
   if (can_attack(target) && shouldAttack) {
     set_message("Attacking");
 
@@ -55,7 +56,7 @@ async function fight(target) {
       target.hp > 3000 &&
       target.resistance > 400 &&
       !target["1hp"] &&
-      character.mp > 2000
+      character.mp > 4000
     ) {
       log("Maxima Burst!");
       use_skill("burst");
@@ -95,7 +96,13 @@ async function fight(target) {
           (character.speed * loopInterval) /
             1000 /
             2 /
-            (character.range * rangeRate)
+            (character.range * rangeRate +
+              character.xrange * 0.3 +
+              extraDistanceWithinHitbox(
+                angle,
+                target ? get_width(target) ?? 0 : 0,
+                target ? get_height(target) ?? 0 : 0
+              ))
         ) *
         2;
   } else {
@@ -125,6 +132,7 @@ setInterval(async function () {
       y: character.y,
     });
   }
+
   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
 
   let target = getTarget();
@@ -136,14 +144,21 @@ setInterval(async function () {
   else target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
-  if (get("cryptInstance") && character.map !== "crypt") {
-    await advanceSmartMove(CRYPT_DOOR);
-    enter("crypt", get("cryptInstance"));
+  if (
+    !smart.move &&
+    !isAdvanceSmartMoving &&
+    get("cryptInstance") &&
+    character.map !== "crypt" &&
+    !target &&
+    !get_entity(partyMems[0])
+  ) {
+    await advanceSmartMove(CRYPT_STARTING_LOCATION);
   } else if (
     !smart.moving &&
     !isAdvanceSmartMoving &&
     !target &&
-    !get_entity(partyMems[0])
+    !get_entity(partyMems[0]) &&
+    !get("cryptInstance")
   ) {
     log("Moving to farming location");
     const scareInterval = setInterval(() => {

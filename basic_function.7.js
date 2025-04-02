@@ -22,28 +22,24 @@ function changeToNormalStrategies() {
 
 // Global vars
 var attack_mode = true;
-// var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
-var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
+var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
+// var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
 
-// const TANKER = "MooohMoooh";
-const TANKER = "CowTheMooh";
+const TANKER = "MooohMoooh";
+// const TANKER = "CowTheMooh";
 
 const MAGE = "MowTheCooh";
 const HEALER = "CowTheMooh";
+const RANGER = "MoohThatCow";
 
-// var partyCodeSlot = [9, 2, 4, 5];
-var partyCodeSlot = [2, 4, 15, 5];
+var partyCodeSlot = [9, 2, 4, 5];
+// var partyCodeSlot = [2, 4, 15, 5];
 
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
 
-var spacial = 50;
-
 //  run and hit
-var last_x = character.real_x;
-var last_y = character.real_y;
-var last_x2 = last_x; // Keep track of one more back to detect edges better
-var last_y2 = last_y; //
+const movementHistory = [];
 var flipRotation = 1;
 var flipRotationCooldown = 0;
 var angle; // Your desired angle from the monster, in radians
@@ -51,6 +47,8 @@ var flip_cooldown = 0;
 var stuck_threshold = 2;
 var basicRangeRate = 0.5; // Is used to reset
 var rangeRate = basicRangeRate; // Variate range rate
+
+const spacial = 16;
 
 // Monsters selector
 var min_xp = 100;
@@ -65,8 +63,11 @@ var boss = ["mrpumpkin", "mrgreen"];
 var map = "main";
 var mapX = 1248;
 var mapY = -63;
+// var mapX = -289;
+// var mapY = -188;
 
 var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"]; // var type = "grinch";
+// var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 // var altType1 = "boar";
 // var altType2 = "boar";
 
@@ -162,9 +163,11 @@ var storeAble = [
   "bfur",
   "beewings",
   "ascale",
+  "tombkey",
 ];
 
 var saleAble = [
+  "fieldgen0",
   "snowball",
   "cclaw",
   "dagger",
@@ -186,7 +189,6 @@ var saleAble = [
   "maceofthedead",
   "daggerofthedead",
   "staffofthedead",
-  "bowofthedead",
   "swordofthedead",
   "throwingstars",
   "ringsj",
@@ -321,7 +323,8 @@ function getTarget() {
         .filter((id) => parent.entities[id].target === HEALER)
         .sort(
           (lhs, rhs) =>
-            parent.entities[lhs].attack - parent.entities[rhs].attack
+            distance(parent.entities[lhs], get_entity(HEALER)) -
+            distance(parent.entities[rhs], get_entity(HEALER))
         );
       if (
         mobsTargetingHealer &&
@@ -345,7 +348,11 @@ function getTarget() {
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
             (character.y - leader.y) * (character.y - leader.y)
-        ) > spacial
+        ) > spacial &&
+        can_move_to(
+          character.x + (leader.x - character.x) / 2,
+          character.y + (leader.y - character.y) / 2
+        )
       )
         move(
           character.x + (leader.x - character.x) / 2,
@@ -367,73 +374,104 @@ async function leaveJail() {
   }
 }
 
+/**
+ *
+ * @param {*} theta -- current angle from target and character
+ * @param {*} width -- width of hitbox border
+ * @param {*} height -- height of hitbox border
+ * @returns -- extra distance allow by attack range
+ */
+function extraDistanceWithinHitbox(theta, width, height) {
+  let halfW = width / 2;
+  let halfH = height / 2;
+
+  let dx = Math.abs(halfW / Math.cos(theta)); // Distance to vertical boundary of hitbox
+  let dy = Math.abs(halfH / Math.sin(theta)); // Distance to horizontal boundary of hitbox
+
+  return Math.min(dx, dy); // Extra range from mob's hitbox
+}
+
 function hitAndRun(target, rangeRate) {
-  // If for some reason we have a target but no angle, set the angle
+  if (!target) {
+    angle = undefined;
+    return;
+  }
 
-  let firstTimeKiting = false;
-
-  if (!target) return;
-  if (!angle && target) {
-    diff_x = character.real_x - target.real_x;
-    diff_y = character.real_y - target.real_y;
+  if (!angle) {
+    let diff_x = character.real_x - target.real_x;
+    let diff_y = character.real_y - target.real_y;
     angle = Math.atan2(diff_y, diff_x);
-    firstTimeKiting = true;
   }
 
-  // Calculate the distance we moved since the last iteration
-  chx = character.real_x - last_x;
-  chy = character.real_y - last_y;
-  dist_moved = Math.sqrt(chx * chx + chy * chy);
+  let cosA = Math.cos(angle);
+  let sinA = Math.sin(angle);
 
-  // Calculate the distance we moved since the 2nd to last iteration
-  chx2 = character.real_x - last_x2;
-  chy2 = character.real_y - last_y2;
-  dist_moved2 = Math.sqrt(chx2 * chx2 + chy2 * chy2);
+  movementHistory.push({ x: character.real_x, y: character.real_y });
+  if (movementHistory.length > 5) movementHistory.shift();
 
-  // If the dist_moved is low enough to indicate that we're stuck,
-  // rotate our desired angle 45 degrees around the target
-  if (dist_moved < stuck_threshold || dist_moved2 < stuck_threshold * 2) {
-    if (flipRotationCooldown < 0) {
+  let totalMovement = 0;
+  for (let i = 1; i < movementHistory.length; i++) {
+    let dx = movementHistory[i].x - movementHistory[i - 1].x;
+    let dy = movementHistory[i].y - movementHistory[i - 1].y;
+    totalMovement += Math.sqrt(dx * dx + dy * dy);
+  }
+
+  if (totalMovement < stuck_threshold * movementHistory.length) {
+    if (flipRotationCooldown <= 0) {
       flipRotation *= -1;
-      flipRotationCooldown = 2;
+      flipRotationCooldown = 4;
+      angle += (flipRotation * Math.PI) / 4;
     }
-    angle = angle + (flipRotation * Math.PI) / 4;
   }
 
-  // Calculate our new desired position. It will be our max attack range
-  // from the target, at the angle described by var angle.
-  var new_x =
-    target.real_x +
-    (character.range + character.xrange) * rangeRate * Math.cos(angle);
-  var new_y =
-    target.real_y +
-    (character.range + character.xrange) * rangeRate * Math.sin(angle);
+  const extraRangeByMobHitbox = extraDistanceWithinHitbox(
+    angle,
+    target ? get_width(target) ?? 0 : 0,
+    target ? get_height(target) ?? 0 : 0
+  );
 
-  // Save current position and last position
-  last_x2 = last_x; // Keep track of one more back to detect edges better
-  last_y2 = last_y; //
-  last_x = character.real_x;
-  last_y = character.real_y;
+  let new_x =
+    target.x +
+    character.range * rangeRate * cosA +
+    (extraRangeByMobHitbox + character.xrange * 0.3) * cosA;
 
-  // If target gets too close, maybe we're stuck? Flip the rotation some.
-  // Has a cooldown after flipping so it doesn't thrash back and forth
-  if (flip_cooldown > 18) {
+  let new_y =
+    target.y +
+    character.range * rangeRate * sinA +
+    (extraRangeByMobHitbox + character.xrange * 0.3) * sinA;
+
+  if (flip_cooldown > 9) {
     if (
-      parent.distance(character, target) <=
+      distance(character, target) <=
       (character.range + character.xrange) * 0.1 * rangeRate
     ) {
-      angle = angle + flipRotation * Math.PI * 2 * 0.35;
+      angle += (flipRotation * Math.PI) / 16;
     }
     flip_cooldown = 0;
   }
-
-  flip_cooldown++;
+  flip_cooldown--;
   flipRotationCooldown--;
 
-  if (!is_in_range(target, "attack")) move(new_x, new_y);
-  else if (!can_move_to(new_x, new_y)) {
+  if (!is_in_range(target, "attack")) {
+    move(new_x, new_y);
+  } else if (!can_move_to(new_x, new_y)) {
+    for (let i = 1; i <= 3; i++) {
+      let adjustedAngle = angle + (flipRotation * Math.PI) / (8 / i);
+      let alt_x =
+        target.x + character.range * rangeRate * Math.cos(adjustedAngle);
+      let alt_y =
+        target.y + character.range * rangeRate * Math.sin(adjustedAngle);
+
+      if (can_move_to(alt_x, alt_y)) {
+        angle = adjustedAngle;
+        move(alt_x, alt_y);
+        return;
+      }
+    }
     flipRotation *= -1;
-  } else move(new_x, new_y);
+  } else {
+    move(new_x, new_y);
+  }
 }
 
 function getLowestHealth() {
@@ -498,6 +536,7 @@ function goToBoss() {
 }
 //// INVENTORY functions
 function item_info(item) {
+  if (!item) return undefined;
   return parent.G.items[item.name];
 }
 
@@ -631,7 +670,7 @@ setInterval(async function () {
 }, 15000);
 
 // Party Setups
-setInterval(function () {
+setInterval(async function () {
   //// Deploy characters which arent active
   const loadedCharacters = get_active_characters();
   const allCharacters = [...partyMems, partyMerchant];
@@ -640,13 +679,18 @@ setInterval(function () {
     !character.controller &&
     allCharacters.filter((characterId) => characterId !== character.name)
       .length !== loadedCharacters.length
-  )
-    allCharacters.forEach((characterId, index) => {
-      if (!loadedCharacters[characterId]) {
-        start_character(characterId, partyCodeSlot[index]);
+  ) {
+    for (const [index, id] of allCharacters.entries()) {
+      if (!loadedCharacters[id]) {
+        start_character(id, partyCodeSlot[index]);
       }
-    });
-
+    }
+    // allCharacters.forEach((characterId, index) => {
+    //   if (!loadedCharacters[characterId]) {
+    //     start_character(characterId, partyCodeSlot[index]);
+    //   }
+    // });
+  }
   if (partyMems.length !== parent.party_list.length) {
     if (character.name === partyMems[0]) {
       partyMems.map((member) => {
@@ -670,7 +714,7 @@ function on_party_invite(name) {
 }
 
 //// Daily Events
-var pinkGooVisitedBoundary = [];
+// var pinkGooVisitedBoundary = [];
 async function changeToDailyEventTargets() {
   let target = getTarget();
   const isFightingBoss = boss.includes(getTarget()?.mtype);
@@ -681,7 +725,7 @@ async function changeToDailyEventTargets() {
     !character.s["hopsickness"]
   ) {
     changeToPullStrategies();
-    if (character.map !== "goobrawl") join("goobrawl");
+    if (character.map !== "goobrawl") await join("goobrawl");
 
     const rgooInstance = get_nearest_monster({ type: "rgoo" });
     const bgooInstance = get_nearest_monster({ type: "bgoo" });
@@ -709,6 +753,23 @@ async function changeToDailyEventTargets() {
     }
   }
 
+  if (parent.S.wabbit?.live && !isFightingBoss) {
+    changeToNormalStrategies();
+    if (character.range < 100) rangeRate = 0.1;
+    const wabbitInstance = get_nearest_monster({ type: "wabbit" });
+
+    if (!wabbitInstance) {
+      if (parent.S.wabbit?.x) {
+        await advanceSmartMove(parent.S.wabbit);
+        change_target(get_nearest_monster({ type: "wabbit" }));
+        return get_nearest_monster({ type: "wabbit" });
+      }
+    } else {
+      change_target(wabbitInstance);
+      return wabbitInstance;
+    }
+  }
+
   if (parent.S.pinkgoo?.live && !isFightingBoss) {
     changeToNormalStrategies();
     let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
@@ -720,16 +781,6 @@ async function changeToDailyEventTargets() {
       }
     } else {
       change_target(pinkgooInstance);
-      if (
-        character.ctype === "warrior" &&
-        character.dreturn &&
-        is_in_range(pinkgooInstance, "taunt") &&
-        !is_on_cooldown("taunt") &&
-        character.mp > G.skills["taunt"].mp &&
-        pinkgooInstance.target !== character.name
-      ) {
-        use_skill("taunt", pinkgooInstance);
-      }
 
       return pinkgooInstance;
     }
@@ -756,7 +807,7 @@ async function changeToDailyEventTargets() {
 
     const crabxxInstance = get_nearest_monster({ type: "crabxx" });
     const crabxInstance = Object.values(parent.entities)
-      .filter((mobs) => mobs.mtype === "crabx" && is_in_range(mobs, "attack"))
+      .filter((mobs) => mobs.mtype === "crabx")
       .sort((lhs, rhs) => {
         if (lhs.hp === rhs.hp)
           return distance(rhs, character) - distance(lhs, character);
@@ -764,7 +815,7 @@ async function changeToDailyEventTargets() {
       })
       .pop();
     if (!crabxxInstance)
-      join("crabxx")
+      await join("crabxx")
         .then(() => change_target(get_nearest_monster({ type: "crabxx" })))
         .catch(() => {
           advanceSmartMove({ map: "main", x: -960, y: 1655 }).then(() =>
@@ -788,7 +839,7 @@ async function changeToDailyEventTargets() {
       }
     }
 
-    if (!target) {
+    if (!target || !target.mtype?.includes("crabx")) {
       const targetCrab =
         character.ctype !== "warrior"
           ? crabxInstance ||
@@ -812,9 +863,14 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
     const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
     if (!iceGolemInstance) {
-      if (character.range < 100) join("icegolem");
+      if (character.range < 100)
+        join("icegolem").catch((e) =>
+          advanceSmartMove({ map: "winterland", x: 896, y: 440 })
+        );
       else {
-        advanceSmartMove({ map: "winterland", x: 771, y: 273 });
+        join("icegolem").catch((e) =>
+          advanceSmartMove({ map: "winterland", x: 896, y: 440 })
+        );
       }
     }
     change_target(iceGolemInstance);
@@ -834,18 +890,20 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
-      join("franky").catch(() =>
-        advanceSmartMove({ map: "level2s", x: -182, y: 42 }).then(() =>
-          change_target(get_nearest_monster({ type: "franky" }))
-        )
+      join("franky").catch(
+        async () =>
+          await advanceSmartMove(parent.S.franky).then(() =>
+            change_target(get_nearest_monster({ type: "franky" }))
+          )
       );
+      await smart_move(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
       frankyInstance = get_nearest_monster({ type: "franky" });
     }
 
     if (frankyInstance)
       if (frankyInstance.target && !partyMems.includes(frankyInstance.target)) {
-        rangeRate = 0.1;
+        rangeRate = 0.2;
         return frankyInstance;
       } else {
         change_target();
@@ -891,8 +949,8 @@ async function changeToDailyEventTargets() {
         pvpTarget = currentCharacterTarget;
 
       if (
-        currentCharacterTarget.priority === pvpTarget.priority &&
-        currentCharacterTarget.sqrDistance < pvpTarget.sqrDistance
+        currentCharacterTarget.priority <= pvpTarget.priority &&
+        currentCharacterTarget.sqrDistance <= pvpTarget.sqrDistance
       )
         pvpTarget = currentCharacterTarget;
     }
@@ -900,9 +958,11 @@ async function changeToDailyEventTargets() {
     target = pvpTarget.entity;
   }
 
-  if (get_entity(HEALER) && !get_entity(HEALER).rip) changeToPullStrategies();
+  if (get_entity(HEALER) && !get_entity(HEALER).rip && character.ping < 600)
+    changeToPullStrategies();
   else changeToNormalStrategies();
-  rangeRate = basicRangeRate;
+
+  rangeRate = originRangeRate ?? basicRangeRate;
   return target;
 }
 

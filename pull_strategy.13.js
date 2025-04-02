@@ -66,11 +66,45 @@ async function usePullStrategies(target) {
       const numberOfMonsterInRange = mobsList.filter((id) =>
         is_in_range(parent.entities[id], "agitate")
       ).length;
-      const numberOfNoTargetMonsterInRange = mobsList.filter(
+      const listOfNoTargetMonsterInRange = mobsList.filter(
         (id) =>
           is_in_range(parent.entities[id], "agitate") &&
-          parent.entities[id] !== TANKER
-      ).length;
+          parent.entities[id].target !== TANKER
+      );
+
+      const magicalMobsTargetingSelf = Object.values(parent.entities).filter(
+        (mob) => mob.damage_type === "magical"
+      );
+      const physicalMobsTargetingSelf = Object.values(parent.entities).filter(
+        (mob) => mob.damage_type === "physical"
+      );
+      const pureMobsTargetingSelf = Object.values(parent.entities).filter(
+        (mob) => mob.damage_type === "pure"
+      );
+
+      let magicalMobsAfterAgitating = magicalMobsTargetingSelf;
+      let physicalMobsAfterAgitating = physicalMobsTargetingSelf;
+      let pureMobsAfterAgitating = pureMobsTargetingSelf;
+      for (mob in listOfNoTargetMonsterInRange) {
+        switch (mob.damage_type) {
+          case "magical":
+            magicalMobsAfterAgitating++;
+            break;
+          case "physical":
+            physicalMobsAfterAgitating++;
+            break;
+          case "pure":
+            pureMobsAfterAgitating++;
+            break;
+          default:
+            break;
+        }
+      }
+
+      const isFearedAfterAgitating =
+        magicalMobsAfterAgitating > character.mcourage ||
+        physicalMobsAfterAgitating > character.courage ||
+        pureMobsAfterAgitating > character.pcourage;
 
       if (
         !havePulledEnoughMobs &&
@@ -78,7 +112,7 @@ async function usePullStrategies(target) {
         character.mp > G.skills["agitate"].mp &&
         !is_on_cooldown("agitate") &&
         numberOfMonsterInRange <= MAX_TARGET + 2 &&
-        numberOfNoTargetMonsterInRange >= 3 &&
+        listOfNoTargetMonsterInRange.length >= 3 &&
         Object.keys(parent.entities)
           .filter((id) => parent.entities[id]?.type === "monster")
           .filter(
@@ -91,14 +125,15 @@ async function usePullStrategies(target) {
               prev + calculateDamage(parent.entities[curr], character),
             0
           ) <
-          partyHealer.heal * partyHealer.frequency * 0.4
+          partyHealer.heal * partyHealer.frequency * 0.4 &&
+        !isFearedAfterAgitating
       ) {
         use_skill("agitate");
       }
 
       if (
         avgDmgTaken(character) <
-          partyHealer.heal * partyHealer.frequency * 0.4 &&
+          partyHealer.heal * partyHealer.frequency * 0.8 &&
         !havePulledEnoughMobs &&
         character.mp > G.skills["taunt"].mp &&
         !is_on_cooldown("taunt") &&
@@ -111,7 +146,12 @@ async function usePullStrategies(target) {
             (!parent.entities[id].target ||
               partyMems
                 .filter((id) => id !== character.name)
-                .includes(parent.entities[id].target))
+                .includes(parent.entities[id].target)) &&
+            (parent.entities[id].damage_type === "physical"
+              ? physicalMobsTargetingSelf.length < character.courage
+              : parent.entities[id].damage_type === "magical"
+              ? magicalMobsTargetingSelf.length < character.mcourage
+              : pureMobsTargetingSelf.length < character.pcourage)
         );
 
         if (mobToPull)
@@ -147,14 +187,10 @@ async function usePullStrategies(target) {
       if (
         avgDmgTaken(character) > character.heal * 0.8 * character.frequency &&
         !is_on_cooldown("scare") &&
-        character.mp > 100 &&
         character.hp < 0.6 * character.max_hp &&
         character.cc < 100
       ) {
-        await equipBatch({
-          orb: "jacko",
-        });
-        await use_skill("scare");
+        scareAwayMobs();
       }
       break;
     default:

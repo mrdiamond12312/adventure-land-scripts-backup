@@ -3,7 +3,7 @@ load_code(7);
 let BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
 
-const IGNORE_RARE_GOLD_THRESHOLD = 15e8;
+const IGNORE_RARE_GOLD_THRESHOLD = 18e8;
 
 const KEEP_THRESHOLD = {
   // Every character needs
@@ -155,6 +155,8 @@ async function compoundInv() {
   for (i; i < 42; i++) {
     let breakFlag = false;
 
+    if (!character.items[i]) break;
+    
     if (item_info(character.items[i]).compound) {
       if (
         character.items[i] &&
@@ -237,6 +239,9 @@ async function upgradeInv() {
 
   for (let i = 0; i < character.items.length; i++) {
     let breakFlag = false;
+
+    if (!character.items[i]) break;
+
     if (ignore.includes(character.items[i].name)) continue;
 
     if (item_info(character.items[i]).upgrade) {

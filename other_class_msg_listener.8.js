@@ -11,7 +11,15 @@ character.on("cm", async function ({ name, message }) {
           if (!item) return;
           if (
             item.level > 0 ||
-            ["tracker", "hpot1", "mpot1"].includes(item.name)
+            [
+              "tracker",
+              "hpot1",
+              "mpot1",
+              "cdragon",
+              "oxhelmet",
+              "snowball",
+              "spookyamulet",
+            ].includes(item.name)
           )
             return;
           await send_item(partyMerchant, index, 1000);

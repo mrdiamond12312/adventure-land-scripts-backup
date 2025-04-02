@@ -3,15 +3,36 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var basicRangeRate = 0.5;
+var originRangeRate = 0.5;
 var rangeRate = 0.5;
+const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 async function fight(target) {
   const shouldAttack = character.map === "crypt" ? get_entity(HEALER) : true;
   if (can_attack(target) && shouldAttack) {
     set_message("Attacking");
     await currentStrategy(target);
-    attack(target).then(() => reduce_cooldown("attack", character.ping * 0.95));
+
+    // Make Priest prior mobs without poison effect that attacking the party, to reduce their attack spped
+    const targetToAttack =
+      character.slots.orb?.name === "test_orb"
+        ? Object.values(parent.entities)
+            .filter(
+              (mob) =>
+                !mob.s.poisoned &&
+                is_in_range(mob, "attack") &&
+                mob.type === "monster" &&
+                partyMems.includes(mob.target)
+            )
+            .sort((lhs, rhs) => lhs.attack - rhs.attack)
+            .pop() ?? target
+        : target;
+    change_target(targetToAttack);
+
+    attack(targetToAttack).then(() =>
+      reduce_cooldown("attack", character.ping * 0.95)
+    );
+
     if (character.mp > 1100 && !is_on_cooldown("curse") && target.max_hp > 3000)
       use_skill("curse", target);
 
@@ -26,13 +47,21 @@ async function fight(target) {
 
   if (!smartmoveDebug) {
     hitAndRun(target, rangeRate);
+
     angle =
       angle +
       flipRotation *
         Math.asin(
-          (character.speed * (1 / character.frequency)) /
-            6 /
-            (character.range * rangeRate)
+          (character.speed * loopInterval) /
+            1000 /
+            2 /
+            (character.range * rangeRate +
+              character.xrange * 0.3 +
+              extraDistanceWithinHitbox(
+                angle,
+                target ? get_width(target) ?? 0 : 0,
+                target ? get_height(target) ?? 0 : 0
+              ))
         ) *
         2;
   } else {
@@ -43,11 +72,25 @@ async function fight(target) {
 function priestBuff() {
   const buffee = getLowestHealth();
   if (buffee.hp < buffee.max_hp - buffThreshold * character.heal) {
-    if (!is_in_range(buffee, "heal")) move(buffee.x, buffee.y);
+    if (!is_in_range(buffee, "heal") && !smart.moving) move(buffee.x, buffee.y);
     if (!is_on_cooldown("heal")) {
+      if (
+        !character.slots.mainhand ||
+        character.slots.mainhand?.name === "broom"
+      ) {
+        equipBatch({
+          mainhand: "pmace",
+          orb: "jacko",
+        });
+      } else {
+        equipBatch({
+          orb: "jacko",
+        });
+      }
       use_skill("heal", buffee).then(() => {
         reduce_cooldown("attack", character.ping * 0.95);
       });
+      reduce_cooldown("attack", (-1 / character.frequency) * 1000);
       set_message("Heal" + buffee.name);
     }
   }
@@ -124,12 +167,19 @@ setInterval(async function () {
   else target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
-  if (get("cryptInstance") && character.map !== "crypt") {
-    await advanceSmartMove(CRYPT_DOOR);
-    enter("crypt", get("cryptInstance"));
+  if (
+    !smart.move &&
+    !isAdvanceSmartMoving &&
+    get("cryptInstance") &&
+    character.map !== "crypt" &&
+    !target &&
+    !get_entity(partyMems[0])
+  ) {
+    await advanceSmartMove(CRYPT_STARTING_LOCATION);
   } else if (
     !smart.moving &&
     !target &&
+    !get("cryptInstance") &&
     (partyMems[0] == character.name || !get_entity(partyMems[0]))
   ) {
     const scareInterval = setInterval(() => {
@@ -144,4 +194,4 @@ setInterval(async function () {
   }
 
   await fight(target);
-}, ((1 / character.frequency) * 1000) / 3);
+}, loopInterval);

@@ -3,9 +3,9 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var originRangeRate = 1.1;
+var originRangeRate = 0.95;
 var rangeRate = originRangeRate;
-const loopInterval = ((1 / character.frequency) * 1000) / 6;
+const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 async function fight(target) {
   const shouldAttack = character.map === "crypt" ? get_entity(HEALER) : true;
@@ -14,6 +14,18 @@ async function fight(target) {
     await currentStrategy(target);
 
     attack(target).then(() => reduce_cooldown("attack", character.ping * 0.95));
+    if (
+      character.slots.offhand &&
+      character.slots.offhand.name === "fireblade"
+    ) {
+      equip(findMaxLevelItem("candycanesword"), "offhand");
+    }
+
+    if (
+      character.slots.mainhand &&
+      character.slots.mainhand.name === "rapier"
+    ) {
+    }
 
     if (character.mp > G.skills["warcry"].mp && !is_on_cooldown("warcry"))
       use_skill("warcry");
@@ -39,18 +51,37 @@ async function fight(target) {
     }
 
     if (character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt")) {
-      const mobsTargetingAlly = Object.keys(parent.entities).find((id) =>
-        partyMems
-          .filter((char) => char !== character.name)
-          .includes(parent.entities[id]?.target)
+      const magicalMobsTargetingSelf = Object.values(parent.entities).filter(
+        (mob) => mob.damage_type === "magical"
       );
+      const physicalMobsTargetingSelf = Object.values(parent.entities).filter(
+        (mob) => mob.damage_type === "physical"
+      );
+
+      const pureMobsTargetingSelf = Object.values(parent.entities).filter(
+        (mob) => mob.damage_type === "pure"
+      );
+
+      const mobsTargetingAlly = Object.values(parent.entities).find(
+        (mob) =>
+          mob.type === "monster" &&
+          partyMems
+            .filter((char) => char !== character.name)
+            .includes(mob?.target) &&
+          (mob.damage_type === "physical"
+            ? physicalMobsTargetingSelf.length < character.courage
+            : mob.damage_type === "magical"
+            ? magicalMobsTargetingSelf.length < character.mcourage
+            : pureMobsTargetingSelf.length < character.pcourage)
+      );
+
       if (
         mobsTargetingAlly &&
-        parent.entities[mobsTargetingAlly]?.attack > 120 &&
-        parent.entities[mobsTargetingAlly]?.attack < 1500 &&
-        !parent.entities[mobsTargetingAlly]?.cooperative
+        mobsTargetingAlly.attack > 120 &&
+        mobsTargetingAlly.attack < 1500 &&
+        !mobsTargetingAlly.cooperative
       )
-        use_skill("taunt", parent.entities[mobsTargetingAlly]).then(() =>
+        use_skill("taunt", mobsTargetingAlly).then(() =>
           reduce_cooldown("taunt", character.ping * 0.95)
         );
       else if (
@@ -68,7 +99,7 @@ async function fight(target) {
     if (
       (!get_entity(HEALER) ||
         get_entity(HEALER).rip ||
-        character.hp < 0.3 * character.max_hp) &&
+        character.hp < 0.5 * character.max_hp) &&
       Object.keys(parent.entities).filter(
         (id) => parent.entities[id].target === character.name
       ).length > 2 &&
@@ -76,10 +107,7 @@ async function fight(target) {
       character.mp > 100 &&
       character.cc < 100
     ) {
-      await equipBatch({
-        orb: "jacko",
-      });
-      await use_skill("scare");
+      scareAwayMobs();
     }
 
     // if (
@@ -97,6 +125,7 @@ async function fight(target) {
 
   if (!smartmoveDebug) {
     hitAndRun(target, rangeRate);
+
     angle =
       angle +
       flipRotation *
@@ -104,7 +133,13 @@ async function fight(target) {
           (character.speed * loopInterval) /
             1000 /
             2 /
-            (character.range * rangeRate)
+            (character.range * rangeRate +
+              character.xrange * 0.3 +
+              extraDistanceWithinHitbox(
+                angle,
+                target ? get_width(target) ?? 0 : 0,
+                target ? get_height(target) ?? 0 : 0
+              ))
         ) *
         2;
   } else {
@@ -143,17 +178,26 @@ setInterval(async function () {
   //// BOSSES
   if (goToBoss()) return;
 
-  target = await changeToDailyEventTargets();
-
   //// THE CRYPT & EVENTS
   if (get("cryptInstance")) target = await useCryptStrategy(target);
   else target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
-  if (get("cryptInstance") && character.map !== "crypt") {
-    await advanceSmartMove(CRYPT_DOOR);
-    enter("crypt", get("cryptInstance"));
-  } else if (!smart.moving && !isAdvanceSmartMoving && !target) {
+  if (
+    !smart.move &&
+    !isAdvanceSmartMoving &&
+    get("cryptInstance") &&
+    character.map !== "crypt" &&
+    !target
+  ) {
+    await advanceSmartMove(CRYPT_STARTING_LOCATION);
+  } else if (
+    !smart.moving &&
+    !get("cryptInstance") &&
+    !isAdvanceSmartMoving &&
+    !target &&
+    !get("cryptInstance")
+  ) {
     const scareInterval = setInterval(() => {
       scareAwayMobs();
     }, 5000);

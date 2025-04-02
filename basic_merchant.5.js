@@ -101,6 +101,7 @@ function exchangeXyn() {
     { name: "goldenegg", quantity: 1 },
     { name: "5bucks", quantity: 1 },
     { name: "candypop", quantity: 10 },
+    { name: "basketofeggs", quantity: 1 },
   ];
   let slot = undefined;
   itemName.map((item) => {
@@ -301,6 +302,7 @@ setInterval(async function () {
     exchangeXyn(),
     holidayExchange(),
     craft("xbox"),
+    craft("basketofeggs"),
     Promise.all(
       Array.from({ length: 42 }, (_, i) => i)
         .filter((i) => {
@@ -308,7 +310,7 @@ setInterval(async function () {
           return (
             saleAble.includes(character.items[i].name) &&
             !character.items[i].shiny &&
-            character.items[i].level <= 1
+            (character.items[i].level || 0) <= 1
           );
         })
         .map(async (i) => sell(i, 1000))
@@ -369,6 +371,45 @@ function on_party_invite(name) {
 function handle_death() {
   respawn().catch((e) => setTimeout(() => respawn(), e.ms + 300));
 }
+
+// Handler to buy from Ponty
+/*
+function secondhands_handler(event) {
+  if (isInvFull(6)) return false;
+  const ITEM_NEEDED = [
+    "intearring",
+    "strearring",
+    "dexearring",
+    "intring",
+    "dexring",
+    "strring",
+    "dexamulet",
+    "stramulet",
+    "intamulet",
+  ];
+  for (const i in event) {
+    const item = event[i];
+    if (item && ITEM_NEEDED.includes(item.name)) {
+      parent.socket.emit("sbuy", { rid: item.rid });
+    }
+  }
+}
+
+// Clear handler when code is terminated
+function on_destroy() {
+  parent.socket.removeListener("secondhands", secondhands_handler);
+  clear_drawings(); // <-- Default in on_destroy
+  clear_buttons(); // <-- Default in on_destroy
+}
+
+// Register secondhands event handler
+parent.socket.on("secondhands", secondhands_handler);
+setInterval(() => {
+  // Send request for Ponty inventory
+  parent.socket.emit("secondhands");
+}, 12000);
+
+*/
 
 load_code(19);
 // setInterval(() => {
