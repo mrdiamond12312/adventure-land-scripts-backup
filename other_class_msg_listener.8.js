@@ -7,7 +7,7 @@ character.on("cm", async function ({ name, message }) {
       log("The merchant is nearby, sending compoundable");
 
       await Promise.all(
-        character.items.forEach(async (item, index) => {
+        character.items.map(async (item, index) => {
           if (!item) return;
           if (
             item.level > 0 ||

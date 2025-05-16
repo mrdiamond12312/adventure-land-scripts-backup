@@ -44,7 +44,7 @@ function getMobsListNearTarget(mob) {
 
 async function useCryptStrategy(target) {
   if (!get("cryptInstance") || character.map !== "crypt") return;
-
+  rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
   const defeatedCrybtMobs = get("cryptDefeatedMobs") ?? [];
 
   if (
@@ -201,7 +201,9 @@ async function useCryptStrategy(target) {
 
     if (!get_entity(HEALER)) await advanceSmartMove(CRYPT_STARTING_LOCATION);
   }
-  changeToNormalStrategies();
+
+  if (get_targeted_monster()?.mtype === "vbat") changeToPullStrategies;
+  else changeToNormalStrategies();
 
   switch (character.ctype) {
     case "warrior":

@@ -61,7 +61,7 @@ async function mageBlink(
   map,
   coordinates,
   useCoordinates = true,
-  minDistanceToBlink = 200
+  minDistanceToBlink = 300
 ) {
   if (
     character.mp > G.skills["blink"].mp &&
@@ -103,7 +103,9 @@ function resetSmartMove() {
 
 async function advanceSmartMove(props) {
   if (
-    ["mage", "priest"].includes(character.ctype) &&
+    !smart.moving &&
+    !isAdvanceSmartMoving &&
+    ["mage", "merchant"].includes(character.ctype) &&
     character.slots.mainhand?.name !== "broom"
   ) {
     equip(findMaxLevelItem("broom"));
@@ -177,8 +179,8 @@ async function advanceSmartMove(props) {
         // Blink to location if enough mana
         await mageBlink(aliaTo.map, [props.x, props.y]);
         await sleep(character.ping + 800);
-        isAdvanceSmartMoving = false;
         await smart_move(props);
+        isAdvanceSmartMoving = false;
         resetSmartMove();
         clearInterval(scareInterval);
         return;

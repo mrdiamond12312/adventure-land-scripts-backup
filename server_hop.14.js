@@ -1,11 +1,13 @@
 const HOP_SERVERS = ["US", "ASIA", "EU"];
 
+const ignoreServer = ["ASIAI"];
+
 const HOME_SERVER = {
-  serverRegion: "US",
+  serverRegion: "EU",
   serverIdentifier: "I",
 };
 
-const tankableBoss = ["snowman", "pinkgoo", "wabbit"];
+const tankableBoss = ["snowman", "pinkgoo"];
 const bosses = [
   "icegolem",
   "mrpumpkin",
@@ -14,7 +16,7 @@ const bosses = [
   "crabxx",
   "dragold",
 ];
-
+const waitForEvent = ["wabbit"];
 const threshold = [
   { type: "icegolem", threshold: 0.7 },
   { type: "mrpumpkin", threshold: 0.95 },
@@ -47,9 +49,18 @@ setInterval(async () => {
   )
     return;
 
-  if (tankableBoss.some((boss) => parent.S[boss]?.live)) return;
+  if (
+    (parent.S["goobrawl"]?.live || parent.S["abtesting"]) &&
+    !character.s.hopsickness
+  )
+    return;
 
-  if (parent.S["goobrawl"]?.live && !character.s["hopsickness"]) return;
+  if (
+    tankableBoss.some((boss) => parent.S[boss]?.live) ||
+    waitForEvent.some((event) => parent.S[event]?.live)
+  )
+    return;
+
 
   const response = await fetch(API);
   if (response.status === 200) {
@@ -62,6 +73,9 @@ setInterval(async () => {
     const hopAbleServers = data
       .filter(
         (serverBoss) =>
+          !ignoreServer.includes(
+            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`
+          ) &&
           serverBoss.serverIdentifier !== "PVP" &&
           HOP_SERVERS.includes(serverBoss.serverRegion) &&
           (serverBoss.id || !serverBoss.estimatedRespawn) &&

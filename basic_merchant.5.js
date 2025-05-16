@@ -40,7 +40,7 @@ function shouldGoExchangeXmas() {
   );
 }
 async function holidayExchange() {
-  if (!shouldGoExchangeXmas()) return;
+  if (!shouldGoExchangeXmas() || !party.S.holiday) return;
 
   const holidayItems = [
     {
@@ -280,7 +280,7 @@ async function craft(item) {
       close_stand();
       await smart_move(find_npc("craftsman"));
     }
-    return auto_craft(item);
+    return Promise.all(Array.from({ length: 100 }).map(() => auto_craft(item)));
   }
 }
 
@@ -300,21 +300,22 @@ setInterval(async function () {
     compoundInv(),
     upgradeInv(),
     exchangeXyn(),
-    holidayExchange(),
+    // holidayExchange(),
     craft("xbox"),
     craft("basketofeggs"),
-    Promise.all(
-      Array.from({ length: 42 }, (_, i) => i)
-        .filter((i) => {
-          if (!character.items[i]) return false;
-          return (
-            saleAble.includes(character.items[i].name) &&
-            !character.items[i].shiny &&
-            (character.items[i].level || 0) <= 1
-          );
-        })
-        .map(async (i) => sell(i, 1000))
-    ),
+    !isSortingInventory &&
+      Promise.all(
+        Array.from({ length: 42 }, (_, i) => i)
+          .filter((i) => {
+            if (!character.items[i]) return false;
+            return (
+              saleAble.includes(character.items[i].name) &&
+              !character.items[i].shiny &&
+              (character.items[i].level || 0) <= 1
+            );
+          })
+          .map(async (i) => sell(i, 1000))
+      ),
   ]);
 
   if (
@@ -357,7 +358,7 @@ setInterval(async function () {
     if (!smart.move) await moveHome();
     onDuty = false;
   }
-}, 2000);
+}, 750);
 
 setInterval(function () {
   onDuty = false;
@@ -373,20 +374,10 @@ function handle_death() {
 }
 
 // Handler to buy from Ponty
-/*
+
 function secondhands_handler(event) {
   if (isInvFull(6)) return false;
-  const ITEM_NEEDED = [
-    "intearring",
-    "strearring",
-    "dexearring",
-    "intring",
-    "dexring",
-    "strring",
-    "dexamulet",
-    "stramulet",
-    "intamulet",
-  ];
+  const ITEM_NEEDED = ["strring", "stramulet", "intamulet", "dexamulet", "bataxe", "lolipop"];
   for (const i in event) {
     const item = event[i];
     if (item && ITEM_NEEDED.includes(item.name)) {
@@ -408,8 +399,6 @@ setInterval(() => {
   // Send request for Ponty inventory
   parent.socket.emit("secondhands");
 }, 12000);
-
-*/
 
 load_code(19);
 // setInterval(() => {
