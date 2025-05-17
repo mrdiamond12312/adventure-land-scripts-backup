@@ -1,4 +1,11 @@
 var isAdvanceSmartMoving = false;
+
+const CRYPT_DOOR = {
+  map: "cave",
+  x: -191,
+  y: -1304,
+};
+
 const ALIA_POSITION = {
   winterland: {
     map: "winterland",
@@ -36,7 +43,7 @@ function getCharacter(name) {
 
 async function scareAwayMobs() {
   if (
-    (locate_item("jacko") || character.slots["orb"] === "jacko") &&
+    (locate_item("jacko") !== -1 || character.slots["orb"].name === "jacko") &&
     Object.values(parent.entities).some(
       (mob) => mob?.target === character.name && mob?.type === "monster"
     ) &&
@@ -50,13 +57,19 @@ async function scareAwayMobs() {
   }
 }
 
-async function mageBlink(map, coordinates, useCoordinates = true) {
+async function mageBlink(
+  map,
+  coordinates,
+  useCoordinates = true,
+  minDistanceToBlink = 300
+) {
   if (
     character.mp > G.skills["blink"].mp &&
     !is_on_cooldown("blink") &&
     character.map === map &&
     coordinates.length === 2 &&
-    distance(character, { x: coordinates[0], y: coordinates[1] }) > 300
+    distance(character, { x: coordinates[0], y: coordinates[1] }) >
+      minDistanceToBlink
   ) {
     log("Blink to " + coordinates);
     return await use_skill("blink", coordinates).then(() =>
@@ -65,7 +78,6 @@ async function mageBlink(map, coordinates, useCoordinates = true) {
   }
 
   if (useCoordinates) {
-    log("omg");
     return smart_move({
       map,
       x: coordinates[0],
@@ -90,16 +102,45 @@ function resetSmartMove() {
 }
 
 async function advanceSmartMove(props) {
+  if (
+    !smart.moving &&
+    !isAdvanceSmartMoving &&
+    ["mage", "merchant"].includes(character.ctype) &&
+    character.slots.mainhand?.name !== "broom"
+  ) {
+    equip(findMaxLevelItem("broom"));
+  }
+
+  const scareInterval = setInterval(() => {
+    scareAwayMobs();
+  }, 1000);
+
+  setTimeout(() => clearInterval(scareInterval), 300000);
+
   try {
     useNearbySmartMove();
     await scareAwayMobs();
-    const scareInterval = setInterval(() => {
-      scareAwayMobs();
-    }, 5000);
 
-    if (isAdvanceSmartMoving) return;
+    if (isAdvanceSmartMoving) {
+      resetSmartMove();
+      clearInterval(scareInterval);
+      return;
+    }
     log("Advance Smart Move!");
     isAdvanceSmartMoving = true;
+
+    if (
+      (props.map === "crypt" || props === "crypt") &&
+      character.map !== "crypt" &&
+      get("cryptInstance")
+    ) {
+      if (distance(character, CRYPT_DOOR) > 100)
+        await smart_move(CRYPT_DOOR).catch((e) => e);
+
+      await enter("crypt", get("cryptInstance"));
+      await sleep(character.ping * 3 + 3000);
+    }
+
     if (!props.map) props.map = character.map;
 
     if (character.ctype === "mage") {
@@ -115,7 +156,11 @@ async function advanceSmartMove(props) {
         await sleep(character.ping);
         isAdvanceSmartMoving = false;
         log("Done!");
-        return smart_move(props).then(() => resetSmartMove());
+        await smart_move(props);
+        resetSmartMove();
+        clearInterval(scareInterval);
+
+        return;
       }
 
       // If 2 destination have Alia
@@ -134,8 +179,11 @@ async function advanceSmartMove(props) {
         // Blink to location if enough mana
         await mageBlink(aliaTo.map, [props.x, props.y]);
         await sleep(character.ping + 800);
+        await smart_move(props);
         isAdvanceSmartMoving = false;
-        return smart_move(props).then(() => resetSmartMove());
+        resetSmartMove();
+        clearInterval(scareInterval);
+        return;
       }
 
       // If one of the 2 maps has no Alia
@@ -147,27 +195,34 @@ async function advanceSmartMove(props) {
           }
         }, 1000);
 
-        await smart_move({ map: props.map });
+        await smart_move({ map: props.map }).catch((e) => e);
+
         await mageBlink(props.map, [props.x, props.y]);
+
         await sleep(character.ping);
         isAdvanceSmartMoving = false;
-        return smart_move(props).then(() => resetSmartMove());
+        await smart_move(props);
+        clearInterval(scareInterval);
+        resetSmartMove();
+        return;
       }
     } else {
       const mageEntity = getCharacter(MAGE);
-      log("Asking for a miracle, may be magiport?");
+      log("Asking for a miracle, may be a magiport?");
       if (
         mageEntity &&
         mageEntity.map === props.map &&
         distance(props, mageEntity) < 300 &&
         mageEntity.mp > G.skills["magiport"].mp &&
-        !get_entity(MAGE)
+        !get_entity(MAGE) &&
+        character.map !== "bank"
       ) {
         send_cm(MAGE, "magiport");
         await smart_move(props);
         log("Whoosh!");
         isAdvanceSmartMoving = false;
         resetSmartMove();
+        clearInterval(scareInterval);
         return;
       } else {
         const checkingMageMagiportInterval = setInterval(async () => {
@@ -177,7 +232,8 @@ async function advanceSmartMove(props) {
             mageEntityUpdate.map === props.map &&
             distance(props, mageEntityUpdate) < 300 &&
             mageEntityUpdate.mp > G.skills["magiport"].mp &&
-            !get_entity(MAGE)
+            !get_entity(MAGE) &&
+            character.map !== "bank"
           ) {
             send_cm(MAGE, "magiport");
             log("Whoosh!");
@@ -187,6 +243,7 @@ async function advanceSmartMove(props) {
         await smart_move(props);
         clearInterval(checkingMageMagiportInterval);
         isAdvanceSmartMoving = false;
+        clearInterval(scareInterval);
         resetSmartMove();
         return;
       }
@@ -194,14 +251,26 @@ async function advanceSmartMove(props) {
   } catch (e) {
     isAdvanceSmartMoving = false;
     resetSmartMove();
+    clearInterval(scareInterval);
+    stop();
+
     if (e.reason === "failed" && e.failed) use_skill("use_town");
     if (e.reason !== "interrupted") {
       isAdvanceSmartMoving = false;
     }
-    clearInterval(scareInterval);
+
+    if (
+      e.reason === undefined &&
+      e.failed &&
+      distance(character, CRYPT_DOOR) < 100
+    ) {
+      await move(16, -1170);
+    }
   }
-  
+
   isAdvanceSmartMoving = false;
   clearInterval(scareInterval);
   resetSmartMove();
+
+  return;
 }

@@ -10,28 +10,18 @@ async function useNormalStrategy(target) {
         await equipBatch(suggestedMageItems);
       }
 
-      if (
-        !is_on_cooldown("burst") &&
-        target.hp > 3000 &&
-        target.resistance > 400 &&
-        character.mp > 2000
-      ) {
-        log("Maxima Burst!");
-        use_skill("burst");
-      }
-
-      if (!is_on_cooldown("energize") && character.mp > 1200) {
+      if (!is_on_cooldown("energize")) {
         const buffee = getLowestMana();
         if (
           buffee.max_mp - buffee.mp > 500 &&
-          buffee.mp < buffee.max_mp * 0.8
+          buffee.mp < buffee.max_mp * 0.5
         ) {
           log("Energize " + buffee?.name);
           use_skill("energize", buffee).then(() =>
             reduce_cooldown("energize", character.ping * 0.95)
           );
         } else {
-          use_skill("energize", get_entity(partyMems[0])).then(() =>
+          use_skill("energize", character).then(() =>
             reduce_cooldown("energize", character.ping * 0.95)
           );
         }
@@ -45,7 +35,7 @@ async function useNormalStrategy(target) {
           (entity) => parent.entities[entity]?.target === character.name
         )
       )
-        use_skill("scare");
+        scareAwayMobs()
 
       break;
 

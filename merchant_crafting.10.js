@@ -3,7 +3,7 @@ load_code(7);
 let BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
 
-const IGNORE_RARE_GOLD_THRESHOLD = 15e8;
+const IGNORE_RARE_GOLD_THRESHOLD = 27e8;
 
 const KEEP_THRESHOLD = {
   // Every character needs
@@ -150,10 +150,12 @@ function retrievedBankItemToUpgrade() {
 }
 
 async function compoundInv() {
-  if (character.q.compound) return;
+  if (character.q.compound || character.q.exchange) return;
   let i = 0;
   for (i; i < 42; i++) {
     let breakFlag = false;
+
+    if (!character.items[i]) break;
 
     if (item_info(character.items[i]).compound) {
       if (
@@ -233,29 +235,28 @@ async function compoundInv() {
 }
 
 async function upgradeInv() {
-  if (character.q.upgrade) return;
+  if (character.q.upgrade || character.q.exchange) return;
 
   for (let i = 0; i < character.items.length; i++) {
     let breakFlag = false;
-    if (ignore.includes(character.items[i].name)) continue;
+
+    if (!character.items[i]) break;
+
+    const itemName = character.items[i].name;
+    if (ignore.includes(itemName)) continue;
 
     if (item_info(character.items[i]).upgrade) {
       if (
-        character.items[i] &&
         (character.items[i]?.level > maxUpgrade ||
           item_grade(character.items[i]) === 2) &&
-        character.items[i]?.level >=
-          ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
+        character.items[i]?.level >= ITEMS_HIGHEST_LEVEL[itemName].level
       )
         if (
           !(
-            ITEMS_HIGHEST_LEVEL[character.items[i]?.name] &&
-            ITEMS_HIGHEST_LEVEL[character.items[i]?.name].quantity >
-              (KEEP_THRESHOLD[
-                ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
-              ] ?? 2) &&
-            character.items[i]?.level ===
-              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
+            ITEMS_HIGHEST_LEVEL[itemName] &&
+            ITEMS_HIGHEST_LEVEL[itemName].quantity >
+              (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type] ?? 2) &&
+            character.items[i]?.level === ITEMS_HIGHEST_LEVEL[itemName].level
           )
         ) {
           continue;
@@ -281,11 +282,14 @@ async function upgradeInv() {
       if (
         character.mp > 200 &&
         !is_on_cooldown("massproductionpp") &&
-        character.items[i]?.level >= 4 &&
+        character.items[i]?.level >= 3 &&
         !character.s.massproductionpp
-      )
+      ) {
+        if (character.mp < 1000 && locate_item("mpot1") === -1) {
+          buy("mpot1", 1);
+        }
         use_skill("massproductionpp");
-      else if (
+      } else if (
         character.mp > 20 &&
         !is_on_cooldown("massproduction") &&
         !character.s.massproduction &&
@@ -296,27 +300,17 @@ async function upgradeInv() {
       return upgrade(i, scrollSlot)
         .then(async (e) => {
           if (e?.success === true) {
-            if (e?.level > ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level)
-              ITEMS_HIGHEST_LEVEL[item.name] = {
-                level: item.level,
+            if (e?.level > (ITEMS_HIGHEST_LEVEL[itemName].level ?? 0))
+              ITEMS_HIGHEST_LEVEL[itemName] = {
+                level: e?.level,
                 quantity: 1,
-                ...item_info(item),
+                ...item_info({ name: itemName }),
               };
 
-            if (
-              e?.level >=
-              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level - 1
-            ) {
+            if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0) {
               close_stand();
               smart_move(bankPosition).then(() =>
-                bank_store(
-                  character.items.findIndex(
-                    (item) =>
-                      item &&
-                      item.name === character.items[i].name &&
-                      item.level === e?.level
-                  )
-                )
+                bank_store(findMaxLevelItem(itemName))
               );
             }
           }
@@ -379,6 +373,14 @@ setInterval(() => {
       });
       retrieveMaxItemsLevel();
       retrievedBankItemToUpgrade();
+
+      if (parent.S.egghunt) {
+        for (let index = 0; index < 9; index++) {
+          retrieveBankItem(`egg${index}`);
+        }
+      }
+
+      retrieveBankItem("gemfragment");
 
       onDuty = false;
     });

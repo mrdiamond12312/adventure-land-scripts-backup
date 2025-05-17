@@ -1,11 +1,35 @@
 const HOP_SERVERS = ["US", "ASIA", "EU"];
 
-const API = "https://aldata.earthiverse.ca/monsters/pinkgoo";
+const ignoreServer = [];
 
 const HOME_SERVER = {
-  serverRegion: "US",
+  serverRegion: "EU",
   serverIdentifier: "I",
 };
+
+const tankableBoss = ["snowman", "pinkgoo"];
+const bosses = [
+  "icegolem",
+  "mrpumpkin",
+  "mrgreen",
+  "franky",
+  "crabxx",
+  "dragold",
+];
+const waitForEvent = ["wabbit"];
+const threshold = [
+  { type: "icegolem", threshold: 0.7 },
+  { type: "mrpumpkin", threshold: 0.95 },
+  { type: "mrgreen", threshold: 0.95 },
+  { type: "franky", threshold: 0.7 },
+  { type: "crabxx", threshold: 1 },
+  { type: "dragold", threshold: 0.99 },
+];
+
+const API = `https://aldata.earthiverse.ca/monsters/${[
+  ...tankableBoss,
+  ...bosses,
+].join(",")}`;
 
 const currentServer = `${server.region}${server.id}`;
 const getHomeServer = () =>
@@ -13,13 +37,29 @@ const getHomeServer = () =>
 
 setInterval(async () => {
   if (
-    ["franky", "snowman", "icegolem", "crabxx"].some(
-      (boss) => parent.S[boss] && parent.S[boss].target
-    )
+    bosses.some(
+      (boss) =>
+        parent.S[boss] &&
+        parent.S[boss].target &&
+        parent.S[boss].hp <
+          (threshold.find((pair) => pair.type === boss)?.threshold ?? 0.93) *
+            parent.S[boss].max_hp
+    ) ||
+    get("cryptInstance")
   )
     return;
 
-  if (["snowman", "pinkgoo"].some((boss) => parent.S[boss]?.live)) return;
+  if (
+    (parent.S["goobrawl"]?.live || parent.S["abtesting"]) &&
+    !character.s.hopsickness
+  )
+    return;
+
+  if (
+    tankableBoss.some((boss) => parent.S[boss]?.live) ||
+    waitForEvent.some((event) => parent.S[event]?.live)
+  )
+    return;
 
   const response = await fetch(API);
   if (response.status === 200) {
@@ -29,32 +69,43 @@ setInterval(async () => {
 
     if (!data) return;
 
-    const hopAbleServers = data.filter(
-      (serverBoss) =>
-        serverBoss.serverIdentifier !== "PVP" &&
-        HOP_SERVERS.includes(serverBoss.serverRegion) &&
-        serverBoss.id
-    );
+    const hopAbleServers = data
+      .filter(
+        (serverBoss) =>
+          !ignoreServer.includes(
+            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`
+          ) &&
+          serverBoss.serverIdentifier !== "PVP" &&
+          HOP_SERVERS.includes(serverBoss.serverRegion) &&
+          (serverBoss.id || !serverBoss.estimatedRespawn) &&
+          (tankableBoss.includes(serverBoss.type) ||
+            (bosses.includes(serverBoss.type) && serverBoss.target))
+      )
+      .sort((lhs, rhs) => {
+        const bossPriority = [...tankableBoss, ...bosses];
+        return bossPriority.findIndex((boss) => boss === lhs.type) -
+          bossPriority.findIndex((boss) => boss === rhs.type)
+          ? bossPriority.findIndex((boss) => boss === lhs.type) -
+              bossPriority.findIndex((boss) => boss === rhs.type)
+          : lhs.hp - rhs.hp;
+      });
 
     if (hopAbleServers && hopAbleServers.length) {
+      const toServer = hopAbleServers[0];
       if (
-        !hopAbleServers
-          .map((server) => `${server.serverRegion}${server.serverIdentifier}`)
-          .includes(currentServer)
+        `${toServer.serverRegion}${toServer.serverIdentifier}` !== currentServer
       ) {
-        log(
-          `Hopping to ${hopAbleServers[0].serverRegion}${hopAbleServers[0].serverIdentifier}`
-        );
-        change_server(
-          hopAbleServers[0].serverRegion,
-          hopAbleServers[0].serverIdentifier
-        );
+        log(`Hopping to ${toServer.serverRegion}${toServer.serverIdentifier}`);
+        change_server(toServer.serverRegion, toServer.serverIdentifier);
       }
-    } else {
-      if (currentServer !== getHomeServer()) {
-        log("Hopping back home server!");
-        change_server(HOME_SERVER.serverRegion, HOME_SERVER.serverIdentifier);
-      }
+      return true;
     }
+
+    if (currentServer !== getHomeServer()) {
+      log("Hopping back home server!");
+      change_server(HOME_SERVER.serverRegion, HOME_SERVER.serverIdentifier);
+    }
+
+    return false;
   }
 }, 10000);

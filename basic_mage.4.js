@@ -3,59 +3,85 @@ load_code(7);
 load_code(8);
 
 // Kiting
-var basicRangeRate = 0.8;
-var rangeRate = 0.8;
-const loopInterval = ((1 / character.frequency) * 1000) / 3;
+var originRangeRate = 0.8;
+rangeRate = originRangeRate;
+const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 5);
 
 async function fight(target) {
-  if (character.rip) {
-    respawn();
-    return;
+  if (currentStrategy === usePullStrategies) {
+    aggroedMobs = Object.values(parent.entities).filter((mob) => {
+      return (
+        !haveFormidableMonsterAroundTarget(mob) &&
+        distance(mob, character) <
+          character.range +
+            character.xrange * 0.9 +
+            extraDistanceWithinHitbox(mob) +
+            extraDistanceWithinHitbox(character) &&
+        mob.target &&
+        mob.type === "monster"
+      );
+    });
+
+    if (aggroedMobs.length) {
+      target =
+        aggroedMobs
+          .sort((lhs, rhs) => {
+            const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
+              lhs,
+              character.blast / 3.6 || BLAST_RADIUS
+            );
+            const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
+              rhs,
+              character.blast / 3.6 || BLAST_RADIUS
+            );
+            if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
+              return rhs.hp - lhs.hp;
+            return rhsNumberOfSurrounding - lhsNumberOfSurrounding;
+          })
+          .shift() ?? target;
+      change_target(target);
+    }
   }
 
-  aggroedMobs = Object.values(parent.entities).filter((mob) => {
-    return (
-      !haveFormidableMonsterAroundTarget(mob) &&
-      is_in_range(mob, "attack") &&
-      mob.target === TANKER &&
-      mob.type === "monster"
-    );
-  });
+  if (!target) return;
 
-  if (target && target.type !== "monster" && aggroedMobs.length) {
-    target =
-      aggroedMobs.sort((lhs, rhs) => {
-        const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
-          parent.entities[lhs]
-        );
-        const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
-          parent.entities[rhs]
-        );
-        if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
-          return parent.entities[rhs]?.hp - parent.entities[lhs]?.hp;
-        return rhsNumberOfSurrounding - lhsNumberOfSurrounding;
-      })[0] ?? undefined;
-    change_target(target);
-  }
   const shouldAttack = character.map === "crypt" ? get_entity(HEALER) : true;
-  if (can_attack(target) && shouldAttack) {
+
+  if (
+    ms_to_next_skill("attack") === 0 &&
+    distance(target, character) <
+      character.range +
+        character.xrange +
+        extraDistanceWithinHitbox(target) +
+        extraDistanceWithinHitbox(character) &&
+    shouldAttack
+  ) {
     set_message("Attacking");
 
-    await currentStrategy(target);
+    currentStrategy(target);
 
-    // Awaiting for HEALER to come if fighting bosses
-    if (!is_on_cooldown("attack")) {
-      attack(target).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95)
-      );
-    }
+    attack(target)
+      .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
+      .catch((e) => {
+        if (e.response === "cooldown" && e.ms < Math.min(...parent.pings)) {
+          setTimeout(
+            () =>
+              attack(target).then(() =>
+                reduce_cooldown("attack", Math.min(...parent.pings))
+              ),
+            e.ms + 10
+          );
+        }
+      });
 
     if (
+      target &&
       !is_on_cooldown("burst") &&
       target.hp > 3000 &&
       target.resistance > 400 &&
+      target.avoidence < 95 &&
       !target["1hp"] &&
-      character.mp > 2000
+      character.mp > 4000
     ) {
       log("Maxima Burst!");
       use_skill("burst");
@@ -95,7 +121,15 @@ async function fight(target) {
           (character.speed * loopInterval) /
             1000 /
             2 /
-            (character.range * rangeRate)
+            (character.range * rangeRate +
+              character.xrange * 0.9 +
+              // extraDistanceWithinHitbox(
+              //   angle,
+              //   target ? get_width(target) ?? 0 : 0,
+              //   target ? get_height(target) ?? 0 : 0
+              // ))
+              extraDistanceWithinHitbox(target) +
+              extraDistanceWithinHitbox(character))
         ) *
         2;
   } else {
@@ -104,7 +138,7 @@ async function fight(target) {
 }
 
 setInterval(async function () {
-  // loot();
+  assignRoles();
   if (
     (bestLooter().name === character.name || !bestLooter()) &&
     Object.keys(get_chests()).length
@@ -125,6 +159,7 @@ setInterval(async function () {
       y: character.y,
     });
   }
+
   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
 
   let target = getTarget();
@@ -136,16 +171,24 @@ setInterval(async function () {
   else target = await changeToDailyEventTargets();
 
   //// Logic to targets and farm places
-  if (get("cryptInstance") && character.map !== "crypt") {
-    await advanceSmartMove(CRYPT_DOOR);
-    enter("crypt", get("cryptInstance"));
+  if (
+    !smart.move &&
+    !isAdvanceSmartMoving &&
+    get("cryptInstance") &&
+    character.map !== "crypt" &&
+    !target
+  ) {
+    changeToNormalStrategies();
+    await advanceSmartMove(CRYPT_STARTING_LOCATION);
   } else if (
     !smart.moving &&
     !isAdvanceSmartMoving &&
     !target &&
-    !get_entity(partyMems[0])
+    !get("cryptInstance") &&
+    (partyMems[0] == character.name || !get_entity(partyMems[0]))
   ) {
     log("Moving to farming location");
+    changeToNormalStrategies();
     const scareInterval = setInterval(() => {
       scareAwayMobs();
     }, 5000);

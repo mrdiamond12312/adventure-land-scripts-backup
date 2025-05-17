@@ -1,3 +1,132 @@
+// Global vars
+var attack_mode = true;
+// var partyMems = ["MowTheCooh", "MoohThatCow", "CupidCow"];
+var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
+// var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
+
+var TANKER = "MooohMoooh";
+// var TANKER = "CowTheMooh";
+
+const MAGE = "MowTheCooh";
+var HEALER = "CowTheMooh";
+// const HEALER = "CupidCow";
+const RANGER = "MoohThatCow";
+
+// var partyCodeSlot = [4, 15, 3, 5];
+var partyCodeSlot = [9, 2, 4, 5];
+// var partyCodeSlot = [2, 4, 15, 5];
+
+var partyMerchant = "MerchantMooh";
+var buffThreshold = 0.7;
+
+function assignRoles() {
+  if (partyMems.includes("MooohMoooh") && partyMems.includes("CowTheMooh")) {
+    if (get_targeted_monster()?.damage_type === "magical") {
+      TANKER = "CowTheMooh";
+    } else TANKER = "MooohMoooh";
+  }
+}
+
+//  run and hit
+const movementHistory = [];
+var flipRotation = 1;
+var flipRotationCooldown = 0;
+var angle; // Your desired angle from the monster, in radians
+var flip_cooldown = 0;
+var stuck_threshold = 2;
+var basicRangeRate = 0.5; // Is used to reset
+var rangeRate = basicRangeRate; // Variate range rate
+
+const spacial = 16;
+
+// Monsters selector
+var min_xp = 100;
+var max_att = 2000;
+var bossOffset = 0.99;
+var boss = ["mrpumpkin", "mrgreen"];
+
+// var map = "main";
+// var mapX = 1248;
+// var mapY = -63;
+
+// var map = "winterland";
+// var mapX = 423;
+// var mapY = -2614;
+
+// var map = "uhills";
+// var mapX = -289;
+// var mapY = -188;
+
+// var map = "desertland";
+// var mapX = 223;
+// var mapY = -708;
+
+// var map = "tunnel";
+// var mapX = 0;
+// var mapY = -775;
+
+// var map = "halloween";
+// var mapX = -219;
+// var mapY = 681;
+
+// var map = "main";
+// var mapX = 676;
+// var mapY = 1754;
+
+var map = "halloween";
+var mapX = -368;
+var mapY = -1623;
+
+// var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"]; // var type = "grinch";
+// var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
+// var mobsToFarm = ["stompy", "wolf", "wolfie"];
+// var mobsToFarm = ["fireroamer"];
+// var mobsToFarm = ["grinch", "phoenix", "mole"];
+// var mobsToFarm = ["phoenix", "minimush", "xscorpion"];
+// var mobsToFarm = ["phoenix", "croc", "armadillo"];
+var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
+
+// desired elixir named
+var desiredElixir = "elixirluck";
+
+//// INVENTORY functions
+function item_info(item) {
+  if (!item) return undefined;
+  return parent.G.items[item.name];
+}
+
+function isInvFull(slots = 1) {
+  return character.esize <= slots;
+}
+
+function bestLooter() {
+  return partyMems
+    .map((id) => get_entity(id))
+    .filter((player) => player)
+    .sort((lhs, rhs) => lhs.goldm - rhs.goldm)
+    .pop();
+}
+
+function getTotalQuantityOf(item) {
+  return character.items.reduce((accummulator, current, index) => {
+    return (
+      accummulator + (current && current.name === item ? current.q || 1 : 0)
+    );
+  }, 0);
+}
+
+function filterCompoundableAndStackable() {
+  const inv = character.items;
+  const res = Array.from({ length: inv.length }, (_, i) => i + 0).filter(
+    (i) =>
+      inv[i] &&
+      (item_info(inv[i]).compound || inv[i].q) &&
+      !["hpot1", "mpot1"].includes(inv[i].name)
+  );
+  return res;
+}
+
+// Strategic functions
 load_code(11);
 if (character.ctype !== "merchant") {
   // Strategy that Pulls Mobs and blast them with lolipops, gstaff, etc
@@ -6,6 +135,7 @@ if (character.ctype !== "merchant") {
   load_code(12);
   var currentStrategy = usePullStrategies;
 }
+// Server hoping
 if (!character.controller) load_code(14);
 
 const disablePullingStrategy = false;
@@ -20,65 +150,13 @@ function changeToNormalStrategies() {
   currentStrategy = useNormalStrategy;
 }
 
-// Global vars
-var attack_mode = true;
-// var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
-var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
-
-// const TANKER = "MooohMoooh";
-const TANKER = "CowTheMooh";
-
-const MAGE = "MowTheCooh";
-const HEALER = "CowTheMooh";
-
-// var partyCodeSlot = [9, 2, 4, 5];
-var partyCodeSlot = [2, 4, 15, 5];
-
-var partyMerchant = "MerchantMooh";
-var buffThreshold = 0.7;
-
-var spacial = 50;
-
-//  run and hit
-var last_x = character.real_x;
-var last_y = character.real_y;
-var last_x2 = last_x; // Keep track of one more back to detect edges better
-var last_y2 = last_y; //
-var flipRotation = 1;
-var flipRotationCooldown = 0;
-var angle; // Your desired angle from the monster, in radians
-var flip_cooldown = 0;
-var stuck_threshold = 2;
-var basicRangeRate = 0.5; // Is used to reset
-var rangeRate = basicRangeRate; // Variate range rate
-
-// Monsters selector
-var min_xp = 100;
-var max_att = 2000;
-var bossOffset = 0.99;
-var boss = ["mrpumpkin", "mrgreen"];
-
-// var map = "level2s";
-// var mapX = 9;
-// var mapY = 432;
-
-var map = "main";
-var mapX = 1248;
-var mapY = -63;
-
-var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"]; // var type = "grinch";
-// var altType1 = "boar";
-// var altType2 = "boar";
-
-// desired elixir named
-var desiredElixir = "elixirluck";
-
 // Debug stucking
 var smartmoveDebug = false;
 
 // Merch boundary
 var ignore = [
   "x0",
+  "staff",
   "x1",
   "x2",
   "x3",
@@ -105,10 +183,15 @@ var ignore = [
   "broom",
   "pumpkinspice",
   "tracker",
+  "sword",
+  "throwingstars",
 ];
 
 var storeAble = [
+  "spidersilk",
+  "feather0",
   "vitscroll",
+  "bunnyelixir",
   "pvptoken",
   "pumpkinspice",
   "eggnog",
@@ -162,10 +245,26 @@ var storeAble = [
   "bfur",
   "beewings",
   "ascale",
+  "tombkey",
+  "cscale",
+  "spiderkey",
+  "svenom",
 ];
 
 var saleAble = [
+  "frankypants",
+  "vgloves",
+  "mcape",
+  "wbook0",
+  "quiver",
+  "santasbelt",
+  "mushroomstaff",
+  "slimestaff",
+  "fieldgen0",
   "snowball",
+  "carrotsword",
+  // "wcap",
+  // "wshoes",
   "cclaw",
   "dagger",
   "rednose",
@@ -174,6 +273,8 @@ var saleAble = [
   "vitring",
   "vitearring",
   "harmor",
+  "hammer",
+  "basher",
   "skullamulet",
   "stinger",
   "lantern",
@@ -186,7 +287,6 @@ var saleAble = [
   "maceofthedead",
   "daggerofthedead",
   "staffofthedead",
-  "bowofthedead",
   "swordofthedead",
   "throwingstars",
   "ringsj",
@@ -199,6 +299,14 @@ var saleAble = [
   "smoke",
   "sword",
   "spear",
+  // Easter's loots
+  // "eears",
+  // "eslippers",
+  // Sell and replace by crypts's drops
+  "intearring",
+  "strearring",
+  "intring",
+  "dexring",
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
@@ -210,7 +318,17 @@ load_code(20);
 load_code(16);
 
 // Pre-set function
+var isSortingInventory = false;
 async function sortInv() {
+  if (
+    isSortingInventory ||
+    character.q.upgrade ||
+    character.q.compound ||
+    character.q.exchange
+  )
+    return;
+
+  isSortingInventory = true;
   var inv = character.items;
   const invLength = inv.length;
   const promises = [];
@@ -243,14 +361,45 @@ async function sortInv() {
       }
     }
   }
-  return await Promise.all(promises);
+  return Promise.all(promises).finally(() => {
+    isSortingInventory = false;
+  });
+}
+
+function calculateRangeRate() {
+  switch (character.ctype) {
+    case "priest":
+      return character.name === TANKER && currentStrategy === usePullStrategies
+        ? 0.2
+        : 0.5;
+    default:
+      return undefined;
+  }
 }
 
 function isMerchant() {
   return character.ctype === "merchant";
 }
 
+function arrayShuffle(array) {
+  let currentIndex = array.length;
+
+  // While there remain elements to shuffle...
+  while (currentIndex != 0) {
+    // Pick a remaining element...
+    let randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+
+    // And swap it with the current element.
+    [array[currentIndex], array[randomIndex]] = [
+      array[randomIndex],
+      array[currentIndex],
+    ];
+  }
+}
+
 function getMonstersOnDeclares() {
+  // if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
   for (monster of mobsToFarm) {
     if (get_nearest_monster({ min_xp, max_att, type: monster })) {
       return get_nearest_monster({ min_xp, max_att, type: monster });
@@ -321,7 +470,8 @@ function getTarget() {
         .filter((id) => parent.entities[id].target === HEALER)
         .sort(
           (lhs, rhs) =>
-            parent.entities[lhs].attack - parent.entities[rhs].attack
+            distance(parent.entities[lhs], get_entity(HEALER)) -
+            distance(parent.entities[rhs], get_entity(HEALER))
         );
       if (
         mobsTargetingHealer &&
@@ -331,13 +481,26 @@ function getTarget() {
         target = parent.entities[mobsTargetingHealer[0]];
       }
     } else {
-      if (leader) target = get_target_of(leader) ?? undefined;
-      else target = getMonstersOnDeclares();
+      const mob = getMonstersOnDeclares();
+      const aggroedMobs = Object.values(parent.entities).filter(
+        (mob) =>
+          mob.type === "monster" &&
+          [...partyMems, partyMerchant].includes(mob.target) &&
+          is_in_range(mob, "attack")
+      );
+      if (leader)
+        target =
+          get_target_of(leader) ?? aggroedMobs.length > 0
+            ? aggroedMobs[0]
+            : mob && mob.attack < 200
+            ? mob
+            : undefined;
+      else target = mob;
     }
 
     if (target) change_target(target);
     else {
-      set_message("No Monsters, move to leader location");
+      set_message("No Monsters");
       if (
         leader &&
         !smart.moving &&
@@ -345,7 +508,11 @@ function getTarget() {
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
             (character.y - leader.y) * (character.y - leader.y)
-        ) > spacial
+        ) > spacial &&
+        can_move_to(
+          character.x + (leader.x - character.x) / 2,
+          character.y + (leader.y - character.y) / 2
+        )
       )
         move(
           character.x + (leader.x - character.x) / 2,
@@ -358,6 +525,13 @@ function getTarget() {
   return target;
 }
 
+function ms_to_next_skill(skill) {
+  const next_skill = parent.next_skill[skill];
+  if (next_skill == undefined) return 0;
+  const ms = parent.next_skill[skill].getTime() - Date.now();
+  return ms < 0 ? 0 : ms;
+}
+
 async function leaveJail() {
   if (character.map === "jail" && !smart.moving && !isAdvanceSmartMoving) {
     log("Jail escape plan!");
@@ -367,73 +541,128 @@ async function leaveJail() {
   }
 }
 
+/**
+ *
+ * @param {*} theta -- current angle from target and character
+ * @param {*} width -- width of hitbox border
+ * @param {*} height -- height of hitbox border
+ * @returns -- extra distance allow by attack range
+ */
+// function extraDistanceWithinHitbox(theta, width, height) {
+//   let halfW = width / 2;
+//   let halfH = height / 2;
+
+//   let dx = Math.abs(halfW / Math.cos(theta)); // Distance to vertical boundary of hitbox
+//   let dy = Math.abs(halfH / Math.sin(theta)); // Distance to horizontal boundary of hitbox
+
+//   return Math.min(dx, dy); // Extra range from mob's hitbox
+// }
+
+function extraDistanceWithinHitbox(target) {
+  return Math.min(get_height(target), get_width(target) / 2) / 2;
+}
+
 function hitAndRun(target, rangeRate) {
-  // If for some reason we have a target but no angle, set the angle
+  if (!target) {
+    angle = undefined;
+    return;
+  }
 
-  let firstTimeKiting = false;
-
-  if (!target) return;
-  if (!angle && target) {
-    diff_x = character.real_x - target.real_x;
-    diff_y = character.real_y - target.real_y;
+  if (!angle) {
+    const diff_x = character.real_x - target.real_x;
+    const diff_y = character.real_y - target.real_y;
     angle = Math.atan2(diff_y, diff_x);
-    firstTimeKiting = true;
   }
 
-  // Calculate the distance we moved since the last iteration
-  chx = character.real_x - last_x;
-  chy = character.real_y - last_y;
-  dist_moved = Math.sqrt(chx * chx + chy * chy);
+  let cosA = Math.cos(angle);
+  let sinA = Math.sin(angle);
 
-  // Calculate the distance we moved since the 2nd to last iteration
-  chx2 = character.real_x - last_x2;
-  chy2 = character.real_y - last_y2;
-  dist_moved2 = Math.sqrt(chx2 * chx2 + chy2 * chy2);
+  movementHistory.push({ x: character.real_x, y: character.real_y });
+  if (movementHistory.length > 5) movementHistory.shift();
 
-  // If the dist_moved is low enough to indicate that we're stuck,
-  // rotate our desired angle 45 degrees around the target
-  if (dist_moved < stuck_threshold || dist_moved2 < stuck_threshold * 2) {
-    if (flipRotationCooldown < 0) {
+  let totalMovement = 0;
+  for (let i = 1; i < movementHistory.length; i++) {
+    let dx = movementHistory[i].x - movementHistory[i - 1].x;
+    let dy = movementHistory[i].y - movementHistory[i - 1].y;
+    totalMovement += Math.sqrt(dx * dx + dy * dy);
+  }
+
+  if (totalMovement < stuck_threshold * movementHistory.length) {
+    if (flipRotationCooldown <= 0) {
       flipRotation *= -1;
-      flipRotationCooldown = 2;
+      flipRotationCooldown = 4;
+      angle += (flipRotation * Math.PI) / 2;
     }
-    angle = angle + (flipRotation * Math.PI) / 4;
   }
 
-  // Calculate our new desired position. It will be our max attack range
-  // from the target, at the angle described by var angle.
-  var new_x =
-    target.real_x +
-    (character.range + character.xrange) * rangeRate * Math.cos(angle);
-  var new_y =
-    target.real_y +
-    (character.range + character.xrange) * rangeRate * Math.sin(angle);
+  // const extraRangeByMobHitbox = extraDistanceWithinHitbox(
+  //   angle,
+  //   target ? get_width(target) ?? 0 : 0,
+  //   target ? get_height(target) ?? 0 : 0
+  // );
 
-  // Save current position and last position
-  last_x2 = last_x; // Keep track of one more back to detect edges better
-  last_y2 = last_y; //
-  last_x = character.real_x;
-  last_y = character.real_y;
+  const extraRangeByMobHitbox = extraDistanceWithinHitbox(target);
+  const extraRangeBySelfHitbox = extraDistanceWithinHitbox(character);
 
-  // If target gets too close, maybe we're stuck? Flip the rotation some.
-  // Has a cooldown after flipping so it doesn't thrash back and forth
-  if (flip_cooldown > 18) {
+  let new_x =
+    target.x +
+    character.range * rangeRate * cosA +
+    (character.xrange * 0.9 + extraRangeByMobHitbox + extraRangeBySelfHitbox) *
+      cosA;
+
+  let new_y =
+    target.y +
+    character.range * rangeRate * sinA +
+    (character.xrange * 0.9 + extraRangeByMobHitbox + extraRangeBySelfHitbox) *
+      sinA;
+
+  if (flip_cooldown > 9) {
     if (
-      parent.distance(character, target) <=
+      distance(character, target) <=
       (character.range + character.xrange) * 0.1 * rangeRate
     ) {
-      angle = angle + flipRotation * Math.PI * 2 * 0.35;
+      angle += (flipRotation * Math.PI) / 16;
     }
     flip_cooldown = 0;
   }
-
-  flip_cooldown++;
+  flip_cooldown--;
   flipRotationCooldown--;
 
-  if (!is_in_range(target, "attack")) move(new_x, new_y);
-  else if (!can_move_to(new_x, new_y)) {
+  if (!is_in_range(target, "attack")) {
+    // const diff_x = character.real_x - target.real_x;
+    // const diff_y = character.real_y - target.real_y;
+    // angle = Math.atan2(diff_y, diff_x);
+    // const alt_x =
+    //   target.x +
+    //   (character.range * rangeRate + character.xrange) * Math.cos(angle);
+    // const alt_y =
+    //   target.y +
+    //   (character.range * rangeRate + character.xrange) * Math.sin(angle);
+    // move(alt_x, alt_y);
+
+    move(new_x, new_y);
+  } else if (!can_move_to(new_x, new_y)) {
+    for (let i = 1; i <= 8; i++) {
+      let adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
+      let alt_x =
+        target.x +
+        (character.range * rangeRate + character.xrange) *
+          Math.cos(adjustedAngle);
+      let alt_y =
+        target.y +
+        (character.range * rangeRate + character.xrange) *
+          Math.sin(adjustedAngle);
+
+      if (can_move_to(alt_x, alt_y)) {
+        angle = adjustedAngle;
+        move(alt_x, alt_y);
+        return;
+      }
+    }
     flipRotation *= -1;
-  } else move(new_x, new_y);
+  } else {
+    move(new_x, new_y);
+  }
 }
 
 function getLowestHealth() {
@@ -496,40 +725,98 @@ function goToBoss() {
   }
   return false;
 }
-//// INVENTORY functions
-function item_info(item) {
-  return parent.G.items[item.name];
-}
 
-function isInvFull(slots = 1) {
-  return character.esize <= slots;
-}
+async function cupidHeal() {
+  if (locate_item("cupid") === -1 && character.slots.mainhand?.name !== "cupid")
+    return;
 
-function bestLooter() {
-  return partyMems
-    .map((id) => get_entity(id))
-    .filter((player) => player)
-    .sort((lhs, rhs) => lhs.goldm - rhs.goldm)
-    .pop();
-}
+  const lowHealthPlayers = Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity &&
+        entity.player &&
+        is_in_range(entity, "attack") &&
+        entity.hp < entity.max_hp * 0.8 &&
+        entity.hp <
+          entity.max_hp -
+            character.attack *
+              dps_multiplier(entity.armor - (character.apiercing ?? 0))
+    )
+    .sort((lhs, rhs) => {
+      if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
+      if ([...partyMems, partyMerchant].includes(rhs.name)) return 1;
 
-function getTotalQuantityOf(item) {
-  return character.items.reduce((accummulator, current, index) => {
-    return (
-      accummulator + (current && current.name === item ? current.q || 1 : 0)
-    );
-  }, 0);
-}
+      return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
+    });
 
-function filterCompoundableAndStackable() {
-  const inv = character.items;
-  const res = Array.from({ length: inv.length }, (_, i) => i + 0).filter(
-    (i) =>
-      inv[i] &&
-      (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name)
-  );
-  return res;
+  if (lowHealthPlayers.length > 0) {
+    await equipBatch({
+      mainhand: "cupid",
+    });
+
+    if (
+      character.level >= G.skills["5shot"].level &&
+      lowHealthPlayers.length >= 4 &&
+      character.mp > 400 &&
+      !character.fear &&
+      ms_to_next_skill("attack") === 0
+    ) {
+      set_message("5shot Cupid");
+      log(
+        `Healing ${lowHealthPlayers
+          .slice(0, 5)
+          .map((player) => player.name)
+          .join(", ")}`
+      );
+      use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
+        reduce_cooldown("attack", character.ping * 0.95)
+      );
+      reduce_cooldown("attack", -(1 / character.frequency) * 1000);
+    } else if (
+      character.level >= G.skills["3shot"].level &&
+      lowHealthPlayers.length >= 2 &&
+      character.mp > 300 &&
+      !character.fear &&
+      ms_to_next_skill("attack") === 0
+    ) {
+      set_message("3shot Cupid");
+      log(
+        `Healing ${lowHealthPlayers
+          .slice(0, 3)
+          .map((player) => player.name)
+          .join(", ")}`
+      );
+      use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
+        reduce_cooldown("attack", character.ping * 0.95)
+      );
+      reduce_cooldown("attack", -(1 / character.frequency) * 1000);
+    } else if (
+      ms_to_next_skill("attack") === 0 &&
+      distance(lowHealthPlayers[0], character) <
+        character.range +
+          character.xrange +
+          extraDistanceWithinHitbox(lowHealthPlayers[0]) +
+          extraDistanceWithinHitbox(character)
+    ) {
+      set_message("Single Cupid");
+      log(`Healing ${lowHealthPlayers[0].name}`);
+      attack(lowHealthPlayers[0])
+        .then(() => reduce_cooldown("attack", character.ping * 0.95))
+        .catch((e) => {
+          if (e.response === "cooldown" && e.ms < Math.min(...parent.pings)) {
+            setTimeout(
+              () =>
+                character.slots.mainhand?.name === "cupid" &&
+                use_skill("attack", lowHealthPlayers[0]).then(() =>
+                  reduce_cooldown("attack", Math.min(...parent.pings))
+                ),
+              e.ms + 10
+            );
+          }
+        });
+      reduce_cooldown("attack", -(1 / character.frequency) * 1000);
+    }
+  }
 }
 
 //// Interval threads
@@ -549,7 +836,11 @@ setInterval(async function () {
 
   if (
     currentTarget &&
-    !is_in_range(currentTarget, "attack") &&
+    distance(currentTarget, character) >
+      character.range +
+        character.xrange +
+        extraDistanceWithinHitbox(currentTarget) +
+        extraDistanceWithinHitbox(character) &&
     !smart.moving &&
     !isAdvanceSmartMoving
   ) {
@@ -565,19 +856,6 @@ setInterval(async function () {
   }
 
   // Re-equip
-  if (
-    !character.slots.helmet ||
-    saleAble.includes(character.slots.helmet.name)
-  ) {
-    await equip(
-      character.items.findIndex(
-        (item) =>
-          !saleAble.includes(item.name) &&
-          item_info(item).type === "helmet" &&
-          item.level > 0
-      )
-    );
-  }
 
   const obj = {
     map: character.map,
@@ -601,7 +879,7 @@ setInterval(async function () {
   }
 
   // Inventory check and potions
-  if (isInvFull(21)) {
+  if (isInvFull(10)) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
   } else if (
@@ -628,10 +906,10 @@ setInterval(async function () {
       send_cm(partyMerchant, { msg: "elixir", ...obj, elixir: desiredElixir });
     }
   }
-}, 15000);
+}, 10000);
 
 // Party Setups
-setInterval(function () {
+setInterval(async function () {
   //// Deploy characters which arent active
   const loadedCharacters = get_active_characters();
   const allCharacters = [...partyMems, partyMerchant];
@@ -640,13 +918,18 @@ setInterval(function () {
     !character.controller &&
     allCharacters.filter((characterId) => characterId !== character.name)
       .length !== loadedCharacters.length
-  )
-    allCharacters.forEach((characterId, index) => {
-      if (!loadedCharacters[characterId]) {
-        start_character(characterId, partyCodeSlot[index]);
+  ) {
+    for (const [index, id] of allCharacters.entries()) {
+      if (!loadedCharacters[id]) {
+        start_character(id, partyCodeSlot[index]);
       }
-    });
-
+    }
+    // allCharacters.forEach((characterId, index) => {
+    //   if (!loadedCharacters[characterId]) {
+    //     start_character(characterId, partyCodeSlot[index]);
+    //   }
+    // });
+  }
   if (partyMems.length !== parent.party_list.length) {
     if (character.name === partyMems[0]) {
       partyMems.map((member) => {
@@ -670,7 +953,7 @@ function on_party_invite(name) {
 }
 
 //// Daily Events
-var pinkGooVisitedBoundary = [];
+// var pinkGooVisitedBoundary = [];
 async function changeToDailyEventTargets() {
   let target = getTarget();
   const isFightingBoss = boss.includes(getTarget()?.mtype);
@@ -681,13 +964,13 @@ async function changeToDailyEventTargets() {
     !character.s["hopsickness"]
   ) {
     changeToPullStrategies();
-    if (character.map !== "goobrawl") join("goobrawl");
+    if (character.map !== "goobrawl") await join("goobrawl");
 
     const rgooInstance = get_nearest_monster({ type: "rgoo" });
     const bgooInstance = get_nearest_monster({ type: "bgoo" });
 
     if (rgooInstance) {
-      change_target(target);
+      change_target(rgooInstance);
       return get_nearest_monster({ type: "rgoo" });
     }
 
@@ -720,16 +1003,6 @@ async function changeToDailyEventTargets() {
       }
     } else {
       change_target(pinkgooInstance);
-      if (
-        character.ctype === "warrior" &&
-        character.dreturn &&
-        is_in_range(pinkgooInstance, "taunt") &&
-        !is_on_cooldown("taunt") &&
-        character.mp > G.skills["taunt"].mp &&
-        pinkgooInstance.target !== character.name
-      ) {
-        use_skill("taunt", pinkgooInstance);
-      }
 
       return pinkgooInstance;
     }
@@ -751,56 +1024,70 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.crabxx?.live && !isFightingBoss) {
+  if (
+    parent.S.crabxx?.live &&
+    !isFightingBoss &&
+    !partyMems.includes(parent.S.crabxx?.target)
+  ) {
     changeToNormalStrategies();
+    if (character.range > 100) rangeRate = 0.3;
 
-    const crabxxInstance = get_nearest_monster({ type: "crabxx" });
-    const crabxInstance = Object.values(parent.entities)
-      .filter((mobs) => mobs.mtype === "crabx" && is_in_range(mobs, "attack"))
-      .sort((lhs, rhs) => {
-        if (lhs.hp === rhs.hp)
-          return distance(rhs, character) - distance(lhs, character);
-        return lhs.hp - rhs.hp;
-      })
-      .pop();
-    if (!crabxxInstance)
-      join("crabxx")
-        .then(() => change_target(get_nearest_monster({ type: "crabxx" })))
-        .catch(() => {
-          advanceSmartMove({ map: "main", x: -960, y: 1655 }).then(() =>
-            change_target(get_nearest_monster({ type: "crabxx" }))
-          );
-        });
+    const findBestCrabx = () =>
+      Object.values(parent.entities)
+        .filter((m) => m.mtype === "crabx")
+        .sort((lhs, rhs) =>
+          lhs.hp === rhs.hp
+            ? distance(rhs, character) - distance(lhs, character)
+            : lhs.hp - rhs.hp
+        )
+        .pop();
 
-    if (character.ctype === "warrior") {
-      if (
-        Object.keys(parent.entities).filter(
-          (id) => parent.entities[id]?.mtype === "crabx"
-        ).length <= 1 &&
-        crabxxInstance &&
-        !crabxxInstance.s.stunned &&
-        !is_on_cooldown("stomp") &&
-        character.mp > G.skills["stomp"].mp
-      ) {
-        equipBatch({ mainhand: "basher", offhand: undefined }).then(() => {
-          use_skill("stomp");
-        });
+    let crabxxInstance = get_nearest_monster({ type: "crabxx" });
+    let crabxInstance = findBestCrabx();
+
+    if (!crabxxInstance) {
+      if (character.s.hopsickness) {
+        await advanceSmartMove({ map: "main", x: -960, y: 1655 });
+      } else {
+        await join("crabxx");
+        await sleep(character.ping);
       }
+
+      crabxxInstance = get_nearest_monster({ type: "crabxx" });
+      crabxInstance = findBestCrabx();
     }
 
-    if (!target) {
-      const targetCrab =
-        character.ctype !== "warrior"
-          ? crabxInstance ||
-            (crabxxInstance?.target ? crabxxInstance : undefined)
-          : crabxxInstance?.target
-          ? crabxxInstance
-          : crabxInstance || undefined;
-      change_target(targetCrab);
-      return targetCrab;
+    if (
+      character.ctype === "warrior" &&
+      crabxxInstance &&
+      !crabxxInstance.s.stunned &&
+      Object.values(parent.entities).filter((e) => e?.mtype === "crabx")
+        .length <= 1
+    ) {
+      await warriorStomp();
     }
-    if (target?.mtype === "crabxx" && get_nearest_monster({ type: "crabx" }))
-      return crabxInstance;
+
+    // if (
+    //   character.ctype === "mage" &&
+    //   crabxxInstance &&
+    //   crabxxInstance.target &&
+    //   character.mp > 600 &&
+    //   is_in_range(crabxxInstance, "cburst") &&
+    //   !is_on_cooldown("cburst")
+    // ) {
+    //   use_skill("cburst", [[crabxxInstance, 1]]);
+    // }
+
+    let targetCrab;
+    if (character.ctype === "warrior") {
+      targetCrab = crabxxInstance?.target ? crabxxInstance : crabxInstance;
+    } else {
+      targetCrab =
+        crabxInstance || (crabxxInstance?.target ? crabxxInstance : undefined);
+    }
+
+    change_target(targetCrab);
+    return targetCrab;
   }
 
   if (
@@ -812,10 +1099,7 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
     const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
     if (!iceGolemInstance) {
-      if (character.range < 100) join("icegolem");
-      else {
-        advanceSmartMove({ map: "winterland", x: 771, y: 273 });
-      }
+      await advanceSmartMove({ map: "winterland", x: 896, y: 440 });
     }
     change_target(iceGolemInstance);
     return iceGolemInstance;
@@ -834,18 +1118,20 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
-      join("franky").catch(() =>
-        advanceSmartMove({ map: "level2s", x: -182, y: 42 }).then(() =>
-          change_target(get_nearest_monster({ type: "franky" }))
-        )
+      join("franky").catch(
+        async () =>
+          await advanceSmartMove(parent.S.franky).then(() =>
+            change_target(get_nearest_monster({ type: "franky" }))
+          )
       );
+      await smart_move(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
       frankyInstance = get_nearest_monster({ type: "franky" });
     }
 
     if (frankyInstance)
       if (frankyInstance.target && !partyMems.includes(frankyInstance.target)) {
-        rangeRate = 0.1;
+        rangeRate = 0.2;
         return frankyInstance;
       } else {
         change_target();
@@ -853,7 +1139,7 @@ async function changeToDailyEventTargets() {
       }
   }
 
-  if (parent.S.abtesting) {
+  if (parent.S.abtesting && !character.s.hopsickness) {
     if (character.map != "abtesting") join("abtesting");
 
     changeToNormalStrategies();
@@ -891,8 +1177,8 @@ async function changeToDailyEventTargets() {
         pvpTarget = currentCharacterTarget;
 
       if (
-        currentCharacterTarget.priority === pvpTarget.priority &&
-        currentCharacterTarget.sqrDistance < pvpTarget.sqrDistance
+        currentCharacterTarget.priority <= pvpTarget.priority &&
+        currentCharacterTarget.sqrDistance <= pvpTarget.sqrDistance
       )
         pvpTarget = currentCharacterTarget;
     }
@@ -900,9 +1186,29 @@ async function changeToDailyEventTargets() {
     target = pvpTarget.entity;
   }
 
-  if (get_entity(HEALER) && !get_entity(HEALER).rip) changeToPullStrategies();
+  if (parent.S.wabbit?.live && !isFightingBoss) {
+    changeToNormalStrategies();
+    if (character.range < 100) rangeRate = 0.1;
+    else rangeRate = 0.4;
+    const wabbitInstance = get_nearest_monster({ type: "wabbit" });
+
+    if (!wabbitInstance) {
+      if (parent.S.wabbit?.x) {
+        await advanceSmartMove(parent.S.wabbit);
+        change_target(get_nearest_monster({ type: "wabbit" }));
+        return get_nearest_monster({ type: "wabbit" });
+      }
+    } else {
+      change_target(wabbitInstance);
+      return wabbitInstance;
+    }
+  }
+
+  if (get_entity(HEALER) && !get_entity(HEALER).rip && character.ping < 600)
+    changeToPullStrategies();
   else changeToNormalStrategies();
-  rangeRate = basicRangeRate;
+
+  rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
   return target;
 }
 

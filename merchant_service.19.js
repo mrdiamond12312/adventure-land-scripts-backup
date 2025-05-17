@@ -36,7 +36,7 @@ character.on("cm", async function ({ name, message }) {
       }
       if (locate_item("mpot1") === -1) {
         await smart_move(find_npc("fancypots"));
-        await buy("mpot1", 10000);
+        await buy("mpot1", 9899);
       }
       await advanceSmartMove({
         ...message,
@@ -56,7 +56,7 @@ character.on("cm", async function ({ name, message }) {
       }
       if (locate_item("hpot1") === -1) {
         await smart_move(find_npc("fancypots"));
-        await buy("hpot1", 10000);
+        await buy("hpot1", 9899);
       }
       await advanceSmartMove({
         ...message,
@@ -117,3 +117,42 @@ character.on("cm", async function ({ name, message }) {
       log(`Unidentified '${message.msg}'`);
   }
 });
+
+async function retrieveBankItem(searchId, level = 0) {
+  if (character.map !== "bank") await smart_move(bankPosition);
+  for (const [bankPack, items] of Object.entries(character.bank).filter(
+    ([key, value]) => key !== "gold"
+  )) {
+    const slot = items.findIndex(
+      (item) =>
+        item && item.name === searchId && (!level || level === item.level)
+    );
+    if (slot !== -1) {
+      return bank_retrieve(bankPack, slot);
+    }
+  }
+}
+
+async function openCryptInstance() {
+  close_stand();
+  onDuty = true;
+  if (locate_item("cryptkey") === -1) {
+    await retrieveBankItem("cryptkey");
+    await sleep(1000 + character.ping);
+
+    if (locate_item("cryptkey") === -1) {
+      return;
+    }
+  }
+
+  await smart_move(CRYPT_DOOR);
+  await enter("crypt");
+
+  set("cryptInstance", character.in);
+  set("lastCryptInstance", new Date());
+  set("cryptDefeatedMobs", []);
+  set("lastSeenDefeatableCryptBoss", undefined);
+
+  onDuty = false;
+  return;
+}
