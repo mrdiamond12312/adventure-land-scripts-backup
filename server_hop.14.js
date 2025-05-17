@@ -1,6 +1,6 @@
 const HOP_SERVERS = ["US", "ASIA", "EU"];
 
-const ignoreServer = ["ASIAI"];
+const ignoreServer = [];
 
 const HOME_SERVER = {
   serverRegion: "EU",
@@ -60,7 +60,6 @@ setInterval(async () => {
     waitForEvent.some((event) => parent.S[event]?.live)
   )
     return;
-
 
   const response = await fetch(API);
   if (response.status === 200) {
