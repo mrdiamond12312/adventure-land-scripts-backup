@@ -9,7 +9,7 @@ if (parent.caracAL) {
 let BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
 
-const IGNORE_RARE_GOLD_THRESHOLD = 28e8;
+const IGNORE_RARE_GOLD_THRESHOLD = 29e8;
 
 const KEEP_THRESHOLD = {
   // Every character needs
