@@ -45,7 +45,7 @@ async function scareAwayMobs() {
   if (
     (locate_item("jacko") !== -1 || character.slots["orb"].name === "jacko") &&
     Object.values(parent.entities).some(
-      (mob) => mob?.target === character.name && mob?.type === "monster"
+      (mob) => mob?.target === character.name && mob?.type === "monster",
     ) &&
     !is_on_cooldown("scare") &&
     character.mp > 100
@@ -61,7 +61,7 @@ async function mageBlink(
   map,
   coordinates,
   useCoordinates = true,
-  minDistanceToBlink = 300
+  minDistanceToBlink = 300,
 ) {
   if (
     character.mp > G.skills["blink"].mp &&
@@ -73,7 +73,7 @@ async function mageBlink(
   ) {
     log("Blink to " + coordinates);
     return await use_skill("blink", coordinates).then(() =>
-      reduce_cooldown("blink", character.ping * 0.7)
+      reduce_cooldown("blink", character.ping * 0.7),
     );
   }
 
@@ -207,7 +207,11 @@ async function advanceSmartMove(props) {
         return;
       }
     } else {
-      const mageEntity = getCharacter(MAGE);
+      const mageEntity = parent.caracAL
+        ? parent.caracAL.siblings.includes(MAGE)
+          ? get("mageLocation")
+          : undefined
+        : getCharacter(MAGE);
       log("Asking for a miracle, may be a magiport?");
       if (
         mageEntity &&
@@ -226,7 +230,11 @@ async function advanceSmartMove(props) {
         return;
       } else {
         const checkingMageMagiportInterval = setInterval(async () => {
-          let mageEntityUpdate = getCharacter(MAGE);
+          let mageEntityUpdate = parent.caracAL
+            ? parent.caracAL.siblings.includes(MAGE)
+              ? get("mageLocation")
+              : undefined
+            : getCharacter(MAGE);
           if (
             mageEntityUpdate &&
             mageEntityUpdate.map === props.map &&

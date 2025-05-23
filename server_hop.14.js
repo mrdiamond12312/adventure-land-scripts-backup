@@ -43,7 +43,7 @@ setInterval(async () => {
         parent.S[boss].target &&
         parent.S[boss].hp <
           (threshold.find((pair) => pair.type === boss)?.threshold ?? 0.93) *
-            parent.S[boss].max_hp
+            parent.S[boss].max_hp,
     ) ||
     get("cryptInstance")
   )
@@ -73,13 +73,13 @@ setInterval(async () => {
       .filter(
         (serverBoss) =>
           !ignoreServer.includes(
-            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`
+            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`,
           ) &&
           serverBoss.serverIdentifier !== "PVP" &&
           HOP_SERVERS.includes(serverBoss.serverRegion) &&
           (serverBoss.id || !serverBoss.estimatedRespawn) &&
           (tankableBoss.includes(serverBoss.type) ||
-            (bosses.includes(serverBoss.type) && serverBoss.target))
+            (bosses.includes(serverBoss.type) && serverBoss.target)),
       )
       .sort((lhs, rhs) => {
         const bossPriority = [...tankableBoss, ...bosses];
@@ -96,14 +96,33 @@ setInterval(async () => {
         `${toServer.serverRegion}${toServer.serverIdentifier}` !== currentServer
       ) {
         log(`Hopping to ${toServer.serverRegion}${toServer.serverIdentifier}`);
-        change_server(toServer.serverRegion, toServer.serverIdentifier);
+        if (parent.caracAL) {
+          Object.keys(caracALconfig.characters)
+            .filter((id) => id !== character.name)
+            .forEach((id) => parent.caracAL.shutdown(id));
+
+          parent.caracAL.deploy(
+            null,
+            `${toServer.serverRegion}${toServer.serverIdentifier}`,
+          );
+        } else change_server(toServer.serverRegion, toServer.serverIdentifier);
       }
       return true;
     }
 
     if (currentServer !== getHomeServer()) {
       log("Hopping back home server!");
-      change_server(HOME_SERVER.serverRegion, HOME_SERVER.serverIdentifier);
+      if (parent.caracAL) {
+        Object.keys(caracALconfig.characters)
+          .filter((id) => id !== character.name)
+          .forEach((id) => parent.caracAL.shutdown(id));
+
+        parent.caracAL.deploy(
+          null,
+          `${HOME_SERVER.serverRegion}${HOME_SERVER.serverIdentifier}`,
+        );
+      } else
+        change_server(HOME_SERVER.serverRegion, HOME_SERVER.serverIdentifier);
     }
 
     return false;
