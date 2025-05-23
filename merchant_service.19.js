@@ -118,21 +118,6 @@ character.on("cm", async function ({ name, message }) {
   }
 });
 
-async function retrieveBankItem(searchId, level = 0) {
-  if (character.map !== "bank") await smart_move(bankPosition);
-  for (const [bankPack, items] of Object.entries(character.bank).filter(
-    ([key, value]) => key !== "gold"
-  )) {
-    const slot = items.findIndex(
-      (item) =>
-        item && item.name === searchId && (!level || level === item.level)
-    );
-    if (slot !== -1) {
-      return bank_retrieve(bankPack, slot);
-    }
-  }
-}
-
 async function openCryptInstance() {
   close_stand();
   onDuty = true;
