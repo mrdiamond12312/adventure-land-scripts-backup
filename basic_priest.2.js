@@ -34,7 +34,7 @@ async function fight(target) {
                 !mob.s.poisoned &&
                 is_in_range(mob, "attack") &&
                 mob.type === "monster" &&
-                partyMems.includes(mob.target),
+                partyMems.includes(mob.target)
             )
             .sort((lhs, rhs) => lhs.attack - rhs.attack)
             .pop() ?? target
@@ -42,7 +42,7 @@ async function fight(target) {
     change_target(targetToAttack);
 
     attack(targetToAttack).then(() =>
-      reduce_cooldown("attack", character.ping * 0.95),
+      reduce_cooldown("attack", character.ping * 0.95)
     );
 
     if (character.mp > 1100 && !is_on_cooldown("curse") && target.max_hp > 3000)
@@ -75,7 +75,7 @@ async function fight(target) {
               //   target ? get_height(target) ?? 0 : 0
               // ))
               extraDistanceWithinHitbox(target) +
-              extraDistanceWithinHitbox(character)),
+              extraDistanceWithinHitbox(character))
         ) *
         2;
   } else {
@@ -124,13 +124,13 @@ async function priestBuff() {
       (ally) =>
         (ally.hp < ally.max_hp - character.level * 10 * 2 &&
           !is_in_range(ally, "heal")) ||
-        ally.hp < ally.max_hp * 0.3,
+        ally.hp < ally.max_hp * 0.3
     ) ||
       allies.every((ally) => ally.hp < ally.max_hp - character.level * 10 * 2))
   ) {
     if (!is_on_cooldown("partyheal") && character.mp > 1000) {
       use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", character.ping * 0.95),
+        reduce_cooldown("partyheal", character.ping * 0.95)
       );
       set_message("Party Heal");
     }
@@ -140,7 +140,7 @@ async function priestBuff() {
     .map((member) => {
       if (
         Object.keys(parent.entities).some(
-          (entity) => parent.entities[entity]?.target === member,
+          (entity) => parent.entities[entity]?.target === member
         )
       )
         if (
@@ -149,7 +149,7 @@ async function priestBuff() {
           character.mp > G.skills["absorb"].mp &&
           (get_entity(member).ctype !== "warrior" ||
             Object.keys(parent.entities).filter(
-              (entity) => parent.entities[entity]?.target === member,
+              (entity) => parent.entities[entity]?.target === member
             ).length > 2)
         ) {
           use_skill("absorb", get_entity(member));
@@ -161,12 +161,6 @@ async function priestBuff() {
 
 setInterval(async function () {
   assignRoles();
-  if (
-    (bestLooter().name === character.name || !bestLooter()) &&
-    Object.keys(get_chests()).length
-  )
-    loot();
-
   buff();
 
   if (character.rip) {
@@ -201,7 +195,8 @@ setInterval(async function () {
     !smart.moving &&
     !target &&
     !get("cryptInstance") &&
-    (partyMems[0] == character.name || !get_entity(partyMems[0]))
+    (partyMems[0] == character.name ||
+      !get_entity(partyMems[0] || character.map === "crypt"))
   ) {
     changeToNormalStrategies();
     const scareInterval = setInterval(() => {

@@ -6,7 +6,11 @@ async function useNormalStrategy(target) {
     case "mage":
       const suggestedMageItems = calculateMageItems(target);
 
-      if (character.slots.mainhand?.name !== suggestedMageItems.mainhand) {
+      if (
+        Object.keys(suggestedMageItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot]
+        )
+      ) {
         await equipBatch(suggestedMageItems);
       }
 
@@ -35,7 +39,7 @@ async function useNormalStrategy(target) {
           (entity) => parent.entities[entity]?.target === character.name
         )
       )
-        scareAwayMobs()
+        scareAwayMobs();
 
       break;
 

@@ -68,6 +68,10 @@ character.on("cm", async function ({ name, message }) {
       }
       break;
 
+    case "loot-before-hopping":
+      midasLooting(true);
+      break;
+
     default:
       log(`Unidentified MsgCode: ${message}`);
   }

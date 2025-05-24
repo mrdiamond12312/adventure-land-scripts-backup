@@ -148,11 +148,6 @@ async function fight(target) {
 
 setInterval(async function () {
   assignRoles();
-  if (
-    (bestLooter().name === character.name || !bestLooter()) &&
-    Object.keys(get_chests()).length
-  )
-    loot();
 
   buff();
 
@@ -195,7 +190,8 @@ setInterval(async function () {
     !isAdvanceSmartMoving &&
     !target &&
     !get("cryptInstance") &&
-    (partyMems[0] == character.name || !get_entity(partyMems[0]))
+    (partyMems[0] == character.name ||
+      !get_entity(partyMems[0] || character.map === "crypt"))
   ) {
     log("Moving to farming location");
     changeToNormalStrategies();

@@ -18,6 +18,8 @@ var HEALER = "CowTheMooh";
 // const HEALER = "CupidCow";
 const RANGER = "MoohThatCow";
 
+const MIDAS_CHARACTER = [MAGE];
+
 // var partyCodeSlot = [4, 15, 3, 5];
 var partyCodeSlot = [9, 2, 4, 5];
 var caracALPartyCodeSlot = [
@@ -133,7 +135,7 @@ function filterCompoundableAndStackable() {
     (i) =>
       inv[i] &&
       (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name),
+      !["hpot1", "mpot1"].includes(inv[i].name)
   );
   return res;
 }
@@ -159,6 +161,7 @@ if (parent.caracAL) {
     var currentStrategy = usePullStrategies;
   }
 }
+
 // Server hoping
 if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
   parent.caracAL.load_scripts([
@@ -507,7 +510,7 @@ function getTarget() {
         .sort(
           (lhs, rhs) =>
             distance(parent.entities[lhs], get_entity(HEALER)) -
-            distance(parent.entities[rhs], get_entity(HEALER)),
+            distance(parent.entities[rhs], get_entity(HEALER))
         );
       if (
         mobsTargetingHealer &&
@@ -522,7 +525,7 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack"),
+          is_in_range(mob, "attack")
       );
       if (leader)
         target =
@@ -538,21 +541,22 @@ function getTarget() {
     else {
       set_message("No Monsters");
       if (
+        character.map !== "crypt" &&
         leader &&
         !smart.moving &&
         !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
-            (character.y - leader.y) * (character.y - leader.y),
+            (character.y - leader.y) * (character.y - leader.y)
         ) > spacial &&
         can_move_to(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         )
       )
         move(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         );
       return;
     }
@@ -763,6 +767,79 @@ function goToBoss() {
   return false;
 }
 
+const LOOTING_LIMIT = 5;
+var isLooting = false;
+async function midasLooting(forced = false) {
+  const chests = Object.values(parent.chests);
+  if ((isLooting && !forced) || !chests.length) return;
+
+  const promises = [];
+  const partyMidasUsers = Object.keys(parent.party)
+    .map((id) => get_player(id))
+    .filter((player) => player && MIDAS_CHARACTER.includes(player.name));
+
+  if (
+    MIDAS_CHARACTER.includes(character.name) &&
+    (chests.length >= LOOTING_LIMIT ||
+      smart.moving ||
+      isAdvanceSmartMoving ||
+      forced)
+  ) {
+    isLooting = true;
+    if ((!smart.moving && !isAdvanceSmartMoving) || forced)
+      await equipBatch({
+        helmet: "wcap",
+        chest: "wattire",
+        pants: "wbreeches",
+        shoes: "wshoes",
+        gloves: "handofmidas",
+        amulet: "spookyamulet",
+      });
+    // Prevent overflooding code cost
+    let breakFlag = LOOTING_LIMIT * 2;
+    for (const chest of chests) {
+      if (breakFlag <= 0) break;
+      if (distance(chest, character) <= 800) {
+        promises.push(loot(chest.id));
+        breakFlag--;
+      }
+    }
+    await Promise.all(promises);
+    await equipBatch(calculateBestItems(), true);
+  } else if (partyMidasUsers.length) {
+    if (chests.length && (smart.moving || isAdvanceSmartMoving || forced)) {
+      isLooting = true;
+      let breakFlag = LOOTING_LIMIT * 1.5;
+      for (const chest of chests) {
+        if (breakFlag <= 0) break;
+        if (
+          partyMidasUsers.every((player) => distance(chest, player) > 800) ||
+          10000 > mssince(chest.last_loot)
+        ) {
+          promises.push(loot(chest.id));
+          breakFlag--;
+        }
+      }
+    }
+  } else if (
+    (bestLooter().name === character.name || !bestLooter()) &&
+    Object.keys(get_chests()).length
+  ) {
+    isLooting = true;
+    promises.push(loot());
+  }
+
+  return Promise.all(promises).finally(() => {
+    isLooting = false;
+  });
+}
+
+setInterval(() => {
+  if (!MIDAS_CHARACTER.includes(character.name) || !isEquipingItems) {
+    midasLooting();
+  }
+}, 100);
+
 async function cupidHeal() {
   if (locate_item("cupid") === -1 && character.slots.mainhand?.name !== "cupid")
     return;
@@ -777,7 +854,7 @@ async function cupidHeal() {
         entity.hp <
           entity.max_hp -
             character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
+              dps_multiplier(entity.armor - (character.apiercing ?? 0))
     )
     .sort((lhs, rhs) => {
       if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
@@ -803,10 +880,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 5)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95),
+        reduce_cooldown("attack", character.ping * 0.95)
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -821,10 +898,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 3)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95),
+        reduce_cooldown("attack", character.ping * 0.95)
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -845,9 +922,9 @@ async function cupidHeal() {
               () =>
                 character.slots.mainhand?.name === "cupid" &&
                 use_skill("attack", lowHealthPlayers[0]).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings)),
+                  reduce_cooldown("attack", Math.min(...parent.pings))
                 ),
-              e.ms + 10,
+              e.ms + 10
             );
           }
         });
@@ -1084,7 +1161,7 @@ async function changeToDailyEventTargets() {
         .sort((lhs, rhs) =>
           lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp,
+            : lhs.hp - rhs.hp
         )
         .pop();
 
@@ -1167,8 +1244,8 @@ async function changeToDailyEventTargets() {
       join("franky").catch(
         async () =>
           await advanceSmartMove(parent.S.franky).then(() =>
-            change_target(get_nearest_monster({ type: "franky" })),
-          ),
+            change_target(get_nearest_monster({ type: "franky" }))
+          )
       );
       await smart_move(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
@@ -1211,7 +1288,7 @@ async function changeToDailyEventTargets() {
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype,
+          (element) => element === currentCharacter.ctype
         ),
         entity: currentCharacter,
         sqrDistance:
