@@ -391,6 +391,12 @@ function secondhands_handler(event) {
     "dexamulet",
     "bataxe",
     "lolipop",
+    "ololipop",
+    "fireblade",
+    "firebow",
+    "firestaff",
+    "firestars",
+    "daggerofthedead",
   ];
   for (const i in event) {
     const item = event[i];

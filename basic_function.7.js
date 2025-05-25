@@ -135,7 +135,7 @@ function filterCompoundableAndStackable() {
     (i) =>
       inv[i] &&
       (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name)
+      !["hpot1", "mpot1"].includes(inv[i].name),
   );
   return res;
 }
@@ -318,7 +318,6 @@ var saleAble = [
   "maceofthedead",
   "pmaceofthedead",
   "maceofthedead",
-  "daggerofthedead",
   "staffofthedead",
   "swordofthedead",
   "throwingstars",
@@ -510,7 +509,7 @@ function getTarget() {
         .sort(
           (lhs, rhs) =>
             distance(parent.entities[lhs], get_entity(HEALER)) -
-            distance(parent.entities[rhs], get_entity(HEALER))
+            distance(parent.entities[rhs], get_entity(HEALER)),
         );
       if (
         mobsTargetingHealer &&
@@ -525,7 +524,7 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack")
+          is_in_range(mob, "attack"),
       );
       if (leader)
         target =
@@ -547,16 +546,16 @@ function getTarget() {
         !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
-            (character.y - leader.y) * (character.y - leader.y)
+            (character.y - leader.y) * (character.y - leader.y),
         ) > spacial &&
         can_move_to(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2
+          character.y + (leader.y - character.y) / 2,
         )
       )
         move(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2
+          character.y + (leader.y - character.y) / 2,
         );
       return;
     }
@@ -854,7 +853,7 @@ async function cupidHeal() {
         entity.hp <
           entity.max_hp -
             character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0))
+              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
     )
     .sort((lhs, rhs) => {
       if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
@@ -880,10 +879,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 5)
           .map((player) => player.name)
-          .join(", ")}`
+          .join(", ")}`,
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95)
+        reduce_cooldown("attack", character.ping * 0.95),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -898,10 +897,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 3)
           .map((player) => player.name)
-          .join(", ")}`
+          .join(", ")}`,
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95)
+        reduce_cooldown("attack", character.ping * 0.95),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -922,9 +921,9 @@ async function cupidHeal() {
               () =>
                 character.slots.mainhand?.name === "cupid" &&
                 use_skill("attack", lowHealthPlayers[0]).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings))
+                  reduce_cooldown("attack", Math.min(...parent.pings)),
                 ),
-              e.ms + 10
+              e.ms + 10,
             );
           }
         });
@@ -1161,7 +1160,7 @@ async function changeToDailyEventTargets() {
         .sort((lhs, rhs) =>
           lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp
+            : lhs.hp - rhs.hp,
         )
         .pop();
 
@@ -1244,8 +1243,8 @@ async function changeToDailyEventTargets() {
       join("franky").catch(
         async () =>
           await advanceSmartMove(parent.S.franky).then(() =>
-            change_target(get_nearest_monster({ type: "franky" }))
-          )
+            change_target(get_nearest_monster({ type: "franky" })),
+          ),
       );
       await smart_move(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
@@ -1288,7 +1287,7 @@ async function changeToDailyEventTargets() {
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype
+          (element) => element === currentCharacter.ctype,
         ),
         entity: currentCharacter,
         sqrDistance:
