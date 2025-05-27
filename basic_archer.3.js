@@ -57,7 +57,7 @@ async function fight(target) {
     if (character.mp > 400 && !is_on_cooldown("supershot"))
       use_skill(
         "supershot",
-        target.cooperative
+        target?.cooperative
           ? target
           : Object.values(parent.entities)
               .filter(
