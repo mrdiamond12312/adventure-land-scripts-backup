@@ -59,9 +59,9 @@ var max_att = 2000;
 var bossOffset = 0.99;
 var boss = ["mrpumpkin", "mrgreen"];
 
-// var map = "main";
-// var mapX = 1248;
-// var mapY = -63;
+var map = "main";
+var mapX = 1248;
+var mapY = -63;
 
 // var map = "winterland";
 // var mapX = 423;
@@ -87,18 +87,18 @@ var boss = ["mrpumpkin", "mrgreen"];
 // var mapX = 676;
 // var mapY = 1754;
 
-var map = "halloween";
-var mapX = -368;
-var mapY = -1623;
+// var map = "halloween";
+// var mapX = -368;
+// var mapY = -1623;
 
-// var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"]; // var type = "grinch";
+var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 // var mobsToFarm = ["stompy", "wolf", "wolfie"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 // var mobsToFarm = ["phoenix", "minimush", "xscorpion"];
 // var mobsToFarm = ["phoenix", "croc", "armadillo"];
-var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
+// var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -214,7 +214,6 @@ var ignore = [
   "pickaxe",
   "rod",
   "broom",
-  "pumpkinspice",
   "tracker",
   "sword",
   "throwingstars",
@@ -437,7 +436,7 @@ function arrayShuffle(array) {
 }
 
 function getMonstersOnDeclares() {
-  // if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
+  if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
   for (monster of mobsToFarm) {
     if (get_nearest_monster({ min_xp, max_att, type: monster })) {
       return get_nearest_monster({ min_xp, max_att, type: monster });
