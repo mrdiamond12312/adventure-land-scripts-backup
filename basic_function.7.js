@@ -880,10 +880,16 @@ async function cupidHeal() {
       return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
     });
 
+  const promises = [];
+
   if (lowHealthPlayers.length > 0) {
-    await equipBatch({
-      mainhand: "cupid",
-    });
+    promises.push(
+      equipBatch({
+        mainhand: "cupid",
+      }),
+    );
+
+    await Promise.all(promises);
 
     if (
       character.level >= G.skills["5shot"].level &&
@@ -1155,6 +1161,7 @@ async function changeToDailyEventTargets() {
 
   if (
     parent.S.crabxx?.live &&
+    parent.S.crabxx.hp < parent.S.crabxx.max_hp &&
     !isFightingBoss &&
     !partyMems.includes(parent.S.crabxx?.target)
   ) {
@@ -1218,127 +1225,6 @@ async function changeToDailyEventTargets() {
     change_target(targetCrab);
     return targetCrab;
   }
-
-  if (
-    parent.S.icegolem?.live &&
-    !isFightingBoss &&
-    parent.S.icegolem?.hp < 0.9 * parent.S.icegolem?.max_hp &&
-    !partyMems.includes(parent.S.icegolem?.target)
-  ) {
-    changeToNormalStrategies();
-    const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
-    if (!iceGolemInstance) {
-      await advanceSmartMove({ map: "winterland", x: 896, y: 440 });
-    }
-    change_target(iceGolemInstance);
-    return iceGolemInstance;
-  } else if (get_nearest_monster({ type: "icegolem" })) {
-    changeToNormalStrategies();
-    change_target(target);
-    return get_nearest_monster({ type: "icegolem" });
-  }
-
-  if (
-    parent.S.franky?.live &&
-    parent.S.franky?.target &&
-    parent.S.franky?.hp < 0.9 * parent.S.franky?.max_hp &&
-    !isFightingBoss
-  ) {
-    changeToNormalStrategies();
-    let frankyInstance = get_nearest_monster({ type: "franky" });
-    if (!frankyInstance) {
-      join("franky").catch(
-        async () =>
-          await advanceSmartMove(parent.S.franky).then(() =>
-            change_target(get_nearest_monster({ type: "franky" })),
-          ),
-      );
-      await smart_move(parent.S.franky);
-      change_target(get_nearest_monster({ type: "franky" }));
-      frankyInstance = get_nearest_monster({ type: "franky" });
-    }
-
-    if (frankyInstance)
-      if (frankyInstance.target && !partyMems.includes(frankyInstance.target)) {
-        rangeRate = 0.2;
-        return frankyInstance;
-      } else {
-        change_target();
-        await advanceSmartMove({ map: "level2w", x: -530, y: -173 });
-      }
-  }
-
-  if (parent.S.abtesting && !character.s.hopsickness) {
-    if (character.map != "abtesting") join("abtesting");
-
-    changeToNormalStrategies();
-    const priority = [
-      "priest",
-      "mage",
-      "ranger",
-      "rogue",
-      "warrior",
-      "paladin",
-    ];
-
-    let pvpTarget = {
-      priority: priority.length + 1,
-      entity: undefined,
-      sqrDistance: undefined,
-    };
-
-    for (id in parent.entities) {
-      const currentCharacter = parent.entities[id];
-
-      if (currentCharacter.team === character.team) continue;
-
-      const currentCharacterTarget = {
-        priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype,
-        ),
-        entity: currentCharacter,
-        sqrDistance:
-          Math.pow(currentCharacter.real_x - character.real_x, 2) +
-          Math.pow(currentCharacter.real_y - character.real_y, 2),
-      };
-
-      if (currentCharacterTarget.priority < pvpTarget.priority)
-        pvpTarget = currentCharacterTarget;
-
-      if (
-        currentCharacterTarget.priority <= pvpTarget.priority &&
-        currentCharacterTarget.sqrDistance <= pvpTarget.sqrDistance
-      )
-        pvpTarget = currentCharacterTarget;
-    }
-
-    target = pvpTarget.entity;
-  }
-
-  if (parent.S.wabbit?.live && !isFightingBoss) {
-    changeToNormalStrategies();
-    if (character.range < 100) rangeRate = 0.1;
-    else rangeRate = 0.4;
-    const wabbitInstance = get_nearest_monster({ type: "wabbit" });
-
-    if (!wabbitInstance) {
-      if (parent.S.wabbit?.x) {
-        await advanceSmartMove(parent.S.wabbit);
-        change_target(get_nearest_monster({ type: "wabbit" }));
-        return get_nearest_monster({ type: "wabbit" });
-      }
-    } else {
-      change_target(wabbitInstance);
-      return wabbitInstance;
-    }
-  }
-
-  if (get_entity(HEALER) && !get_entity(HEALER).rip && character.ping < 600)
-    changeToPullStrategies();
-  else changeToNormalStrategies();
-
-  rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
-  return target;
 }
 
 function on_magiport(name) {
