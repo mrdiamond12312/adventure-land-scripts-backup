@@ -6,8 +6,8 @@ try {
 
 // Global vars
 var attack_mode = true;
-// var partyMems = ["MowTheCooh", "MoohThatCow", "CupidCow"];
-var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
+var partyMems = ["MowTheCooh", "MoohThatCow", "CupidCow"];
+// var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
 // var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
 
 var TANKER = "MooohMoooh";
@@ -20,14 +20,20 @@ const RANGER = "MoohThatCow";
 
 const MIDAS_CHARACTER = [MAGE];
 
-// var partyCodeSlot = [4, 15, 3, 5];
-var partyCodeSlot = [9, 2, 4, 5];
+var partyCodeSlot = [4, 15, 3, 5];
+// var partyCodeSlot = [9, 2, 4, 5];
 var caracALPartyCodeSlot = [
-  "adventure-land-scripts-backup/basic_warrior.9.js",
-  "adventure-land-scripts-backup/basic_priest.2.js",
   "adventure-land-scripts-backup/basic_mage.4.js",
+  "adventure-land-scripts-backup/solo_ranger.15.js",
+  "adventure-land-scripts-backup/basic_archer.3.js",
   "adventure-land-scripts-backup/basic_merchant.5.js",
 ];
+// var caracALPartyCodeSlot = [
+//   "adventure-land-scripts-backup/basic_warrior.9.js",
+//   "adventure-land-scripts-backup/basic_priest.2.js",
+//   "adventure-land-scripts-backup/basic_mage.4.js",
+//   "adventure-land-scripts-backup/basic_merchant.5.js",
+// ];
 // var partyCodeSlot = [2, 4, 15, 5];
 
 var partyMerchant = "MerchantMooh";
@@ -59,9 +65,9 @@ var max_att = 2000;
 var bossOffset = 0.99;
 var boss = ["mrpumpkin", "mrgreen"];
 
-var map = "main";
-var mapX = 1248;
-var mapY = -63;
+// var map = "main";
+// var mapX = 1248;
+// var mapY = -63;
 
 // var map = "winterland";
 // var mapX = 423;
@@ -91,14 +97,19 @@ var mapY = -63;
 // var mapX = -368;
 // var mapY = -1623;
 
-var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"];
+var map = "main";
+var mapX = -1111;
+var mapY = 132;
+
+// var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 // var mobsToFarm = ["stompy", "wolf", "wolfie"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
-// var mobsToFarm = ["phoenix", "minimush", "xscorpion"];
+// var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
 // var mobsToFarm = ["phoenix", "croc", "armadillo"];
 // var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
+var mobsToFarm = ["phoenix", "squigtoad", "squig"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -436,10 +447,10 @@ function arrayShuffle(array) {
 }
 
 function getMonstersOnDeclares() {
-  if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
+  // if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
   for (monster of mobsToFarm) {
-    if (get_nearest_monster({ min_xp, max_att, type: monster })) {
-      return get_nearest_monster({ min_xp, max_att, type: monster });
+    if (get_nearest_monster({ min_xp, type: monster })) {
+      return get_nearest_monster({ min_xp, type: monster });
     }
   }
   // return (
@@ -503,19 +514,23 @@ function getTarget() {
     if (character.name === partyMems[0]) {
       target = getMonstersOnDeclares();
 
-      const mobsTargetingHealer = Object.keys(parent.entities)
-        .filter((id) => parent.entities[id].target === HEALER)
+      const mobsTargetingNonTanker = Object.values(parent.entities)
+        .filter(
+          (entity) =>
+            entity.type === "monster" &&
+            (entity.target === HEALER || entity.target === MAGE),
+        )
         .sort(
-          (lhs, rhs) =>
-            distance(parent.entities[lhs], get_entity(HEALER)) -
-            distance(parent.entities[rhs], get_entity(HEALER)),
+          (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
         );
       if (
-        mobsTargetingHealer &&
-        mobsTargetingHealer.length &&
-        (!target || (target && target.target !== HEALER))
+        mobsTargetingNonTanker.length &&
+        (!target ||
+          (target &&
+            target.target !== character.name &&
+            partyMems.includes(target.target)))
       ) {
-        target = parent.entities[mobsTargetingHealer[0]];
+        target = mobsTargetingNonTanker.shift();
       }
     } else {
       const mob = getMonstersOnDeclares();
@@ -839,7 +854,11 @@ setInterval(() => {
 }, 100);
 
 async function cupidHeal() {
-  if (locate_item("cupid") === -1 && character.slots.mainhand?.name !== "cupid")
+  if (
+    (locate_item("cupid") === -1 &&
+      character.slots.mainhand?.name !== "cupid") ||
+    ms_to_next_skill("attack") > 0
+  )
     return;
 
   const lowHealthPlayers = Object.values(parent.entities)
@@ -881,7 +900,7 @@ async function cupidHeal() {
           .join(", ")}`,
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95),
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -899,7 +918,7 @@ async function cupidHeal() {
           .join(", ")}`,
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95),
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -912,20 +931,9 @@ async function cupidHeal() {
     ) {
       set_message("Single Cupid");
       log(`Healing ${lowHealthPlayers[0].name}`);
-      attack(lowHealthPlayers[0])
-        .then(() => reduce_cooldown("attack", character.ping * 0.95))
-        .catch((e) => {
-          if (e.response === "cooldown" && e.ms < Math.min(...parent.pings)) {
-            setTimeout(
-              () =>
-                character.slots.mainhand?.name === "cupid" &&
-                use_skill("attack", lowHealthPlayers[0]).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings)),
-                ),
-              e.ms + 10,
-            );
-          }
-        });
+      attack(lowHealthPlayers[0]).then(() =>
+        reduce_cooldown("attack", Math.min(...parent.pings)),
+      );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     }
   }

@@ -11,7 +11,7 @@ if (parent.caracAL) {
 }
 
 // Kiting
-var originRangeRate = 0.8;
+var originRangeRate = 0.9;
 desiredElixir = "pumpkinspice";
 rangeRate = originRangeRate;
 const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 5);

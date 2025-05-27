@@ -15,10 +15,10 @@ var originRangeRate = 0.7;
 var rangeRate = 0.7;
 const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
-var rangerTarget = undefined;
-var rangerMap = undefined;
-var rangerMapX = undefined;
-var rangerMapY = undefined;
+var rangerTarget = ["phoenix", "crab", "squig"];
+var rangerMap = "main";
+var rangerMapX = -1163;
+var rangerMapY = 74;
 
 function getRangerTarget() {
   if (rangerTarget && rangerTarget.length) {
@@ -99,18 +99,7 @@ async function fight(target) {
       set_message("Five Shooting");
       use_skill("5shot", weakMobs.slice(0, 5))
         .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
-        .catch((e) => {
-          if (e.response === "cooldown" && e.ms < loopInterval) {
-            setTimeout(
-              () =>
-                character.slots.mainhand?.name !== "cupid" &&
-                use_skill("5shot", potentialTargets.slice(0, 5)).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings)),
-                ),
-              e.ms + 10,
-            );
-          }
-        });
+        ;
     } else if (
       character.mp > 500 &&
       !character.fear &&
@@ -122,18 +111,7 @@ async function fight(target) {
       set_message("Three Shooting");
       use_skill("3shot", potentialTargets.slice(0, 3))
         .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
-        .catch((e) => {
-          if (e.response === "cooldown" && e.ms < loopInterval) {
-            setTimeout(
-              () =>
-                character.slots.mainhand?.name !== "cupid" &&
-                use_skill("3shot", potentialTargets.slice(0, 3)).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings)),
-                ),
-              e.ms + 10,
-            );
-          }
-        });
+        ;
     } else if (
       distance(target, character) < character.range + character.xrange &&
       character.slots.mainhand?.name !== "cupid"
@@ -142,18 +120,7 @@ async function fight(target) {
       set_message("Shooting");
       attack(target)
         .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
-        .catch((e) => {
-          if (e.response === "cooldown" && e.ms < loopInterval) {
-            setTimeout(
-              () =>
-                character.slots.mainhand?.name !== "cupid" &&
-                use_skill("attack", target).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings)),
-                ),
-              e.ms + 10,
-            );
-          }
-        });
+        ;
     }
 
     if (character.fear) {
@@ -204,11 +171,11 @@ async function fight(target) {
 }
 
 setInterval(async function () {
-  if (
-    (bestLooter().name === character.name || !bestLooter()) &&
-    Object.keys(get_chests()).length
-  )
-    loot();
+  // if (
+  //   (bestLooter().name === character.name || !bestLooter()) &&
+  //   Object.keys(get_chests()).length
+  // )
+  //   loot();
 
   buff();
 
