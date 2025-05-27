@@ -37,11 +37,11 @@ async function fight(target) {
           .sort((lhs, rhs) => {
             const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
               lhs,
-              character.blast / 3.6 || BLAST_RADIUS,
+              character.blast / 3.6 || BLAST_RADIUS
             );
             const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
               rhs,
-              character.blast / 3.6 || BLAST_RADIUS,
+              character.blast / 3.6 || BLAST_RADIUS
             );
             if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
               return rhs.hp - lhs.hp;
@@ -70,7 +70,7 @@ async function fight(target) {
     currentStrategy(target);
 
     attack(target).then(() =>
-      reduce_cooldown("attack", Math.min(...parent.pings)),
+      reduce_cooldown("attack", Math.min(...parent.pings))
     );
 
     if (
@@ -128,7 +128,7 @@ async function fight(target) {
               //   target ? get_height(target) ?? 0 : 0
               // ))
               extraDistanceWithinHitbox(target) +
-              extraDistanceWithinHitbox(character)),
+              extraDistanceWithinHitbox(character))
         ) *
         2;
   } else {

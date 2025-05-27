@@ -52,7 +52,7 @@ async function usePullStrategies(target) {
         character.mp > 400 &&
         !get_targeted_monster()?.["1hp"] &&
         partyHealer.ctype === "priest" &&
-        is_in_range(partyHealer, "absorb") &&
+        distance(partyHealer, character) < (partyHealer.range ?? character.range * 0.7) &&
         partyHealer?.hp > 0.6 * partyHealer?.max_hp &&
         getMonstersToCBurst().length >= 1
       ) {

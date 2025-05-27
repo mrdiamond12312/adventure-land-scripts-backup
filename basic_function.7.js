@@ -146,7 +146,7 @@ function filterCompoundableAndStackable() {
     (i) =>
       inv[i] &&
       (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name),
+      !["hpot1", "mpot1"].includes(inv[i].name)
   );
   return res;
 }
@@ -518,10 +518,10 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
-            (entity.target === HEALER || entity.target === MAGE),
+            (entity.target === HEALER || entity.target === MAGE)
         )
         .sort(
-          (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
+          (lhs, rhs) => distance(rhs, character) - distance(lhs, character)
         );
       if (
         mobsTargetingNonTanker.length &&
@@ -538,7 +538,7 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack"),
+          is_in_range(mob, "attack")
       );
       if (leader)
         target =
@@ -560,16 +560,16 @@ function getTarget() {
         !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
-            (character.y - leader.y) * (character.y - leader.y),
+            (character.y - leader.y) * (character.y - leader.y)
         ) > spacial &&
         can_move_to(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         )
       )
         move(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         );
       return;
     }
@@ -871,7 +871,7 @@ async function cupidHeal() {
         entity.hp <
           entity.max_hp -
             character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
+              dps_multiplier(entity.armor - (character.apiercing ?? 0))
     )
     .sort((lhs, rhs) => {
       if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
@@ -886,7 +886,7 @@ async function cupidHeal() {
     promises.push(
       equipBatch({
         mainhand: "cupid",
-      }),
+      })
     );
 
     await Promise.all(promises);
@@ -903,10 +903,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 5)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -921,10 +921,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 3)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -938,7 +938,7 @@ async function cupidHeal() {
       set_message("Single Cupid");
       log(`Healing ${lowHealthPlayers[0].name}`);
       attack(lowHealthPlayers[0]).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     }
@@ -1174,7 +1174,7 @@ async function changeToDailyEventTargets() {
         .sort((lhs, rhs) =>
           lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp,
+            : lhs.hp - rhs.hp
         )
         .pop();
 
@@ -1225,6 +1225,127 @@ async function changeToDailyEventTargets() {
     change_target(targetCrab);
     return targetCrab;
   }
+
+  if (
+    parent.S.icegolem?.live &&
+    !isFightingBoss &&
+    parent.S.icegolem?.hp < 0.9 * parent.S.icegolem?.max_hp &&
+    !partyMems.includes(parent.S.icegolem?.target)
+  ) {
+    changeToNormalStrategies();
+    const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
+    if (!iceGolemInstance) {
+      await advanceSmartMove({ map: "winterland", x: 896, y: 440 });
+    }
+    change_target(iceGolemInstance);
+    return iceGolemInstance;
+  } else if (get_nearest_monster({ type: "icegolem" })) {
+    changeToNormalStrategies();
+    change_target(target);
+    return get_nearest_monster({ type: "icegolem" });
+  }
+
+  if (
+    parent.S.franky?.live &&
+    parent.S.franky?.target &&
+    parent.S.franky?.hp < 0.9 * parent.S.franky?.max_hp &&
+    !isFightingBoss
+  ) {
+    changeToNormalStrategies();
+    let frankyInstance = get_nearest_monster({ type: "franky" });
+    if (!frankyInstance) {
+      join("franky").catch(
+        async () =>
+          await advanceSmartMove(parent.S.franky).then(() =>
+            change_target(get_nearest_monster({ type: "franky" }))
+          )
+      );
+      await smart_move(parent.S.franky);
+      change_target(get_nearest_monster({ type: "franky" }));
+      frankyInstance = get_nearest_monster({ type: "franky" });
+    }
+
+    if (frankyInstance)
+      if (frankyInstance.target && !partyMems.includes(frankyInstance.target)) {
+        rangeRate = 0.2;
+        return frankyInstance;
+      } else {
+        change_target();
+        await advanceSmartMove({ map: "level2w", x: -530, y: -173 });
+      }
+  }
+
+  if (parent.S.abtesting && !character.s.hopsickness) {
+    if (character.map != "abtesting") join("abtesting");
+
+    changeToNormalStrategies();
+    const priority = [
+      "priest",
+      "mage",
+      "ranger",
+      "rogue",
+      "warrior",
+      "paladin",
+    ];
+
+    let pvpTarget = {
+      priority: priority.length + 1,
+      entity: undefined,
+      sqrDistance: undefined,
+    };
+
+    for (id in parent.entities) {
+      const currentCharacter = parent.entities[id];
+
+      if (currentCharacter.team === character.team) continue;
+
+      const currentCharacterTarget = {
+        priority: priority.findIndex(
+          (element) => element === currentCharacter.ctype
+        ),
+        entity: currentCharacter,
+        sqrDistance:
+          Math.pow(currentCharacter.real_x - character.real_x, 2) +
+          Math.pow(currentCharacter.real_y - character.real_y, 2),
+      };
+
+      if (currentCharacterTarget.priority < pvpTarget.priority)
+        pvpTarget = currentCharacterTarget;
+
+      if (
+        currentCharacterTarget.priority <= pvpTarget.priority &&
+        currentCharacterTarget.sqrDistance <= pvpTarget.sqrDistance
+      )
+        pvpTarget = currentCharacterTarget;
+    }
+
+    target = pvpTarget.entity;
+  }
+
+  if (parent.S.wabbit?.live && !isFightingBoss) {
+    changeToNormalStrategies();
+    if (character.range < 100) rangeRate = 0.1;
+    else rangeRate = 0.4;
+    const wabbitInstance = get_nearest_monster({ type: "wabbit" });
+
+    if (!wabbitInstance) {
+      if (parent.S.wabbit?.x) {
+        await advanceSmartMove(parent.S.wabbit);
+        change_target(get_nearest_monster({ type: "wabbit" }));
+        return get_nearest_monster({ type: "wabbit" });
+      }
+    } else {
+      change_target(wabbitInstance);
+      return wabbitInstance;
+    }
+  }
+
+  if (get_entity(HEALER) && !get_entity(HEALER).rip && character.ping < 600)
+    changeToPullStrategies();
+  else changeToNormalStrategies();
+
+  rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
+  return target;
 }
 
 function on_magiport(name) {
