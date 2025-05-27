@@ -780,7 +780,7 @@ function goToBoss() {
   return false;
 }
 
-const LOOTING_LIMIT = 5;
+const LOOTING_LIMIT = 10;
 var isLooting = false;
 async function midasLooting(forced = false) {
   const chests = Object.values(parent.chests);
