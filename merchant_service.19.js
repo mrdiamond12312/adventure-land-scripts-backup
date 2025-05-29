@@ -101,7 +101,7 @@ character.on("cm", async function ({ name, message }) {
           buy(message.elixir);
         }
       }
-      if (!locate_item(message.elixir)) {
+      if (locate_item(message.elixir) === -1) {
         onDuty = false;
         break;
       }
@@ -109,6 +109,31 @@ character.on("cm", async function ({ name, message }) {
         ...message,
       });
       await send_item(name, locate_item(message.elixir), 10);
+      onDuty = false;
+      break;
+
+    case "xptome":
+      if (!partyMems.includes(name)) break;
+      log(`Buying Tome of Protection for ${name}`);
+
+      if (locate_item("xptome") === -1) {
+        await retrieveBankItem("xptome");
+
+        if (locate_item("xptome") === -1) {
+          await smart_move(find_npc("premium"));
+          await buy("xptome");
+        }
+      }
+
+      if (locate_item("xptome") === -1) {
+        onDuty = false;
+        break;
+      }
+
+      await advanceSmartMove({
+        ...message,
+      });
+      await send_item(name, locate_item("xptome"), 1);
       onDuty = false;
       break;
 

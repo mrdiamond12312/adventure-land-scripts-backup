@@ -19,6 +19,10 @@ character.on("cm", async function ({ name, message }) {
               "oxhelmet",
               "snowball",
               "spookyamulet",
+              "xptome",
+              "xpbooster",
+              "goldbooster",
+              "luckbooster",
             ].includes(item.name)
           )
             return;
