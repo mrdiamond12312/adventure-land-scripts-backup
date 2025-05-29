@@ -6,8 +6,8 @@ try {
 
 // Global vars
 var attack_mode = true;
-var partyMems = ["MowTheCooh", "MoohThatCow", "CupidCow"];
-// var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
+// var partyMems = ["MowTheCooh", "MoohThatCow", "CupidCow"];
+var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
 // var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
 
 var TANKER = "MooohMoooh";
@@ -20,20 +20,20 @@ const RANGER = "MoohThatCow";
 
 const MIDAS_CHARACTER = [MAGE];
 
-var partyCodeSlot = [4, 15, 3, 5];
-// var partyCodeSlot = [9, 2, 4, 5];
-var caracALPartyCodeSlot = [
-  "adventure-land-scripts-backup/basic_mage.4.js",
-  "adventure-land-scripts-backup/solo_ranger.15.js",
-  "adventure-land-scripts-backup/basic_archer.3.js",
-  "adventure-land-scripts-backup/basic_merchant.5.js",
-];
+// var partyCodeSlot = [4, 15, 3, 5];
+var partyCodeSlot = [9, 2, 4, 5];
 // var caracALPartyCodeSlot = [
-//   "adventure-land-scripts-backup/basic_warrior.9.js",
-//   "adventure-land-scripts-backup/basic_priest.2.js",
 //   "adventure-land-scripts-backup/basic_mage.4.js",
+//   "adventure-land-scripts-backup/solo_ranger.15.js",
+//   "adventure-land-scripts-backup/basic_archer.3.js",
 //   "adventure-land-scripts-backup/basic_merchant.5.js",
 // ];
+var caracALPartyCodeSlot = [
+  "adventure-land-scripts-backup/basic_warrior.9.js",
+  "adventure-land-scripts-backup/basic_priest.2.js",
+  "adventure-land-scripts-backup/basic_mage.4.js",
+  "adventure-land-scripts-backup/basic_merchant.5.js",
+];
 // var partyCodeSlot = [2, 4, 15, 5];
 
 var partyMerchant = "MerchantMooh";
@@ -69,9 +69,9 @@ var boss = ["mrpumpkin", "mrgreen"];
 // var mapX = 1248;
 // var mapY = -63;
 
-// var map = "winterland";
-// var mapX = 423;
-// var mapY = -2614;
+var map = "winterland";
+var mapX = 423;
+var mapY = -2614;
 
 // var map = "uhills";
 // var mapX = -289;
@@ -97,19 +97,27 @@ var boss = ["mrpumpkin", "mrgreen"];
 // var mapX = -368;
 // var mapY = -1623;
 
-var map = "main";
-var mapX = -1111;
-var mapY = 132;
+// var map = "main";
+// var mapX = -1111;
+// var mapY = 132;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-// var mobsToFarm = ["stompy", "wolf", "wolfie"];
+var mobsToFarm = ["stompy", "wolf"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 // var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
 // var mobsToFarm = ["phoenix", "croc", "armadillo"];
 // var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
-var mobsToFarm = ["phoenix", "squigtoad", "squig"];
+// var mobsToFarm = [
+//   "phoenix",
+//   "frog",
+//   "squigtoad",
+//   "crab",
+//   "squig",
+//   "turtle",
+//   "crabx",
+// ];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -146,7 +154,7 @@ function filterCompoundableAndStackable() {
     (i) =>
       inv[i] &&
       (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name)
+      !["hpot1", "mpot1"].includes(inv[i].name),
   );
   return res;
 }
@@ -518,10 +526,10 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
-            (entity.target === HEALER || entity.target === MAGE)
+            (entity.target === HEALER || entity.target === MAGE),
         )
         .sort(
-          (lhs, rhs) => distance(rhs, character) - distance(lhs, character)
+          (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
         );
       if (
         mobsTargetingNonTanker.length &&
@@ -538,7 +546,7 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack")
+          is_in_range(mob, "attack"),
       );
       if (leader)
         target =
@@ -560,16 +568,16 @@ function getTarget() {
         !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
-            (character.y - leader.y) * (character.y - leader.y)
+            (character.y - leader.y) * (character.y - leader.y),
         ) > spacial &&
         can_move_to(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2
+          character.y + (leader.y - character.y) / 2,
         )
       )
         move(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2
+          character.y + (leader.y - character.y) / 2,
         );
       return;
     }
@@ -871,7 +879,7 @@ async function cupidHeal() {
         entity.hp <
           entity.max_hp -
             character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0))
+              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
     )
     .sort((lhs, rhs) => {
       if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
@@ -886,7 +894,7 @@ async function cupidHeal() {
     promises.push(
       equipBatch({
         mainhand: "cupid",
-      })
+      }),
     );
 
     await Promise.all(promises);
@@ -903,10 +911,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 5)
           .map((player) => player.name)
-          .join(", ")}`
+          .join(", ")}`,
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings))
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -921,10 +929,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 3)
           .map((player) => player.name)
-          .join(", ")}`
+          .join(", ")}`,
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings))
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -938,7 +946,7 @@ async function cupidHeal() {
       set_message("Single Cupid");
       log(`Healing ${lowHealthPlayers[0].name}`);
       attack(lowHealthPlayers[0]).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings))
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     }
@@ -1174,7 +1182,7 @@ async function changeToDailyEventTargets() {
         .sort((lhs, rhs) =>
           lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp
+            : lhs.hp - rhs.hp,
         )
         .pop();
 
@@ -1257,8 +1265,8 @@ async function changeToDailyEventTargets() {
       join("franky").catch(
         async () =>
           await advanceSmartMove(parent.S.franky).then(() =>
-            change_target(get_nearest_monster({ type: "franky" }))
-          )
+            change_target(get_nearest_monster({ type: "franky" })),
+          ),
       );
       await smart_move(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
@@ -1301,7 +1309,7 @@ async function changeToDailyEventTargets() {
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype
+          (element) => element === currentCharacter.ctype,
         ),
         entity: currentCharacter,
         sqrDistance:
@@ -1340,7 +1348,12 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (get_entity(HEALER) && !get_entity(HEALER).rip && character.ping < 600)
+  if (
+    get_entity(HEALER) &&
+    !get_entity(HEALER).rip &&
+    character.ping < 600 &&
+    (get_targeted_monster()?.level < 5 || get_targeted_monster()?.attack < 500)
+  )
     changeToPullStrategies();
   else changeToNormalStrategies();
 

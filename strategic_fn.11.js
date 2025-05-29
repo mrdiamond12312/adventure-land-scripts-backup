@@ -59,7 +59,7 @@ function calculateMageItems() {
         ? "froststaff"
         : ["pinkgoo", "snowman", "wabbit", "crabxx", "crabx", "crab"].includes(
             get_targeted_monster()?.mtype,
-          )
+          ) || get_targeted_monster()?.max_hp < 2000
         ? "pinkie"
         : "firestaff",
     offhand:
