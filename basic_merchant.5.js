@@ -386,6 +386,8 @@ function secondhands_handler(event) {
   if (isInvFull(6)) return false;
   const ITEM_NEEDED = [
     "strring",
+    "dexring",
+    "intring",
     "stramulet",
     "intamulet",
     "dexamulet",
