@@ -53,8 +53,6 @@ async function fight(target) {
 
   if (!target) return;
 
-  const shouldAttack = character.map === "crypt" ? get_entity(HEALER) : true;
-
   if (
     ms_to_next_skill("attack") === 0 &&
     distance(target, character) <
@@ -62,7 +60,7 @@ async function fight(target) {
         character.xrange +
         extraDistanceWithinHitbox(target) +
         extraDistanceWithinHitbox(character) &&
-    shouldAttack
+    shouldAttack()
   ) {
     set_message("Attacking");
 

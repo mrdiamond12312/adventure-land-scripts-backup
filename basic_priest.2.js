@@ -16,12 +16,7 @@ var rangeRate = 0.5;
 const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 async function fight(target) {
-  const shouldAttack =
-    character.map === "crypt"
-      ? get_entity(HEALER) && !get_entity(HEALER).rip
-      : true;
-
-  if (can_attack(target) && shouldAttack) {
+  if (can_attack(target) && shouldAttack()) {
     set_message("Attacking");
     await currentStrategy(target);
 
