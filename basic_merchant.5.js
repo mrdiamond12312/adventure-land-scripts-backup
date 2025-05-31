@@ -392,7 +392,7 @@ function secondhands_handler(event) {
     "intamulet",
     "dexamulet",
     "bataxe",
-    "lolipop",
+    "glolipop",
     "ololipop",
     "fireblade",
     "firebow",

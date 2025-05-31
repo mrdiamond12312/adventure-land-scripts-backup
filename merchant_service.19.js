@@ -81,24 +81,11 @@ character.on("cm", async function ({ name, message }) {
 
     case "elixir":
       if (locate_item(message.elixir) === -1) {
-        let itemBankSlot = undefined;
-        let itemSlot = undefined;
-        await smart_move(bankPosition);
-        Object.keys(character.bank)
-          .filter((id) => id !== "gold")
-          .map((slot) => {
-            character.bank[slot]?.map((item, index) => {
-              if (item && item.name === message.elixir) {
-                itemBankSlot = slot;
-                itemSlot = index;
-              }
-            });
-          });
-        if (itemBankSlot && itemSlot) {
-          bank_retrieve(itemBankSlot, itemSlot);
-        } else {
+        await retrieveBankItem(message.elixir);
+        
+        if (locate_item(message.elixir) === -1) {
           await smart_move({ map: find_npc("wbartender").map });
-          buy(message.elixir);
+          await buy(message.elixir);
         }
       }
       if (locate_item(message.elixir) === -1) {

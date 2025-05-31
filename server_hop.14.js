@@ -8,27 +8,20 @@ const HOME_SERVER = {
 };
 
 const tankableBoss = ["snowman", "pinkgoo"];
-const bosses = [
-  "icegolem",
-  "mrpumpkin",
-  "mrgreen",
-  "franky",
-  "crabxx",
-  "dragold",
-];
+
+const bosses = {
+  icegolem: { type: "icegolem", threshold: 0.7, hoppable: 1 },
+  mrpumpkin: { type: "mrpumpkin", threshold: 0.7, hoppable: 0.95 },
+  mrgreen: { type: "mrgreen", threshold: 0.7, hoppable: 0.95 },
+  franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
+  crabxx: { type: "crabxx", threshold: 0.95, hoppable: 1 },
+  dragold: { type: "dragold", threshold: 0.99, hoppable: 1 },
+};
 const waitForEvent = ["wabbit"];
-const threshold = [
-  { type: "icegolem", threshold: 0.7 },
-  { type: "mrpumpkin", threshold: 0.95 },
-  { type: "mrgreen", threshold: 0.95 },
-  { type: "franky", threshold: 0.7 },
-  { type: "crabxx", threshold: 1 },
-  { type: "dragold", threshold: 0.99 },
-];
 
 const API = `https://aldata.earthiverse.ca/monsters/${[
   ...tankableBoss,
-  ...bosses,
+  ...Object.keys(bosses),
 ].join(",")}`;
 
 const currentServer = `${server.region}${server.id}`;
@@ -57,13 +50,12 @@ async function hopToServer(serverRegion, serverIdentifier) {
 
 setInterval(async () => {
   if (
-    bosses.some(
+    Object.keys(bosses).some(
       (boss) =>
         parent.S[boss] &&
         parent.S[boss].target &&
         parent.S[boss].hp <
-          (threshold.find((pair) => pair.type === boss)?.threshold ?? 0.93) *
-            parent.S[boss].max_hp
+          (bosses[boss]?.threshold ?? 0.93) * parent.S[boss].max_hp,
     ) ||
     get("cryptInstance")
   )
@@ -90,19 +82,25 @@ setInterval(async () => {
     if (!data) return;
 
     const hopAbleServers = data
-      .filter(
-        (serverBoss) =>
+      .filter((serverBoss) => {
+        return (
           !ignoreServer.includes(
-            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`
+            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`,
           ) &&
           serverBoss.serverIdentifier !== "PVP" &&
           HOP_SERVERS.includes(serverBoss.serverRegion) &&
           (serverBoss.id || !serverBoss.estimatedRespawn) &&
           (tankableBoss.includes(serverBoss.type) ||
-            (bosses.includes(serverBoss.type) && serverBoss.target))
-      )
+            (Object.keys(bosses).includes(serverBoss.type) &&
+              ((serverBoss.hp <
+                bosses[serverBoss.type].hoppable *
+                  G.monsters[serverBoss.type].max_hp &&
+                serverBoss.target) ||
+                bosses[serverBoss.type].hoppable === 1)))
+        );
+      })
       .sort((lhs, rhs) => {
-        const bossPriority = [...tankableBoss, ...bosses];
+        const bossPriority = [...tankableBoss, ...Object.keys(bosses)];
         return bossPriority.findIndex((boss) => boss === lhs.type) -
           bossPriority.findIndex((boss) => boss === rhs.type)
           ? bossPriority.findIndex((boss) => boss === lhs.type) -

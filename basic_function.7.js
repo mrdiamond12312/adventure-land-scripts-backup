@@ -1201,7 +1201,8 @@ async function changeToDailyEventTargets() {
     parent.S.crabxx?.live &&
     parent.S.crabxx.hp < parent.S.crabxx.max_hp &&
     !isFightingBoss &&
-    !partyMems.includes(parent.S.crabxx?.target)
+    parent.S.crabxx?.target &&
+    !partyMems.includes(parent.S.crabxx.target)
   ) {
     changeToNormalStrategies();
     if (character.range > 100) rangeRate = 0.3;
@@ -1264,19 +1265,14 @@ async function changeToDailyEventTargets() {
     return targetCrab;
   }
 
-  if (
-    parent.S.icegolem?.live &&
-    !isFightingBoss &&
-    parent.S.icegolem?.hp < 0.9 * parent.S.icegolem?.max_hp &&
-    !partyMems.includes(parent.S.icegolem?.target)
-  ) {
+  if (parent.S.icegolem?.live && !isFightingBoss) {
     changeToNormalStrategies();
     const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
     if (!iceGolemInstance) {
       await advanceSmartMove({ map: "winterland", x: 896, y: 440 });
     }
-    change_target(iceGolemInstance);
-    return iceGolemInstance;
+    change_target(get_nearest_monster({ type: "icegolem" }));
+    return get_nearest_monster({ type: "icegolem" });
   } else if (get_nearest_monster({ type: "icegolem" })) {
     changeToNormalStrategies();
     change_target(target);
@@ -1286,7 +1282,7 @@ async function changeToDailyEventTargets() {
   if (
     parent.S.franky?.live &&
     parent.S.franky?.target &&
-    parent.S.franky?.hp < 0.9 * parent.S.franky?.max_hp &&
+    parent.S.franky?.hp < 0.97 * parent.S.franky?.max_hp &&
     !isFightingBoss
   ) {
     changeToNormalStrategies();
