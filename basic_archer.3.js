@@ -1,6 +1,14 @@
 // Load basic functions from other code snippet
-load_code(7);
-load_code(8);
+
+if (parent.caracAL) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/basic_function.7.js",
+    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+  ]);
+} else {
+  load_code(7);
+  load_code(8);
+}
 
 // Kiting
 var originRangeRate = 0.7;
@@ -30,7 +38,7 @@ async function fight(target) {
     const suggestedItems = calculateCupidItems();
     if (
       Object.keys(suggestedItems).some(
-        (slot) => character.slots[slot]?.name !== suggestedItems[slot]
+        (slot) => character.slots[slot]?.name !== suggestedItems[slot],
       )
     ) {
       await equipBatch(suggestedItems);
@@ -49,20 +57,20 @@ async function fight(target) {
     if (character.mp > 400 && !is_on_cooldown("supershot"))
       use_skill(
         "supershot",
-        target.cooperative
+        target?.cooperative
           ? target
           : Object.values(parent.entities)
               .filter(
                 (entity) =>
                   entity.type === "monster" &&
                   entity.attack * entity.frequency < 500 &&
-                  is_in_range(entity, "supershot")
+                  is_in_range(entity, "supershot"),
               )
               .sort(
                 (lhs, rhs) =>
-                  distance(character, rhs) - distance(character, lhs)
+                  distance(character, rhs) - distance(character, lhs),
               )
-              .shift() ?? target
+              .shift() ?? target,
       );
 
     const potentialTargets = Object.values(parent.entities)
@@ -76,7 +84,7 @@ async function fight(target) {
             (mobs.cooperative &&
               mobs.target &&
               (!partyMems.includes(mobs.target) || mobs["1hp"])) ||
-            mobs.target)
+            mobs.target),
       )
       .sort((lhs, rhs) => {
         if (lhs.cooperative || lhs.target) return -1;
@@ -87,7 +95,7 @@ async function fight(target) {
       });
 
     const weakMobs = potentialTargets.filter(
-      (mob) => mob.hp < character.attack * 0.6 || mob.target
+      (mob) => mob.hp < character.attack * 0.6 || mob.target,
     );
 
     if (
@@ -100,20 +108,9 @@ async function fight(target) {
     ) {
       currentAction = "multishot";
       set_message("Five Shooting");
-      use_skill("5shot", weakMobs.slice(0, 5))
-        .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
-        .catch((e) => {
-          if (e.response === "cooldown" && e.ms < loopInterval) {
-            setTimeout(
-              () =>
-                character.slots.mainhand?.name !== "cupid" &&
-                use_skill("5shot", potentialTargets.slice(0, 5)).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings))
-                ),
-              e.ms + 10
-            );
-          }
-        });
+      use_skill("5shot", weakMobs.slice(0, 5)).then(() =>
+        reduce_cooldown("attack", Math.min(...parent.pings)),
+      );
     } else if (
       character.level >= G.skills["3shot"].level &&
       character.mp > G.skills["3shot"].mp &&
@@ -124,40 +121,18 @@ async function fight(target) {
     ) {
       currentAction = "multishot";
       set_message("Three Shooting");
-      use_skill("3shot", potentialTargets.slice(0, 3))
-        .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
-        .catch((e) => {
-          if (e.response === "cooldown" && e.ms < loopInterval) {
-            setTimeout(
-              () =>
-                character.slots.mainhand?.name !== "cupid" &&
-                use_skill("3shot", potentialTargets.slice(0, 3)).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings))
-                ),
-              e.ms + 10
-            );
-          }
-        });
+      use_skill("3shot", potentialTargets.slice(0, 3)).then(() =>
+        reduce_cooldown("attack", Math.min(...parent.pings)),
+      );
     } else if (
       distance(target, character) < character.range + character.xrange &&
       character.slots.mainhand?.name !== "cupid"
     ) {
       currentAction = "singleshot";
       set_message("Shooting");
-      attack(target)
-        .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
-        .catch((e) => {
-          if (e.response === "cooldown" && e.ms < loopInterval) {
-            setTimeout(
-              () =>
-                character.slots.mainhand?.name !== "cupid" &&
-                use_skill("attack", target).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings))
-                ),
-              e.ms + 10
-            );
-          }
-        });
+      attack(target).then(() =>
+        reduce_cooldown("attack", Math.min(...parent.pings)),
+      );
     }
 
     if (character.fear) {
@@ -174,14 +149,14 @@ async function fight(target) {
         .filter(
           (id) =>
             parent.entities.type === "monster" &&
-            parent.entities[id].target === character.name
+            parent.entities[id].target === character.name,
         )
         ?.sort(
           (lhs, rhs) =>
             distance(character, parent.entities[lhs]) -
-            distance(character, parent.entities[rhs])
+            distance(character, parent.entities[rhs]),
         )[0] ?? target,
-      rangeRate
+      rangeRate,
     );
 
     angle =
@@ -199,7 +174,7 @@ async function fight(target) {
               //   target ? get_height(target) ?? 0 : 0
               // ))
               extraDistanceWithinHitbox(target) +
-              extraDistanceWithinHitbox(character))
+              extraDistanceWithinHitbox(character)),
         ) *
         2;
   } else {
@@ -208,11 +183,11 @@ async function fight(target) {
 }
 
 setInterval(async function () {
-  if (
-    (bestLooter().name === character.name || !bestLooter()) &&
-    Object.keys(get_chests()).length
-  )
-    loot();
+  // if (
+  //   (bestLooter().name === character.name || !bestLooter()) &&
+  //   Object.keys(get_chests()).length
+  // )
+  //   loot();
 
   buff();
 

@@ -1,9 +1,15 @@
-load_code(7);
+if (parent.caracAL) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/basic_function.7.js",
+  ]);
+} else {
+  load_code(7);
+}
 
 let BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
 
-const IGNORE_RARE_GOLD_THRESHOLD = 27e8;
+const IGNORE_RARE_GOLD_THRESHOLD = 5e9;
 
 const KEEP_THRESHOLD = {
   // Every character needs
@@ -31,12 +37,27 @@ const ITEMS_HIGHEST_LEVEL = {};
 
 const RETRIEVE_HISTORY = [];
 
+async function retrieveBankItem(searchId, level = 0) {
+  if (character.map !== "bank") await smart_move(bankPosition);
+  for (const [bankPack, items] of Object.entries(character.bank).filter(
+    ([key, value]) => key !== "gold",
+  )) {
+    const slot = items.findIndex(
+      (item) =>
+        item && item.name === searchId && (!level || level === item.level),
+    );
+    if (slot !== -1) {
+      return bank_retrieve(bankPack, slot);
+    }
+  }
+}
+
 async function retrieveMaxItemsLevel() {
   if (character.map !== "bank") return;
 
   // Reset counter;
   Object.keys(ITEMS_HIGHEST_LEVEL).forEach(
-    (key) => delete ITEMS_HIGHEST_LEVEL[key]
+    (key) => delete ITEMS_HIGHEST_LEVEL[key],
   );
 
   BANK_CACHE = character.bank;
@@ -136,7 +157,7 @@ function retrievedBankItemToUpgrade() {
   desiredItems = desiredItems.splice(
     0,
     desiredItems.length -
-      (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ?? 2)
+      (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ?? 2),
   );
 
   let inventoryEmptySlots = character.items.filter((item) => !item).length - 4;
@@ -158,23 +179,39 @@ async function compoundInv() {
     if (!character.items[i]) break;
 
     if (item_info(character.items[i]).compound) {
-      if (
-        character.items[i] &&
-        (character.items[i]?.level > 2 || item_grade(character.items[i]) === 2)
-      )
+      const compoundNameChecker = new Set([
+        character.items[i].name,
+        character.items[i + 1]?.name,
+        character.items[i + 2]?.name,
+      ]);
+
+      const compoundLevelChecker = new Set([
+        character.items[i].level,
+        character.items[i + 1]?.level,
+        character.items[i + 2]?.level,
+      ]);
+
+      const canCompound =
+        compoundLevelChecker.size === 1 && compoundNameChecker.size === 1;
+
+      if (!canCompound) continue;
+
+      const isRareItem =
+        character.items[i].level >= 2 || item_grade(character.items[i]) >= 2;
+
+      if (isRareItem) {
         if (
-          !(
-            ITEMS_HIGHEST_LEVEL[character.items[i]?.name] &&
-            ITEMS_HIGHEST_LEVEL[character.items[i]?.name].quantity >
-              (KEEP_THRESHOLD[
-                ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
-              ] ?? 2) &&
-            character.items[i]?.level ===
-              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].level
-          )
+          ITEMS_HIGHEST_LEVEL[character.items[i].name] &&
+          ITEMS_HIGHEST_LEVEL[character.items[i].name].quantity <
+            (KEEP_THRESHOLD[
+              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
+            ] + 3 ?? 5) &&
+          character.items[i].level ===
+            ITEMS_HIGHEST_LEVEL[character.items[i].name].level
         ) {
           continue;
         }
+      }
 
       const scrollType = `cscroll${item_grade(character.items[i])}`;
       let scrollSlot = locate_item(scrollType);
@@ -194,35 +231,44 @@ async function compoundInv() {
       }
 
       if (
+        canCompound &&
+        isRareItem &&
+        locate_item("offeringp") === -1 &&
+        !smart.moving
+      ) {
+        await retrieveBankItem("offeringp");
+      }
+
+      if (
         character.mp > 200 &&
         !is_on_cooldown("massproductionpp") &&
         character.items[i]?.level >= 4 &&
         !character.s.massproductionpp
       )
         use_skill("massproductionpp");
-      else if (
+
+      if (
         character.mp > 20 &&
         !is_on_cooldown("massproduction") &&
-        !character.s.massproduction &&
-        !character.s.massproductionpp
+        !character.s.massproduction
       )
         use_skill("massproduction");
 
       if (
         character.items[i] !== null &&
-        new Set([
-          character.items[i]?.name,
-          character.items[i + 1]?.name,
-          character.items[i + 2]?.name,
-        ]).size === 1 &&
-        new Set([
-          character.items[i]?.level,
-          character.items[i + 1]?.level,
-          character.items[i + 2]?.level,
-        ]).size === 1
+        compoundNameChecker.size === 1 &&
+        compoundLevelChecker.size === 1
       ) {
-        return compound(i, i + 1, i + 2, scrollSlot)
-          .then((e) => {
+        return compound(
+          i,
+          i + 1,
+          i + 2,
+          scrollSlot,
+          isRareItem && locate_item("offering") !== -1
+            ? locate_item("offering")
+            : undefined,
+        )
+          .then(() => {
             breakFlag = true;
           })
           .catch((e) => {
@@ -241,6 +287,9 @@ async function upgradeInv() {
     let breakFlag = false;
 
     if (!character.items[i]) break;
+
+    const isRareItem =
+      character.items[i].level >= 6 || item_grade(character.items[i]) >= 2;
 
     const itemName = character.items[i].name;
     if (ignore.includes(itemName)) continue;
@@ -261,6 +310,11 @@ async function upgradeInv() {
         ) {
           continue;
         }
+
+      if (isRareItem && locate_item("offeringp") === -1 && !smart.moving) {
+        await retrieveBankItem("offeringp");
+      }
+
       const scrollType = `scroll${item_grade(character.items[i])}`;
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
@@ -297,7 +351,13 @@ async function upgradeInv() {
       )
         use_skill("massproduction");
 
-      return upgrade(i, scrollSlot)
+      return upgrade(
+        i,
+        scrollSlot,
+        isRareItem && locate_item("offering") !== -1
+          ? locate_item("offering")
+          : undefined,
+      )
         .then(async (e) => {
           if (e?.success === true) {
             if (e?.level > (ITEMS_HIGHEST_LEVEL[itemName].level ?? 0))
@@ -310,7 +370,7 @@ async function upgradeInv() {
             if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0) {
               close_stand();
               smart_move(bankPosition).then(() =>
-                bank_store(findMaxLevelItem(itemName))
+                bank_store(findMaxLevelItem(itemName)),
               );
             }
           }

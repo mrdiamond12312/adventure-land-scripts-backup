@@ -81,27 +81,14 @@ character.on("cm", async function ({ name, message }) {
 
     case "elixir":
       if (locate_item(message.elixir) === -1) {
-        let itemBankSlot = undefined;
-        let itemSlot = undefined;
-        await smart_move(bankPosition);
-        Object.keys(character.bank)
-          .filter((id) => id !== "gold")
-          .map((slot) => {
-            character.bank[slot]?.map((item, index) => {
-              if (item && item.name === message.elixir) {
-                itemBankSlot = slot;
-                itemSlot = index;
-              }
-            });
-          });
-        if (itemBankSlot && itemSlot) {
-          bank_retrieve(itemBankSlot, itemSlot);
-        } else {
+        await retrieveBankItem(message.elixir);
+        
+        if (locate_item(message.elixir) === -1) {
           await smart_move({ map: find_npc("wbartender").map });
-          buy(message.elixir);
+          await buy(message.elixir);
         }
       }
-      if (!locate_item(message.elixir)) {
+      if (locate_item(message.elixir) === -1) {
         onDuty = false;
         break;
       }
@@ -112,26 +99,36 @@ character.on("cm", async function ({ name, message }) {
       onDuty = false;
       break;
 
+    case "xptome":
+      if (!partyMems.includes(name)) break;
+      log(`Buying Tome of Protection for ${name}`);
+
+      if (locate_item("xptome") === -1) {
+        await retrieveBankItem("xptome");
+
+        if (locate_item("xptome") === -1) {
+          await smart_move(find_npc("premium"));
+          await buy("xptome");
+        }
+      }
+
+      if (locate_item("xptome") === -1) {
+        onDuty = false;
+        break;
+      }
+
+      await advanceSmartMove({
+        ...message,
+      });
+      await send_item(name, locate_item("xptome"), 1);
+      onDuty = false;
+      break;
+
     default:
       onDuty = false;
       log(`Unidentified '${message.msg}'`);
   }
 });
-
-async function retrieveBankItem(searchId, level = 0) {
-  if (character.map !== "bank") await smart_move(bankPosition);
-  for (const [bankPack, items] of Object.entries(character.bank).filter(
-    ([key, value]) => key !== "gold"
-  )) {
-    const slot = items.findIndex(
-      (item) =>
-        item && item.name === searchId && (!level || level === item.level)
-    );
-    if (slot !== -1) {
-      return bank_retrieve(bankPack, slot);
-    }
-  }
-}
 
 async function openCryptInstance() {
   close_stand();

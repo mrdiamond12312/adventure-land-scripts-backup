@@ -1,9 +1,17 @@
 // Load basic functions from other code snippet
-load_code(7);
-load_code(8);
+
+if (parent.caracAL) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/basic_function.7.js",
+    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+  ]);
+} else {
+  load_code(7);
+  load_code(8);
+}
 
 // Kiting
-var originRangeRate = 0.8;
+var originRangeRate = 0.9;
 rangeRate = originRangeRate;
 const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 5);
 
@@ -14,7 +22,7 @@ async function fight(target) {
         !haveFormidableMonsterAroundTarget(mob) &&
         distance(mob, character) <
           character.range +
-            character.xrange * 0.9 +
+            character.xrange * 0.4 +
             extraDistanceWithinHitbox(mob) +
             extraDistanceWithinHitbox(character) &&
         mob.target &&
@@ -28,11 +36,11 @@ async function fight(target) {
           .sort((lhs, rhs) => {
             const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
               lhs,
-              character.blast / 3.6 || BLAST_RADIUS
+              character.blast / 3.6 || BLAST_RADIUS,
             );
             const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
               rhs,
-              character.blast / 3.6 || BLAST_RADIUS
+              character.blast / 3.6 || BLAST_RADIUS,
             );
             if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
               return rhs.hp - lhs.hp;
@@ -45,8 +53,6 @@ async function fight(target) {
 
   if (!target) return;
 
-  const shouldAttack = character.map === "crypt" ? get_entity(HEALER) : true;
-
   if (
     ms_to_next_skill("attack") === 0 &&
     distance(target, character) <
@@ -54,25 +60,15 @@ async function fight(target) {
         character.xrange +
         extraDistanceWithinHitbox(target) +
         extraDistanceWithinHitbox(character) &&
-    shouldAttack
+    shouldAttack()
   ) {
     set_message("Attacking");
 
     currentStrategy(target);
 
-    attack(target)
-      .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
-      .catch((e) => {
-        if (e.response === "cooldown" && e.ms < Math.min(...parent.pings)) {
-          setTimeout(
-            () =>
-              attack(target).then(() =>
-                reduce_cooldown("attack", Math.min(...parent.pings))
-              ),
-            e.ms + 10
-          );
-        }
-      });
+    attack(target).then(() =>
+      reduce_cooldown("attack", Math.min(...parent.pings)),
+    );
 
     if (
       target &&
@@ -129,7 +125,7 @@ async function fight(target) {
               //   target ? get_height(target) ?? 0 : 0
               // ))
               extraDistanceWithinHitbox(target) +
-              extraDistanceWithinHitbox(character))
+              extraDistanceWithinHitbox(character)),
         ) *
         2;
   } else {
@@ -138,12 +134,8 @@ async function fight(target) {
 }
 
 setInterval(async function () {
+  desiredElixir = "pumpkinspice";
   assignRoles();
-  if (
-    (bestLooter().name === character.name || !bestLooter()) &&
-    Object.keys(get_chests()).length
-  )
-    loot();
 
   buff();
 
@@ -154,6 +146,7 @@ setInterval(async function () {
 
   if (character.level > 50) {
     set("mageLocation", {
+      mp: character.mp,
       map: character.map,
       x: character.x,
       y: character.y,
@@ -185,7 +178,8 @@ setInterval(async function () {
     !isAdvanceSmartMoving &&
     !target &&
     !get("cryptInstance") &&
-    (partyMems[0] == character.name || !get_entity(partyMems[0]))
+    (partyMems[0] == character.name ||
+      !get_entity(partyMems[0] || character.map === "crypt"))
   ) {
     log("Moving to farming location");
     changeToNormalStrategies();

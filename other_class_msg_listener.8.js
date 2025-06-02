@@ -19,6 +19,10 @@ character.on("cm", async function ({ name, message }) {
               "oxhelmet",
               "snowball",
               "spookyamulet",
+              "xptome",
+              "xpbooster",
+              "goldbooster",
+              "luckbooster",
             ].includes(item.name)
           )
             return;
@@ -66,6 +70,10 @@ character.on("cm", async function ({ name, message }) {
       if (character.mp > G.skills["magiport"]?.mp) {
         use_skill("magiport", name);
       }
+      break;
+
+    case "loot-before-hopping":
+      midasLooting(true);
       break;
 
     default:

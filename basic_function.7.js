@@ -1,3 +1,9 @@
+// Load caracAL configs
+var caracALconfig = null;
+try {
+  caracALconfig = require("../config");
+} catch (err) {}
+
 // Global vars
 var attack_mode = true;
 // var partyMems = ["MowTheCooh", "MoohThatCow", "CupidCow"];
@@ -12,8 +18,22 @@ var HEALER = "CowTheMooh";
 // const HEALER = "CupidCow";
 const RANGER = "MoohThatCow";
 
+const MIDAS_CHARACTER = [MAGE];
+
 // var partyCodeSlot = [4, 15, 3, 5];
 var partyCodeSlot = [9, 2, 4, 5];
+// var caracALPartyCodeSlot = [
+//   "adventure-land-scripts-backup/basic_mage.4.js",
+//   "adventure-land-scripts-backup/solo_ranger.15.js",
+//   "adventure-land-scripts-backup/basic_archer.3.js",
+//   "adventure-land-scripts-backup/basic_merchant.5.js",
+// ];
+var caracALPartyCodeSlot = [
+  "adventure-land-scripts-backup/basic_warrior.9.js",
+  "adventure-land-scripts-backup/basic_priest.2.js",
+  "adventure-land-scripts-backup/basic_mage.4.js",
+  "adventure-land-scripts-backup/basic_merchant.5.js",
+];
 // var partyCodeSlot = [2, 4, 15, 5];
 
 var partyMerchant = "MerchantMooh";
@@ -49,9 +69,9 @@ var boss = ["mrpumpkin", "mrgreen"];
 // var mapX = 1248;
 // var mapY = -63;
 
-// var map = "winterland";
-// var mapX = 423;
-// var mapY = -2614;
+var map = "winterland";
+var mapX = 423;
+var mapY = -2614;
 
 // var map = "uhills";
 // var mapX = -289;
@@ -73,18 +93,31 @@ var boss = ["mrpumpkin", "mrgreen"];
 // var mapX = 676;
 // var mapY = 1754;
 
-var map = "halloween";
-var mapX = -368;
-var mapY = -1623;
+// var map = "halloween";
+// var mapX = -368;
+// var mapY = -1623;
 
-// var mobsToFarm = ["grinch", "phoenix", "bigbird", "spider", "scorpion"]; // var type = "grinch";
+// var map = "main";
+// var mapX = -1111;
+// var mapY = 132;
+
+// var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-// var mobsToFarm = ["stompy", "wolf", "wolfie"];
+var mobsToFarm = ["stompy", "wolf"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
-// var mobsToFarm = ["phoenix", "minimush", "xscorpion"];
+// var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
 // var mobsToFarm = ["phoenix", "croc", "armadillo"];
-var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
+// var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
+// var mobsToFarm = [
+//   "phoenix",
+//   "frog",
+//   "squigtoad",
+//   "crab",
+//   "squig",
+//   "turtle",
+//   "crabx",
+// ];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -121,22 +154,41 @@ function filterCompoundableAndStackable() {
     (i) =>
       inv[i] &&
       (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name)
+      !["hpot1", "mpot1"].includes(inv[i].name),
   );
   return res;
 }
 
 // Strategic functions
-load_code(11);
-if (character.ctype !== "merchant") {
-  // Strategy that Pulls Mobs and blast them with lolipops, gstaff, etc
-  load_code(13);
-  // Normal
-  load_code(12);
-  var currentStrategy = usePullStrategies;
+if (parent.caracAL) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/strategic_fn.11.js",
+  ]);
+  if (character.ctype !== "merchant") {
+    parent.caracAL.load_scripts([
+      "adventure-land-scripts-backup/normal_strategy.12.js",
+      "adventure-land-scripts-backup/pull_strategy.13.js",
+    ]);
+  }
+} else {
+  load_code(11);
+  if (character.ctype !== "merchant") {
+    // Strategy that Pulls Mobs and blast them with lolipops, gstaff, etc
+    load_code(13);
+    // Normal
+    load_code(12);
+    var currentStrategy = usePullStrategies;
+  }
 }
+
 // Server hoping
-if (!character.controller) load_code(14);
+if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/server_hop.14.js",
+  ]);
+} else if (!character.controller) {
+  load_code(14);
+}
 
 const disablePullingStrategy = false;
 
@@ -181,7 +233,6 @@ var ignore = [
   "pickaxe",
   "rod",
   "broom",
-  "pumpkinspice",
   "tracker",
   "sword",
   "throwingstars",
@@ -285,7 +336,6 @@ var saleAble = [
   "maceofthedead",
   "pmaceofthedead",
   "maceofthedead",
-  "daggerofthedead",
   "staffofthedead",
   "swordofthedead",
   "throwingstars",
@@ -305,8 +355,6 @@ var saleAble = [
   // Sell and replace by crypts's drops
   "intearring",
   "strearring",
-  "intring",
-  "dexring",
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
@@ -314,9 +362,15 @@ var maxCompound = 3;
 // Bank
 const bankSlots = ["items0", "items1", "items3"];
 
-load_code(20);
-load_code(16);
-
+if (parent.caracAL) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/crypt_strategy.16.js",
+    "adventure-land-scripts-backup/advance_smart_move.20.js",
+  ]);
+} else {
+  load_code(20);
+  load_code(16);
+}
 // Pre-set function
 var isSortingInventory = false;
 async function sortInv() {
@@ -401,8 +455,8 @@ function arrayShuffle(array) {
 function getMonstersOnDeclares() {
   // if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
   for (monster of mobsToFarm) {
-    if (get_nearest_monster({ min_xp, max_att, type: monster })) {
-      return get_nearest_monster({ min_xp, max_att, type: monster });
+    if (get_nearest_monster({ min_xp, type: monster })) {
+      return get_nearest_monster({ min_xp, type: monster });
     }
   }
   // return (
@@ -466,19 +520,23 @@ function getTarget() {
     if (character.name === partyMems[0]) {
       target = getMonstersOnDeclares();
 
-      const mobsTargetingHealer = Object.keys(parent.entities)
-        .filter((id) => parent.entities[id].target === HEALER)
+      const mobsTargetingNonTanker = Object.values(parent.entities)
+        .filter(
+          (entity) =>
+            entity.type === "monster" &&
+            (entity.target === HEALER || entity.target === MAGE),
+        )
         .sort(
-          (lhs, rhs) =>
-            distance(parent.entities[lhs], get_entity(HEALER)) -
-            distance(parent.entities[rhs], get_entity(HEALER))
+          (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
         );
       if (
-        mobsTargetingHealer &&
-        mobsTargetingHealer.length &&
-        (!target || (target && target.target !== HEALER))
+        mobsTargetingNonTanker.length &&
+        (!target ||
+          (target &&
+            target.target !== character.name &&
+            partyMems.includes(target.target)))
       ) {
-        target = parent.entities[mobsTargetingHealer[0]];
+        target = mobsTargetingNonTanker.shift();
       }
     } else {
       const mob = getMonstersOnDeclares();
@@ -486,7 +544,7 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack")
+          is_in_range(mob, "attack"),
       );
       if (leader)
         target =
@@ -502,21 +560,22 @@ function getTarget() {
     else {
       set_message("No Monsters");
       if (
+        character.map !== "crypt" &&
         leader &&
         !smart.moving &&
         !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
-            (character.y - leader.y) * (character.y - leader.y)
+            (character.y - leader.y) * (character.y - leader.y),
         ) > spacial &&
         can_move_to(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2
+          character.y + (leader.y - character.y) / 2,
         )
       )
         move(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2
+          character.y + (leader.y - character.y) / 2,
         );
       return;
     }
@@ -559,6 +618,7 @@ async function leaveJail() {
 // }
 
 function extraDistanceWithinHitbox(target) {
+  if (!target) return 0;
   return Math.min(get_height(target), get_width(target) / 2) / 2;
 }
 
@@ -726,8 +786,91 @@ function goToBoss() {
   return false;
 }
 
+const LOOTING_LIMIT = 10;
+var isLooting = false;
+async function midasLooting(forced = false) {
+  const chests = Object.values(parent.chests);
+  if ((isLooting && !forced) || !chests.length) return;
+
+  const promises = [];
+  const partyMidasUsers = Object.keys(parent.party)
+    .map((id) => get_player(id))
+    .filter((player) => player && MIDAS_CHARACTER.includes(player.name));
+
+  if (
+    MIDAS_CHARACTER.includes(character.name) &&
+    (chests.length >= LOOTING_LIMIT ||
+      smart.moving ||
+      isAdvanceSmartMoving ||
+      forced)
+  ) {
+    isLooting = true;
+
+    const currentBooster = findInvBooster();
+    if (currentBooster && currentBooster !== "goldbooster") {
+      await shift(locate_item(currentBooster), "goldbooster");
+    }
+
+    if ((!smart.moving && !isAdvanceSmartMoving) || forced)
+      await equipBatch({
+        helmet: "wcap",
+        chest: "wattire",
+        pants: "wbreeches",
+        shoes: "wshoes",
+        gloves: "handofmidas",
+        amulet: "spookyamulet",
+      });
+    // Prevent overflooding code cost
+    let breakFlag = LOOTING_LIMIT * 2;
+    for (const chest of chests) {
+      if (breakFlag <= 0) break;
+      if (distance(chest, character) <= 800) {
+        promises.push(loot(chest.id));
+        breakFlag--;
+      }
+    }
+    await Promise.all(promises);
+    await equipBatch(calculateBestItems(), true);
+  } else if (partyMidasUsers.length) {
+    if (chests.length && (smart.moving || isAdvanceSmartMoving || forced)) {
+      isLooting = true;
+      let breakFlag = LOOTING_LIMIT * 1.5;
+      for (const chest of chests) {
+        if (breakFlag <= 0) break;
+        if (
+          partyMidasUsers.every((player) => distance(chest, player) > 800) ||
+          10000 > mssince(chest.last_loot)
+        ) {
+          promises.push(loot(chest.id));
+          breakFlag--;
+        }
+      }
+    }
+  } else if (
+    (bestLooter().name === character.name || !bestLooter()) &&
+    Object.keys(get_chests()).length
+  ) {
+    isLooting = true;
+    promises.push(loot());
+  }
+
+  return Promise.all(promises).finally(() => {
+    isLooting = false;
+  });
+}
+
+setInterval(() => {
+  if (!MIDAS_CHARACTER.includes(character.name) || !isEquipingItems) {
+    midasLooting();
+  }
+}, 100);
+
 async function cupidHeal() {
-  if (locate_item("cupid") === -1 && character.slots.mainhand?.name !== "cupid")
+  if (
+    (locate_item("cupid") === -1 &&
+      character.slots.mainhand?.name !== "cupid") ||
+    ms_to_next_skill("attack") > 0
+  )
     return;
 
   const lowHealthPlayers = Object.values(parent.entities)
@@ -740,7 +883,7 @@ async function cupidHeal() {
         entity.hp <
           entity.max_hp -
             character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0))
+              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
     )
     .sort((lhs, rhs) => {
       if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
@@ -749,10 +892,16 @@ async function cupidHeal() {
       return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
     });
 
+  const promises = [];
+
   if (lowHealthPlayers.length > 0) {
-    await equipBatch({
-      mainhand: "cupid",
-    });
+    promises.push(
+      equipBatch({
+        mainhand: "cupid",
+      }),
+    );
+
+    await Promise.all(promises);
 
     if (
       character.level >= G.skills["5shot"].level &&
@@ -766,10 +915,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 5)
           .map((player) => player.name)
-          .join(", ")}`
+          .join(", ")}`,
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95)
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -784,10 +933,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 3)
           .map((player) => player.name)
-          .join(", ")}`
+          .join(", ")}`,
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", character.ping * 0.95)
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -800,20 +949,9 @@ async function cupidHeal() {
     ) {
       set_message("Single Cupid");
       log(`Healing ${lowHealthPlayers[0].name}`);
-      attack(lowHealthPlayers[0])
-        .then(() => reduce_cooldown("attack", character.ping * 0.95))
-        .catch((e) => {
-          if (e.response === "cooldown" && e.ms < Math.min(...parent.pings)) {
-            setTimeout(
-              () =>
-                character.slots.mainhand?.name === "cupid" &&
-                use_skill("attack", lowHealthPlayers[0]).then(() =>
-                  reduce_cooldown("attack", Math.min(...parent.pings))
-                ),
-              e.ms + 10
-            );
-          }
-        });
+      attack(lowHealthPlayers[0]).then(() =>
+        reduce_cooldown("attack", Math.min(...parent.pings)),
+      );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     }
   }
@@ -876,6 +1014,29 @@ setInterval(async function () {
   // Send gold to merchant if he's nearby
   if (get_entity(partyMerchant)) {
     send_gold(partyMerchant, character.gold - 1000000);
+    await Promise.all(
+      character.items.map(async (item, index) => {
+        if (!item) return;
+        if (
+          item.level > 0 ||
+          [
+            "tracker",
+            "hpot1",
+            "mpot1",
+            "cdragon",
+            "oxhelmet",
+            "snowball",
+            "spookyamulet",
+            "xptome",
+            "xpbooster",
+            "goldbooster",
+            "luckbooster",
+          ].includes(item.name)
+        )
+          return;
+        await send_item(partyMerchant, index, 1000);
+      }),
+    );
   }
 
   // Inventory check and potions
@@ -905,6 +1066,9 @@ setInterval(async function () {
       log("No elixir left! Callin our merchant...");
       send_cm(partyMerchant, { msg: "elixir", ...obj, elixir: desiredElixir });
     }
+  } else if (!isInvFull(2) && locate_item("xptome") === -1) {
+    log("Asking the merchant for a Tome of Protection...");
+    send_cm(partyMerchant, { msg: "xptome", ...obj });
   }
 }, 10000);
 
@@ -914,7 +1078,16 @@ setInterval(async function () {
   const loadedCharacters = get_active_characters();
   const allCharacters = [...partyMems, partyMerchant];
 
-  if (
+  if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
+    for (const [index, id] of allCharacters.entries()) {
+      if (
+        parent.caracAL &&
+        !parent.caracAL.siblings.find((sibling) => sibling === id)
+      ) {
+        parent.caracAL.deploy(id, null, caracALPartyCodeSlot[index]);
+      }
+    }
+  } else if (
     !character.controller &&
     allCharacters.filter((characterId) => characterId !== character.name)
       .length !== loadedCharacters.length
@@ -944,7 +1117,7 @@ setInterval(async function () {
   }
 
   leaveJail();
-}, 1000);
+}, 10000);
 
 //// Events listeners
 // Party Events
@@ -1026,8 +1199,10 @@ async function changeToDailyEventTargets() {
 
   if (
     parent.S.crabxx?.live &&
+    parent.S.crabxx.hp < parent.S.crabxx.max_hp &&
     !isFightingBoss &&
-    !partyMems.includes(parent.S.crabxx?.target)
+    parent.S.crabxx?.target &&
+    !partyMems.includes(parent.S.crabxx.target)
   ) {
     changeToNormalStrategies();
     if (character.range > 100) rangeRate = 0.3;
@@ -1038,7 +1213,7 @@ async function changeToDailyEventTargets() {
         .sort((lhs, rhs) =>
           lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp
+            : lhs.hp - rhs.hp,
         )
         .pop();
 
@@ -1090,19 +1265,14 @@ async function changeToDailyEventTargets() {
     return targetCrab;
   }
 
-  if (
-    parent.S.icegolem?.live &&
-    !isFightingBoss &&
-    parent.S.icegolem?.hp < 0.9 * parent.S.icegolem?.max_hp &&
-    !partyMems.includes(parent.S.icegolem?.target)
-  ) {
+  if (parent.S.icegolem?.live && !isFightingBoss) {
     changeToNormalStrategies();
     const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
     if (!iceGolemInstance) {
       await advanceSmartMove({ map: "winterland", x: 896, y: 440 });
     }
-    change_target(iceGolemInstance);
-    return iceGolemInstance;
+    change_target(get_nearest_monster({ type: "icegolem" }));
+    return get_nearest_monster({ type: "icegolem" });
   } else if (get_nearest_monster({ type: "icegolem" })) {
     changeToNormalStrategies();
     change_target(target);
@@ -1112,7 +1282,7 @@ async function changeToDailyEventTargets() {
   if (
     parent.S.franky?.live &&
     parent.S.franky?.target &&
-    parent.S.franky?.hp < 0.9 * parent.S.franky?.max_hp &&
+    parent.S.franky?.hp < 0.97 * parent.S.franky?.max_hp &&
     !isFightingBoss
   ) {
     changeToNormalStrategies();
@@ -1121,8 +1291,8 @@ async function changeToDailyEventTargets() {
       join("franky").catch(
         async () =>
           await advanceSmartMove(parent.S.franky).then(() =>
-            change_target(get_nearest_monster({ type: "franky" }))
-          )
+            change_target(get_nearest_monster({ type: "franky" })),
+          ),
       );
       await smart_move(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
@@ -1165,7 +1335,7 @@ async function changeToDailyEventTargets() {
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype
+          (element) => element === currentCharacter.ctype,
         ),
         entity: currentCharacter,
         sqrDistance:
@@ -1204,7 +1374,12 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (get_entity(HEALER) && !get_entity(HEALER).rip && character.ping < 600)
+  if (
+    get_entity(HEALER) &&
+    !get_entity(HEALER).rip &&
+    character.ping < 600 &&
+    (get_targeted_monster()?.level < 5 || get_targeted_monster()?.attack < 500)
+  )
     changeToPullStrategies();
   else changeToNormalStrategies();
 

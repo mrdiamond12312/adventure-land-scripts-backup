@@ -2,7 +2,14 @@
 // This is CODE, lets you control your character with code.
 // If you don't know how to code, don't worry, It's easy.
 // Just set attack_mode to true and ENGAGE!
-load_code(10);
+
+if (parent.caracAL) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/merchant_crafting.10.js",
+  ]);
+} else {
+  load_code(10);
+}
 // Global Vars
 var onDuty = false;
 var isExeing = false;
@@ -314,7 +321,7 @@ setInterval(async function () {
               (character.items[i].level || 0) <= 1
             );
           })
-          .map(async (i) => sell(i, 1000))
+          .map(async (i) => sell(i, 1000)),
       ),
   ]);
 
@@ -352,7 +359,7 @@ setInterval(async function () {
         .filter(
           (index) =>
             character.items[index] &&
-            !ignore.includes(character.items[index].name)
+            !ignore.includes(character.items[index].name),
         )
         .map((i) => bank_store(i));
     if (!smart.move) await moveHome();
@@ -377,7 +384,22 @@ function handle_death() {
 
 function secondhands_handler(event) {
   if (isInvFull(6)) return false;
-  const ITEM_NEEDED = ["strring", "stramulet", "intamulet", "dexamulet", "bataxe", "lolipop"];
+  const ITEM_NEEDED = [
+    "strring",
+    "dexring",
+    "intring",
+    "stramulet",
+    "intamulet",
+    "dexamulet",
+    "bataxe",
+    "glolipop",
+    "ololipop",
+    "fireblade",
+    "firebow",
+    "firestaff",
+    "firestars",
+    "daggerofthedead",
+  ];
   for (const i in event) {
     const item = event[i];
     if (item && ITEM_NEEDED.includes(item.name)) {
@@ -400,7 +422,11 @@ setInterval(() => {
   parent.socket.emit("secondhands");
 }, 12000);
 
-load_code(19);
+if (parent.caracAL) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/merchant_service.19.js",
+  ]);
+} else load_code(19);
 // setInterval(() => {
 //   if (
 //     !isInvFull(5) &&
