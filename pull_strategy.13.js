@@ -63,6 +63,18 @@ async function usePullStrategies(target) {
         reduce_cooldown("cburst", -2000);
       }
 
+      if (
+        character.mp > 100 &&
+        !is_on_cooldown("scare") &&
+        target.max_hp > 3000 &&
+        character.hp < character.max_hp * 0.7 &&
+        Object.values(parent.entities).some(
+          (entity) =>
+            entity.type === "monster" && entity.target === character.name
+        )
+      )
+        scareAwayMobs();
+
       break;
 
     case "warrior":
@@ -156,7 +168,7 @@ async function usePullStrategies(target) {
           partyHealer.heal * partyHealer.frequency +
             (parent.entities["$Caroline"]?.focus &&
             distance(parent.entities["$Caroline"], character) < 250
-              ? 600
+              ? 1200
               : 0) -
             partyDmgRecieved &&
         !isFearedAfterAgitating
@@ -169,7 +181,7 @@ async function usePullStrategies(target) {
           partyHealer.heal * partyHealer.frequency * 0.9 +
             (parent.entities["$Caroline"]?.focus &&
             distance(parent.entities["$Caroline"], character) < 250
-              ? 600
+              ? 1200
               : 0) &&
         !havePulledEnoughMobs &&
         character.mp > G.skills["taunt"].mp &&

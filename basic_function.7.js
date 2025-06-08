@@ -469,7 +469,7 @@ function getMonstersOnDeclares() {
 function buff() {
   if (
     character.hp / character.max_hp < character.mp / character.max_mp ||
-    character.hp < character.max_hp * 0.6
+    (character.hp < character.max_hp * 0.6 && character.mp > 500)
   ) {
     if (
       character.hp < 0.8 * character.max_hp &&
@@ -489,11 +489,7 @@ function buff() {
         reduce_cooldown("use_hp", character.ping * 0.95);
       });
   } else {
-    if (
-      character.mp < character.max_mp - 500 &&
-      character.mp < 0.8 * character.max_mp &&
-      !is_on_cooldown("use_mp")
-    ) {
+    if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
       use_skill("use_mp").then(() => {
         reduce_cooldown("use_mp", character.ping * 0.95);
         reduce_cooldown("use_hp", character.ping * 0.95);
@@ -1031,6 +1027,7 @@ setInterval(async function () {
             "xpbooster",
             "goldbooster",
             "luckbooster",
+            desiredElixir,
           ].includes(item.name)
         )
           return;
@@ -1111,11 +1108,6 @@ setInterval(async function () {
     }
   }
 
-  if (character.name !== partyMems[0] && !isMerchant()) {
-    const leader = get_entity(partyMems[0]);
-    if (leader && get_target_of(leader)) change_target(get_target_of(leader));
-  }
-
   leaveJail();
 }, 10000);
 
@@ -1137,7 +1129,10 @@ async function changeToDailyEventTargets() {
     !character.s["hopsickness"]
   ) {
     changeToPullStrategies();
-    if (character.map !== "goobrawl") await join("goobrawl");
+    if (character.map !== "goobrawl") {
+      await join("goobrawl");
+      await sleep(character.ping);
+    }
 
     const rgooInstance = get_nearest_monster({ type: "rgoo" });
     const bgooInstance = get_nearest_monster({ type: "bgoo" });
@@ -1269,7 +1264,7 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
     const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
     if (!iceGolemInstance) {
-      await advanceSmartMove({ map: "winterland", x: 896, y: 440 });
+      await advanceSmartMove({ map: "winterland", x: 792, y: 416 });
     }
     change_target(get_nearest_monster({ type: "icegolem" }));
     return get_nearest_monster({ type: "icegolem" });
