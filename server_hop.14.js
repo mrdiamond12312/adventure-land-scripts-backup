@@ -14,7 +14,7 @@ const bosses = {
   mrpumpkin: { type: "mrpumpkin", threshold: 0.7, hoppable: 0.95 },
   mrgreen: { type: "mrgreen", threshold: 0.7, hoppable: 0.95 },
   franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
-  crabxx: { type: "crabxx", threshold: 0.95, hoppable: 1 },
+  crabxx: { type: "crabxx", threshold: 0.95, hoppable: 0.999 },
   dragold: { type: "dragold", threshold: 0.99, hoppable: 1 },
 };
 const waitForEvent = ["wabbit"];
@@ -94,7 +94,7 @@ setInterval(async () => {
             (Object.keys(bosses).includes(serverBoss.type) &&
               ((serverBoss.hp <
                 bosses[serverBoss.type].hoppable *
-                  G.monsters[serverBoss.type].max_hp &&
+                  G.monsters[serverBoss.type].hp &&
                 serverBoss.target) ||
                 bosses[serverBoss.type].hoppable === 1)))
         );

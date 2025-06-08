@@ -11,9 +11,9 @@ if (parent.caracAL) {
 }
 
 // Kiting
-var originRangeRate = 0.9;
+var originRangeRate = 0.85;
 rangeRate = originRangeRate;
-const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 5);
+const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 4);
 
 async function fight(target) {
   if (currentStrategy === usePullStrategies) {

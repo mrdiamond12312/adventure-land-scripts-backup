@@ -8,7 +8,7 @@ async function useNormalStrategy(target) {
 
       if (
         Object.keys(suggestedMageItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
         )
       ) {
         await equipBatch(suggestedMageItems);
@@ -22,11 +22,11 @@ async function useNormalStrategy(target) {
         ) {
           log("Energize " + buffee?.name);
           use_skill("energize", buffee).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95)
+            reduce_cooldown("energize", character.ping * 0.95),
           );
         } else {
           use_skill("energize", character).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95)
+            reduce_cooldown("energize", character.ping * 0.95),
           );
         }
       }
@@ -35,8 +35,9 @@ async function useNormalStrategy(target) {
         character.mp > 100 &&
         !is_on_cooldown("scare") &&
         target.max_hp > 3000 &&
-        Object.keys(parent.entities).some(
-          (entity) => parent.entities[entity]?.target === character.name
+        Object.values(parent.entities).some(
+          (entity) =>
+            entity.type === "monster" && entity.target === character.name,
         )
       )
         scareAwayMobs();
@@ -48,7 +49,7 @@ async function useNormalStrategy(target) {
 
       if (
         Object.keys(suggestedWarriorItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot],
         )
       ) {
         await equipBatch(suggestedWarriorItems);
@@ -60,7 +61,7 @@ async function useNormalStrategy(target) {
 
       if (
         Object.keys(suggestedRangerItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
         )
       ) {
         await equipBatch(suggestedRangerItems);
@@ -71,7 +72,7 @@ async function useNormalStrategy(target) {
       const suggestedPriestItems = calculatePriestItems();
       if (
         Object.keys(suggestedPriestItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
         )
       ) {
         await equipBatch(suggestedPriestItems);

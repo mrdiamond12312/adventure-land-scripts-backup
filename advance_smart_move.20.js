@@ -118,7 +118,7 @@ async function advanceSmartMove(props) {
   setTimeout(() => clearInterval(scareInterval), 300000);
 
   try {
-    useNearbySmartMove();
+    // useNearbySmartMove();
     await scareAwayMobs();
 
     if (isAdvanceSmartMoving) {

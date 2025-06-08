@@ -583,11 +583,10 @@ async function warriorStomp() {
 
 function shouldAttack() {
   const currentTarget = get_targeted_monster();
+  const partyHealer = get_entity(HEALER);
   return character.map === "crypt"
-    ? get_entity(HEALER)
-    : currentTarget &&
-      currentTarget.attack > 600 &&
-      partyMems.includes(currentTarget.target)
-    ? get_entity(HEALER)
+    ? partyHealer && !partyHealer.rip
+    : currentTarget && currentTarget.attack > 600 && !currentTarget.target
+    ? partyHealer && !partyHealer.rip
     : true;
 }

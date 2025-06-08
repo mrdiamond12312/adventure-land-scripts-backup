@@ -149,7 +149,17 @@ async function fight(target) {
   }
 
   // Taunt logic to protect allies
-  if (character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt")) {
+  const partyDmgRecieved = partyMems.reduce(
+    (accumulator, current) => accumulator + avgDmgTaken(get_player(current)),
+    0,
+  );
+  const partyHealer = get_player(HEALER);
+  if (
+    character.mp > G.skills["taunt"].mp &&
+    !is_on_cooldown("taunt") &&
+    partyHealer &&
+    !partyHealer.rip
+  ) {
     const mobsTargetingAlly = Object.values(parent.entities).find(
       (mob) =>
         mob.type === "monster" &&
@@ -157,7 +167,7 @@ async function fight(target) {
           (ally) => ally !== character.name && mob.target === ally,
         ) &&
         mob.attack > 120 &&
-        mob.attack < 1500 &&
+        calculateDamage(mob, character) < 1800 &&
         !mob.cooperative,
     );
 
