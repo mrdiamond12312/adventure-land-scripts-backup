@@ -94,7 +94,11 @@ setInterval(async () => {
             (Object.keys(bosses).includes(serverBoss.type) &&
               ((serverBoss.hp <
                 bosses[serverBoss.type].hoppable *
+<<<<<<< HEAD
                   G.monsters[serverBoss.type].hp &&
+=======
+                  G.monsters[serverBoss.type].max_hp &&
+>>>>>>> origin/master
                 serverBoss.target) ||
                 bosses[serverBoss.type].hoppable === 1)))
         );
