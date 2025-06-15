@@ -259,9 +259,7 @@ async function compoundInv() {
         compoundNameChecker.size === 1 &&
         compoundLevelChecker.size === 1
       ) {
-        if (isRareItem && locate_item("offering") === -1) {
-          return;
-        } else
+        if (!isRareItem || locate_item("offering") !== -1)
           return compound(
             i,
             i + 1,
@@ -354,37 +352,35 @@ async function upgradeInv() {
       )
         use_skill("massproduction");
 
-      if (isRareItem && locate_item("offering") === -1) {
-        return;
-      }
-      return upgrade(
-        i,
-        scrollSlot,
-        isRareItem && locate_item("offering") !== -1
-          ? locate_item("offering")
-          : undefined,
-      )
-        .then(async (e) => {
-          if (e?.success === true) {
-            if (e?.level > (ITEMS_HIGHEST_LEVEL[itemName].level ?? 0))
-              ITEMS_HIGHEST_LEVEL[itemName] = {
-                level: e?.level,
-                quantity: 1,
-                ...item_info({ name: itemName }),
-              };
+      if (!isRareItem || locate_item("offering") !== -1)
+        return upgrade(
+          i,
+          scrollSlot,
+          isRareItem && locate_item("offering") !== -1
+            ? locate_item("offering")
+            : undefined,
+        )
+          .then(async (e) => {
+            if (e?.success === true) {
+              if (e?.level > (ITEMS_HIGHEST_LEVEL[itemName].level ?? 0))
+                ITEMS_HIGHEST_LEVEL[itemName] = {
+                  level: e?.level,
+                  quantity: 1,
+                  ...item_info({ name: itemName }),
+                };
 
-            if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0) {
-              close_stand();
-              smart_move(bankPosition).then(() =>
-                bank_store(findMaxLevelItem(itemName)),
-              );
+              if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0) {
+                close_stand();
+                smart_move(bankPosition).then(() =>
+                  bank_store(findMaxLevelItem(itemName)),
+                );
+              }
             }
-          }
-          breakFlag = true;
-        })
-        .catch((e) => {
-          breakFlag = true;
-        });
+            breakFlag = true;
+          })
+          .catch((e) => {
+            breakFlag = true;
+          });
     }
 
     if (breakFlag) break;
