@@ -290,7 +290,9 @@ async function upgradeInv() {
     if (!character.items[i]) break;
 
     const isRareItem =
-      character.items[i].level >= 6 || item_grade(character.items[i]) >= 2;
+      character.items[i].level >= 6 ||
+      (character.items[i].level >= 4 && item_grade(character.items[i]) >= 1) ||
+      item_grade(character.items[i]) >= 2;
 
     const itemName = character.items[i].name;
     if (ignore.includes(itemName)) continue;
