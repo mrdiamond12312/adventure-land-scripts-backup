@@ -259,21 +259,24 @@ async function compoundInv() {
         compoundNameChecker.size === 1 &&
         compoundLevelChecker.size === 1
       ) {
-        return compound(
-          i,
-          i + 1,
-          i + 2,
-          scrollSlot,
-          isRareItem && locate_item("offering") !== -1
-            ? locate_item("offering")
-            : undefined,
-        )
-          .then(() => {
-            breakFlag = true;
-          })
-          .catch((e) => {
-            breakFlag = true;
-          });
+        if (isRareItem && locate_item("offering") === -1) {
+          return;
+        } else
+          return compound(
+            i,
+            i + 1,
+            i + 2,
+            scrollSlot,
+            isRareItem && locate_item("offering") !== -1
+              ? locate_item("offering")
+              : undefined,
+          )
+            .then(() => {
+              breakFlag = true;
+            })
+            .catch((e) => {
+              breakFlag = true;
+            });
       }
     }
     if (breakFlag) break;
@@ -351,6 +354,9 @@ async function upgradeInv() {
       )
         use_skill("massproduction");
 
+      if (isRareItem && locate_item("offering") === -1) {
+        return;
+      }
       return upgrade(
         i,
         scrollSlot,

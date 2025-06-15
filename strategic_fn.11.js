@@ -128,7 +128,7 @@ function calculateWarriorItems() {
             .filter((entity) => entity.type === "monster")
             .some((mob) => mob.target === character.name)) ||
         character.map === "crypt"
-      ? "t2stramulet"
+      ? "snring"
       : "stramulet",
     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofstr",
     chest: character.map === "crypt" ? "xarmor" : "cdragon",
