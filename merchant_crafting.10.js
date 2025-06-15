@@ -38,7 +38,11 @@ const ITEMS_HIGHEST_LEVEL = {};
 const RETRIEVE_HISTORY = [];
 
 async function retrieveBankItem(searchId, level = 0) {
-  if (character.map !== "bank") await smart_move(bankPosition);
+  if (character.map !== "bank") {
+    close_stand();
+    await smart_move(bankPosition);
+  }
+
   for (const [bankPack, items] of Object.entries(character.bank).filter(
     ([key, value]) => key !== "gold",
   )) {
@@ -259,14 +263,14 @@ async function compoundInv() {
         compoundNameChecker.size === 1 &&
         compoundLevelChecker.size === 1
       ) {
-        if (!isRareItem || locate_item("offering") !== -1)
+        if (!isRareItem || locate_item("offeringp") !== -1)
           return compound(
             i,
             i + 1,
             i + 2,
             scrollSlot,
-            isRareItem && locate_item("offering") !== -1
-              ? locate_item("offering")
+            isRareItem && locate_item("offeringp") !== -1
+              ? locate_item("offeringp")
               : undefined,
           )
             .then(() => {
@@ -354,12 +358,12 @@ async function upgradeInv() {
       )
         use_skill("massproduction");
 
-      if (!isRareItem || locate_item("offering") !== -1)
+      if (!isRareItem || locate_item("offeringp") !== -1)
         return upgrade(
           i,
           scrollSlot,
-          isRareItem && locate_item("offering") !== -1
-            ? locate_item("offering")
+          isRareItem && locate_item("offeringp") !== -1
+            ? locate_item("offeringp")
             : undefined,
         )
           .then(async (e) => {
