@@ -51,6 +51,7 @@ async function retrieveBankItem(searchId, level = 0) {
         item && item.name === searchId && (!level || level === item.level),
     );
     if (slot !== -1) {
+      BANK_CACHE = character.bank;
       return bank_retrieve(bankPack, slot);
     }
   }
@@ -122,7 +123,7 @@ function getItemBankSlots(itemId) {
   const result = [];
   for (id in BANK_CACHE) {
     if (id === "gold") continue;
-    character.bank[id].forEach((item, index) => {
+    BANK_CACHE[id].forEach((item, index) => {
       if (!item) return;
       if (item.name === itemId)
         result.push({
@@ -200,8 +201,15 @@ async function compoundInv() {
 
       if (!canCompound) continue;
 
+      const itemInfo = item_info(character.items[i]);
+      const itemGrade = item_grade(character.items[i]);
+      const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
       const isRareItem =
-        character.items[i].level >= 2 || item_grade(character.items[i]) >= 2;
+        character.items[i].level >= itemInfo.grades[0] > 0
+          ? itemInfo.grades[0]
+          : itemGrade >= 2
+          ? 0
+          : itemInfo.grades[0] + 2;
 
       if (isRareItem) {
         if (
@@ -217,11 +225,11 @@ async function compoundInv() {
         }
       }
 
-      const scrollType = `cscroll${item_grade(character.items[i])}`;
+      const scrollType = `cscroll${itemGrade}`;
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
         if (
-          item_grade(character.items[i]) >= 2 &&
+          itemGrade(character.items[i]) >= 2 &&
           character.gold < IGNORE_RARE_GOLD_THRESHOLD
         )
           continue;
@@ -238,6 +246,7 @@ async function compoundInv() {
         canCompound &&
         isRareItem &&
         locate_item("offeringp") === -1 &&
+        havePrimlingInBank &&
         !smart.moving
       ) {
         await retrieveBankItem("offeringp");
@@ -263,7 +272,11 @@ async function compoundInv() {
         compoundNameChecker.size === 1 &&
         compoundLevelChecker.size === 1
       ) {
-        if (!isRareItem || locate_item("offeringp") !== -1)
+        if (
+          !havePrimlingInBank ||
+          !isRareItem ||
+          locate_item("offeringp") !== -1
+        )
           return compound(
             i,
             i + 1,
@@ -293,18 +306,20 @@ async function upgradeInv() {
 
     if (!character.items[i]) break;
 
+    const itemInfo = item_info(character.items[i]);
+    const itemGrade = item_grade(character.items[i]);
+    const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
     const isRareItem =
       character.items[i].level >= 6 ||
-      (character.items[i].level >= 4 && item_grade(character.items[i]) >= 1) ||
-      item_grade(character.items[i]) >= 2;
+      (character.items[i].level >= 4 && itemGrade >= 1) ||
+      itemGrade >= 2;
 
     const itemName = character.items[i].name;
     if (ignore.includes(itemName)) continue;
 
-    if (item_info(character.items[i]).upgrade) {
+    if (itemInfo.upgrade) {
       if (
-        (character.items[i]?.level > maxUpgrade ||
-          item_grade(character.items[i]) === 2) &&
+        (character.items[i]?.level > maxUpgrade || itemGrade >= 2) &&
         character.items[i]?.level >= ITEMS_HIGHEST_LEVEL[itemName].level
       )
         if (
@@ -318,17 +333,19 @@ async function upgradeInv() {
           continue;
         }
 
-      if (isRareItem && locate_item("offeringp") === -1 && !smart.moving) {
+      if (
+        isRareItem &&
+        locate_item("offeringp") === -1 &&
+        havePrimlingInBank &&
+        !smart.moving
+      ) {
         await retrieveBankItem("offeringp");
       }
 
-      const scrollType = `scroll${item_grade(character.items[i])}`;
+      const scrollType = `scroll${itemGrade}`;
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
-        if (
-          item_grade(character.items[i]) >= 2 &&
-          character.gold < IGNORE_RARE_GOLD_THRESHOLD
-        )
+        if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD)
           continue;
 
         buy(scrollType, 1)
@@ -350,15 +367,16 @@ async function upgradeInv() {
           buy("mpot1", 1);
         }
         use_skill("massproductionpp");
-      } else if (
+      }
+
+      if (
         character.mp > 20 &&
         !is_on_cooldown("massproduction") &&
-        !character.s.massproduction &&
-        !character.s.massproductionpp
+        !character.s.massproduction
       )
         use_skill("massproduction");
 
-      if (!isRareItem || locate_item("offeringp") !== -1)
+      if (!havePrimlingInBank || !isRareItem || locate_item("offeringp") !== -1)
         return upgrade(
           i,
           scrollSlot,

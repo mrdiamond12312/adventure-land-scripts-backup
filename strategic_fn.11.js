@@ -83,9 +83,9 @@ function calculateMageItems() {
 }
 
 function calculateWarriorItems() {
-  // const shouldUseBlaster =
-  //   numberOfMonsterAroundTarget(get_targeted_monster()) >= 2 &&
-  //   !get_targeted_monster()["1hp"];
+  const shouldUseBlaster =
+    numberOfMonsterAroundTarget(get_targeted_monster()) >= 2 &&
+    !get_targeted_monster()["1hp"];
 
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
     (mobs) =>
@@ -106,9 +106,8 @@ function calculateWarriorItems() {
   return {
     helmet: character.map === "crypt" ? "xhelmet" : "oxhelmet",
     mainhand:
-      currentStrategy === usePullStrategies
-        ? // && shouldUseBlaster
-          "vhammer"
+      currentStrategy === usePullStrategies && shouldUseBlaster
+        ? "vhammer"
         : "xmace",
     offhand:
       (character.map === "crypt" &&
@@ -117,9 +116,8 @@ function calculateWarriorItems() {
         )) ||
       haveLowHpMobsNearby
         ? "mshield"
-        : currentStrategy === usePullStrategies
-        ? // && shouldUseBlaster
-          "ololipop"
+        : currentStrategy === usePullStrategies && shouldUseBlaster
+        ? "ololipop"
         : "fireblade",
     amulet: haveLowHpMobsNearby
       ? "spookyamulet"
