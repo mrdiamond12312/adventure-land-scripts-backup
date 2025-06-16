@@ -205,11 +205,12 @@ async function compoundInv() {
       const itemGrade = item_grade(character.items[i]);
       const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
       const isRareItem =
-        character.items[i].level >= itemInfo.grades[0] > 0
+        character.items[i].level >=
+        (itemInfo.grades[0] > 0
           ? itemInfo.grades[0]
           : itemGrade >= 2
           ? 0
-          : itemInfo.grades[0] + 2;
+          : itemInfo.grades[0] + 2);
 
       if (isRareItem) {
         if (
