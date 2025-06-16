@@ -229,10 +229,7 @@ async function compoundInv() {
       const scrollType = `cscroll${itemGrade}`;
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
-        if (
-          itemGrade(character.items[i]) >= 2 &&
-          character.gold < IGNORE_RARE_GOLD_THRESHOLD
-        )
+        if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD)
           continue;
         buy(scrollType, 1)
           .then(() => {
