@@ -271,9 +271,10 @@ async function compoundInv() {
         compoundLevelChecker.size === 1
       ) {
         if (
-          !havePrimlingInBank ||
-          !isRareItem ||
-          locate_item("offeringp") !== -1
+          (!havePrimlingInBank ||
+            !isRareItem ||
+            locate_item("offeringp") !== -1) &&
+          scrollSlot !== -1
         )
           return compound(
             i,
@@ -374,7 +375,12 @@ async function upgradeInv() {
       )
         use_skill("massproduction");
 
-      if (!havePrimlingInBank || !isRareItem || locate_item("offeringp") !== -1)
+      if (
+        (!havePrimlingInBank ||
+          !isRareItem ||
+          locate_item("offeringp") !== -1) &&
+        scrollSlot !== -1
+      )
         return upgrade(
           i,
           scrollSlot,
