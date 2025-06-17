@@ -354,14 +354,18 @@ setInterval(async function () {
     if (!smart.move) await moveHome();
     close_stand();
     if (!smart.move) await smart_move(bankPosition);
-    if (character.map === "bank")
-      Array.from({ length: 42 }, (_, i) => i)
-        .filter(
-          (index) =>
-            character.items[index] &&
-            !ignore.includes(character.items[index].name),
-        )
-        .map((i) => bank_store(i));
+    if (character.map === "bank") {
+      try {
+        character.items
+          .filter((item) => item && !ignore.includes(item.name))
+          .map((item, index) => {
+            console.log(item);
+            bank_store(index);
+          });
+      } catch (e) {
+        console.error(e);
+      }
+    }
     if (!smart.move) await moveHome();
     onDuty = false;
   }
