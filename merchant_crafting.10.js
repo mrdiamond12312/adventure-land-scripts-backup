@@ -68,7 +68,7 @@ async function retrieveMaxItemsLevel() {
   BANK_CACHE = character.bank;
 
   character.items
-    .filter((item) => item && !item.q && !ignore.includes(item.name))
+    .filter((item) => item && !item.q && !IGNOREincludes(item.name))
     .forEach((item) => {
       if (item.q) return;
 
@@ -94,7 +94,7 @@ async function retrieveMaxItemsLevel() {
     if (slot === "gold") continue;
 
     character.bank[slot]
-      .filter((item) => item && !item.q && !ignore.includes(item.name))
+      .filter((item) => item && !item.q && !IGNOREincludes(item.name))
       .forEach((item) => {
         if (item.q) return;
 
@@ -314,7 +314,7 @@ async function upgradeInv() {
       itemGrade >= 2;
 
     const itemName = character.items[i].name;
-    if (ignore.includes(itemName)) continue;
+    if (IGNOREincludes(itemName)) continue;
 
     if (itemInfo.upgrade) {
       if (
@@ -450,7 +450,7 @@ setInterval(() => {
 
         const isStoreable = STORE_ABLE.includes(item.name);
         const isEquipable = item_info(item).compound || item_info(item).upgrade;
-        const shouldItemBeIgnore = ignore.includes(item.name);
+        const shouldItemBeIgnore = IGNOREincludes(item.name);
 
         if (
           item &&

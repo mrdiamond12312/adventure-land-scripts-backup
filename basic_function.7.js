@@ -206,7 +206,23 @@ function changeToNormalStrategies() {
 var smartmoveDebug = false;
 
 // Merch boundary
-var ignore = [
+const BUYABLE = [
+  "helmet",
+  "shoes",
+  "gloves",
+  "pants",
+  "coat",
+  "blade",
+  "claw",
+  "staff",
+  "bow",
+  "shield",
+  "wand",
+  "mace",
+  "wbasher",
+];
+
+var IGNORE = [
   "x0",
   "staff",
   "x1",
@@ -240,22 +256,7 @@ var ignore = [
   "orboffrost",
   "orbofplague",
   "orbofresolve",
-];
-
-const BUYABLE = [
-  "helmet",
-  "shoes",
-  "gloves",
-  "pants",
-  "coat",
-  "blade",
-  "claw",
-  "staff",
-  "bow",
-  "shield",
-  "wand",
-  "mace",
-  "wbasher",
+  ...BUYABLE,
 ];
 
 const STORE_ABLE = [

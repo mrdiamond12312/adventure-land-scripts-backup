@@ -392,7 +392,7 @@ setInterval(async function () {
     if (character.map === "bank") {
       try {
         character.items
-          .filter((item) => item && !ignore.includes(item.name))
+          .filter((item) => item && !IGNOREincludes(item.name))
           .map((item, index) => {
             console.log(item);
             bank_store(index);
