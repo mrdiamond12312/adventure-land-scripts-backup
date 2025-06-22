@@ -294,15 +294,27 @@ async function craft(item) {
       0,
     );
 
-    const numberOfItemMissing = totalQuantityOfSlotItem - quantity;
+    let numberOfItemMissing = totalQuantityOfSlotItem - quantity;
 
     if (numberOfItemMissing && totalQuantityOfBankItem) {
-      for (let count = 0; count < numberOfItemMissing; count++)
+      for (let count = 0; count < numberOfItemMissing; count++) {
         fromBank.push(name);
+
+        if (bankSlots[count] && bankSlots[count].q) {
+          numberOfItemMissing -= bankSlots[count].q;
+        }
+      }
     }
 
     return totalQuantityOfSlotItem + totalQuantityOfBankItem >= quantity;
   });
+
+  if (fromBank.length) {
+    for (const item of fromBank) {
+      await retrieveBankItem(item);
+    }
+  }
+
   if (isEnoughIngredients) {
     if (get_nearest_npc()?.name !== "Leo") {
       close_stand();
