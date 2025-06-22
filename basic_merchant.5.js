@@ -259,7 +259,7 @@ async function goMining() {
   }
 }
 
-async function craft(item, craftQuantity = 1) {
+async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   // Check if craftable
   if (
     onDuty ||
@@ -289,12 +289,12 @@ async function craft(item, craftQuantity = 1) {
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0
+      0,
     );
 
     const totalQuantityOfBankItem = bankSlots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0
+      0,
     );
 
     let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
@@ -342,10 +342,10 @@ async function craft(item, craftQuantity = 1) {
   if (isEnoughIngredients) {
     if (get_nearest_npc()?.name !== "Leo") {
       close_stand();
-      await smart_move(find_npc("craftsman"));
+      await smart_move(place);
     }
 
-    for (let trial = 0; trial < craftQuantity; trial++) auto_craft(item);
+    for (let trial = 0; trial < craftQuantity; trial++) await auto_craft(item);
     return;
   }
 }
@@ -369,6 +369,7 @@ setInterval(async function () {
     // holidayExchange(),
     craft("xbox"),
     craft("basketofeggs"),
+    craft("orba", 1, { map: "main", x: -152, y: -137 }),
     craft("froststaff", character.esize - 3),
     craft("carrotsword", character.esize - 3),
     !isSortingInventory &&
@@ -382,7 +383,7 @@ setInterval(async function () {
               (character.items[i].level || 0) <= 1
             );
           })
-          .map(async (i) => sell(i, 1000))
+          .map(async (i) => sell(i, 1000)),
       ),
   ]);
 
