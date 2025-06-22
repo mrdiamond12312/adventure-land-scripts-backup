@@ -103,7 +103,7 @@ var mapY = -2614;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-var mobsToFarm = ["stompy", "wolf"];
+var mobsToFarm = ["phoenix", "stompy", "wolf"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 // var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
@@ -236,9 +236,14 @@ var ignore = [
   "tracker",
   "sword",
   "throwingstars",
+  "orboffire",
+  "orboffrost",
+  "orbofplague",
+  "orbofresolve",
 ];
 
 var storeAble = [
+  "essenceofether",
   "spidersilk",
   "feather0",
   "vitscroll",
@@ -300,6 +305,10 @@ var storeAble = [
   "cscale",
   "spiderkey",
   "svenom",
+  "orboffire",
+  "orboffrost",
+  "orbofplague",
+  "orbofresolve",
 ];
 
 var saleAble = [
@@ -1105,6 +1114,8 @@ setInterval(async function () {
       partyMems.map((member) => {
         send_party_invite(member);
       });
+      if (!parent.party_list.length || !parent.party_list.includes("earthPri"))
+        send_party_request("earthPri");
     }
   }
 

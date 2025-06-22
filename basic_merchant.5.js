@@ -278,9 +278,28 @@ async function craft(item) {
     log("Invalid craftable item id");
     return;
   }
+
+  const fromBank = [];
   const isEnoughIngredients = G.craft[item].items.every(([quantity, name]) => {
-    const slot = locate_item(name);
-    return slot !== -1 && character.items[slot]?.q >= quantity;
+    const slots = character.items.filter((item) => item && item.name === name);
+    const bankSlots = getItemBankSlots(name);
+
+    const totalQuantityOfSlotItem = slots.reduce(
+      (accumulator, current) => accumulator + (current.q ?? 1),
+    );
+
+    const totalQuantityOfBankItem = bankSlots.reduce(
+      (accumulator, current) => accumulator + (current.q ?? 1),
+    );
+
+    const numberOfItemMissing = totalQuantityOfSlotItem - quantity;
+
+    if (numberOfItemMissing && totalQuantityOfBankItem) {
+      for (let count = 0; count < numberOfItemMissing; count++)
+        fromBank.push(name);
+    }
+
+    return totalQuantityOfSlotItem + totalQuantityOfBankItem >= quantity;
   });
   if (isEnoughIngredients) {
     if (get_nearest_npc()?.name !== "Leo") {

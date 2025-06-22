@@ -179,7 +179,9 @@ setInterval(async function () {
     !target &&
     !get("cryptInstance") &&
     (partyMems[0] == character.name ||
-      !get_entity(partyMems[0] || character.map === "crypt"))
+      !get_entity(partyMems[0]) ||
+      character.map === "crypt" ||
+      distance(character, { x: mapX, y: mapY, map }) > 500)
   ) {
     log("Moving to farming location");
     changeToNormalStrategies();
