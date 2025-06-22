@@ -259,7 +259,7 @@ async function goMining() {
   }
 }
 
-async function craft(item) {
+async function craft(item, craftQuantity = 1) {
   // Check if craftable
   if (
     onDuty ||
@@ -286,17 +286,17 @@ async function craft(item) {
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0,
+      0
     );
 
     const totalQuantityOfBankItem = bankSlots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0,
+      0
     );
 
-    let numberOfItemMissing = totalQuantityOfSlotItem - quantity;
+    let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
 
-    if (numberOfItemMissing && totalQuantityOfBankItem) {
+    if (numberOfItemMissing > 0 && totalQuantityOfBankItem) {
       for (let count = 0; count < numberOfItemMissing; count++) {
         fromBank.push(name);
 
@@ -320,7 +320,9 @@ async function craft(item) {
       close_stand();
       await smart_move(find_npc("craftsman"));
     }
-    return Promise.all(Array.from({ length: 100 }).map(() => auto_craft(item)));
+    return Promise.all(
+      Array.from({ length: craftQuantity }).map(() => auto_craft(item))
+    );
   }
 }
 
@@ -354,7 +356,7 @@ setInterval(async function () {
               (character.items[i].level || 0) <= 1
             );
           })
-          .map(async (i) => sell(i, 1000)),
+          .map(async (i) => sell(i, 1000))
       ),
   ]);
 
