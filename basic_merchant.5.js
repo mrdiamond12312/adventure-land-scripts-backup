@@ -283,17 +283,18 @@ async function craft(item, craftQuantity = 1) {
   const vendorBuy = [];
 
   const isEnoughIngredients = G.craft[item].items.every(([quantity, name]) => {
+    quantity = quantity * craftQuantity;
     const slots = character.items.filter((item) => item && item.name === name);
     const bankSlots = getItemBankSlots(name).filter((item) => !item.level);
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0
+      0,
     );
 
     const totalQuantityOfBankItem = bankSlots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0
+      0,
     );
 
     let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
@@ -344,7 +345,7 @@ async function craft(item, craftQuantity = 1) {
       await smart_move(find_npc("craftsman"));
     }
     return Promise.all(
-      Array.from({ length: craftQuantity }).map(() => auto_craft(item))
+      Array.from({ length: craftQuantity }).map(() => auto_craft(item)),
     );
   }
 }
@@ -368,6 +369,8 @@ setInterval(async function () {
     // holidayExchange(),
     craft("xbox"),
     craft("basketofeggs"),
+    craft("froststaff", character.esize - 3),
+    craft("carrotsword", character.esize - 3),
     !isSortingInventory &&
       Promise.all(
         Array.from({ length: 42 }, (_, i) => i)
@@ -379,7 +382,7 @@ setInterval(async function () {
               (character.items[i].level || 0) <= 1
             );
           })
-          .map(async (i) => sell(i, 1000))
+          .map(async (i) => sell(i, 1000)),
       ),
   ]);
 
