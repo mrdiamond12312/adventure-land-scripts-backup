@@ -275,14 +275,16 @@ async function craft(item, craftQuantity = 1) {
     return;
 
   if (!G.craft[item]) {
-    log("Invalid craftable item id");
+    log("Uncraftable/Invalid item id!");
     return;
   }
 
   const fromBank = [];
+  const vendorBuy = [];
+
   const isEnoughIngredients = G.craft[item].items.every(([quantity, name]) => {
     const slots = character.items.filter((item) => item && item.name === name);
-    const bankSlots = getItemBankSlots(name);
+    const bankSlots = getItemBankSlots(name).filter((item) => item.level === 0);
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
@@ -297,6 +299,19 @@ async function craft(item, craftQuantity = 1) {
     let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
 
     if (numberOfItemMissing > 0 && totalQuantityOfBankItem) {
+      if (
+        BUYABLE.includes(name) &&
+        totalQuantityOfBankItem < numberOfItemMissing
+      ) {
+        for (
+          let count = 0;
+          count < numberOfItemMissing - totalQuantityOfBankItem;
+          count++
+        ) {
+          vendorBuy.push(name);
+          numberOfItemMissing--;
+        }
+      }
       for (let count = 0; count < numberOfItemMissing; count++) {
         fromBank.push(name);
 
@@ -306,8 +321,15 @@ async function craft(item, craftQuantity = 1) {
       }
     }
 
-    return totalQuantityOfSlotItem + totalQuantityOfBankItem >= quantity;
+    return (
+      totalQuantityOfSlotItem + totalQuantityOfBankItem >= quantity ||
+      BUYABLE.includes(name)
+    );
   });
+
+  if (vendorBuy.length) {
+    await Promise.all(vendorBuy.map((id) => buy(id)));
+  }
 
   if (fromBank.length) {
     for (const item of fromBank) {
