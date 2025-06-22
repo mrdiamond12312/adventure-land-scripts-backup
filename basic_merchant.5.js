@@ -286,10 +286,12 @@ async function craft(item) {
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
+      0,
     );
 
     const totalQuantityOfBankItem = bankSlots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
+      0,
     );
 
     const numberOfItemMissing = totalQuantityOfSlotItem - quantity;
