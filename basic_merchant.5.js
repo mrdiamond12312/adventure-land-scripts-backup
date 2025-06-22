@@ -284,7 +284,7 @@ async function craft(item, craftQuantity = 1) {
 
   const isEnoughIngredients = G.craft[item].items.every(([quantity, name]) => {
     const slots = character.items.filter((item) => item && item.name === name);
-    const bankSlots = getItemBankSlots(name).filter((item) => item.level === 0);
+    const bankSlots = getItemBankSlots(name).filter((item) => !item.level);
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
@@ -298,20 +298,21 @@ async function craft(item, craftQuantity = 1) {
 
     let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
 
-    if (numberOfItemMissing > 0 && totalQuantityOfBankItem) {
-      if (
-        BUYABLE.includes(name) &&
-        totalQuantityOfBankItem < numberOfItemMissing
+    if (
+      BUYABLE.includes(name) &&
+      totalQuantityOfBankItem < numberOfItemMissing
+    ) {
+      for (
+        let count = 0;
+        count < numberOfItemMissing - totalQuantityOfBankItem;
+        count++
       ) {
-        for (
-          let count = 0;
-          count < numberOfItemMissing - totalQuantityOfBankItem;
-          count++
-        ) {
-          vendorBuy.push(name);
-          numberOfItemMissing--;
-        }
+        vendorBuy.push(name);
+        numberOfItemMissing--;
       }
+    }
+
+    if (numberOfItemMissing > 0 && totalQuantityOfBankItem) {
       for (let count = 0; count < numberOfItemMissing; count++) {
         fromBank.push(name);
 
