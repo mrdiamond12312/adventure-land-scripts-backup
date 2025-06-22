@@ -73,8 +73,8 @@ function calculateMageItems() {
           ? undefined
           : "wbook1"
         : "wbook1",
-    helmet: "helmet1",
-    chest: "coat1",
+    helmet: "eears",
+    chest: "epyjamas",
     pants: "starkillers",
     shoes: "wingedboots",
     gloves: "supermittens",
@@ -185,11 +185,13 @@ function calculatePriestItems() {
         ? "wbook1"
         : haveLowHpMobsNearby
         ? "mshield"
-        : Object.values(parent.entities).some(
+        : TANKER === character.name ||
+          Object.values(parent.entities).some(
             (mob) => mob.type === "monster" && mob.target === character.name,
-          ) && !character.fear
+          ) ||
+          character.fear
         ? "wbookhs"
-        : "mshield",
+        : "wbook1",
     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "test_orb",
     amulet: "intamulet",
   };

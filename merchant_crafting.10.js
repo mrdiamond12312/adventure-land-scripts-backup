@@ -9,7 +9,7 @@ if (parent.caracAL) {
 let BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
 
-const IGNORE_RARE_GOLD_THRESHOLD = 65e8;
+const IGNORE_RARE_GOLD_THRESHOLD = 53e8;
 
 const KEEP_THRESHOLD = {
   // Every character needs
@@ -44,11 +44,11 @@ async function retrieveBankItem(searchId, level = 0) {
   }
 
   for (const [bankPack, items] of Object.entries(character.bank).filter(
-    ([key, value]) => key !== "gold",
+    ([key, value]) => key !== "gold"
   )) {
     const slot = items.findIndex(
       (item) =>
-        item && item.name === searchId && (!level || level === item.level),
+        item && item.name === searchId && (!level || level === item.level)
     );
     if (slot !== -1) {
       BANK_CACHE = character.bank;
@@ -62,13 +62,13 @@ async function retrieveMaxItemsLevel() {
 
   // Reset counter;
   Object.keys(ITEMS_HIGHEST_LEVEL).forEach(
-    (key) => delete ITEMS_HIGHEST_LEVEL[key],
+    (key) => delete ITEMS_HIGHEST_LEVEL[key]
   );
 
   BANK_CACHE = character.bank;
 
   character.items
-    .filter((item) => item && !item.q && !ignore.includes(item.name))
+    .filter((item) => item && !item.q && !IGNORE.includes(item.name))
     .forEach((item) => {
       if (item.q) return;
 
@@ -94,7 +94,7 @@ async function retrieveMaxItemsLevel() {
     if (slot === "gold") continue;
 
     character.bank[slot]
-      .filter((item) => item && !item.q && !ignore.includes(item.name))
+      .filter((item) => item && !item.q && !IGNORE.includes(item.name))
       .forEach((item) => {
         if (item.q) return;
 
@@ -162,7 +162,7 @@ function retrievedBankItemToUpgrade() {
   desiredItems = desiredItems.splice(
     0,
     desiredItems.length -
-      (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ?? 2),
+      (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ?? 2)
   );
 
   let inventoryEmptySlots = character.items.filter((item) => !item).length - 4;
@@ -283,7 +283,7 @@ async function compoundInv() {
             scrollSlot,
             isRareItem && locate_item("offeringp") !== -1
               ? locate_item("offeringp")
-              : undefined,
+              : undefined
           )
             .then(() => {
               breakFlag = true;
@@ -314,7 +314,7 @@ async function upgradeInv() {
       itemGrade >= 2;
 
     const itemName = character.items[i].name;
-    if (ignore.includes(itemName)) continue;
+    if (IGNORE.includes(itemName)) continue;
 
     if (itemInfo.upgrade) {
       if (
@@ -386,7 +386,7 @@ async function upgradeInv() {
           scrollSlot,
           isRareItem && locate_item("offeringp") !== -1
             ? locate_item("offeringp")
-            : undefined,
+            : undefined
         )
           .then(async (e) => {
             if (e?.success === true) {
@@ -400,7 +400,7 @@ async function upgradeInv() {
               if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0) {
                 close_stand();
                 smart_move(bankPosition).then(() =>
-                  bank_store(findMaxLevelItem(itemName)),
+                  bank_store(findMaxLevelItem(itemName))
                 );
               }
             }
@@ -448,9 +448,9 @@ setInterval(() => {
         const isHighLevelItem =
           item?.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
 
-        const isStoreable = storeAble.includes(item.name);
+        const isStoreable = STORE_ABLE.includes(item.name);
         const isEquipable = item_info(item).compound || item_info(item).upgrade;
-        const shouldItemBeIgnore = ignore.includes(item.name);
+        const shouldItemBeIgnore = IGNORE.includes(item.name);
 
         if (
           item &&

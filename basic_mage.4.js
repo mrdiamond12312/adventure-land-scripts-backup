@@ -94,15 +94,15 @@ async function fight(target) {
 
   // if (character.mp > 2000 && !is_on_cooldown("alchemy") && !isInvFull()) {
   //   const sellableSlot = character.items.findIndex((item) =>
-  //     saleAble.includes(item?.name)
+  //     SALE_ABLE.includes(item?.name)
   //   );
 
   //   if (sellableSlot !== -1) {
-  //     if (sellableSlot === 0 && saleAble.includes(character.items[0]?.name)) {
+  //     if (sellableSlot === 0 && SALE_ABLE.includes(character.items[0]?.name)) {
   //       use_skill("alchemy");
   //     } else {
   //       swap(0, sellableSlot).then(() => {
-  //         if (saleAble.includes(character.items[0]?.name)) use_skill("alchemy");
+  //         if (SALE_ABLE.includes(character.items[0]?.name)) use_skill("alchemy");
   //       });
   //     }
   //   }
@@ -179,7 +179,9 @@ setInterval(async function () {
     !target &&
     !get("cryptInstance") &&
     (partyMems[0] == character.name ||
-      !get_entity(partyMems[0] || character.map === "crypt"))
+      !get_entity(partyMems[0]) ||
+      character.map === "crypt" ||
+      distance(character, { x: mapX, y: mapY, map }) > 500)
   ) {
     log("Moving to farming location");
     changeToNormalStrategies();
