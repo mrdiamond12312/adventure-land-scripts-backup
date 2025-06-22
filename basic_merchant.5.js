@@ -259,7 +259,7 @@ async function goMining() {
   }
 }
 
-async function craft(item, craftQuantity = 1) {
+async function craft(item) {
   // Check if craftable
   if (
     onDuty ||
@@ -275,78 +275,19 @@ async function craft(item, craftQuantity = 1) {
     return;
 
   if (!G.craft[item]) {
-    log("Uncraftable/Invalid item id!");
+    log("Invalid craftable item id");
     return;
   }
-
-  const fromBank = [];
-  const vendorBuy = [];
-
   const isEnoughIngredients = G.craft[item].items.every(([quantity, name]) => {
-    quantity = quantity * craftQuantity;
-    const slots = character.items.filter((item) => item && item.name === name);
-    const bankSlots = getItemBankSlots(name).filter((item) => !item.level);
-
-    const totalQuantityOfSlotItem = slots.reduce(
-      (accumulator, current) => accumulator + (current.q ?? 1),
-      0
-    );
-
-    const totalQuantityOfBankItem = bankSlots.reduce(
-      (accumulator, current) => accumulator + (current.q ?? 1),
-      0
-    );
-
-    let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
-
-    if (
-      BUYABLE.includes(name) &&
-      totalQuantityOfBankItem < numberOfItemMissing
-    ) {
-      for (
-        let count = 0;
-        count < numberOfItemMissing - totalQuantityOfBankItem;
-        count++
-      ) {
-        vendorBuy.push(name);
-        numberOfItemMissing--;
-      }
-    }
-
-    if (numberOfItemMissing > 0 && totalQuantityOfBankItem) {
-      for (let count = 0; count < numberOfItemMissing; count++) {
-        fromBank.push(name);
-
-        if (bankSlots[count] && bankSlots[count].q) {
-          numberOfItemMissing -= bankSlots[count].q;
-        }
-      }
-    }
-
-    return (
-      totalQuantityOfSlotItem + totalQuantityOfBankItem >= quantity ||
-      BUYABLE.includes(name)
-    );
+    const slot = locate_item(name);
+    return slot !== -1 && character.items[slot]?.q >= quantity;
   });
-
-  if (vendorBuy.length) {
-    await Promise.all(vendorBuy.map((id) => buy(id)));
-  }
-
-  if (fromBank.length) {
-    for (const item of fromBank) {
-      await retrieveBankItem(item);
-    }
-  }
-
   if (isEnoughIngredients) {
     if (get_nearest_npc()?.name !== "Leo") {
       close_stand();
       await smart_move(find_npc("craftsman"));
     }
-
-    for (let trial = 0; trial < craftQuantity; trial++) auto_craft(item);
-    return;
+    return Promise.all(Array.from({ length: 100 }).map(() => auto_craft(item)));
   }
 }
 
@@ -369,20 +310,18 @@ setInterval(async function () {
     // holidayExchange(),
     craft("xbox"),
     craft("basketofeggs"),
-    craft("froststaff", character.esize - 3),
-    craft("carrotsword", character.esize - 3),
     !isSortingInventory &&
       Promise.all(
         Array.from({ length: 42 }, (_, i) => i)
           .filter((i) => {
             if (!character.items[i]) return false;
             return (
-              SALE_ABLE.includes(character.items[i].name) &&
+              saleAble.includes(character.items[i].name) &&
               !character.items[i].shiny &&
               (character.items[i].level || 0) <= 1
             );
           })
-          .map(async (i) => sell(i, 1000))
+          .map(async (i) => sell(i, 1000)),
       ),
   ]);
 
@@ -418,7 +357,7 @@ setInterval(async function () {
     if (character.map === "bank") {
       try {
         character.items
-          .filter((item) => item && !IGNORE.includes(item.name))
+          .filter((item) => item && !ignore.includes(item.name))
           .map((item, index) => {
             console.log(item);
             bank_store(index);

@@ -10,11 +10,11 @@ const HOME_SERVER = {
 const tankableBoss = ["snowman", "pinkgoo"];
 
 const bosses = {
-  icegolem: { type: "icegolem", threshold: 0.7, hoppable: 0.999 },
-  franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
+  icegolem: { type: "icegolem", threshold: 0.7, hoppable: 1 },
   mrpumpkin: { type: "mrpumpkin", threshold: 0.7, hoppable: 0.95 },
   mrgreen: { type: "mrgreen", threshold: 0.7, hoppable: 0.95 },
-  crabxx: { type: "crabxx", threshold: 0.95, hoppable: 0.9999 },
+  franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
+  crabxx: { type: "crabxx", threshold: 0.95, hoppable: 0.999 },
   dragold: { type: "dragold", threshold: 0.99, hoppable: 1 },
 };
 const waitForEvent = ["wabbit"];

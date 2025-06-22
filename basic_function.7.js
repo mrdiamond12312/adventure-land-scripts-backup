@@ -103,7 +103,7 @@ var mapY = -2614;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-var mobsToFarm = ["phoenix", "stompy", "wolf"];
+var mobsToFarm = ["stompy", "wolf"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 // var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
@@ -206,23 +206,7 @@ function changeToNormalStrategies() {
 var smartmoveDebug = false;
 
 // Merch boundary
-const BUYABLE = [
-  "helmet",
-  "shoes",
-  "gloves",
-  "pants",
-  "coat",
-  "blade",
-  "claw",
-  "staff",
-  "bow",
-  "shield",
-  "wand",
-  "mace",
-  "wbasher",
-];
-
-var IGNORE = [
+var ignore = [
   "x0",
   "staff",
   "x1",
@@ -252,15 +236,9 @@ var IGNORE = [
   "tracker",
   "sword",
   "throwingstars",
-  "orboffire",
-  "orboffrost",
-  "orbofplague",
-  "orbofresolve",
-  ...BUYABLE,
 ];
 
-const STORE_ABLE = [
-  "essenceofether",
+var storeAble = [
   "spidersilk",
   "feather0",
   "vitscroll",
@@ -322,13 +300,9 @@ const STORE_ABLE = [
   "cscale",
   "spiderkey",
   "svenom",
-  "orboffire",
-  "orboffrost",
-  "orbofplague",
-  "orbofresolve",
 ];
 
-const SALE_ABLE = [
+var saleAble = [
   "frankypants",
   "vgloves",
   "mcape",
@@ -1131,8 +1105,6 @@ setInterval(async function () {
       partyMems.map((member) => {
         send_party_invite(member);
       });
-      if (!parent.party_list.length || !parent.party_list.includes("earthPri"))
-        send_party_request("earthPri");
     }
   }
 
