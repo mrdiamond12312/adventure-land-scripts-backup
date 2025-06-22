@@ -289,12 +289,12 @@ async function craft(item, craftQuantity = 1) {
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0,
+      0
     );
 
     const totalQuantityOfBankItem = bankSlots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0,
+      0
     );
 
     let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
@@ -344,9 +344,9 @@ async function craft(item, craftQuantity = 1) {
       close_stand();
       await smart_move(find_npc("craftsman"));
     }
-    return Promise.all(
-      Array.from({ length: craftQuantity }).map(() => auto_craft(item)),
-    );
+
+    for (let trial = 0; trial < craftQuantity; trial++) auto_craft(item);
+    return;
   }
 }
 
@@ -382,7 +382,7 @@ setInterval(async function () {
               (character.items[i].level || 0) <= 1
             );
           })
-          .map(async (i) => sell(i, 1000)),
+          .map(async (i) => sell(i, 1000))
       ),
   ]);
 
