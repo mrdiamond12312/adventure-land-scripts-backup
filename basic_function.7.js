@@ -242,7 +242,23 @@ var ignore = [
   "orbofresolve",
 ];
 
-var storeAble = [
+const BUYABLE = [
+  "helmet",
+  "shoes",
+  "gloves",
+  "pants",
+  "coat",
+  "blade",
+  "claw",
+  "staff",
+  "bow",
+  "shield",
+  "wand",
+  "mace",
+  "wbasher",
+];
+
+const STORE_ABLE = [
   "essenceofether",
   "spidersilk",
   "feather0",
@@ -311,7 +327,7 @@ var storeAble = [
   "orbofresolve",
 ];
 
-var saleAble = [
+const SALE_ABLE = [
   "frankypants",
   "vgloves",
   "mcape",

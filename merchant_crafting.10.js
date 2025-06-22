@@ -448,7 +448,7 @@ setInterval(() => {
         const isHighLevelItem =
           item?.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
 
-        const isStoreable = storeAble.includes(item.name);
+        const isStoreable = STORE_ABLE.includes(item.name);
         const isEquipable = item_info(item).compound || item_info(item).upgrade;
         const shouldItemBeIgnore = ignore.includes(item.name);
 
