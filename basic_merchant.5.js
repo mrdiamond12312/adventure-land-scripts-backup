@@ -370,8 +370,8 @@ setInterval(async function () {
     craft("xbox"),
     craft("basketofeggs"),
     craft("orba", 1, { map: "main", x: -152, y: -137 }),
-    craft("froststaff", character.esize - 3),
-    craft("carrotsword", character.esize - 3),
+    craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
+    craft("carrotsword", 2, { map: "main", x: -2, y: 295 }),
     !isSortingInventory &&
       Promise.all(
         Array.from({ length: 42 }, (_, i) => i)
