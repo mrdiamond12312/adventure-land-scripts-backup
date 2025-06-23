@@ -329,11 +329,11 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     );
   });
 
-  if (vendorBuy.length) {
+  if (vendorBuy.length && isEnoughIngredients) {
     await Promise.all(vendorBuy.map((id) => buy(id)));
   }
 
-  if (fromBank.length) {
+  if (fromBank.length && isEnoughIngredients) {
     for (const item of fromBank) {
       await retrieveBankItem(item);
     }
