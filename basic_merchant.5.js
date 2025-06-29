@@ -383,7 +383,7 @@ setInterval(async function () {
               (character.items[i].level || 0) <= 1
             );
           })
-          .map(async (i) => sell(i, 1000)),
+          .map(async (i) => sell(i, 1000))
       ),
   ]);
 

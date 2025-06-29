@@ -1135,6 +1135,8 @@ setInterval(async function () {
       partyMems.map((member) => {
         send_party_invite(member);
       });
+      if (!parent.party_list.length || !parent.party_list.includes("earthPri"))
+        send_party_request("earthPri");
     }
   }
 

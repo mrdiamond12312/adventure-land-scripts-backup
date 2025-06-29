@@ -45,11 +45,11 @@ async function retrieveBankItem(searchId, level = 0) {
   }
 
   for (const [bankPack, items] of Object.entries(character.bank).filter(
-    ([key, value]) => key !== "gold",
+    ([key, value]) => key !== "gold"
   )) {
     const slot = items.findIndex(
       (item) =>
-        item && item.name === searchId && (!level || level === item.level),
+        item && item.name === searchId && (!level || level === item.level)
     );
     if (slot !== -1) {
       return bank_retrieve(bankPack, slot).then(
@@ -64,7 +64,7 @@ async function retrieveMaxItemsLevel() {
 
   // Reset counter;
   Object.keys(ITEMS_HIGHEST_LEVEL).forEach(
-    (key) => delete ITEMS_HIGHEST_LEVEL[key],
+    (key) => delete ITEMS_HIGHEST_LEVEL[key]
   );
 
   BANK_CACHE = character.bank;
@@ -164,7 +164,7 @@ function retrievedBankItemToUpgrade() {
   desiredItems = desiredItems.splice(
     0,
     desiredItems.length -
-      (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ?? 2),
+      (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ?? 2)
   );
 
   let inventoryEmptySlots = character.items.filter((item) => !item).length - 4;
@@ -287,7 +287,7 @@ async function compoundInv() {
             scrollSlot,
             isRareItem && locate_item("offeringp") !== -1
               ? locate_item("offeringp")
-              : undefined,
+              : undefined
           )
             .then(() => {
               breakFlag = true;
@@ -390,7 +390,7 @@ async function upgradeInv() {
           scrollSlot,
           isRareItem && locate_item("offeringp") !== -1
             ? locate_item("offeringp")
-            : undefined,
+            : undefined
         )
           .then(async (e) => {
             if (e?.success === true) {
@@ -404,7 +404,7 @@ async function upgradeInv() {
               if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0) {
                 close_stand();
                 smart_move(bankPosition).then(() =>
-                  bank_store(findMaxLevelItem(itemName)),
+                  bank_store(findMaxLevelItem(itemName))
                 );
               }
             }
