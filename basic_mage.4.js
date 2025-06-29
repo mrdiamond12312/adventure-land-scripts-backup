@@ -1,10 +1,14 @@
 // Load basic functions from other code snippet
 
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/basic_function.7.js",
-    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-  ]);
+  parent.caracAL
+    .load_scripts([
+      "adventure-land-scripts-backup/basic_function.7.js",
+      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+    ])
+    .then(() => {
+      mainLoop();
+    });
 } else {
   load_code(7);
   load_code(8);
@@ -36,11 +40,11 @@ async function fight(target) {
           .sort((lhs, rhs) => {
             const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
               lhs,
-              character.blast / 3.6 || BLAST_RADIUS
+              character.blast / 3.6 || BLAST_RADIUS,
             );
             const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
               rhs,
-              character.blast / 3.6 || BLAST_RADIUS
+              character.blast / 3.6 || BLAST_RADIUS,
             );
             if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
               return rhs.hp - lhs.hp;
@@ -66,7 +70,7 @@ async function fight(target) {
   ) {
     set_message("Attacking");
     attack(target).then(() =>
-      reduce_cooldown("attack", Math.min(...parent.pings))
+      reduce_cooldown("attack", Math.min(...parent.pings)),
     );
   }
 
@@ -125,7 +129,7 @@ async function fight(target) {
               //   target ? get_height(target) ?? 0 : 0
               // ))
               extraDistanceWithinHitbox(target) +
-              extraDistanceWithinHitbox(character))
+              extraDistanceWithinHitbox(character)),
         ) *
         2;
   } else {
@@ -204,7 +208,7 @@ async function mainLoop() {
   setTimeout(mainLoop, getLoopInterval());
 }
 
-mainLoop();
+if (!parent.caracAL) mainLoop();
 
 // setInterval(async function () {
 //   desiredElixir = "pumpkinspice";

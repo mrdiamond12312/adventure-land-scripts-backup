@@ -1,10 +1,14 @@
 // Load basic functions from other code snippet
 
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/basic_function.7.js",
-    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-  ]);
+  parent.caracAL
+    .load_scripts([
+      "adventure-land-scripts-backup/basic_function.7.js",
+      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+    ])
+    .then(() => {
+      mainLoop();
+    });
 } else {
   load_code(7);
   load_code(8);
@@ -29,7 +33,7 @@ async function fight(target) {
                 !mob.s.poisoned &&
                 is_in_range(mob, "attack") &&
                 mob.type === "monster" &&
-                partyMems.includes(mob.target)
+                partyMems.includes(mob.target),
             )
             .sort((lhs, rhs) => lhs.attack - rhs.attack)
             .pop() ?? target
@@ -37,7 +41,7 @@ async function fight(target) {
     change_target(targetToAttack);
 
     attack(targetToAttack).then(() =>
-      reduce_cooldown("attack", character.ping * 0.95)
+      reduce_cooldown("attack", character.ping * 0.95),
     );
 
     if (
@@ -76,7 +80,7 @@ async function fight(target) {
               //   target ? get_height(target) ?? 0 : 0
               // ))
               extraDistanceWithinHitbox(target) +
-              extraDistanceWithinHitbox(character))
+              extraDistanceWithinHitbox(character)),
         ) *
         2;
   } else {
@@ -126,13 +130,13 @@ async function priestBuff() {
       (ally) =>
         (ally.hp < ally.max_hp - character.level * 10 * 2 &&
           !is_in_range(ally, "heal")) ||
-        ally.hp < ally.max_hp * 0.3
+        ally.hp < ally.max_hp * 0.3,
     ) ||
       allies.every((ally) => ally.hp < ally.max_hp - character.level * 10 * 2))
   ) {
     if (!is_on_cooldown("partyheal") && character.mp > 1000) {
       use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", character.ping * 0.95)
+        reduce_cooldown("partyheal", character.ping * 0.95),
       );
       set_message("Party Heal");
     }
@@ -142,7 +146,7 @@ async function priestBuff() {
     .map((member) => {
       if (
         Object.keys(parent.entities).some(
-          (entity) => parent.entities[entity]?.target === member
+          (entity) => parent.entities[entity]?.target === member,
         )
       )
         if (
@@ -151,7 +155,7 @@ async function priestBuff() {
           character.mp > G.skills["absorb"].mp &&
           (get_entity(member).ctype !== "warrior" ||
             Object.keys(parent.entities).filter(
-              (entity) => parent.entities[entity]?.target === member
+              (entity) => parent.entities[entity]?.target === member,
             ).length > 2)
         ) {
           use_skill("absorb", get_entity(member));
@@ -225,7 +229,7 @@ async function mainLoop() {
   setTimeout(mainLoop, getLoopInterval());
 }
 
-mainLoop();
+if (!parent.caracAL) mainLoop();
 
 // setInterval(async function () {
 //   assignRoles();

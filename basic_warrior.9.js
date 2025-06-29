@@ -1,10 +1,14 @@
 // Load basic functions
 
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/basic_function.7.js",
-    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-  ]);
+  parent.caracAL
+    .load_scripts([
+      "adventure-land-scripts-backup/basic_function.7.js",
+      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+    ])
+    .then(() => {
+      mainLoop();
+    });
 } else {
   load_code(7);
   load_code(8);
@@ -35,11 +39,11 @@ async function fight(target) {
         .sort((lhs, rhs) => {
           const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
             lhs,
-            character.explosion / 3.6 || BLAST_RADIUS
+            character.explosion / 3.6 || BLAST_RADIUS,
           );
           const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
             rhs,
-            character.explosion / 3.6 || BLAST_RADIUS
+            character.explosion / 3.6 || BLAST_RADIUS,
           );
           if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
             return rhs.hp - lhs.hp;
@@ -71,7 +75,7 @@ async function fight(target) {
     set_message("Attacking");
     currentStrategy(target);
     attack(target).then(() =>
-      reduce_cooldown("attack", Math.min(...parent.pings))
+      reduce_cooldown("attack", Math.min(...parent.pings)),
     );
 
     // Offhand swap logic
@@ -141,7 +145,7 @@ async function fight(target) {
   // Taunt logic to protect allies
   const partyDmgRecieved = partyMems.reduce(
     (accumulator, current) => accumulator + avgDmgTaken(get_player(current)),
-    0
+    0,
   );
   const partyHealer = get_player(HEALER);
   if (
@@ -154,16 +158,16 @@ async function fight(target) {
       (mob) =>
         mob.type === "monster" &&
         partyMems.some(
-          (ally) => ally !== character.name && mob.target === ally
+          (ally) => ally !== character.name && mob.target === ally,
         ) &&
         mob.attack > 120 &&
         calculateDamage(mob, character) < 1800 &&
-        !mob.cooperative
+        !mob.cooperative,
     );
 
     if (mobsTargetingAlly) {
       use_skill("taunt", mobsTargetingAlly).then(() =>
-        reduce_cooldown("taunt", character.ping * 0.95)
+        reduce_cooldown("taunt", character.ping * 0.95),
       );
     } else if (
       !target.target ||
@@ -172,7 +176,7 @@ async function fight(target) {
         !target.cooperative)
     ) {
       use_skill("taunt", target).then(() =>
-        reduce_cooldown("taunt", character.ping * 0.95)
+        reduce_cooldown("taunt", character.ping * 0.95),
       );
     }
   }
@@ -184,7 +188,7 @@ async function fight(target) {
       get_entity(HEALER)?.rip ||
       character.hp < character.max_hp * 0.3) &&
       Object.values(parent.entities).filter(
-        (mob) => mob.target === character.name
+        (mob) => mob.target === character.name,
       ).length > 2 &&
       !is_on_cooldown("scare") &&
       character.mp > 100 &&
@@ -208,7 +212,7 @@ async function fight(target) {
         (character.speed * getLoopInterval()) /
           1000 /
           (2 *
-            (character.range * rangeRate + character.xrange * 0.9 + extraDist))
+            (character.range * rangeRate + character.xrange * 0.9 + extraDist)),
       ) *
         2);
   } else {
@@ -254,7 +258,7 @@ async function mainLoop() {
         character.range + character.xrange
     )
       await warriorCleave(
-        currentStrategy === usePullStrategies ? "pull" : "normal"
+        currentStrategy === usePullStrategies ? "pull" : "normal",
       );
 
     if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
@@ -295,7 +299,7 @@ async function mainLoop() {
   setTimeout(mainLoop, getLoopInterval());
 }
 
-mainLoop();
+if (!parent.caracAL) mainLoop();
 
 // setInterval(async function () {
 //   assignRoles();

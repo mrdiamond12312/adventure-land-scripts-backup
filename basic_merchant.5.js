@@ -4,9 +4,8 @@
 // Just set attack_mode to true and ENGAGE!
 
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/merchant_crafting.10.js",
-  ]);
+  parent.caracAL
+    .load_scripts(["adventure-land-scripts-backup/merchant_crafting.10.js"])
 } else {
   load_code(10);
 }
@@ -383,7 +382,7 @@ setInterval(async function () {
               (character.items[i].level || 0) <= 1
             );
           })
-          .map(async (i) => sell(i, 1000))
+          .map(async (i) => sell(i, 1000)),
       ),
   ]);
 
@@ -454,8 +453,7 @@ function secondhands_handler(event) {
     "strring",
     "dexring",
     "intring",
-    "stramulet",
-    "intamulet",
+    'dexearring',
     "dexamulet",
     "bataxe",
     "glolipop",

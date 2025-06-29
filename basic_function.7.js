@@ -154,7 +154,7 @@ function filterCompoundableAndStackable() {
     (i) =>
       inv[i] &&
       (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name)
+      !["hpot1", "mpot1"].includes(inv[i].name),
   );
   return res;
 }
@@ -488,46 +488,52 @@ function getMonstersOnDeclares() {
   //   get_nearest_monster({ min_xp, max_att, type: altType2 })
   // );
 }
-
 async function buff() {
-  if (
-    character.hp / character.max_hp < character.mp / character.max_mp ||
-    (character.hp < character.max_hp * 0.6 && character.mp > 500)
-  ) {
+  try {
     if (
-      character.hp < 0.8 * character.max_hp &&
-      character.hp < character.max_hp - 500 &&
-      !is_on_cooldown("use_hp")
-    )
-      await use_skill("use_hp").then(() => {
-        reduce_cooldown("use_mp", Math.min(...parent.pings));
-        reduce_cooldown("use_hp", Math.min(...parent.pings));
-      });
-    else if (
-      character.hp < character.max_hp - 50 &&
-      !is_on_cooldown("regen_hp")
-    )
-      await use_skill("regen_hp").then(() => {
-        reduce_cooldown("use_mp", Math.min(...parent.pings));
-        reduce_cooldown("use_hp", Math.min(...parent.pings));
-      });
-  } else {
-    if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
-      await use_skill("use_mp").then(() => {
-        reduce_cooldown("use_mp", Math.min(...parent.pings));
-        reduce_cooldown("use_hp", Math.min(...parent.pings));
-      });
-    } else if (
-      character.mp < character.max_mp - 100 &&
-      !is_on_cooldown("regen_mp")
-    )
-      await use_skill("regen_mp").then(() => {
-        reduce_cooldown("use_mp", Math.min(...parent.pings));
-        reduce_cooldown("use_hp", Math.min(...parent.pings));
-      });
+      character.hp / character.max_hp < character.mp / character.max_mp ||
+      (character.hp < character.max_hp * 0.6 && character.mp > 500)
+    ) {
+      if (
+        character.hp < 0.8 * character.max_hp &&
+        character.hp < character.max_hp - 500 &&
+        !is_on_cooldown("use_hp")
+      )
+        await use_skill("use_hp").then(() => {
+          reduce_cooldown("use_mp", Math.min(...parent.pings));
+          reduce_cooldown("use_hp", Math.min(...parent.pings));
+        });
+      else if (
+        character.hp < character.max_hp - 50 &&
+        !is_on_cooldown("regen_hp")
+      )
+        await use_skill("regen_hp").then(() => {
+          reduce_cooldown("use_mp", Math.min(...parent.pings));
+          reduce_cooldown("use_hp", Math.min(...parent.pings));
+        });
+    } else {
+      if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
+        await use_skill("use_mp").then(() => {
+          reduce_cooldown("use_mp", Math.min(...parent.pings));
+          reduce_cooldown("use_hp", Math.min(...parent.pings));
+        });
+      } else if (
+        character.mp < character.max_mp - 100 &&
+        !is_on_cooldown("regen_mp")
+      )
+        await use_skill("regen_mp").then(() => {
+          reduce_cooldown("use_mp", Math.min(...parent.pings));
+          reduce_cooldown("use_hp", Math.min(...parent.pings));
+        });
+    }
+  } catch (e) {
+    console.error(e);
   }
 
-  setTimeout(buff, min(ms_to_next_skill("use_mp"), ms_to_next_skill("use_hp")));
+  setTimeout(
+    async () => await buff(),
+    Math.min(ms_to_next_skill("use_mp"), ms_to_next_skill("use_hp")) ?? 500,
+  );
 }
 
 buff();
@@ -547,10 +553,10 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
-            (entity.target === HEALER || entity.target === MAGE)
+            (entity.target === HEALER || entity.target === MAGE),
         )
         .sort(
-          (lhs, rhs) => distance(rhs, character) - distance(lhs, character)
+          (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
         );
       if (
         mobsTargetingNonTanker.length &&
@@ -567,7 +573,7 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack")
+          is_in_range(mob, "attack"),
       );
       if (leader)
         target =
@@ -589,16 +595,16 @@ function getTarget() {
         !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
-            (character.y - leader.y) * (character.y - leader.y)
+            (character.y - leader.y) * (character.y - leader.y),
         ) > spacial &&
         can_move_to(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2
+          character.y + (leader.y - character.y) / 2,
         )
       )
         move(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2
+          character.y + (leader.y - character.y) / 2,
         );
       return;
     }
@@ -610,7 +616,7 @@ function getTarget() {
 const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
-    (breakpoint) => (1 / character.frequency / breakpoint) * 1000
+    (breakpoint) => (1 / character.frequency / breakpoint) * 1000,
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
@@ -918,7 +924,7 @@ async function cupidHeal() {
         entity.hp <
           entity.max_hp -
             character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0))
+              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
     )
     .sort((lhs, rhs) => {
       if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
@@ -933,7 +939,7 @@ async function cupidHeal() {
     promises.push(
       equipBatch({
         mainhand: "cupid",
-      })
+      }),
     );
 
     await Promise.all(promises);
@@ -950,10 +956,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 5)
           .map((player) => player.name)
-          .join(", ")}`
+          .join(", ")}`,
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings))
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -968,10 +974,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 3)
           .map((player) => player.name)
-          .join(", ")}`
+          .join(", ")}`,
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings))
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -985,7 +991,7 @@ async function cupidHeal() {
       set_message("Single Cupid");
       log(`Healing ${lowHealthPlayers[0].name}`);
       attack(lowHealthPlayers[0]).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings))
+        reduce_cooldown("attack", Math.min(...parent.pings)),
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     }
@@ -1071,7 +1077,7 @@ setInterval(async function () {
         )
           return;
         await send_item(partyMerchant, index, 1000);
-      })
+      }),
     );
   }
 
@@ -1251,7 +1257,7 @@ async function changeToDailyEventTargets() {
         .sort((lhs, rhs) =>
           lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp
+            : lhs.hp - rhs.hp,
         )
         .pop();
 
@@ -1329,8 +1335,8 @@ async function changeToDailyEventTargets() {
       join("franky").catch(
         async () =>
           await advanceSmartMove(parent.S.franky).then(() =>
-            change_target(get_nearest_monster({ type: "franky" }))
-          )
+            change_target(get_nearest_monster({ type: "franky" })),
+          ),
       );
       await smart_move(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
@@ -1373,7 +1379,7 @@ async function changeToDailyEventTargets() {
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype
+          (element) => element === currentCharacter.ctype,
         ),
         entity: currentCharacter,
         sqrDistance:
