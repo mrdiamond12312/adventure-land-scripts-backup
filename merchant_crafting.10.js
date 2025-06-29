@@ -41,6 +41,7 @@ async function retrieveBankItem(searchId, level = 0) {
   if (character.map !== "bank") {
     close_stand();
     await smart_move(bankPosition);
+    BANK_CACHE = character.bank;
   }
 
   for (const [bankPack, items] of Object.entries(character.bank).filter(
@@ -51,8 +52,9 @@ async function retrieveBankItem(searchId, level = 0) {
         item && item.name === searchId && (!level || level === item.level)
     );
     if (slot !== -1) {
-      BANK_CACHE = character.bank;
-      return bank_retrieve(bankPack, slot);
+      return bank_retrieve(bankPack, slot).then(
+        () => (BANK_CACHE = character.bank),
+      );
     }
   }
 }
@@ -182,10 +184,12 @@ async function compoundInv() {
     let breakFlag = false;
 
     if (!character.items[i]) break;
+    const itemName = character.items[i].name;
+    if (IGNORE.includes(itemName)) continue;
 
     if (item_info(character.items[i]).compound) {
       const compoundNameChecker = new Set([
-        character.items[i].name,
+        itemName,
         character.items[i + 1]?.name,
         character.items[i + 2]?.name,
       ]);
@@ -214,13 +218,13 @@ async function compoundInv() {
 
       if (isRareItem) {
         if (
-          ITEMS_HIGHEST_LEVEL[character.items[i].name] &&
-          ITEMS_HIGHEST_LEVEL[character.items[i].name].quantity <
+          ITEMS_HIGHEST_LEVEL[itemName] &&
+          ITEMS_HIGHEST_LEVEL[itemName].quantity <
             (KEEP_THRESHOLD[
-              ITEMS_HIGHEST_LEVEL[character.items[i]?.name].type
+              ITEMS_HIGHEST_LEVEL[itemName].type
             ] + 3 ?? 5) &&
           character.items[i].level ===
-            ITEMS_HIGHEST_LEVEL[character.items[i].name].level
+            ITEMS_HIGHEST_LEVEL[itemName].level
         ) {
           continue;
         }

@@ -259,7 +259,7 @@ async function goMining() {
   }
 }
 
-async function craft(item, craftQuantity = 1) {
+async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   // Check if craftable
   if (
     onDuty ||
@@ -289,12 +289,12 @@ async function craft(item, craftQuantity = 1) {
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0
+      0,
     );
 
     const totalQuantityOfBankItem = bankSlots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0
+      0,
     );
 
     let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
@@ -329,11 +329,11 @@ async function craft(item, craftQuantity = 1) {
     );
   });
 
-  if (vendorBuy.length) {
+  if (vendorBuy.length && isEnoughIngredients) {
     await Promise.all(vendorBuy.map((id) => buy(id)));
   }
 
-  if (fromBank.length) {
+  if (fromBank.length && isEnoughIngredients) {
     for (const item of fromBank) {
       await retrieveBankItem(item);
     }
@@ -342,10 +342,10 @@ async function craft(item, craftQuantity = 1) {
   if (isEnoughIngredients) {
     if (get_nearest_npc()?.name !== "Leo") {
       close_stand();
-      await smart_move(find_npc("craftsman"));
+      await smart_move(place);
     }
 
-    for (let trial = 0; trial < craftQuantity; trial++) auto_craft(item);
+    for (let trial = 0; trial < craftQuantity; trial++) await auto_craft(item);
     return;
   }
 }
@@ -369,8 +369,9 @@ setInterval(async function () {
     // holidayExchange(),
     craft("xbox"),
     craft("basketofeggs"),
-    craft("froststaff", character.esize - 3),
-    craft("carrotsword", character.esize - 3),
+    craft("orba", 1, { map: "main", x: -152, y: -137 }),
+    craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
+    craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
     !isSortingInventory &&
       Promise.all(
         Array.from({ length: 42 }, (_, i) => i)
@@ -464,6 +465,7 @@ function secondhands_handler(event) {
     "firestaff",
     "firestars",
     "daggerofthedead",
+    "jacko",
   ];
   for (const i in event) {
     const item = event[i];
