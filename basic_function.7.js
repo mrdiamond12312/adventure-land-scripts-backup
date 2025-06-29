@@ -1126,13 +1126,15 @@ setInterval(async function () {
     //   }
     // });
   }
+
+  // if (!parent.party_list.length || !parent.party_list.includes("earthPri"))
+  //   send_party_request("earthPri");
+
   if (partyMems.length !== parent.party_list.length) {
     if (character.name === partyMems[0]) {
       partyMems.map((member) => {
         send_party_invite(member);
       });
-      if (!parent.party_list.length || !parent.party_list.includes("earthPri"))
-        send_party_request("earthPri");
     }
   }
 
