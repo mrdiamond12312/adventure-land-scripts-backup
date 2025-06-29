@@ -13,7 +13,6 @@ if (parent.caracAL) {
 // Kiting settings
 const originRangeRate = 0.97;
 rangeRate = originRangeRate;
-const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 // Main fight function
 async function fight(target) {
@@ -36,11 +35,11 @@ async function fight(target) {
         .sort((lhs, rhs) => {
           const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
             lhs,
-            character.explosion / 3.6 || BLAST_RADIUS,
+            character.explosion / 3.6 || BLAST_RADIUS
           );
           const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
             rhs,
-            character.explosion / 3.6 || BLAST_RADIUS,
+            character.explosion / 3.6 || BLAST_RADIUS
           );
           if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
             return rhs.hp - lhs.hp;
@@ -78,14 +77,12 @@ async function fight(target) {
           setTimeout(
             () =>
               attack(target).then(() =>
-                reduce_cooldown("attack", Math.min(...parent.pings)),
+                reduce_cooldown("attack", Math.min(...parent.pings))
               ),
-            e.ms + 10,
+            e.ms + 10
           );
         }
       });
-
-    reduce_cooldown("attack", -(1 / character.frequency) * 900);
 
     // Offhand swap logic
     if (
@@ -113,7 +110,7 @@ async function fight(target) {
             slot: "offhand",
             num: findMaxLevelItem(warriorItems.offhand),
           },
-        ]),
+        ])
       );
 
       isEquipingItems = false;
@@ -151,7 +148,7 @@ async function fight(target) {
   // Taunt logic to protect allies
   const partyDmgRecieved = partyMems.reduce(
     (accumulator, current) => accumulator + avgDmgTaken(get_player(current)),
-    0,
+    0
   );
   const partyHealer = get_player(HEALER);
   if (
@@ -164,16 +161,16 @@ async function fight(target) {
       (mob) =>
         mob.type === "monster" &&
         partyMems.some(
-          (ally) => ally !== character.name && mob.target === ally,
+          (ally) => ally !== character.name && mob.target === ally
         ) &&
         mob.attack > 120 &&
         calculateDamage(mob, character) < 1800 &&
-        !mob.cooperative,
+        !mob.cooperative
     );
 
     if (mobsTargetingAlly) {
       use_skill("taunt", mobsTargetingAlly).then(() =>
-        reduce_cooldown("taunt", character.ping * 0.95),
+        reduce_cooldown("taunt", character.ping * 0.95)
       );
     } else if (
       !target.target ||
@@ -182,7 +179,7 @@ async function fight(target) {
         !target.cooperative)
     ) {
       use_skill("taunt", target).then(() =>
-        reduce_cooldown("taunt", character.ping * 0.95),
+        reduce_cooldown("taunt", character.ping * 0.95)
       );
     }
   }
@@ -194,7 +191,7 @@ async function fight(target) {
       get_entity(HEALER)?.rip ||
       character.hp < character.max_hp * 0.3) &&
       Object.values(parent.entities).filter(
-        (mob) => mob.target === character.name,
+        (mob) => mob.target === character.name
       ).length > 2 &&
       !is_on_cooldown("scare") &&
       character.mp > 100 &&
@@ -215,10 +212,10 @@ async function fight(target) {
     angle +=
       flipRotation *
       (Math.asin(
-        (character.speed * loopInterval) /
+        (character.speed * getLoopInterval()) /
           1000 /
           (2 *
-            (character.range * rangeRate + character.xrange * 0.9 + extraDist)),
+            (character.range * rangeRate + character.xrange * 0.9 + extraDist))
       ) *
         2);
   } else {
@@ -237,62 +234,131 @@ async function fight(target) {
 }
 
 // Main game loop
-setInterval(async function () {
-  assignRoles();
 
-  buff();
+async function mainLoop() {
+  try {
+    assignRoles();
 
-  if (
-    character.moving &&
-    character.mp > G.skills["charge"].mp &&
-    !is_on_cooldown("charge")
-  ) {
-    use_skill("charge");
-  }
+    buff();
 
-  if (character.rip) {
-    respawn();
-    return;
-  }
-
-  if (
-    smart.moving ||
-    is_on_cooldown("attack") ||
-    distance(character, get_targeted_monster()) >
-      character.range + character.xrange
-  )
-    await warriorCleave(
-      currentStrategy === usePullStrategies ? "pull" : "normal",
-    );
-
-  if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
-
-  let target = getTarget();
-
-  // Boss handling
-  if (goToBoss()) return;
-
-  // Crypt & Event logic
-  if (get("cryptInstance")) {
-    target = await useCryptStrategy(target);
-  } else {
-    target = await changeToDailyEventTargets();
-  }
-
-  // Targeting & movement logic
-  if (!target) {
-    if (!smart.moving && !isAdvanceSmartMoving) {
-      if (get("cryptInstance") && character.map !== "crypt") {
-        changeToNormalStrategies();
-        await advanceSmartMove(CRYPT_STARTING_LOCATION);
-      } else if (!get("cryptInstance")) {
-        changeToNormalStrategies();
-        const scareInterval = setInterval(scareAwayMobs, 5000);
-        await advanceSmartMove({ map, x: mapX, y: mapY });
-        clearInterval(scareInterval);
-      }
+    if (
+      character.moving &&
+      character.mp > G.skills["charge"].mp &&
+      !is_on_cooldown("charge")
+    ) {
+      use_skill("charge");
     }
-  } else {
-    await fight(target);
+
+    if (character.rip) {
+      respawn();
+      return;
+    }
+
+    if (
+      smart.moving ||
+      is_on_cooldown("attack") ||
+      distance(character, get_targeted_monster()) >
+        character.range + character.xrange
+    )
+      await warriorCleave(
+        currentStrategy === usePullStrategies ? "pull" : "normal"
+      );
+
+    if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
+
+    let target = getTarget();
+
+    // Boss handling
+    if (goToBoss()) return;
+
+    // Crypt & Event logic
+    if (get("cryptInstance")) {
+      target = await useCryptStrategy(target);
+    } else {
+      target = await changeToDailyEventTargets();
+    }
+
+    // Targeting & movement logic
+    if (!target) {
+      if (!smart.moving && !isAdvanceSmartMoving) {
+        if (get("cryptInstance") && character.map !== "crypt") {
+          changeToNormalStrategies();
+          await advanceSmartMove(CRYPT_STARTING_LOCATION);
+        } else if (!get("cryptInstance")) {
+          changeToNormalStrategies();
+          const scareInterval = setInterval(scareAwayMobs, 5000);
+          await advanceSmartMove({ map, x: mapX, y: mapY });
+          clearInterval(scareInterval);
+        }
+      }
+    } else {
+      await fight(target);
+    }
+  } catch (e) {
+    console.error(e);
   }
-}, loopInterval);
+
+  setTimeout(mainLoop, getLoopInterval());
+}
+
+mainLoop();
+
+// setInterval(async function () {
+//   assignRoles();
+
+//   buff();
+
+//   if (
+//     character.moving &&
+//     character.mp > G.skills["charge"].mp &&
+//     !is_on_cooldown("charge")
+//   ) {
+//     use_skill("charge");
+//   }
+
+//   if (character.rip) {
+//     respawn();
+//     return;
+//   }
+
+//   if (
+//     smart.moving ||
+//     is_on_cooldown("attack") ||
+//     distance(character, get_targeted_monster()) >
+//       character.range + character.xrange
+//   )
+//     await warriorCleave(
+//       currentStrategy === usePullStrategies ? "pull" : "normal"
+//     );
+
+//   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
+
+//   let target = getTarget();
+
+//   // Boss handling
+//   if (goToBoss()) return;
+
+//   // Crypt & Event logic
+//   if (get("cryptInstance")) {
+//     target = await useCryptStrategy(target);
+//   } else {
+//     target = await changeToDailyEventTargets();
+//   }
+
+//   // Targeting & movement logic
+//   if (!target) {
+//     if (!smart.moving && !isAdvanceSmartMoving) {
+//       if (get("cryptInstance") && character.map !== "crypt") {
+//         changeToNormalStrategies();
+//         await advanceSmartMove(CRYPT_STARTING_LOCATION);
+//       } else if (!get("cryptInstance")) {
+//         changeToNormalStrategies();
+//         const scareInterval = setInterval(scareAwayMobs, 5000);
+//         await advanceSmartMove({ map, x: mapX, y: mapY });
+//         clearInterval(scareInterval);
+//       }
+//     }
+//   } else {
+//     await fight(target);
+//   }
+// }, loopInterval);

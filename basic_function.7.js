@@ -154,7 +154,7 @@ function filterCompoundableAndStackable() {
     (i) =>
       inv[i] &&
       (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name),
+      !["hpot1", "mpot1"].includes(inv[i].name)
   );
   return res;
 }
@@ -385,9 +385,6 @@ const SALE_ABLE = [
 var maxUpgrade = 7;
 var maxCompound = 3;
 
-// Bank
-const bankSlots = ["items0", "items1", "items3"];
-
 if (parent.caracAL) {
   parent.caracAL.load_scripts([
     "adventure-land-scripts-backup/crypt_strategy.16.js",
@@ -546,10 +543,10 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
-            (entity.target === HEALER || entity.target === MAGE),
+            (entity.target === HEALER || entity.target === MAGE)
         )
         .sort(
-          (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
+          (lhs, rhs) => distance(rhs, character) - distance(lhs, character)
         );
       if (
         mobsTargetingNonTanker.length &&
@@ -566,7 +563,7 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack"),
+          is_in_range(mob, "attack")
       );
       if (leader)
         target =
@@ -588,22 +585,34 @@ function getTarget() {
         !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
-            (character.y - leader.y) * (character.y - leader.y),
+            (character.y - leader.y) * (character.y - leader.y)
         ) > spacial &&
         can_move_to(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         )
       )
         move(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         );
       return;
     }
   }
 
   return target;
+}
+
+const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+function getLoopInterval() {
+  const dynamicInterval = INTERVAL_BREAKPOINTS.map(
+    (breakpoint) => (1 / character.frequency / breakpoint) * 1000
+  ).find((loopInterval) => loopInterval > 250);
+  const frequencyInterval = (1 / character.frequency) * 1000;
+
+  return ms_to_next_skill("attack") <= 300 && ms_to_next_skill("attack") >= 100
+    ? ms_to_next_skill("attack")
+    : dynamicInterval ?? frequencyInterval;
 }
 
 function ms_to_next_skill(skill) {
@@ -905,7 +914,7 @@ async function cupidHeal() {
         entity.hp <
           entity.max_hp -
             character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
+              dps_multiplier(entity.armor - (character.apiercing ?? 0))
     )
     .sort((lhs, rhs) => {
       if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
@@ -920,7 +929,7 @@ async function cupidHeal() {
     promises.push(
       equipBatch({
         mainhand: "cupid",
-      }),
+      })
     );
 
     await Promise.all(promises);
@@ -937,10 +946,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 5)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -955,10 +964,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 3)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -972,7 +981,7 @@ async function cupidHeal() {
       set_message("Single Cupid");
       log(`Healing ${lowHealthPlayers[0].name}`);
       attack(lowHealthPlayers[0]).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     }
@@ -1058,7 +1067,7 @@ setInterval(async function () {
         )
           return;
         await send_item(partyMerchant, index, 1000);
-      }),
+      })
     );
   }
 
@@ -1135,8 +1144,6 @@ setInterval(async function () {
       partyMems.map((member) => {
         send_party_invite(member);
       });
-      if (!parent.party_list.length || !parent.party_list.includes("earthPri"))
-        send_party_request("earthPri");
     }
   }
 
@@ -1240,7 +1247,7 @@ async function changeToDailyEventTargets() {
         .sort((lhs, rhs) =>
           lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp,
+            : lhs.hp - rhs.hp
         )
         .pop();
 
@@ -1318,8 +1325,8 @@ async function changeToDailyEventTargets() {
       join("franky").catch(
         async () =>
           await advanceSmartMove(parent.S.franky).then(() =>
-            change_target(get_nearest_monster({ type: "franky" })),
-          ),
+            change_target(get_nearest_monster({ type: "franky" }))
+          )
       );
       await smart_move(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
@@ -1362,7 +1369,7 @@ async function changeToDailyEventTargets() {
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype,
+          (element) => element === currentCharacter.ctype
         ),
         entity: currentCharacter,
         sqrDistance:
