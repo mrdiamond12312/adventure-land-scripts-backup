@@ -36,11 +36,11 @@ async function fight(target) {
           .sort((lhs, rhs) => {
             const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
               lhs,
-              character.blast / 3.6 || BLAST_RADIUS,
+              character.blast / 3.6 || BLAST_RADIUS
             );
             const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
               rhs,
-              character.blast / 3.6 || BLAST_RADIUS,
+              character.blast / 3.6 || BLAST_RADIUS
             );
             if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
               return rhs.hp - lhs.hp;
@@ -53,6 +53,8 @@ async function fight(target) {
 
   if (!target) return;
 
+  currentStrategy(target);
+
   if (
     ms_to_next_skill("attack") === 0 &&
     distance(target, character) <
@@ -63,33 +65,31 @@ async function fight(target) {
     shouldAttack()
   ) {
     set_message("Attacking");
-
-    currentStrategy(target);
-
     attack(target).then(() =>
-      reduce_cooldown("attack", Math.min(...parent.pings)),
+      reduce_cooldown("attack", Math.min(...parent.pings))
     );
+  }
 
-    if (
-      target &&
-      !is_on_cooldown("burst") &&
-      target.hp > 3000 &&
-      target.resistance > 400 &&
-      target.avoidence < 95 &&
-      !target["1hp"] &&
-      character.mp > 4000
-    ) {
-      log("Maxima Burst!");
-      use_skill("burst");
-    }
-    if (
-      target["damage_type"] === "magical" &&
-      !is_on_cooldown("reflection") &&
-      partyMems.includes(target.target) &&
-      character.mp > 1000
-    ) {
-      use_skill("reflection", get_entity(target.target));
-    }
+  if (
+    target &&
+    !is_on_cooldown("burst") &&
+    target.hp > 3000 &&
+    target.resistance > 400 &&
+    target.avoidence < 95 &&
+    !target["1hp"] &&
+    character.mp > 4000
+  ) {
+    log("Maxima Burst!");
+    use_skill("burst");
+  }
+
+  if (
+    target["damage_type"] === "magical" &&
+    !is_on_cooldown("reflection") &&
+    partyMems.includes(target.target) &&
+    character.mp > 1000
+  ) {
+    use_skill("reflection", get_entity(target.target));
   }
 
   // if (character.mp > 2000 && !is_on_cooldown("alchemy") && !isInvFull()) {
@@ -114,7 +114,7 @@ async function fight(target) {
       angle +
       flipRotation *
         Math.asin(
-          (character.speed * loopInterval) /
+          (character.speed * getLoopInterval()) /
             1000 /
             2 /
             (character.range * rangeRate +
@@ -125,7 +125,7 @@ async function fight(target) {
               //   target ? get_height(target) ?? 0 : 0
               // ))
               extraDistanceWithinHitbox(target) +
-              extraDistanceWithinHitbox(character)),
+              extraDistanceWithinHitbox(character))
         ) *
         2;
   } else {
@@ -133,68 +133,141 @@ async function fight(target) {
   }
 }
 
-setInterval(async function () {
-  desiredElixir = "pumpkinspice";
-  assignRoles();
+async function mainLoop() {
+  try {
+    desiredElixir = "pumpkinspice";
+    assignRoles();
 
-  buff();
+    buff();
 
-  if (character.rip) {
-    respawn();
-    return;
+    if (character.rip) {
+      respawn();
+      throw new Error("Character's down", {
+        cause: "death",
+      });
+    }
+
+    if (character.level > 50) {
+      set("mageLocation", {
+        mp: character.mp,
+        map: character.map,
+        x: character.x,
+        y: character.y,
+      });
+    }
+
+    if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
+      throw new Error("Smart moving", {
+        cause: "smart_move",
+      });
+
+    let target = getTarget();
+
+    // if (goToBoss()) return;
+
+    //// THE CRYPT & EVENTS
+    if (get("cryptInstance")) target = await useCryptStrategy(target);
+    else target = await changeToDailyEventTargets();
+
+    //// Logic to targets and farm places
+    if (!target) {
+      if (
+        !smart.move &&
+        !isAdvanceSmartMoving &&
+        get("cryptInstance") &&
+        character.map !== "crypt"
+      ) {
+        changeToNormalStrategies();
+        advanceSmartMove(CRYPT_STARTING_LOCATION);
+      } else if (
+        !smart.moving &&
+        !isAdvanceSmartMoving &&
+        !get("cryptInstance") &&
+        (partyMems[0] == character.name ||
+          !get_entity(partyMems[0]) ||
+          character.map === "crypt" ||
+          distance(character, { x: mapX, y: mapY, map }) > 500)
+      ) {
+        log("Moving to farming location");
+        changeToNormalStrategies();
+        advanceSmartMove({
+          map,
+          x: mapX,
+          y: mapY,
+        });
+      }
+    } else fight(target);
+  } catch (e) {
+    console.error(e);
   }
 
-  if (character.level > 50) {
-    set("mageLocation", {
-      mp: character.mp,
-      map: character.map,
-      x: character.x,
-      y: character.y,
-    });
-  }
+  setTimeout(mainLoop, getLoopInterval());
+}
 
-  if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
+mainLoop();
 
-  let target = getTarget();
+// setInterval(async function () {
+//   desiredElixir = "pumpkinspice";
+//   assignRoles();
 
-  if (goToBoss()) return;
+//   buff();
 
-  //// THE CRYPT & EVENTS
-  if (get("cryptInstance")) target = await useCryptStrategy(target);
-  else target = await changeToDailyEventTargets();
+//   if (character.rip) {
+//     respawn();
+//     return;
+//   }
 
-  //// Logic to targets and farm places
-  if (
-    !smart.move &&
-    !isAdvanceSmartMoving &&
-    get("cryptInstance") &&
-    character.map !== "crypt" &&
-    !target
-  ) {
-    changeToNormalStrategies();
-    await advanceSmartMove(CRYPT_STARTING_LOCATION);
-  } else if (
-    !smart.moving &&
-    !isAdvanceSmartMoving &&
-    !target &&
-    !get("cryptInstance") &&
-    (partyMems[0] == character.name ||
-      !get_entity(partyMems[0]) ||
-      character.map === "crypt" ||
-      distance(character, { x: mapX, y: mapY, map }) > 500)
-  ) {
-    log("Moving to farming location");
-    changeToNormalStrategies();
-    const scareInterval = setInterval(() => {
-      scareAwayMobs();
-    }, 5000);
-    await advanceSmartMove({
-      map,
-      x: mapX,
-      y: mapY,
-    });
-    clearInterval(scareInterval);
-  }
+//   if (character.level > 50) {
+//     set("mageLocation", {
+//       mp: character.mp,
+//       map: character.map,
+//       x: character.x,
+//       y: character.y,
+//     });
+//   }
 
-  await fight(target);
-}, loopInterval);
+//   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
+
+//   let target = getTarget();
+
+//   if (goToBoss()) return;
+
+//   //// THE CRYPT & EVENTS
+//   if (get("cryptInstance")) target = await useCryptStrategy(target);
+//   else target = await changeToDailyEventTargets();
+
+//   //// Logic to targets and farm places
+//   if (
+//     !smart.move &&
+//     !isAdvanceSmartMoving &&
+//     get("cryptInstance") &&
+//     character.map !== "crypt" &&
+//     !target
+//   ) {
+//     changeToNormalStrategies();
+//     await advanceSmartMove(CRYPT_STARTING_LOCATION);
+//   } else if (
+//     !smart.moving &&
+//     !isAdvanceSmartMoving &&
+//     !target &&
+//     !get("cryptInstance") &&
+//     (partyMems[0] == character.name ||
+//       !get_entity(partyMems[0]) ||
+//       character.map === "crypt" ||
+//       distance(character, { x: mapX, y: mapY, map }) > 500)
+//   ) {
+//     log("Moving to farming location");
+//     changeToNormalStrategies();
+//     const scareInterval = setInterval(() => {
+//       scareAwayMobs();
+//     }, 5000);
+//     await advanceSmartMove({
+//       map,
+//       x: mapX,
+//       y: mapY,
+//     });
+//     clearInterval(scareInterval);
+//   }
+
+//   await fight(target);
+// }, loopInterval);

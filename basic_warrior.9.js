@@ -76,12 +76,13 @@ async function fight(target) {
 
     // Offhand swap logic
     if (
-      character.slots.offhand?.name === "fireblade" ||
-      character.slots.mainhand?.name === "fireblade"
+      (character.slots.offhand?.name === "fireblade" ||
+        character.slots.mainhand?.name === "fireblade") &&
+      !isEquipingItems
     ) {
       isEquipingItems = true;
       const warriorItems = calculateWarriorItems();
-      await equip_batch([
+      equip_batch([
         {
           slot: "mainhand",
           num: findMaxLevelItem("candycanesword"),
@@ -90,20 +91,22 @@ async function fight(target) {
           slot: "offhand",
           num: findMaxLevelItem("candycanesword", 1),
         },
-      ]).then(() =>
-        equip_batch([
-          {
-            slot: "mainhand",
-            num: findMaxLevelItem(warriorItems.mainhand),
-          },
-          {
-            slot: "offhand",
-            num: findMaxLevelItem(warriorItems.offhand),
-          },
-        ])
-      );
-
-      isEquipingItems = false;
+      ])
+        .then(() => {
+          equip_batch([
+            {
+              slot: "mainhand",
+              num: findMaxLevelItem(warriorItems.mainhand),
+            },
+            {
+              slot: "offhand",
+              num: findMaxLevelItem(warriorItems.offhand),
+            },
+          ]);
+        })
+        .finally(() => {
+          isEquipingItems = false;
+        });
     }
 
     if (
@@ -241,7 +244,9 @@ async function mainLoop() {
 
     if (character.rip) {
       respawn();
-      return;
+      throw new Error("Character's down", {
+        cause: "death",
+      });
     }
 
     if (
@@ -254,12 +259,15 @@ async function mainLoop() {
         currentStrategy === usePullStrategies ? "pull" : "normal"
       );
 
-    if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
+    if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
+      throw new Error("Smart moving", {
+        cause: "smart_move",
+      });
 
     let target = getTarget();
 
     // Boss handling
-    if (goToBoss()) return;
+    // if (goToBoss()) return;
 
     // Crypt & Event logic
     if (get("cryptInstance")) {
@@ -273,16 +281,14 @@ async function mainLoop() {
       if (!smart.moving && !isAdvanceSmartMoving) {
         if (get("cryptInstance") && character.map !== "crypt") {
           changeToNormalStrategies();
-          await advanceSmartMove(CRYPT_STARTING_LOCATION);
+          advanceSmartMove(CRYPT_STARTING_LOCATION);
         } else if (!get("cryptInstance")) {
           changeToNormalStrategies();
-          const scareInterval = setInterval(scareAwayMobs, 5000);
-          await advanceSmartMove({ map, x: mapX, y: mapY });
-          clearInterval(scareInterval);
+          advanceSmartMove({ map, x: mapX, y: mapY });
         }
       }
     } else {
-      await fight(target);
+      fight(target);
     }
   } catch (e) {
     console.error(e);
