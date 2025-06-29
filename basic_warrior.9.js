@@ -232,8 +232,6 @@ async function mainLoop() {
   try {
     assignRoles();
 
-    buff();
-
     if (
       character.moving &&
       character.mp > G.skills["charge"].mp &&

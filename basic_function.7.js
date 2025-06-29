@@ -489,7 +489,7 @@ function getMonstersOnDeclares() {
   // );
 }
 
-function buff() {
+async function buff() {
   if (
     character.hp / character.max_hp < character.mp / character.max_mp ||
     (character.hp < character.max_hp * 0.6 && character.mp > 500)
@@ -499,34 +499,38 @@ function buff() {
       character.hp < character.max_hp - 500 &&
       !is_on_cooldown("use_hp")
     )
-      use_skill("use_hp").then(() => {
-        reduce_cooldown("use_mp", character.ping * 0.95);
-        reduce_cooldown("use_hp", character.ping * 0.95);
+      await use_skill("use_hp").then(() => {
+        reduce_cooldown("use_mp", Math.min(...parent.pings));
+        reduce_cooldown("use_hp", Math.min(...parent.pings));
       });
     else if (
       character.hp < character.max_hp - 50 &&
       !is_on_cooldown("regen_hp")
     )
-      use_skill("regen_hp").then(() => {
-        reduce_cooldown("use_mp", character.ping * 0.95);
-        reduce_cooldown("use_hp", character.ping * 0.95);
+      await use_skill("regen_hp").then(() => {
+        reduce_cooldown("use_mp", Math.min(...parent.pings));
+        reduce_cooldown("use_hp", Math.min(...parent.pings));
       });
   } else {
     if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
-      use_skill("use_mp").then(() => {
-        reduce_cooldown("use_mp", character.ping * 0.95);
-        reduce_cooldown("use_hp", character.ping * 0.95);
+      await use_skill("use_mp").then(() => {
+        reduce_cooldown("use_mp", Math.min(...parent.pings));
+        reduce_cooldown("use_hp", Math.min(...parent.pings));
       });
     } else if (
       character.mp < character.max_mp - 100 &&
       !is_on_cooldown("regen_mp")
     )
-      use_skill("regen_mp").then(() => {
-        reduce_cooldown("use_mp", character.ping * 0.95);
-        reduce_cooldown("use_hp", character.ping * 0.95);
+      await use_skill("regen_mp").then(() => {
+        reduce_cooldown("use_mp", Math.min(...parent.pings));
+        reduce_cooldown("use_hp", Math.min(...parent.pings));
       });
   }
+
+  setTimeout(buff, min(ms_to_next_skill("use_mp"), ms_to_next_skill("use_hp")));
 }
+
+buff();
 
 function getTarget() {
   const leader = get_entity(partyMems[0]);

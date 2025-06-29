@@ -48,7 +48,7 @@ async function usePullStrategies(target) {
       }
 
       if (
-        !is_on_cooldown("cburst") &&
+        ms_to_next_skill("cburst") === 0 &&
         character.mp > 400 &&
         !get_targeted_monster()?.["1hp"] &&
         partyHealer.ctype === "priest" &&
@@ -58,7 +58,7 @@ async function usePullStrategies(target) {
         getMonstersToCBurst().length >= 1
       ) {
         use_skill("cburst", getMonstersToCBurst()).then(() =>
-          reduce_cooldown("cburst", -3000)
+          reduce_cooldown("cburst", -2000)
         );
         reduce_cooldown("cburst", -2000);
       }
