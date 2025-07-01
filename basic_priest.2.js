@@ -145,8 +145,8 @@ async function priestBuff() {
     .filter((member) => member !== character.name && member !== TANKER)
     .map((member) => {
       if (
-        Object.keys(parent.entities).some(
-          (entity) => parent.entities[entity]?.target === member,
+        Object.values(parent.entities).some(
+          (entity) => entity.target === member,
         )
       )
         if (
@@ -154,8 +154,8 @@ async function priestBuff() {
           !is_on_cooldown("absorb") &&
           character.mp > G.skills["absorb"].mp &&
           (get_entity(member).ctype !== "warrior" ||
-            Object.keys(parent.entities).filter(
-              (entity) => parent.entities[entity]?.target === member,
+            Object.values(parent.entities).filter(
+              (entity) => entity.type === "monster" && entity.target === member,
             ).length > 2)
         ) {
           use_skill("absorb", get_entity(member));

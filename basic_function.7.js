@@ -488,8 +488,25 @@ function getMonstersOnDeclares() {
   //   get_nearest_monster({ min_xp, max_att, type: altType2 })
   // );
 }
+
+async function withTimeout(
+  promise,
+  timeoutInterval = Math.max(...parent.pings),
+) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(resolve, timeoutInterval)),
+  ]);
+}
+
 async function buff() {
   try {
+    const minPing = Math.min(...parent.pings);
+    const adjustPotionsCooldown = () => {
+      reduce_cooldown("use_mp", minPing);
+      reduce_cooldown("use_hp", minPing);
+    };
+
     if (
       character.hp / character.max_hp < character.mp / character.max_mp ||
       (character.hp < character.max_hp * 0.6 && character.mp > 500)
@@ -498,42 +515,32 @@ async function buff() {
         character.hp < 0.8 * character.max_hp &&
         character.hp < character.max_hp - 500 &&
         !is_on_cooldown("use_hp")
-      )
-        await use_skill("use_hp").then(() => {
-          reduce_cooldown("use_mp", Math.min(...parent.pings));
-          reduce_cooldown("use_hp", Math.min(...parent.pings));
-        });
-      else if (
+      ) {
+        await withTimeout(use_skill("use_hp"), 2000);
+        adjustPotionsCooldown();
+      } else if (
         character.hp < character.max_hp - 50 &&
         !is_on_cooldown("regen_hp")
-      )
-        await use_skill("regen_hp").then(() => {
-          reduce_cooldown("use_mp", Math.min(...parent.pings));
-          reduce_cooldown("use_hp", Math.min(...parent.pings));
-        });
+      ) {
+        await withTimeout(use_skill("regen_hp"), 2000);
+        adjustPotionsCooldown();
+      }
     } else {
       if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
-        await use_skill("use_mp").then(() => {
-          reduce_cooldown("use_mp", Math.min(...parent.pings));
-          reduce_cooldown("use_hp", Math.min(...parent.pings));
-        });
+        await withTimeout(use_skill("use_mp"), 2000);
+        adjustPotionsCooldown();
       } else if (
         character.mp < character.max_mp - 100 &&
         !is_on_cooldown("regen_mp")
-      )
-        await use_skill("regen_mp").then(() => {
-          reduce_cooldown("use_mp", Math.min(...parent.pings));
-          reduce_cooldown("use_hp", Math.min(...parent.pings));
-        });
+      ) {
+        await withTimeout(use_skill("regen_mp"), 2000);
+        adjustPotionsCooldown();
+      }
     }
   } catch (e) {
     console.error(e);
   }
-
-  setTimeout(
-    async () => await buff(),
-    Math.min(ms_to_next_skill("use_mp"), ms_to_next_skill("use_hp")) ?? 500,
-  );
+  setTimeout(buff, Math.max(ms_to_next_skill("use_mp"), 1));
 }
 
 buff();
@@ -620,7 +627,7 @@ function getLoopInterval() {
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
-  return ms_to_next_skill("attack") <= 300 && ms_to_next_skill("attack") >= 100
+  return ms_to_next_skill("attack") <= 300 && ms_to_next_skill("attack") >= 50
     ? ms_to_next_skill("attack")
     : dynamicInterval ?? frequencyInterval;
 }
@@ -782,7 +789,7 @@ function getLowestMana() {
 
 //// RESPAWN
 function handle_death() {
-  respawn();
+  setTimeout(respawn, 15000);
 }
 
 // BOSS fight functions
@@ -1286,16 +1293,16 @@ async function changeToDailyEventTargets() {
       await warriorStomp();
     }
 
-    // if (
-    //   character.ctype === "mage" &&
-    //   crabxxInstance &&
-    //   crabxxInstance.target &&
-    //   character.mp > 600 &&
-    //   is_in_range(crabxxInstance, "cburst") &&
-    //   !is_on_cooldown("cburst")
-    // ) {
-    //   use_skill("cburst", [[crabxxInstance, 1]]);
-    // }
+    if (
+      character.ctype === "mage" &&
+      crabxxInstance &&
+      crabxxInstance.target &&
+      character.mp > 600 &&
+      is_in_range(crabxxInstance, "cburst") &&
+      !is_on_cooldown("cburst")
+    ) {
+      use_skill("cburst", [[crabxxInstance, 1]]);
+    }
 
     let targetCrab;
     if (character.ctype === "warrior") {
