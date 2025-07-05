@@ -311,7 +311,6 @@ const STORE_ABLE = [
   "essenceoffrost",
   "dexscroll",
   "cshell",
-  "crabclaw",
   "carrot",
   "bwing",
   "btusk",
@@ -540,7 +539,7 @@ async function buff() {
   } catch (e) {
     console.error(e);
   }
-  setTimeout(buff, Math.max(ms_to_next_skill("use_mp"), 1));
+  setTimeout(async () => buff(), Math.max(ms_to_next_skill("use_mp"), 5));
 }
 
 buff();
@@ -627,8 +626,8 @@ function getLoopInterval() {
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
-  return ms_to_next_skill("attack") <= 300 && ms_to_next_skill("attack") >= 50
-    ? ms_to_next_skill("attack")
+  return ms_to_next_skill("attack") <= 300
+    ? Math.max(ms_to_next_skill("attack"), 100)
     : dynamicInterval ?? frequencyInterval;
 }
 
@@ -1307,6 +1306,14 @@ async function changeToDailyEventTargets() {
     let targetCrab;
     if (character.ctype === "warrior") {
       targetCrab = crabxxInstance?.target ? crabxxInstance : crabxInstance;
+
+      if (
+        targetCrab &&
+        (targetCrab.x !== targetCrab.going_x ||
+          targetCrab.y !== targetCrab.going_y)
+      ) {
+        rangeRate = 0.05;
+      }
     } else {
       targetCrab =
         crabxInstance || (crabxxInstance?.target ? crabxxInstance : undefined);

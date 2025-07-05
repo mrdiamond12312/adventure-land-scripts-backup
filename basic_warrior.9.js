@@ -77,6 +77,7 @@ async function fight(target) {
     attack(target).then(() =>
       reduce_cooldown("attack", Math.min(...parent.pings)),
     );
+    reduce_cooldown("attack", (-1 / character.frequency) * 1000);
 
     // Offhand swap logic
     if (

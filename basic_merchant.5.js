@@ -4,8 +4,9 @@
 // Just set attack_mode to true and ENGAGE!
 
 if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts(["adventure-land-scripts-backup/merchant_crafting.10.js"])
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/merchant_crafting.10.js",
+  ]);
 } else {
   load_code(10);
 }
@@ -350,7 +351,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 }
 
 setInterval(async function () {
-  buff();
   loot();
   if (character.rip) {
     respawn();
@@ -453,7 +453,7 @@ function secondhands_handler(event) {
     "strring",
     "dexring",
     "intring",
-    'dexearring',
+    "dexearring",
     "dexamulet",
     "bataxe",
     "glolipop",

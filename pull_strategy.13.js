@@ -28,25 +28,6 @@ async function usePullStrategies(target) {
       //   }
       // }
 
-      if (!is_on_cooldown("energize")) {
-        const buffee = getLowestMana();
-        if (
-          buffee.max_mp - buffee.mp > 500 &&
-          buffee.mp < buffee.max_mp * 0.65 &&
-          character.mp > character.max_mp * 0.75 &&
-          is_in_range(buffee, "energize")
-        ) {
-          log("Energize " + buffee?.name);
-          use_skill("energize", buffee).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95),
-          );
-        } else if (ms_to_next_skill("attack") < 50) {
-          use_skill("energize", character).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95),
-          );
-        }
-      }
-
       if (
         ms_to_next_skill("cburst") === 0 &&
         character.mp > 400 &&

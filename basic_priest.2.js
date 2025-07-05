@@ -41,8 +41,9 @@ async function fight(target) {
     change_target(targetToAttack);
 
     attack(targetToAttack).then(() =>
-      reduce_cooldown("attack", character.ping * 0.95),
+      reduce_cooldown("attack", Math.min(parent.pings)),
     );
+    reduce_cooldown("attack", (-1 / character.frequency) * 1000);
 
     if (
       target &&

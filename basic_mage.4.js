@@ -57,7 +57,24 @@ async function fight(target) {
 
   if (!target) return;
 
-  currentStrategy(target);
+  if (!is_on_cooldown("energize")) {
+    const buffee = getLowestMana();
+    if (
+      buffee.max_mp - buffee.mp > 500 &&
+      buffee.mp < buffee.max_mp * 0.65 &&
+      character.mp > character.max_mp * 0.75 &&
+      is_in_range(buffee, "energize")
+    ) {
+      log("Energize " + buffee?.name);
+      use_skill("energize", buffee).then(() =>
+        reduce_cooldown("energize", character.ping * 0.95),
+      );
+    } else if (ms_to_next_skill("attack") < 75) {
+      use_skill("energize", character).then(() =>
+        reduce_cooldown("energize", character.ping * 0.95),
+      );
+    }
+  }
 
   if (
     ms_to_next_skill("attack") === 0 &&
@@ -68,23 +85,12 @@ async function fight(target) {
         extraDistanceWithinHitbox(character) &&
     shouldAttack()
   ) {
+    currentStrategy(target);
     set_message("Attacking");
     attack(target).then(() =>
       reduce_cooldown("attack", Math.min(...parent.pings)),
     );
-  }
-
-  if (
-    target &&
-    !is_on_cooldown("burst") &&
-    target.hp > 3000 &&
-    target.resistance > 400 &&
-    target.avoidence < 95 &&
-    !target["1hp"] &&
-    character.mp > 4000
-  ) {
-    log("Maxima Burst!");
-    use_skill("burst");
+    reduce_cooldown("attack", (-1 / character.frequency) * 1000);
   }
 
   if (
