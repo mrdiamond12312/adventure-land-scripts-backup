@@ -69,7 +69,7 @@ async function fight(target) {
       use_skill("energize", buffee).then(() =>
         reduce_cooldown("energize", character.ping * 0.95),
       );
-    } else if (ms_to_next_skill("attack") < 75) {
+    } else if (ms_to_next_skill("attack") < 10 && !character.s.penalty_cd) {
       use_skill("energize", character).then(() =>
         reduce_cooldown("energize", character.ping * 0.95),
       );
@@ -90,7 +90,7 @@ async function fight(target) {
     attack(target).then(() =>
       reduce_cooldown("attack", Math.min(...parent.pings)),
     );
-    reduce_cooldown("attack", (-1 / character.frequency) * 1000);
+    reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2);
   }
 
   if (

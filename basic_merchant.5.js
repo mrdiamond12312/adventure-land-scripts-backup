@@ -447,7 +447,7 @@ function handle_death() {
 
 // Handler to buy from Ponty
 
-function secondhands_handler(event) {
+function secondhands_handler(events) {
   if (isInvFull(6)) return false;
   const ITEM_NEEDED = [
     "strring",
@@ -465,8 +465,8 @@ function secondhands_handler(event) {
     "daggerofthedead",
     "jacko",
   ];
-  for (const i in event) {
-    const item = event[i];
+  for (const index in events) {
+    const item = events[i];
     if (item && ITEM_NEEDED.includes(item.name)) {
       parent.socket.emit("sbuy", { rid: item.rid });
     }

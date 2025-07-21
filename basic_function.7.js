@@ -328,7 +328,6 @@ const STORE_ABLE = [
 ];
 
 const SALE_ABLE = [
-  "frankypants",
   "vgloves",
   "mcape",
   "wbook0",
@@ -1254,7 +1253,6 @@ async function changeToDailyEventTargets() {
     parent.S.crabxx?.target &&
     !partyMems.includes(parent.S.crabxx.target)
   ) {
-    changeToNormalStrategies();
     if (character.range > 100) rangeRate = 0.3;
 
     const findBestCrabx = () =>
@@ -1300,7 +1298,16 @@ async function changeToDailyEventTargets() {
       is_in_range(crabxxInstance, "cburst") &&
       !is_on_cooldown("cburst")
     ) {
-      use_skill("cburst", [[crabxxInstance, 1]]);
+      const crabxToCBurst = Object.values(parent.entities)
+        .filter(
+          (entity) =>
+            entity.type === "monster" &&
+            entity.mtype === "crabx" &&
+            entity.hp < 300 &&
+            !entity.rip,
+        )
+        .map((crabx) => [crabx, crabx.hp * 2]);
+      use_skill("cburst", [[crabxxInstance, 1], ...crabxToCBurst]);
     }
 
     let targetCrab;
@@ -1318,6 +1325,15 @@ async function changeToDailyEventTargets() {
       targetCrab =
         crabxInstance || (crabxxInstance?.target ? crabxxInstance : undefined);
     }
+
+    // if (
+    //   crabxxInstance &&
+    //   crabxxInstance.target &&
+    //   !partyMems.includes(crabxxInstance.target)
+    // )
+    //   changeToPullStrategies();
+    // else
+    changeToNormalStrategies();
 
     change_target(targetCrab);
     return targetCrab;
@@ -1389,7 +1405,8 @@ async function changeToDailyEventTargets() {
     for (id in parent.entities) {
       const currentCharacter = parent.entities[id];
 
-      if (currentCharacter.team === character.team) continue;
+      if (currentCharacter.team === character.team || currentCharacter.rip)
+        continue;
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
@@ -1411,7 +1428,7 @@ async function changeToDailyEventTargets() {
         pvpTarget = currentCharacterTarget;
     }
 
-    target = pvpTarget.entity;
+    return pvpTarget.entity;
   }
 
   if (parent.S.wabbit?.live && !isFightingBoss) {

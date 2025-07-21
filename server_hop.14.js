@@ -3,8 +3,8 @@ const HOP_SERVERS = ["US", "ASIA", "EU"];
 const ignoreServer = [];
 
 const HOME_SERVER = {
-  serverRegion: "US",
-  serverIdentifier: "III",
+  serverRegion: "EU",
+  serverIdentifier: "I",
 };
 
 const tankableBoss = ["snowman", "pinkgoo"];
