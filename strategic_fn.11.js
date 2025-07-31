@@ -106,7 +106,7 @@ function calculateWarriorItems() {
     };
 
   return {
-    helmet: character.map === "crypt" ? "xhelmet" : "oxhelmet",
+    helmet: haveLowHpMobsNearby ? 'oxhelmet' : character.map === "crypt" ? "xhelmet" : "helmet1",
     mainhand:
       currentStrategy === usePullStrategies && shouldUseBlaster
         ? "vhammer"
@@ -131,7 +131,7 @@ function calculateWarriorItems() {
       ? "snring"
       : "stramulet",
     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofstr",
-    chest: character.map === "crypt" ? "xarmor" : "cdragon",
+    chest: haveLowHpMobsNearby ? 'cdragon' : character.map === "crypt" ? "xarmor" : "coat1",
     pants: character.map === "crypt" ? "frankypants" : "frankypants",
   };
 }

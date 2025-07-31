@@ -245,6 +245,8 @@ async function advanceSmartMove(props) {
           ) {
             send_cm(MAGE, "magiport");
             log("Whoosh!");
+            await sleep(character.ping * 2);
+            if (distance(character, props) < 300) stop("smart");
             clearInterval(checkingMageMagiportInterval);
           }
         }, 1000);

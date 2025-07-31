@@ -40,9 +40,14 @@ async function fight(target) {
         : target;
     change_target(targetToAttack);
 
-    attack(targetToAttack).then(() =>
-      reduce_cooldown("attack", Math.min(parent.pings)),
-    );
+    attack(targetToAttack)
+      .then(() => reduce_cooldown("attack", Math.min(parent.pings)))
+      .catch(
+        (e) =>
+          e.failed &&
+          !["cooldown"].includes(e.response) &&
+          reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2),
+      );
     reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2);
 
     if (
@@ -90,35 +95,61 @@ async function fight(target) {
 }
 
 async function priestBuff() {
-  const buffee = getLowestHealth();
-  if (buffee.hp < buffee.max_hp - buffThreshold * character.heal) {
-    if (!is_in_range(buffee, "heal") && !smart.moving) move(buffee.x, buffee.y);
-    if (!is_on_cooldown("heal")) {
+  const promises = [];
+
+  if (!is_on_cooldown("attack")) {
+    const buffees = getPlayersToHeal();
+
+    if (buffees.length) {
       if (
         !character.slots.mainhand ||
-        ["broom", "froststaff"].includes(character.slots.mainhand?.name) ||
+        ["broom", "froststaff", "pinkies"].includes(
+          character.slots.mainhand?.name,
+        ) ||
         !character.slots.mainhand.level
       ) {
         equipBatch({
           mainhand:
-            character.name === TANKER
-              ? "pmace"
-              : character.map === "crypt"
+            character.name === TANKER || character.map === "crypt"
               ? "pmace"
               : "oozingterror",
           orb: "jacko",
         });
-      } else {
+      } else if (character.slots.orb?.name !== "jacko") {
         equipBatch({
           orb: "jacko",
         });
       }
-      use_skill("heal", buffee).then(() => {
-        reduce_cooldown("attack", Math.min(...parent.pings));
-      });
-      reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2);
 
-      set_message("Heal " + buffee.name);
+      for (const buffee of buffees) {
+        if (
+          !smart.moving &&
+          distance(buffee, character) >=
+            character.range + character.xrange * 0.9 &&
+          healingPrioritizedNames().includes(buffee.name)
+        ) {
+          promises.push(
+            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
+          );
+          continue;
+        }
+
+        if (
+          distance(buffee, character) <
+          character.range + character.xrange * 0.9
+        ) {
+          promises.push(
+            withTimeout(
+              heal(buffee).then(() => {
+                reduce_cooldown("attack", Math.min(...parent.pings));
+              }),
+            ),
+          );
+
+          set_message("Heal " + buffee.name);
+          break;
+        }
+      }
     }
   }
 
@@ -126,7 +157,7 @@ async function priestBuff() {
     .map((name) => get_entity(name))
     .filter((visible) => visible);
   if (
-    allies?.length &&
+    allies.length &&
     (allies.some(
       (ally) =>
         (ally.hp < ally.max_hp - character.level * 10 * 2 &&
@@ -137,11 +168,12 @@ async function priestBuff() {
   ) {
     if (!is_on_cooldown("partyheal") && character.mp > 1000) {
       use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", character.ping * 0.95),
+        reduce_cooldown("partyheal", Math.min(...parent.pings)),
       );
       set_message("Party Heal");
     }
   }
+
   partyMems
     .filter((member) => member !== character.name && member !== TANKER)
     .map((member) => {
@@ -164,6 +196,8 @@ async function priestBuff() {
           set_message("Absorb " + member);
         }
     });
+
+  return promises;
 }
 
 async function mainLoop() {
@@ -177,7 +211,7 @@ async function mainLoop() {
       });
     }
 
-    priestBuff();
+    await priestBuff();
 
     if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
       throw new Error("Smart moving", {

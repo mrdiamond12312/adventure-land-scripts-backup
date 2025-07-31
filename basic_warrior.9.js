@@ -73,9 +73,14 @@ async function fight(target) {
   ) {
     set_message("Attacking");
     currentStrategy(target);
-    attack(target).then(() =>
-      reduce_cooldown("attack", Math.min(...parent.pings)),
-    );
+    attack(target)
+      .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
+      .catch(
+        (e) =>
+          e.failed &&
+          !["cooldown"].includes(e.response) &&
+          reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2),
+      );
     reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2);
 
     // Offhand swap logic

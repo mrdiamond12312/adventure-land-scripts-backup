@@ -446,8 +446,7 @@ function handle_death() {
 }
 
 // Handler to buy from Ponty
-
-function secondhands_handler(events) {
+function secondhandsHandler(events) {
   if (isInvFull(6)) return false;
   const ITEM_NEEDED = [
     "strring",
@@ -465,8 +464,7 @@ function secondhands_handler(events) {
     "daggerofthedead",
     "jacko",
   ];
-  for (const index in events) {
-    const item = events[i];
+  for (const item of events) {
     if (item && ITEM_NEEDED.includes(item.name)) {
       parent.socket.emit("sbuy", { rid: item.rid });
     }
@@ -475,13 +473,13 @@ function secondhands_handler(events) {
 
 // Clear handler when code is terminated
 function on_destroy() {
-  parent.socket.removeListener("secondhands", secondhands_handler);
+  parent.socket.removeListener("secondhands", secondhandsHandler);
   clear_drawings(); // <-- Default in on_destroy
   clear_buttons(); // <-- Default in on_destroy
 }
 
 // Register secondhands event handler
-parent.socket.on("secondhands", secondhands_handler);
+parent.socket.on("secondhands", secondhandsHandler);
 setInterval(() => {
   // Send request for Ponty inventory
   parent.socket.emit("secondhands");

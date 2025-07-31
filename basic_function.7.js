@@ -777,6 +777,47 @@ function getLowestHealth() {
   allies.sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
   return allies[0] || character;
 }
+function healingPrioritizedNames() {
+  return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
+}
+
+function getPlayersToHeal() {
+  const minimumHealingModifier = 0.9;
+  const prioritizedName = healingPrioritizedNames();
+
+  const prioritizedTarget = prioritizedName
+    .map((id) => get_player(id))
+    .filter(
+      (player) =>
+        player &&
+        (player.max_hp >
+          minimumHealingModifier * (character.heal ?? character.attack) +
+            player.hp ||
+          player.hp < player.max_hp * 0.8),
+    )
+    .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
+
+  const otherEntities = Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity &&
+        (entity.type === "character" || entity.mtype === "ghost") &&
+        (entity.mtype !== "ghost"
+          ? !prioritizedName.includes(entity.name) &&
+            (entity.max_hp >
+              minimumHealingModifier * (character.heal ?? character.attack) +
+                entity.hp ||
+              entity.hp < 0.8 * entity.max_hp)
+          : !entity.s.healed && entity.hp < 7000),
+    )
+    .sort((lhs, rhs) => {
+      if (lhs.mtype === "ghost" && rhs.mtype !== "ghost") return 9999;
+      if (rhs.mtype === "ghost" && lhs.mtype !== "ghost") return -9999;
+      return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
+    });
+
+  return [...prioritizedTarget, ...otherEntities];
+}
 
 function getLowestMana() {
   const allies = parent.party_list.map((name) => get_entity(name));
@@ -1077,6 +1118,7 @@ setInterval(async function () {
             "xpbooster",
             "goldbooster",
             "luckbooster",
+            "suckerpunch",
             desiredElixir,
           ].includes(item.name)
         )
@@ -1259,7 +1301,11 @@ async function changeToDailyEventTargets() {
       Object.values(parent.entities)
         .filter((m) => m.mtype === "crabx")
         .sort((lhs, rhs) =>
-          lhs.hp === rhs.hp
+          is_in_range(lhs, "attack") !== is_in_range(rhs, "attack")
+            ? is_in_range(lhs, "attack")
+              ? -1
+              : 1
+            : lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
             : lhs.hp - rhs.hp,
         )
@@ -1290,25 +1336,25 @@ async function changeToDailyEventTargets() {
       await warriorStomp();
     }
 
-    if (
-      character.ctype === "mage" &&
-      crabxxInstance &&
-      crabxxInstance.target &&
-      character.mp > 600 &&
-      is_in_range(crabxxInstance, "cburst") &&
-      !is_on_cooldown("cburst")
-    ) {
-      const crabxToCBurst = Object.values(parent.entities)
-        .filter(
-          (entity) =>
-            entity.type === "monster" &&
-            entity.mtype === "crabx" &&
-            entity.hp < 300 &&
-            !entity.rip,
-        )
-        .map((crabx) => [crabx, crabx.hp * 2]);
-      use_skill("cburst", [[crabxxInstance, 1], ...crabxToCBurst]);
-    }
+    // if (
+    //   character.ctype === "mage" &&
+    //   crabxxInstance &&
+    //   crabxxInstance.target &&
+    //   character.mp > 600 &&
+    //   is_in_range(crabxxInstance, "cburst") &&
+    //   !is_on_cooldown("cburst")
+    // ) {
+    //   const crabxToCBurst = Object.values(parent.entities)
+    //     .filter(
+    //       (entity) =>
+    //         entity.type === "monster" &&
+    //         entity.mtype === "crabx" &&
+    //         entity.hp < 500 &&
+    //         !entity.rip,
+    //     )
+    //     .map((crabx) => [crabx, crabx.hp * 2]);
+    //   use_skill("cburst", [[crabxxInstance, 1], ...crabxToCBurst]);
+    // }
 
     let targetCrab;
     if (character.ctype === "warrior") {
@@ -1362,13 +1408,8 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
-      join("franky").catch(
-        async () =>
-          await advanceSmartMove(parent.S.franky).then(() =>
-            change_target(get_nearest_monster({ type: "franky" })),
-          ),
-      );
-      await smart_move(parent.S.franky);
+      join("franky");
+      await advanceSmartMove(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
       frankyInstance = get_nearest_monster({ type: "franky" });
     }
