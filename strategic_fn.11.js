@@ -46,7 +46,9 @@ function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
 function calculateMageItems() {
   const shouldUseBlaster =
     numberOfMonsterAroundTarget(get_targeted_monster()) >=
-      TARGET_TO_SWITCH_TO_BLASTER_WEAPON && !get_targeted_monster()?.["1hp"];
+      TARGET_TO_SWITCH_TO_BLASTER_WEAPON &&
+    !get_targeted_monster()?.["1hp"] &&
+    character.mp > G.skills["magiport"].mp + G.skills["blink"].mp;
 
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
     (mob) =>
@@ -62,7 +64,7 @@ function calculateMageItems() {
           : "firestaff"
         : character.map === "crypt" && !get_targeted_monster()?.s?.frozen
         ? "froststaff"
-        : ["pinkgoo", "snowman", "wabbit", "crabxx", "crabx", "crab"].includes(
+        : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
             get_targeted_monster()?.mtype,
           ) || get_targeted_monster()?.max_hp < 2000
         ? "pinkie"
@@ -104,7 +106,7 @@ function calculateWarriorItems() {
     };
 
   return {
-    helmet: character.map === "crypt" ? "xhelmet" : "oxhelmet",
+    helmet: haveLowHpMobsNearby ? 'oxhelmet' : character.map === "crypt" ? "xhelmet" : "helmet1",
     mainhand:
       currentStrategy === usePullStrategies && shouldUseBlaster
         ? "vhammer"
@@ -129,7 +131,7 @@ function calculateWarriorItems() {
       ? "snring"
       : "stramulet",
     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofstr",
-    chest: character.map === "crypt" ? "xarmor" : "cdragon",
+    chest: haveLowHpMobsNearby ? 'cdragon' : character.map === "crypt" ? "xarmor" : "coat1",
     pants: character.map === "crypt" ? "frankypants" : "frankypants",
   };
 }
@@ -156,14 +158,9 @@ function calculatePriestItems() {
   );
   const currentTarget = get_targeted_monster();
   return {
-    mainhand: [
-      "pinkgoo",
-      "snowman",
-      "wabbit",
-      "crabxx",
-      "crabx",
-      "crab",
-    ].includes(get_targeted_monster()?.mtype)
+    mainhand: ["pinkgoo", "snowman", "wabbit", "crab"].includes(
+      get_targeted_monster()?.mtype,
+    )
       ? "pinkie"
       : character.map === "crypt"
       ? "froststaff"

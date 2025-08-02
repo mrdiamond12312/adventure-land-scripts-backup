@@ -1,10 +1,14 @@
 // Load basic functions
 
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/basic_function.7.js",
-    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-  ]);
+  parent.caracAL
+    .load_scripts([
+      "adventure-land-scripts-backup/basic_function.7.js",
+      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+    ])
+    .then(() => {
+      mainLoop();
+    });
 } else {
   load_code(7);
   load_code(8);
@@ -13,7 +17,6 @@ if (parent.caracAL) {
 // Kiting settings
 const originRangeRate = 0.97;
 rangeRate = originRangeRate;
-const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 // Main fight function
 async function fight(target) {
@@ -24,7 +27,6 @@ async function fight(target) {
         distance(mob, character) <
           character.range +
             character.xrange * 0.9 +
-            extraDistanceWithinHitbox(mob) +
             extraDistanceWithinHitbox(character) &&
         mob.target &&
         mob.type === "monster"
@@ -61,7 +63,8 @@ async function fight(target) {
   if (!target) return;
 
   if (
-    ms_to_next_skill("attack") < 5 &&
+    ms_to_next_skill("attack") === 0 &&
+    !character.s.penalty_cd &&
     distance(target, character) <
       character.range +
         character.xrange +
@@ -73,28 +76,23 @@ async function fight(target) {
     currentStrategy(target);
     attack(target)
       .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
-      .catch((e) => {
-        if (e.response === "cooldown" && e.ms < Math.min(...parent.pings)) {
-          setTimeout(
-            () =>
-              attack(target).then(() =>
-                reduce_cooldown("attack", Math.min(...parent.pings)),
-              ),
-            e.ms + 10,
-          );
-        }
-      });
-
-    reduce_cooldown("attack", -(1 / character.frequency) * 900);
+      .catch(
+        (e) =>
+          e.failed &&
+          !["cooldown"].includes(e.response) &&
+          reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2),
+      );
+    reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2);
 
     // Offhand swap logic
     if (
-      character.slots.offhand?.name === "fireblade" ||
-      character.slots.mainhand?.name === "fireblade"
+      (character.slots.offhand?.name === "fireblade" ||
+        character.slots.mainhand?.name === "fireblade") &&
+      !isEquipingItems
     ) {
       isEquipingItems = true;
       const warriorItems = calculateWarriorItems();
-      await equip_batch([
+      equip_batch([
         {
           slot: "mainhand",
           num: findMaxLevelItem("candycanesword"),
@@ -103,20 +101,22 @@ async function fight(target) {
           slot: "offhand",
           num: findMaxLevelItem("candycanesword", 1),
         },
-      ]).then(() =>
-        equip_batch([
-          {
-            slot: "mainhand",
-            num: findMaxLevelItem(warriorItems.mainhand),
-          },
-          {
-            slot: "offhand",
-            num: findMaxLevelItem(warriorItems.offhand),
-          },
-        ]),
-      );
-
-      isEquipingItems = false;
+      ])
+        .then(() => {
+          equip_batch([
+            {
+              slot: "mainhand",
+              num: findMaxLevelItem(warriorItems.mainhand),
+            },
+            {
+              slot: "offhand",
+              num: findMaxLevelItem(warriorItems.offhand),
+            },
+          ]);
+        })
+        .finally(() => {
+          isEquipingItems = false;
+        });
     }
 
     if (
@@ -215,7 +215,7 @@ async function fight(target) {
     angle +=
       flipRotation *
       (Math.asin(
-        (character.speed * loopInterval) /
+        (character.speed * getLoopInterval()) /
           1000 /
           (2 *
             (character.range * rangeRate + character.xrange * 0.9 + extraDist)),
@@ -237,62 +237,132 @@ async function fight(target) {
 }
 
 // Main game loop
-setInterval(async function () {
-  assignRoles();
 
-  buff();
+async function mainLoop() {
+  try {
+    assignRoles();
 
-  if (
-    character.moving &&
-    character.mp > G.skills["charge"].mp &&
-    !is_on_cooldown("charge")
-  ) {
-    use_skill("charge");
-  }
-
-  if (character.rip) {
-    respawn();
-    return;
-  }
-
-  if (
-    smart.moving ||
-    is_on_cooldown("attack") ||
-    distance(character, get_targeted_monster()) >
-      character.range + character.xrange
-  )
-    await warriorCleave(
-      currentStrategy === usePullStrategies ? "pull" : "normal",
-    );
-
-  if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
-
-  let target = getTarget();
-
-  // Boss handling
-  if (goToBoss()) return;
-
-  // Crypt & Event logic
-  if (get("cryptInstance")) {
-    target = await useCryptStrategy(target);
-  } else {
-    target = await changeToDailyEventTargets();
-  }
-
-  // Targeting & movement logic
-  if (!target) {
-    if (!smart.moving && !isAdvanceSmartMoving) {
-      if (get("cryptInstance") && character.map !== "crypt") {
-        changeToNormalStrategies();
-        await advanceSmartMove(CRYPT_STARTING_LOCATION);
-      } else if (!get("cryptInstance")) {
-        changeToNormalStrategies();
-        const scareInterval = setInterval(scareAwayMobs, 5000);
-        await advanceSmartMove({ map, x: mapX, y: mapY });
-        clearInterval(scareInterval);
-      }
+    if (
+      character.moving &&
+      character.mp > G.skills["charge"].mp &&
+      !is_on_cooldown("charge")
+    ) {
+      use_skill("charge");
     }
-  } else {
-    await fight(target);
+
+    if (character.rip) {
+      respawn();
+      throw new Error("Character's down", {
+        cause: "death",
+      });
+    }
+
+    if (
+      smart.moving ||
+      is_on_cooldown("attack") ||
+      distance(character, get_targeted_monster()) >
+        character.range + character.xrange
+    )
+      await warriorCleave(
+        currentStrategy === usePullStrategies ? "pull" : "normal",
+      );
+
+    if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
+      throw new Error("Smart moving", {
+        cause: "smart_move",
+      });
+
+    let target = getTarget();
+
+    // Boss handling
+    // if (goToBoss()) return;
+
+    // Crypt & Event logic
+    if (get("cryptInstance")) {
+      target = await useCryptStrategy(target);
+    } else {
+      target = await changeToDailyEventTargets();
+    }
+
+    // Targeting & movement logic
+    if (!target) {
+      if (!smart.moving && !isAdvanceSmartMoving) {
+        if (get("cryptInstance") && character.map !== "crypt") {
+          changeToNormalStrategies();
+          advanceSmartMove(CRYPT_STARTING_LOCATION);
+        } else if (!get("cryptInstance")) {
+          changeToNormalStrategies();
+          advanceSmartMove({ map, x: mapX, y: mapY });
+        }
+      }
+    } else {
+      fight(target);
+    }
+  } catch (e) {
+    console.error(e);
   }
-}, loopInterval);
+
+  setTimeout(mainLoop, getLoopInterval());
+}
+
+if (!parent.caracAL) mainLoop();
+
+// setInterval(async function () {
+//   assignRoles();
+
+//   buff();
+
+//   if (
+//     character.moving &&
+//     character.mp > G.skills["charge"].mp &&
+//     !is_on_cooldown("charge")
+//   ) {
+//     use_skill("charge");
+//   }
+
+//   if (character.rip) {
+//     respawn();
+//     return;
+//   }
+
+//   if (
+//     smart.moving ||
+//     is_on_cooldown("attack") ||
+//     distance(character, get_targeted_monster()) >
+//       character.range + character.xrange
+//   )
+//     await warriorCleave(
+//       currentStrategy === usePullStrategies ? "pull" : "normal"
+//     );
+
+//   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
+
+//   let target = getTarget();
+
+//   // Boss handling
+//   if (goToBoss()) return;
+
+//   // Crypt & Event logic
+//   if (get("cryptInstance")) {
+//     target = await useCryptStrategy(target);
+//   } else {
+//     target = await changeToDailyEventTargets();
+//   }
+
+//   // Targeting & movement logic
+//   if (!target) {
+//     if (!smart.moving && !isAdvanceSmartMoving) {
+//       if (get("cryptInstance") && character.map !== "crypt") {
+//         changeToNormalStrategies();
+//         await advanceSmartMove(CRYPT_STARTING_LOCATION);
+//       } else if (!get("cryptInstance")) {
+//         changeToNormalStrategies();
+//         const scareInterval = setInterval(scareAwayMobs, 5000);
+//         await advanceSmartMove({ map, x: mapX, y: mapY });
+//         clearInterval(scareInterval);
+//       }
+//     }
+//   } else {
+//     await fight(target);
+//   }
+// }, loopInterval);

@@ -23,6 +23,7 @@ character.on("cm", async function ({ name, message }) {
               "xpbooster",
               "goldbooster",
               "luckbooster",
+              "suckerpunch",
             ].includes(item.name)
           )
             return;

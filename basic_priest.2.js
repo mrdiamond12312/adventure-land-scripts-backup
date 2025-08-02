@@ -1,10 +1,14 @@
 // Load basic functions from other code snippet
 
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/basic_function.7.js",
-    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-  ]);
+  parent.caracAL
+    .load_scripts([
+      "adventure-land-scripts-backup/basic_function.7.js",
+      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+    ])
+    .then(() => {
+      mainLoop();
+    });
 } else {
   load_code(7);
   load_code(8);
@@ -16,9 +20,9 @@ var rangeRate = 0.5;
 const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 async function fight(target) {
-  if (can_attack(target) && shouldAttack()) {
+  if (can_attack(target) && shouldAttack() && !character.s.penalty_cd) {
     set_message("Attacking");
-    await currentStrategy(target);
+    currentStrategy(target);
 
     // Make Priest prior mobs without poison effect that attacking the party, to reduce their attack spped
     const targetToAttack =
@@ -36,9 +40,15 @@ async function fight(target) {
         : target;
     change_target(targetToAttack);
 
-    attack(targetToAttack).then(() =>
-      reduce_cooldown("attack", character.ping * 0.95),
-    );
+    attack(targetToAttack)
+      .then(() => reduce_cooldown("attack", Math.min(parent.pings)))
+      .catch(
+        (e) =>
+          e.failed &&
+          !["cooldown"].includes(e.response) &&
+          reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2),
+      );
+    reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2);
 
     if (
       target &&
@@ -65,7 +75,7 @@ async function fight(target) {
       angle +
       flipRotation *
         Math.asin(
-          (character.speed * loopInterval) /
+          (character.speed * getLoopInterval()) /
             1000 /
             2 /
             (character.range * rangeRate +
@@ -85,34 +95,61 @@ async function fight(target) {
 }
 
 async function priestBuff() {
-  const buffee = getLowestHealth();
-  if (buffee.hp < buffee.max_hp - buffThreshold * character.heal) {
-    if (!is_in_range(buffee, "heal") && !smart.moving) move(buffee.x, buffee.y);
-    if (!is_on_cooldown("heal")) {
+  const promises = [];
+
+  if (!is_on_cooldown("attack")) {
+    const buffees = getPlayersToHeal();
+
+    if (buffees.length) {
       if (
         !character.slots.mainhand ||
-        ["broom", "froststaff"].includes(character.slots.mainhand?.name) ||
+        ["broom", "froststaff", "pinkies"].includes(
+          character.slots.mainhand?.name,
+        ) ||
         !character.slots.mainhand.level
       ) {
         equipBatch({
           mainhand:
-            character.name === TANKER
-              ? "pmace"
-              : character.map === "crypt"
+            character.name === TANKER || character.map === "crypt"
               ? "pmace"
               : "oozingterror",
           orb: "jacko",
         });
-      } else {
+      } else if (character.slots.orb?.name !== "jacko") {
         equipBatch({
           orb: "jacko",
         });
       }
-      use_skill("heal", buffee).then(() => {
-        reduce_cooldown("attack", character.ping * 0.95);
-      });
-      reduce_cooldown("attack", (-1 / character.frequency) * 1000);
-      set_message("Heal" + buffee.name);
+
+      for (const buffee of buffees) {
+        if (
+          !smart.moving &&
+          distance(buffee, character) >=
+            character.range + character.xrange * 0.9 &&
+          healingPrioritizedNames().includes(buffee.name)
+        ) {
+          promises.push(
+            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
+          );
+          continue;
+        }
+
+        if (
+          distance(buffee, character) <
+          character.range + character.xrange * 0.9
+        ) {
+          promises.push(
+            withTimeout(
+              heal(buffee).then(() => {
+                reduce_cooldown("attack", Math.min(...parent.pings));
+              }),
+            ),
+          );
+
+          set_message("Heal " + buffee.name);
+          break;
+        }
+      }
     }
   }
 
@@ -120,7 +157,7 @@ async function priestBuff() {
     .map((name) => get_entity(name))
     .filter((visible) => visible);
   if (
-    allies?.length &&
+    allies.length &&
     (allies.some(
       (ally) =>
         (ally.hp < ally.max_hp - character.level * 10 * 2 &&
@@ -131,17 +168,18 @@ async function priestBuff() {
   ) {
     if (!is_on_cooldown("partyheal") && character.mp > 1000) {
       use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", character.ping * 0.95),
+        reduce_cooldown("partyheal", Math.min(...parent.pings)),
       );
       set_message("Party Heal");
     }
   }
+
   partyMems
     .filter((member) => member !== character.name && member !== TANKER)
     .map((member) => {
       if (
-        Object.keys(parent.entities).some(
-          (entity) => parent.entities[entity]?.target === member,
+        Object.values(parent.entities).some(
+          (entity) => entity.target === member,
         )
       )
         if (
@@ -149,8 +187,8 @@ async function priestBuff() {
           !is_on_cooldown("absorb") &&
           character.mp > G.skills["absorb"].mp &&
           (get_entity(member).ctype !== "warrior" ||
-            Object.keys(parent.entities).filter(
-              (entity) => parent.entities[entity]?.target === member,
+            Object.values(parent.entities).filter(
+              (entity) => entity.type === "monster" && entity.target === member,
             ).length > 2)
         ) {
           use_skill("absorb", get_entity(member));
@@ -158,60 +196,127 @@ async function priestBuff() {
           set_message("Absorb " + member);
         }
     });
+
+  return promises;
 }
 
-setInterval(async function () {
-  assignRoles();
-  buff();
+async function mainLoop() {
+  try {
+    assignRoles();
 
-  if (character.rip) {
-    respawn();
-    return;
+    if (character.rip) {
+      respawn();
+      throw new Error("Character's down", {
+        cause: "death",
+      });
+    }
+
+    await priestBuff();
+
+    if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
+      throw new Error("Smart moving", {
+        cause: "smart_move",
+      });
+
+    let target = getTarget();
+
+    //// BOSSES
+    // if (goToBoss()) return;
+
+    //// THE CRYPT & EVENTS
+    if (get("cryptInstance")) target = await useCryptStrategy(target);
+    else target = await changeToDailyEventTargets();
+
+    //// Logic to targets and farm places
+    if (!target) {
+      if (
+        !smart.move &&
+        !isAdvanceSmartMoving &&
+        get("cryptInstance") &&
+        character.map !== "crypt"
+      ) {
+        changeToNormalStrategies();
+        await advanceSmartMove(CRYPT_STARTING_LOCATION);
+      } else if (
+        !smart.moving &&
+        !get("cryptInstance") &&
+        (partyMems[0] == character.name ||
+          !get_entity(partyMems[0]) ||
+          character.map === "crypt" ||
+          distance(character, { x: mapX, y: mapY, map }) > 500)
+      ) {
+        changeToNormalStrategies();
+        const scareInterval = setInterval(() => {
+          scareAwayMobs();
+        }, 5000);
+        await advanceSmartMove({
+          map,
+          x: mapX,
+          y: mapY,
+        });
+        clearInterval(scareInterval);
+      }
+    } else fight(target);
+  } catch (e) {
+    console.error(e);
   }
 
-  priestBuff();
+  setTimeout(mainLoop, getLoopInterval());
+}
 
-  if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
+if (!parent.caracAL) mainLoop();
 
-  let target = getTarget();
+// setInterval(async function () {
+//   assignRoles();
 
-  //// BOSSES
-  if (goToBoss()) return;
+//   if (character.rip) {
+//     respawn();
+//     return;
+//   }
 
-  //// THE CRYPT & EVENTS
-  if (get("cryptInstance")) target = await useCryptStrategy(target);
-  else target = await changeToDailyEventTargets();
+//   priestBuff();
 
-  //// Logic to targets and farm places
-  if (
-    !smart.move &&
-    !isAdvanceSmartMoving &&
-    get("cryptInstance") &&
-    character.map !== "crypt" &&
-    !target
-  ) {
-    changeToNormalStrategies();
-    await advanceSmartMove(CRYPT_STARTING_LOCATION);
-  } else if (
-    !smart.moving &&
-    !target &&
-    !get("cryptInstance") &&
-    (partyMems[0] == character.name ||
-      !get_entity(partyMems[0]) ||
-      character.map === "crypt" ||
-      distance(character, { x: mapX, y: mapY, map }) > 500)
-  ) {
-    changeToNormalStrategies();
-    const scareInterval = setInterval(() => {
-      scareAwayMobs();
-    }, 5000);
-    await advanceSmartMove({
-      map,
-      x: mapX,
-      y: mapY,
-    });
-    clearInterval(scareInterval);
-  }
+//   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
 
-  await fight(target);
-}, loopInterval);
+//   let target = getTarget();
+
+//   //// BOSSES
+//   if (goToBoss()) return;
+
+//   //// THE CRYPT & EVENTS
+//   if (get("cryptInstance")) target = await useCryptStrategy(target);
+//   else target = await changeToDailyEventTargets();
+
+//   //// Logic to targets and farm places
+//   if (
+//     !smart.move &&
+//     !isAdvanceSmartMoving &&
+//     get("cryptInstance") &&
+//     character.map !== "crypt" &&
+//     !target
+//   ) {
+//     changeToNormalStrategies();
+//     await advanceSmartMove(CRYPT_STARTING_LOCATION);
+//   } else if (
+//     !smart.moving &&
+//     !target &&
+//     !get("cryptInstance") &&
+//     (partyMems[0] == character.name ||
+//       !get_entity(partyMems[0]) ||
+//       character.map === "crypt" ||
+//       distance(character, { x: mapX, y: mapY, map }) > 500)
+//   ) {
+//     changeToNormalStrategies();
+//     const scareInterval = setInterval(() => {
+//       scareAwayMobs();
+//     }, 5000);
+//     await advanceSmartMove({
+//       map,
+//       x: mapX,
+//       y: mapY,
+//     });
+//     clearInterval(scareInterval);
+//   }
+
+//   await fight(target);
+// }, loopInterval);

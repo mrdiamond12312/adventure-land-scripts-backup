@@ -351,7 +351,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 }
 
 setInterval(async function () {
-  buff();
   loot();
   if (character.rip) {
     respawn();
@@ -383,7 +382,7 @@ setInterval(async function () {
               (character.items[i].level || 0) <= 1
             );
           })
-          .map(async (i) => sell(i, 1000))
+          .map(async (i) => sell(i, 1000)),
       ),
   ]);
 
@@ -447,15 +446,13 @@ function handle_death() {
 }
 
 // Handler to buy from Ponty
-
-function secondhands_handler(event) {
+function secondhandsHandler(events) {
   if (isInvFull(6)) return false;
   const ITEM_NEEDED = [
     "strring",
     "dexring",
     "intring",
-    "stramulet",
-    "intamulet",
+    "dexearring",
     "dexamulet",
     "bataxe",
     "glolipop",
@@ -467,8 +464,7 @@ function secondhands_handler(event) {
     "daggerofthedead",
     "jacko",
   ];
-  for (const i in event) {
-    const item = event[i];
+  for (const item of events) {
     if (item && ITEM_NEEDED.includes(item.name)) {
       parent.socket.emit("sbuy", { rid: item.rid });
     }
@@ -477,13 +473,13 @@ function secondhands_handler(event) {
 
 // Clear handler when code is terminated
 function on_destroy() {
-  parent.socket.removeListener("secondhands", secondhands_handler);
+  parent.socket.removeListener("secondhands", secondhandsHandler);
   clear_drawings(); // <-- Default in on_destroy
   clear_buttons(); // <-- Default in on_destroy
 }
 
 // Register secondhands event handler
-parent.socket.on("secondhands", secondhands_handler);
+parent.socket.on("secondhands", secondhandsHandler);
 setInterval(() => {
   // Send request for Ponty inventory
   parent.socket.emit("secondhands");

@@ -311,7 +311,6 @@ const STORE_ABLE = [
   "essenceoffrost",
   "dexscroll",
   "cshell",
-  "crabclaw",
   "carrot",
   "bwing",
   "btusk",
@@ -329,7 +328,6 @@ const STORE_ABLE = [
 ];
 
 const SALE_ABLE = [
-  "frankypants",
   "vgloves",
   "mcape",
   "wbook0",
@@ -384,9 +382,6 @@ const SALE_ABLE = [
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
-
-// Bank
-const bankSlots = ["items0", "items1", "items3"];
 
 if (parent.caracAL) {
   parent.caracAL.load_scripts([
@@ -492,44 +487,61 @@ function getMonstersOnDeclares() {
   // );
 }
 
-function buff() {
-  if (
-    character.hp / character.max_hp < character.mp / character.max_mp ||
-    (character.hp < character.max_hp * 0.6 && character.mp > 500)
-  ) {
-    if (
-      character.hp < 0.8 * character.max_hp &&
-      character.hp < character.max_hp - 500 &&
-      !is_on_cooldown("use_hp")
-    )
-      use_skill("use_hp").then(() => {
-        reduce_cooldown("use_mp", character.ping * 0.95);
-        reduce_cooldown("use_hp", character.ping * 0.95);
-      });
-    else if (
-      character.hp < character.max_hp - 50 &&
-      !is_on_cooldown("regen_hp")
-    )
-      use_skill("regen_hp").then(() => {
-        reduce_cooldown("use_mp", character.ping * 0.95);
-        reduce_cooldown("use_hp", character.ping * 0.95);
-      });
-  } else {
-    if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
-      use_skill("use_mp").then(() => {
-        reduce_cooldown("use_mp", character.ping * 0.95);
-        reduce_cooldown("use_hp", character.ping * 0.95);
-      });
-    } else if (
-      character.mp < character.max_mp - 100 &&
-      !is_on_cooldown("regen_mp")
-    )
-      use_skill("regen_mp").then(() => {
-        reduce_cooldown("use_mp", character.ping * 0.95);
-        reduce_cooldown("use_hp", character.ping * 0.95);
-      });
-  }
+async function withTimeout(
+  promise,
+  timeoutInterval = Math.max(...parent.pings),
+) {
+  return Promise.race([
+    promise,
+    new Promise((resolve) => setTimeout(resolve, timeoutInterval)),
+  ]);
 }
+
+async function buff() {
+  try {
+    const minPing = Math.min(...parent.pings);
+    const adjustPotionsCooldown = () => {
+      reduce_cooldown("use_mp", minPing);
+      reduce_cooldown("use_hp", minPing);
+    };
+
+    if (
+      character.hp / character.max_hp < character.mp / character.max_mp ||
+      (character.hp < character.max_hp * 0.6 && character.mp > 500)
+    ) {
+      if (
+        character.hp < 0.8 * character.max_hp &&
+        character.hp < character.max_hp - 500 &&
+        !is_on_cooldown("use_hp")
+      ) {
+        await withTimeout(use_skill("use_hp"), 2000);
+        adjustPotionsCooldown();
+      } else if (
+        character.hp < character.max_hp - 50 &&
+        !is_on_cooldown("regen_hp")
+      ) {
+        await withTimeout(use_skill("regen_hp"), 2000);
+        adjustPotionsCooldown();
+      }
+    } else {
+      if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
+        await withTimeout(use_skill("use_mp"), 2000);
+        adjustPotionsCooldown();
+      } else if (
+        character.mp < character.max_mp - 100 &&
+        !is_on_cooldown("regen_mp")
+      ) {
+        await withTimeout(use_skill("regen_mp"), 2000);
+        adjustPotionsCooldown();
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+  setTimeout(async () => buff(), Math.max(ms_to_next_skill("use_mp"), 5));
+}
+
+buff();
 
 function getTarget() {
   const leader = get_entity(partyMems[0]);
@@ -604,6 +616,18 @@ function getTarget() {
   }
 
   return target;
+}
+
+const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
+function getLoopInterval() {
+  const dynamicInterval = INTERVAL_BREAKPOINTS.map(
+    (breakpoint) => (1 / character.frequency / breakpoint) * 1000,
+  ).find((loopInterval) => loopInterval > 250);
+  const frequencyInterval = (1 / character.frequency) * 1000;
+
+  return ms_to_next_skill("attack") <= 300
+    ? Math.max(ms_to_next_skill("attack"), 100)
+    : dynamicInterval ?? frequencyInterval;
 }
 
 function ms_to_next_skill(skill) {
@@ -753,6 +777,47 @@ function getLowestHealth() {
   allies.sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
   return allies[0] || character;
 }
+function healingPrioritizedNames() {
+  return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
+}
+
+function getPlayersToHeal() {
+  const minimumHealingModifier = 0.9;
+  const prioritizedName = healingPrioritizedNames();
+
+  const prioritizedTarget = prioritizedName
+    .map((id) => get_player(id))
+    .filter(
+      (player) =>
+        player &&
+        (player.max_hp >
+          minimumHealingModifier * (character.heal ?? character.attack) +
+            player.hp ||
+          player.hp < player.max_hp * 0.8),
+    )
+    .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
+
+  const otherEntities = Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity &&
+        (entity.type === "character" || entity.mtype === "ghost") &&
+        (entity.mtype !== "ghost"
+          ? !prioritizedName.includes(entity.name) &&
+            (entity.max_hp >
+              minimumHealingModifier * (character.heal ?? character.attack) +
+                entity.hp ||
+              entity.hp < 0.8 * entity.max_hp)
+          : !entity.s.healed && entity.hp < 7000),
+    )
+    .sort((lhs, rhs) => {
+      if (lhs.mtype === "ghost" && rhs.mtype !== "ghost") return 9999;
+      if (rhs.mtype === "ghost" && lhs.mtype !== "ghost") return -9999;
+      return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
+    });
+
+  return [...prioritizedTarget, ...otherEntities];
+}
 
 function getLowestMana() {
   const allies = parent.party_list.map((name) => get_entity(name));
@@ -763,7 +828,7 @@ function getLowestMana() {
 
 //// RESPAWN
 function handle_death() {
-  respawn();
+  setTimeout(respawn, 15000);
 }
 
 // BOSS fight functions
@@ -1053,6 +1118,7 @@ setInterval(async function () {
             "xpbooster",
             "goldbooster",
             "luckbooster",
+            "suckerpunch",
             desiredElixir,
           ].includes(item.name)
         )
@@ -1135,8 +1201,6 @@ setInterval(async function () {
       partyMems.map((member) => {
         send_party_invite(member);
       });
-      if (!parent.party_list.length || !parent.party_list.includes("earthPri"))
-        send_party_request("earthPri");
     }
   }
 
@@ -1231,14 +1295,17 @@ async function changeToDailyEventTargets() {
     parent.S.crabxx?.target &&
     !partyMems.includes(parent.S.crabxx.target)
   ) {
-    changeToNormalStrategies();
     if (character.range > 100) rangeRate = 0.3;
 
     const findBestCrabx = () =>
       Object.values(parent.entities)
         .filter((m) => m.mtype === "crabx")
         .sort((lhs, rhs) =>
-          lhs.hp === rhs.hp
+          is_in_range(lhs, "attack") !== is_in_range(rhs, "attack")
+            ? is_in_range(lhs, "attack")
+              ? -1
+              : 1
+            : lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
             : lhs.hp - rhs.hp,
         )
@@ -1277,16 +1344,42 @@ async function changeToDailyEventTargets() {
     //   is_in_range(crabxxInstance, "cburst") &&
     //   !is_on_cooldown("cburst")
     // ) {
-    //   use_skill("cburst", [[crabxxInstance, 1]]);
+    //   const crabxToCBurst = Object.values(parent.entities)
+    //     .filter(
+    //       (entity) =>
+    //         entity.type === "monster" &&
+    //         entity.mtype === "crabx" &&
+    //         entity.hp < 500 &&
+    //         !entity.rip,
+    //     )
+    //     .map((crabx) => [crabx, crabx.hp * 2]);
+    //   use_skill("cburst", [[crabxxInstance, 1], ...crabxToCBurst]);
     // }
 
     let targetCrab;
     if (character.ctype === "warrior") {
       targetCrab = crabxxInstance?.target ? crabxxInstance : crabxInstance;
+
+      if (
+        targetCrab &&
+        (targetCrab.x !== targetCrab.going_x ||
+          targetCrab.y !== targetCrab.going_y)
+      ) {
+        rangeRate = 0.05;
+      }
     } else {
       targetCrab =
         crabxInstance || (crabxxInstance?.target ? crabxxInstance : undefined);
     }
+
+    // if (
+    //   crabxxInstance &&
+    //   crabxxInstance.target &&
+    //   !partyMems.includes(crabxxInstance.target)
+    // )
+    //   changeToPullStrategies();
+    // else
+    changeToNormalStrategies();
 
     change_target(targetCrab);
     return targetCrab;
@@ -1315,13 +1408,8 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
-      join("franky").catch(
-        async () =>
-          await advanceSmartMove(parent.S.franky).then(() =>
-            change_target(get_nearest_monster({ type: "franky" })),
-          ),
-      );
-      await smart_move(parent.S.franky);
+      join("franky");
+      await advanceSmartMove(parent.S.franky);
       change_target(get_nearest_monster({ type: "franky" }));
       frankyInstance = get_nearest_monster({ type: "franky" });
     }
@@ -1358,7 +1446,8 @@ async function changeToDailyEventTargets() {
     for (id in parent.entities) {
       const currentCharacter = parent.entities[id];
 
-      if (currentCharacter.team === character.team) continue;
+      if (currentCharacter.team === character.team || currentCharacter.rip)
+        continue;
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
@@ -1380,7 +1469,7 @@ async function changeToDailyEventTargets() {
         pvpTarget = currentCharacterTarget;
     }
 
-    target = pvpTarget.entity;
+    return pvpTarget.entity;
   }
 
   if (parent.S.wabbit?.live && !isFightingBoss) {

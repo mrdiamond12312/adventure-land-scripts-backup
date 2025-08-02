@@ -28,27 +28,8 @@ async function usePullStrategies(target) {
       //   }
       // }
 
-      if (!is_on_cooldown("energize")) {
-        const buffee = getLowestMana();
-        if (
-          buffee.max_mp - buffee.mp > 500 &&
-          buffee.mp < buffee.max_mp * 0.5 &&
-          character.mp > character.max_mp * 0.6 &&
-          is_in_range(buffee, "energize")
-        ) {
-          log("Energize " + buffee?.name);
-          use_skill("energize", buffee).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95),
-          );
-        } else {
-          use_skill("energize", character).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95),
-          );
-        }
-      }
-
       if (
-        !is_on_cooldown("cburst") &&
+        ms_to_next_skill("cburst") === 0 &&
         character.mp > 400 &&
         !get_targeted_monster()?.["1hp"] &&
         partyHealer.ctype === "priest" &&
@@ -58,7 +39,7 @@ async function usePullStrategies(target) {
         getMonstersToCBurst().length >= 1
       ) {
         use_skill("cburst", getMonstersToCBurst()).then(() =>
-          reduce_cooldown("cburst", -3000),
+          reduce_cooldown("cburst", -2000),
         );
         reduce_cooldown("cburst", -2000);
       }
@@ -70,7 +51,7 @@ async function usePullStrategies(target) {
         character.hp < character.max_hp * 0.7 &&
         Object.values(parent.entities).some(
           (entity) =>
-            entity.type === "monster" && entity.target === character.name
+            entity.type === "monster" && entity.target === character.name,
         )
       )
         scareAwayMobs();
@@ -185,8 +166,7 @@ async function usePullStrategies(target) {
               : 0) &&
         !havePulledEnoughMobs &&
         character.mp > G.skills["taunt"].mp &&
-        !is_on_cooldown("taunt") &&
-        is_in_range(get_entity(HEALER), "absorb")
+        !is_on_cooldown("taunt")
       ) {
         const mobToPull = mobsList.find(
           (id) =>

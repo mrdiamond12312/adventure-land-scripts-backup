@@ -3,8 +3,8 @@ const HOP_SERVERS = ["US", "ASIA", "EU"];
 const ignoreServer = [];
 
 const HOME_SERVER = {
-  serverRegion: "US",
-  serverIdentifier: "III",
+  serverRegion: "EU",
+  serverIdentifier: "I",
 };
 
 const tankableBoss = ["snowman", "pinkgoo"];
@@ -55,7 +55,7 @@ setInterval(async () => {
         parent.S[boss] &&
         parent.S[boss].target &&
         parent.S[boss].hp <
-          (bosses[boss]?.threshold ?? 0.93) * parent.S[boss].max_hp,
+          (bosses[boss]?.threshold ?? 0.93) * parent.S[boss].max_hp
     ) ||
     get("cryptInstance")
   )
@@ -85,7 +85,7 @@ setInterval(async () => {
       .filter((serverBoss) => {
         return (
           !ignoreServer.includes(
-            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`,
+            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`
           ) &&
           serverBoss.serverIdentifier !== "PVP" &&
           HOP_SERVERS.includes(serverBoss.serverRegion) &&
@@ -100,12 +100,16 @@ setInterval(async () => {
         );
       })
       .sort((lhs, rhs) => {
-        const bossPriority = [...tankableBoss, ...Object.keys(bosses)];
-        return bossPriority.findIndex((boss) => boss === lhs.type) -
-          bossPriority.findIndex((boss) => boss === rhs.type)
-          ? bossPriority.findIndex((boss) => boss === lhs.type) -
-              bossPriority.findIndex((boss) => boss === rhs.type)
-          : lhs.hp - rhs.hp;
+        // const bossPriority = [...tankableBoss, ...Object.keys(bosses)];
+        return (
+          lhs.hp / G.monsters[lhs.type].hp - rhs.hp / G.monsters[rhs.type].hp
+        );
+        // return bossPriority.findIndex((boss) => boss === lhs.type) -
+        //   bossPriority.findIndex((boss) => boss === rhs.type)
+        //   ? bossPriority.findIndex((boss) => boss === lhs.type) -
+        //       bossPriority.findIndex((boss) => boss === rhs.type)
+        //   :
+        //   lhs.hp / G.monsters[lhs.type].hp - rhs.hp / G.monsters[rhs.type].hp;
       });
 
     if (hopAbleServers && hopAbleServers.length) {
