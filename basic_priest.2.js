@@ -20,7 +20,7 @@ var rangeRate = 0.5;
 const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 async function fight(target) {
-  if (can_attack(target) && shouldAttack()) {
+  if (can_attack(target) && shouldAttack() && !character.s.penalty_cd) {
     set_message("Attacking");
     currentStrategy(target);
 

@@ -77,7 +77,7 @@ async function fight(target) {
   }
 
   if (
-    ms_to_next_skill("attack") === 0 &&
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd &&
     distance(target, character) <
       character.range +
         character.xrange +
