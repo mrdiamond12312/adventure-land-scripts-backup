@@ -137,7 +137,10 @@ async function usePullStrategies(target) {
         character.mp > G.skills["agitate"].mp &&
         !is_on_cooldown("agitate") &&
         // numberOfMonsterInRange <= MAX_TARGET + 2 &&
-        listOfNoTargetMonsterInRange.length >= 3 &&
+        listOfNoTargetMonsterInRange.length >= 2 &&
+        !listOfNoTargetMonsterInRange.some((id) =>
+          MELEE_IGNORE_LIST.includes(parent.entities[id].mtype),
+        ) &&
         Object.values(parent.entities)
           .filter(
             (entity) =>
