@@ -4,6 +4,17 @@ const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 3;
 const MAX_MOB_DPS = 1000;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
 
+function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
+  if (!target) return [];
+
+  return Object.values(parent.entities).filter(
+    (entity) =>
+      entity.type === "monster" &&
+      distance(target, entity) < blastRadius &&
+      entity.target,
+  );
+}
+
 // Counting
 function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return 0;
@@ -106,7 +117,11 @@ function calculateWarriorItems() {
     };
 
   return {
-    helmet: haveLowHpMobsNearby ? 'oxhelmet' : character.map === "crypt" ? "xhelmet" : "helmet1",
+    helmet: haveLowHpMobsNearby
+      ? "oxhelmet"
+      : character.map === "crypt"
+      ? "xhelmet"
+      : "helmet1",
     mainhand:
       currentStrategy === usePullStrategies && shouldUseBlaster
         ? "vhammer"
@@ -131,7 +146,11 @@ function calculateWarriorItems() {
       ? "snring"
       : "stramulet",
     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofstr",
-    chest: haveLowHpMobsNearby ? 'cdragon' : character.map === "crypt" ? "xarmor" : "coat1",
+    chest: haveLowHpMobsNearby
+      ? "cdragon"
+      : character.map === "crypt"
+      ? "xarmor"
+      : "coat1",
     pants: character.map === "crypt" ? "frankypants" : "frankypants",
   };
 }
@@ -314,7 +333,13 @@ function calculateDamage(target, characterEntity, recursion = true) {
     case "physical":
       return (
         target.attack *
-          dps_multiplier(characterEntity.armor - (target.apiercing ?? 0)) *
+          dps_multiplier(
+            characterEntity.armor -
+              (characterEntity.s["hardshell"]
+                ? G.conditions.hardshell.armor
+                : 0) -
+              (target.apiercing ?? 0),
+          ) *
           (target.frequency < 0.9 ? 0.9 : target.frequency) +
         (target.dreturn && recursion
           ? characterEntity.range < 100
@@ -421,7 +446,8 @@ async function warriorCleave(currentStrategy) {
     Object.values(parent.entities).filter(
       (mob) =>
         mob.type === "monster" &&
-        distance(mob, character) < G.skills["cleave"].range,
+        distance(mob, character) < G.skills["cleave"].range &&
+        mob.mtype !== "porcupine",
     ).length === 0 ||
     isCleaving
   )
@@ -491,8 +517,10 @@ async function warriorCleave(currentStrategy) {
 
     if (
       (currentStrategy === "pull"
-        ? totalDpsTaken <= healThreshold
+        ? totalDpsTaken <= healThreshold ||
+          listOfNoTargetMonsterInRange.length === 0
         : listOfNoTargetMonsterInRange.length === 0) &&
+      !allMobs.some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype)) &&
       !isFeared &&
       !formidableMob &&
       !isEquipingItems
@@ -583,6 +611,9 @@ function shouldAttack() {
   const partyHealer = get_entity(HEALER);
   return character.map === "crypt"
     ? partyHealer && !partyHealer.rip
+    : ["warrior", "rogue"].includes(character.ctype) &&
+      MELEE_IGNORE_LIST.includes(currentTarget.mtype)
+    ? false
     : currentTarget && currentTarget.attack > 600 && !currentTarget.target
     ? partyHealer && !partyHealer.rip
     : true;

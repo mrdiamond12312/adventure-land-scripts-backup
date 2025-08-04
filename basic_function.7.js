@@ -65,17 +65,19 @@ var max_att = 2000;
 var bossOffset = 0.99;
 var boss = ["mrpumpkin", "mrgreen"];
 
+// Ignore mob with high d-return
+const MELEE_IGNORE_LIST = ["porcupine"];
 // var map = "main";
 // var mapX = 1248;
 // var mapY = -63;
 
-var map = "winterland";
-var mapX = 423;
-var mapY = -2614;
-
 // var map = "uhills";
 // var mapX = -289;
 // var mapY = -188;
+
+// var map = "winterland";
+// var mapX = 423;
+// var mapY = -2614;
 
 // var map = "desertland";
 // var mapX = 223;
@@ -85,9 +87,9 @@ var mapY = -2614;
 // var mapX = 0;
 // var mapY = -775;
 
-// var map = "halloween";
-// var mapX = -219;
-// var mapY = 681;
+var map = "halloween";
+var mapX = -219;
+var mapY = 681;
 
 // var map = "main";
 // var mapX = 676;
@@ -101,12 +103,16 @@ var mapY = -2614;
 // var mapX = -1111;
 // var mapY = 132;
 
+// var map = "desertland";
+// var mapX = -800;
+// var mapY = -354;
+
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-var mobsToFarm = ["phoenix", "stompy", "wolf"];
+// var mobsToFarm = ["phoenix", "stompy", "wolf"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
-// var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
+var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
 // var mobsToFarm = ["phoenix", "croc", "armadillo"];
 // var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
 // var mobsToFarm = [
@@ -118,6 +124,7 @@ var mobsToFarm = ["phoenix", "stompy", "wolf"];
 //   "turtle",
 //   "crabx",
 // ];
+// var mobsToFarm = ["plantoid"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";

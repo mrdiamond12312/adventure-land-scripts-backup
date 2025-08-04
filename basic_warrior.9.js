@@ -20,6 +20,13 @@ rangeRate = originRangeRate;
 
 // Main fight function
 async function fight(target) {
+  const haveIgnoreMobAroundTarget = (targetMob) => {
+    return mobsListAroundTarget(
+      targetMob,
+      character.explosion / 3.6 || BLAST_RADIUS,
+    ).some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype));
+  };
+
   if (currentStrategy === usePullStrategies) {
     aggroedMobs = Object.values(parent.entities).filter((mob) => {
       return (
@@ -29,7 +36,9 @@ async function fight(target) {
             character.xrange * 0.9 +
             extraDistanceWithinHitbox(character) &&
         mob.target &&
-        mob.type === "monster"
+        mob.type === "monster" &&
+        !MELEE_IGNORE_LIST.includes(mob.mtype) &&
+        !haveIgnoreMobAroundTarget(mob)
       );
     });
 
@@ -61,6 +70,10 @@ async function fight(target) {
   }
 
   if (!target) return;
+
+  if (haveIgnoreMobAroundTarget(target)) {
+    changeToNormalStrategies();
+  }
 
   if (
     ms_to_next_skill("attack") === 0 &&

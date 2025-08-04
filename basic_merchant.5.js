@@ -450,10 +450,9 @@ function secondhandsHandler(events) {
   if (isInvFull(6)) return false;
   const ITEM_NEEDED = [
     "strring",
-    "dexring",
-    "intring",
     "dexearring",
     "dexamulet",
+    "intamulet",
     "bataxe",
     "glolipop",
     "ololipop",
