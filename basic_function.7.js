@@ -41,7 +41,17 @@ var buffThreshold = 0.7;
 
 function assignRoles() {
   if (partyMems.includes("MooohMoooh") && partyMems.includes("CowTheMooh")) {
-    if (get_targeted_monster()?.damage_type === "magical") {
+    const mobsTargetingAllies = Object.values(parent.entities).filter(
+      (mob) => mob.type === "monster" && partyMems.includes(mob.target),
+    );
+
+    if (
+      mobsTargetingAllies.filter((mob) => mob.damage_type === "magical")
+        .length -
+        mobsTargetingAllies.filter((mob) => mob.damage_type !== "magical")
+          .length >
+      0
+    ) {
       TANKER = "CowTheMooh";
     } else TANKER = "MooohMoooh";
   }

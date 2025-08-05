@@ -108,17 +108,21 @@ async function priestBuff() {
         ) ||
         !character.slots.mainhand.level
       ) {
-        equipBatch({
-          mainhand:
-            character.name === TANKER || character.map === "crypt"
-              ? "pmace"
-              : "oozingterror",
-          orb: "jacko",
-        });
+        promises.push(
+          equipBatch({
+            mainhand:
+              character.name === TANKER || character.map === "crypt"
+                ? "pmace"
+                : "oozingterror",
+            orb: "jacko",
+          }),
+        );
       } else if (character.slots.orb?.name !== "jacko") {
-        equipBatch({
-          orb: "jacko",
-        });
+        promises.push(
+          equipBatch({
+            orb: "jacko",
+          }),
+        );
       }
 
       for (const buffee of buffees) {
