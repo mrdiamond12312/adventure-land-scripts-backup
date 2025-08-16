@@ -366,23 +366,42 @@ function mobbingMultiplier(numberOfMobs) {
   return numberOfMobs < 5 ? 1.7 : numberOfMobs < 6 ? 1.8 : 2;
 }
 
-function avgDmgTaken(characterEntity) {
+function avgDmgTaken(characterEntity, dmgType = null) {
   if (!characterEntity) return Infinity;
   const numberOfAttackingMobs = listOfMonsterAttacking(characterEntity).length;
   return (
-    Object.keys(parent.entities)
+    Object.values(parent.entities)
       .filter(
-        (id) =>
-          parent.entities[id]?.target === characterEntity.name &&
-          parent.entities[id]?.type === "monster",
+        (mob) =>
+          mob.target === characterEntity.name &&
+          mob.type === "monster" &&
+          (!dmgType || mob.damage_type === dmgType),
       )
       .reduce(
-        (accummulator, currentId) =>
-          accummulator +
-          calculateDamage(parent.entities[currentId], characterEntity),
+        (accummulator, currentMob) =>
+          accummulator + calculateDamage(currentMob, characterEntity),
         0,
       ) * mobbingMultiplier(numberOfAttackingMobs)
   );
+}
+
+function avgPartyDmgTaken(partyMems, dmgType = null) {
+  return partyMems.reduce(
+    (accumulator, current) =>
+      accumulator + avgDmgTaken(get_player(current), dmgType),
+    0,
+  );
+}
+
+function assignRoles() {
+  if (partyMems.includes("MooohMoooh") && partyMems.includes("CowTheMooh")) {
+    const partyDmgTaken = avgPartyDmgTaken(partyMems);
+    const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "magical");
+
+    if (partyDmgTaken * 0.5 < partyMagicalDmgTaken) {
+      TANKER = "CowTheMooh";
+    } else TANKER = "MooohMoooh";
+  }
 }
 
 function getMonstersToCBurst() {
@@ -407,10 +426,7 @@ function getMonstersToCBurst() {
 
   const result = [];
 
-  let partyDmgRecieved = partyMems.reduce(
-    (accumulator, current) => accumulator + avgDmgTaken(get_player(current)),
-    0,
-  );
+  let partyDmgRecieved = avgPartyDmgTaken(partyMems);
   let tankerNumberOfAggroedMobs = listOfMonsterAttacking(partyHealer).length;
 
   for (const mobId of mobsList) {

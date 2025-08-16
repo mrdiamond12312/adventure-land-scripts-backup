@@ -39,14 +39,6 @@ var caracALPartyCodeSlot = [
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
 
-function assignRoles() {
-  if (partyMems.includes("MooohMoooh") && partyMems.includes("CowTheMooh")) {
-    if (get_targeted_monster()?.damage_type === "magical") {
-      TANKER = "CowTheMooh";
-    } else TANKER = "MooohMoooh";
-  }
-}
-
 //  run and hit
 const movementHistory = [];
 var flipRotation = 1;
@@ -741,20 +733,7 @@ function hitAndRun(target, rangeRate) {
   flip_cooldown--;
   flipRotationCooldown--;
 
-  if (!is_in_range(target, "attack")) {
-    // const diff_x = character.real_x - target.real_x;
-    // const diff_y = character.real_y - target.real_y;
-    // angle = Math.atan2(diff_y, diff_x);
-    // const alt_x =
-    //   target.x +
-    //   (character.range * rangeRate + character.xrange) * Math.cos(angle);
-    // const alt_y =
-    //   target.y +
-    //   (character.range * rangeRate + character.xrange) * Math.sin(angle);
-    // move(alt_x, alt_y);
-
-    move(new_x, new_y);
-  } else if (!can_move_to(new_x, new_y)) {
+  if (!can_move_to(new_x, new_y)) {
     for (let i = 1; i <= 8; i++) {
       let adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
       let alt_x =
@@ -953,7 +932,23 @@ async function midasLooting(forced = false) {
   });
 }
 
+function suicide() {
+  if (
+    !character.rip &&
+    character.hp < Math.max(0.15 * character.max_hp, 2000) &&
+    (avgDmgTaken(character) > character.hp || character.ping > 600)
+  ) {
+    parent.socket.emit("harakiri");
+    game_log("Harakiri");
+
+    setTimeout(() => {
+      respawn();
+    }, 12500);
+  }
+}
+
 setInterval(() => {
+  suicide();
   if (!MIDAS_CHARACTER.includes(character.name) || !isEquipingItems) {
     midasLooting();
   }
@@ -1064,7 +1059,10 @@ setInterval(async function () {
   if (isMerchant()) return;
 
   // Fix a bug where character is stuck to corner
-  const currentTarget = get_targeted_monster();
+  const currentTarget =
+    get_targeted_monster() ??
+    getTarget() ??
+    get_nearest_monster({ target: TANKER });
 
   if (
     currentTarget &&
@@ -1078,13 +1076,13 @@ setInterval(async function () {
   ) {
     smartmoveDebug = true;
     log("Debug being stuck while kiting");
-    smart_move({ map: character.map, x: currentTarget.x, y: currentTarget.y })
-      .then(() => {
-        smartmoveDebug = false;
-      })
-      .catch(() => {
-        smartmoveDebug = false;
-      });
+    await advanceSmartMove({
+      map: character.map,
+      x: currentTarget.x,
+      y: currentTarget.y,
+    });
+
+    smartmoveDebug = false;
   }
 
   // Re-equip
