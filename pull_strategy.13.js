@@ -125,11 +125,7 @@ async function usePullStrategies(target) {
         physicalMobsAfterAgitating > character.courage ||
         pureMobsAfterAgitating > character.pcourage;
 
-      let partyDmgRecieved = partyMems.reduce(
-        (accumulator, current) =>
-          accumulator + avgDmgTaken(get_player(current)),
-        0,
-      );
+      let partyDmgRecieved = avgPartyDmgTaken(partyMems);
 
       if (
         !havePulledEnoughMobs &&

@@ -162,10 +162,7 @@ async function fight(target) {
   }
 
   // Taunt logic to protect allies
-  const partyDmgRecieved = partyMems.reduce(
-    (accumulator, current) => accumulator + avgDmgTaken(get_player(current)),
-    0,
-  );
+  const partyDmgRecieved = avgPartyDmgTaken(partyMems);
   const partyHealer = get_player(HEALER);
   if (
     character.mp > G.skills["taunt"].mp &&
