@@ -3,6 +3,7 @@ const BLAST_RADIUS = character.blast / 3.6 || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 3;
 const MAX_MOB_DPS = 1000;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
+const WATCHOUT_ABILITIES = ["burn"];
 
 function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return [];
@@ -138,7 +139,7 @@ function calculateWarriorItems() {
         : "fireblade",
     amulet: haveLowHpMobsNearby
       ? "spookyamulet"
-      : (character.name === TANKER &&
+      : (isAssignedAsTanker() &&
           Object.values(parent.entities)
             .filter((entity) => entity.type === "monster")
             .some((mob) => mob.target === character.name)) ||
@@ -169,7 +170,7 @@ function calculateCupidItems() {
   };
 }
 
-function calculatePriestItems() {
+function calculatePriestItems(target) {
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
     (mobs) =>
       (mobs.target === character.name || mobs.cooperative) &&
@@ -177,39 +178,51 @@ function calculatePriestItems() {
   );
   const currentTarget = get_targeted_monster();
   return {
-    mainhand: ["pinkgoo", "snowman", "wabbit", "crab"].includes(
-      get_targeted_monster()?.mtype,
-    )
-      ? "pinkie"
-      : character.map === "crypt"
-      ? "froststaff"
-      : currentTarget &&
-        (currentTarget.cooperative ||
-          currentTarget["1hp"] ||
-          currentTarget["avoidance"] > 90)
-      ? "firestaff"
-      : haveLowHpMobsNearby
-      ? "lmace"
-      : character.name === TANKER ||
-        (currentTarget &&
-          currentTarget.type === "monster " &&
-          currentTarget.max_hp < 8000)
-      ? "harbringer"
-      : "oozingterror",
+    mainhand:
+      target?.type !== "monster"
+        ? "oozingterror"
+        : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
+            get_targeted_monster()?.mtype,
+          )
+        ? "pinkie"
+        : character.map === "crypt"
+        ? currentTarget.s["frozen"]
+          ? "oozingterror"
+          : "froststaff"
+        : currentTarget &&
+          (currentTarget.cooperative ||
+            currentTarget["1hp"] ||
+            currentTarget["avoidance"] > 90)
+        ? "firestaff"
+        : haveLowHpMobsNearby
+        ? "lmace"
+        : "oozingterror",
     offhand:
       character.map === "crypt"
         ? "wbook1"
+        : isAssignedAsTanker() && character.s.burned
+        ? "wbookhs"
         : haveLowHpMobsNearby
         ? "mshield"
         : TANKER === character.name ||
           Object.values(parent.entities).some(
-            (mob) => mob.type === "monster" && mob.target === character.name,
+            (mob) =>
+              mob.type === "monster" &&
+              mob.target === character.name &&
+              mob.damage_type === "magical",
           ) ||
           character.fear
         ? "wbookhs"
         : "wbook1",
-    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "test_orb",
-    amulet: "intamulet",
+    orb:
+      isAssignedAsTanker() && character.s.burned
+        ? "orba"
+        : haveLowHpMobsNearby
+        ? "rabbitsfoot"
+        : target?.type !== "monster"
+        ? "jacko"
+        : "test_orb",
+    amulet: isAssignedAsTanker() ? "t2stramulet" : "intamulet",
   };
 }
 
@@ -320,7 +333,12 @@ function calculateDamage(target, characterEntity, recursion = true) {
     case "magical":
       return (
         target.attack *
-          dps_multiplier(characterEntity.resistance - (target.rpiercing ?? 0)) *
+          dps_multiplier(
+            characterEntity.resistance -
+              (target.type === "monster"
+                ? G.monsters[target.mtype].rpiercing ?? 0
+                : 0),
+          ) *
           (target.frequency < 0.9 ? 0.9 : target.frequency) +
         (target.dreturn && recursion
           ? characterEntity.range < 100
@@ -338,7 +356,9 @@ function calculateDamage(target, characterEntity, recursion = true) {
               (characterEntity.s["hardshell"]
                 ? G.conditions.hardshell.armor
                 : 0) -
-              (target.apiercing ?? 0),
+              (target.type === "monster"
+                ? G.monsters[target.mtype].apiercing ?? 0
+                : 0),
           ) *
           (target.frequency < 0.9 ? 0.9 : target.frequency) +
         (target.dreturn && recursion
@@ -367,21 +387,53 @@ function mobbingMultiplier(numberOfMobs) {
 }
 
 function avgDmgTaken(characterEntity, dmgType = null) {
-  if (!characterEntity) return Infinity;
+  if (!characterEntity) return 0;
   const numberOfAttackingMobs = listOfMonsterAttacking(characterEntity).length;
+  const listOfAttackingMobs = Object.values(parent.entities).filter(
+    (mob) =>
+      mob.target === characterEntity.name &&
+      mob.type === "monster" &&
+      (!dmgType || mob.damage_type === dmgType),
+  );
+
+  // Burn Damage padding
+  const highestBurningMob = listOfAttackingMobs
+    .filter((mob) => mob.abilities?.burn)
+    .reduce((prev, current) => {
+      if (!prev) return current;
+      return prev.attack > current.attack ? prev : current;
+    }, undefined);
+
+  const fireResist =
+    characterEntity.firesistance ??
+    (characterEntity.slots.orb?.name === "orba" ? 15 : 0);
+
+  const burnPadding = highestBurningMob
+    ? dps_multiplier(
+        highestBurningMob.damage_type === "physical"
+          ? characterEntity.armor -
+              (G.monsters[highestBurningMob.mtype].apiercing ?? 0)
+          : highestBurningMob.damage_type === "magical"
+          ? characterEntity.resistance -
+            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0)
+          : 1,
+      ) *
+      ((100 -
+        (characterEntity.firesistance ??
+          (characterEntity.slots.orb?.name === "orba" ? 15 : 0))) /
+        100) *
+      (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
+      highestBurningMob.attack
+    : 0;
+
   return (
-    Object.values(parent.entities)
-      .filter(
-        (mob) =>
-          mob.target === characterEntity.name &&
-          mob.type === "monster" &&
-          (!dmgType || mob.damage_type === dmgType),
-      )
-      .reduce(
-        (accummulator, currentMob) =>
-          accummulator + calculateDamage(currentMob, characterEntity),
-        0,
-      ) * mobbingMultiplier(numberOfAttackingMobs)
+    listOfAttackingMobs.reduce(
+      (accummulator, currentMob) =>
+        accummulator + calculateDamage(currentMob, characterEntity),
+      0,
+    ) *
+      mobbingMultiplier(numberOfAttackingMobs) +
+    Math.max(characterEntity.s.burn?.intensity ?? 0, burnPadding)
   );
 }
 
@@ -393,15 +445,29 @@ function avgPartyDmgTaken(partyMems, dmgType = null) {
   );
 }
 
+function rotateLeader(mems, value) {
+  const idx = mems.indexOf(value);
+  if (idx === -1) return mems; // not found
+  return mems.slice(idx).concat(mems.slice(0, idx));
+}
+
 function assignRoles() {
-  if (partyMems.includes("MooohMoooh") && partyMems.includes("CowTheMooh")) {
+  if (partyMems.includes(WARRIOR) && partyMems.includes(HEALER)) {
     const partyDmgTaken = avgPartyDmgTaken(partyMems);
     const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "magical");
 
-    if (partyDmgTaken * 0.5 < partyMagicalDmgTaken) {
-      TANKER = "CowTheMooh";
-    } else TANKER = "MooohMoooh";
+    if (partyMagicalDmgTaken / partyDmgTaken >= 0.5) {
+      TANKER = HEALER;
+      partyMems = rotateLeader(partyMems, HEALER);
+    } else {
+      TANKER = WARRIOR;
+      partyMems = rotateLeader(partyMems, WARRIOR);
+    }
   }
+}
+
+function isAssignedAsTanker() {
+  return character.name === TANKER;
 }
 
 function getMonstersToCBurst() {
@@ -410,43 +476,42 @@ function getMonstersToCBurst() {
 
   if (!(partyHealer && partyTanker)) return [];
 
-  const mobsList = Object.keys(parent.entities)
+  const mobsList = Object.values(parent.entities)
     .filter(
-      (id) =>
-        parent.entities[id]?.type === "monster" &&
-        is_in_range(parent.entities[id], "cburst") &&
-        calculateDamage(parent.entities[id], partyTanker) < MAX_MOB_DPS &&
-        parent.entities[id].range < character.range - 20,
+      (mob) =>
+        mob.type === "monster" &&
+        is_in_range(mob, "cburst") &&
+        calculateDamage(mob, partyTanker) < MAX_MOB_DPS &&
+        mob.range < character.range - 20 &&
+        !WATCHOUT_ABILITIES.some((skill) =>
+          Object.keys(mob.abilities).includes(skill),
+        ),
     )
-    .sort(
-      (lhs, rhs) =>
-        distance(character, parent.entities[rhs]) -
-        distance(character, parent.entities[lhs]),
-    );
+    .sort((lhs, rhs) => distance(character, rhs) - distance(character, lhs));
 
   const result = [];
 
   let partyDmgRecieved = avgPartyDmgTaken(partyMems);
   let tankerNumberOfAggroedMobs = listOfMonsterAttacking(partyHealer).length;
 
-  for (const mobId of mobsList) {
+  for (const mob of mobsList) {
     if (partyDmgRecieved >= partyHealer.heal * partyHealer.frequency * 0.95)
       break;
 
     if (
-      is_in_range(parent.entities[mobId], "cburst") &&
-      !parent.entities[mobId]?.target &&
+      is_in_range(mob, "cburst") &&
+      !mob.target &&
       partyDmgRecieved +
-        calculateDamage(parent.entities[mobId], partyTanker) *
+        calculateDamage(mob, partyTanker) *
           mobbingMultiplier(tankerNumberOfAggroedMobs + 1) <
         partyHealer.heal * partyHealer.frequency * 0.9
     ) {
-      result.push([parent.entities[mobId], 2]);
+      result.push([mob, 2]);
       tankerNumberOfAggroedMobs += 1;
       partyDmgRecieved =
         (partyDmgRecieved * mobbingMultiplier(tankerNumberOfAggroedMobs + 1)) /
           mobbingMultiplier(tankerNumberOfAggroedMobs) +
-        calculateDamage(parent.entities[mobId], partyTanker) *
+        calculateDamage(mob, partyTanker) *
           mobbingMultiplier(tankerNumberOfAggroedMobs + 1);
     }
   }
@@ -536,7 +601,14 @@ async function warriorCleave(currentStrategy) {
         ? totalDpsTaken <= healThreshold ||
           listOfNoTargetMonsterInRange.length === 0
         : listOfNoTargetMonsterInRange.length === 0) &&
-      !allMobs.some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype)) &&
+      !allMobs.some(
+        (mob) =>
+          MELEE_IGNORE_LIST.includes(mob.mtype) ||
+          WATCHOUT_ABILITIES.some((skill) =>
+            Object.keys(mob.abilities).includes(skill),
+          ),
+      ) &&
+      !listOfNoTargetMonsterInRange.some((mob) => mob.abilities.burn) &&
       !isFeared &&
       !formidableMob &&
       !isEquipingItems

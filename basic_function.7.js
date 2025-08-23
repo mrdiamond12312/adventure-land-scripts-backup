@@ -10,13 +10,15 @@ var attack_mode = true;
 var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
 // var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
 
-var TANKER = "MooohMoooh";
-// var TANKER = "CowTheMooh";
-
 const MAGE = "MowTheCooh";
 var HEALER = "CowTheMooh";
 // const HEALER = "CupidCow";
 const RANGER = "MoohThatCow";
+const WARRIOR = "MooohMoooh";
+
+var TANKER =
+  partyMems.find((id) => [HEALER, WARRIOR].includes(id)) ?? partyMems[0];
+// var TANKER = "CowTheMooh";
 
 const MIDAS_CHARACTER = [MAGE];
 
@@ -71,17 +73,17 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = 423;
 // var mapY = -2614;
 
-// var map = "desertland";
-// var mapX = 223;
-// var mapY = -708;
+var map = "desertland";
+var mapX = 223;
+var mapY = -708;
 
 // var map = "tunnel";
 // var mapX = 0;
 // var mapY = -775;
 
-var map = "halloween";
-var mapX = -219;
-var mapY = 681;
+// var map = "halloween";
+// var mapX = -219;
+// var mapY = 681;
 
 // var map = "main";
 // var mapX = 676;
@@ -102,9 +104,11 @@ var mapY = 681;
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 // var mobsToFarm = ["phoenix", "stompy", "wolf"];
-// var mobsToFarm = ["fireroamer"];
+var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
-var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
+
+// var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
+
 // var mobsToFarm = ["phoenix", "croc", "armadillo"];
 // var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
 // var mobsToFarm = [
@@ -308,6 +312,7 @@ const STORE_ABLE = [
   "feather0",
   "essenceofnature",
   "essenceoffrost",
+  "essenceoffire",
   "dexscroll",
   "cshell",
   "carrot",
@@ -324,6 +329,9 @@ const STORE_ABLE = [
   "orboffrost",
   "orbofplague",
   "orbofresolve",
+  "orba",
+  "orbofstr",
+  "orbofdex",
 ];
 
 const SALE_ABLE = [
@@ -443,7 +451,7 @@ async function sortInv() {
 function calculateRangeRate() {
   switch (character.ctype) {
     case "priest":
-      return character.name === TANKER && currentStrategy === usePullStrategies
+      return isAssignedAsTanker() && currentStrategy === usePullStrategies
         ? 0.2
         : 0.5;
     default:
@@ -1510,9 +1518,14 @@ async function changeToDailyEventTargets() {
     }
   }
 
+  const partyHealer = get_entity(HEALER);
+  const partyTanker = get_entity(TANKER);
+
   if (
-    get_entity(HEALER) &&
-    !get_entity(HEALER).rip &&
+    partyTanker &&
+    partyTanker.hp > partyTanker.max_hp * 0.35 &&
+    partyHealer &&
+    !partyHealer.rip &&
     character.ping < 600 &&
     (get_targeted_monster()?.level < 5 || get_targeted_monster()?.attack < 500)
   )

@@ -174,6 +174,7 @@ async function fight(target) {
   const partyDmgRecieved = avgPartyDmgTaken(partyMems);
   const partyHealer = get_player(HEALER);
   if (
+    isAssignedAsTanker() &&
     character.mp > G.skills["taunt"].mp &&
     !is_on_cooldown("taunt") &&
     partyHealer &&
@@ -238,6 +239,7 @@ async function fight(target) {
 
 async function mainLoop() {
   try {
+    desiredElixir = isAssignedAsTanker() ? "elixirluck" : "pumpkinspice";
     assignRoles();
 
     if (
@@ -284,18 +286,30 @@ async function mainLoop() {
 
     // Targeting & movement logic
     if (!target) {
-      if (!smart.moving && !isAdvanceSmartMoving) {
-        if (get("cryptInstance") && character.map !== "crypt") {
-          changeToNormalStrategies();
-          advanceSmartMove(CRYPT_STARTING_LOCATION);
-        } else if (!get("cryptInstance")) {
-          changeToNormalStrategies();
-          advanceSmartMove({ map, x: mapX, y: mapY });
-        }
+      if (
+        !smart.moving &&
+        !isAdvanceSmartMoving &&
+        get("cryptInstance") &&
+        character.map !== "crypt"
+      ) {
+        changeToNormalStrategies();
+        advanceSmartMove(CRYPT_STARTING_LOCATION);
+      } else if (
+        !smart.moving &&
+        !get("cryptInstance") &&
+        (partyMems[0] === character.name ||
+          !get_entity(partyMems[0]) ||
+          character.map === "crypt" ||
+          distance(character, { x: mapX, y: mapY, map }) > 500)
+      ) {
+        changeToNormalStrategies();
+        advanceSmartMove({
+          map,
+          x: mapX,
+          y: mapY,
+        });
       }
-    } else {
-      fight(target);
-    }
+    } else fight(target);
   } catch (e) {
     console.error(e);
   }

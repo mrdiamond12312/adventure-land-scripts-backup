@@ -65,17 +65,16 @@ async function useCryptStrategy(target) {
       await advanceSmartMove(VBAT_LOCATION);
     }
 
-    const vbat =
-      character.name === TANKER
-        ? get_nearest_monster({ type: "a2" }) ||
-          get_targeted_monster() ||
-          get_nearest_monster({ type: "vbat" })
-        : get_nearest_monster({ type: "a2" }) ||
-          get_target_of(get_entity(TANKER)) ||
-          get_nearest_monster({ target: TANKER }) ||
-          get_nearest_monster({ target: HEALER }) ||
-          get_nearest_monster({ target: MAGE }) ||
-          get_nearest_monster({ type: "vbat" });
+    const vbat = isAssignedAsTanker()
+      ? get_nearest_monster({ type: "a2" }) ||
+        get_targeted_monster() ||
+        get_nearest_monster({ type: "vbat" })
+      : get_nearest_monster({ type: "a2" }) ||
+        get_target_of(get_entity(TANKER)) ||
+        get_nearest_monster({ target: TANKER }) ||
+        get_nearest_monster({ target: HEALER }) ||
+        get_nearest_monster({ target: MAGE }) ||
+        get_nearest_monster({ type: "vbat" });
 
     const nearestKillableBosses = Object.values(parent.entities).filter(
       (mobs) =>
@@ -205,6 +204,14 @@ async function useCryptStrategy(target) {
   if (get_targeted_monster()?.mtype === "vbat") changeToPullStrategies;
   else changeToNormalStrategies();
 
+  const mobTargetingAlly = Object.values(parent.entities).find((mob) => {
+    return (
+      [...defeatableBosses, "vbat"].includes(mob.mtype) &&
+      partyMems.includes(mob.target) &&
+      mob.target !== character.name
+    );
+  });
+
   switch (character.ctype) {
     case "warrior":
       if (
@@ -224,16 +231,8 @@ async function useCryptStrategy(target) {
         }
       }
 
-      const mobTargetingAlly = Object.values(parent.entities).find((mob) => {
-        return (
-          [...defeatableBosses, "vbat"].includes(mob.mtype) &&
-          partyMems.includes(mob.target) &&
-          mob.target !== character.name
-        );
-      });
-
       if (
-        character.name === TANKER &&
+        isAssignedAsTanker() &&
         character.mp > G.skills["taunt"].mp &&
         !is_on_cooldown("taunt") &&
         mobTargetingAlly &&
@@ -246,6 +245,16 @@ async function useCryptStrategy(target) {
       break;
 
     case "priest":
+      if (isAssignedAsTanker() && mobTargetingAlly) {
+        const allyToAbsorb = get_player(mobTargetingAlly.target);
+        if (
+          allyToAbsorb &&
+          is_in_range(allyToAbsorb, "absorb") &&
+          character.mp > G.skills["absorb"].mp &&
+          !is_on_cooldown("absorb")
+        )
+          use_skill("absorb", allyToAbsorb);
+      }
       const lowHpMember = partyMems
         .map((id) => get_entity(id))
         .filter((char) => char)

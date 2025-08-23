@@ -1,8 +1,8 @@
 async function usePullStrategies(target) {
   const partyHealer = get_entity(HEALER);
   const partyTanker = get_entity(TANKER);
-  const mobsList = Object.keys(parent.entities).filter(
-    (id) => parent.entities[id]?.type === "monster",
+  const mobsList = Object.values(parent.entities).filter(
+    (mob) => mob.type === "monster",
   );
 
   switch (character.ctype) {
@@ -70,23 +70,19 @@ async function usePullStrategies(target) {
       }
 
       const formidableMonsterAppeared = mobsList.find(
-        (id) =>
-          parent.entities[id]?.attack * parent.entities[id]?.frequency >
-          MAX_MOB_DPS,
+        (mob) => mob.attack * mob?.frequency > MAX_MOB_DPS,
       );
 
       const havePulledEnoughMobs =
-        mobsList.filter((id) => parent.entities[id]?.target === character.name)
-          .length >= MAX_TARGET;
+        mobsList.filter((mob) => mob?.target === character.name).length >=
+        MAX_TARGET;
 
-      const numberOfMonsterInRange = mobsList.filter((id) =>
-        is_in_range(parent.entities[id], "agitate"),
+      const numberOfMonsterInRange = mobsList.filter((mob) =>
+        is_in_range(mob, "agitate"),
       ).length;
 
       const listOfNoTargetMonsterInRange = mobsList.filter(
-        (id) =>
-          is_in_range(parent.entities[id], "agitate") &&
-          parent.entities[id].target !== TANKER,
+        (mob) => is_in_range(mob, "agitate") && mob.target !== TANKER,
       );
 
       const magicalMobsTargetingSelf = Object.values(parent.entities).filter(
@@ -134,8 +130,12 @@ async function usePullStrategies(target) {
         !is_on_cooldown("agitate") &&
         // numberOfMonsterInRange <= MAX_TARGET + 2 &&
         listOfNoTargetMonsterInRange.length >= 2 &&
-        !listOfNoTargetMonsterInRange.some((id) =>
-          MELEE_IGNORE_LIST.includes(parent.entities[id].mtype),
+        !listOfNoTargetMonsterInRange.some(
+          (mob) =>
+            MELEE_IGNORE_LIST.includes(mob.mtype) ||
+            WATCHOUT_ABILITIES.some((skill) =>
+              Object.keys(mob.abilities).includes(skill),
+            ),
         ) &&
         Object.values(parent.entities)
           .filter(
@@ -168,16 +168,19 @@ async function usePullStrategies(target) {
         !is_on_cooldown("taunt")
       ) {
         const mobToPull = mobsList.find(
-          (id) =>
-            calculateDamage(parent.entities[id], character) < 4000 &&
-            is_in_range(parent.entities[id], "taunt") &&
-            (!parent.entities[id].target ||
+          (mob) =>
+            calculateDamage(mob, character) < 4000 &&
+            is_in_range(mob, "taunt") &&
+            !WATCHOUT_ABILITIES.some((skill) =>
+              Object.keys(mob.abilities).includes(skill),
+            ) &&
+            (!mob.target ||
               partyMems
                 .filter((id) => id !== character.name)
-                .includes(parent.entities[id].target)) &&
-            (parent.entities[id].damage_type === "physical"
+                .includes(mob.target)) &&
+            (mob.damage_type === "physical"
               ? physicalMobsTargetingSelf.length < character.courage
-              : parent.entities[id].damage_type === "magical"
+              : mob.damage_type === "magical"
               ? magicalMobsTargetingSelf.length < character.mcourage
               : pureMobsTargetingSelf.length < character.pcourage),
         );
@@ -203,7 +206,7 @@ async function usePullStrategies(target) {
       break;
 
     case "priest":
-      const suggestedPriestItems = calculatePriestItems();
+      const suggestedPriestItems = calculatePriestItems(target);
       if (
         Object.keys(suggestedPriestItems).some(
           (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
@@ -213,8 +216,9 @@ async function usePullStrategies(target) {
       }
 
       if (
-        (avgDmgTaken(character) > character.heal * 0.95 * character.frequency ||
-          character.hp < 0.5 * character.max_hp) &&
+        avgPartyDmgTaken(partyMems) >
+          character.heal * 0.95 * character.frequency &&
+        character.hp < (isAssignedAsTanker() ? 0.3 : 0.5) * character.max_hp &&
         !is_on_cooldown("scare") &&
         character.cc < 100
       ) {
