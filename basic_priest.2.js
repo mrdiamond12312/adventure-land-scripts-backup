@@ -28,7 +28,7 @@ async function fight(target) {
     const partyDmgRecieved = avgPartyDmgTaken(partyMems);
 
     const targetToTaunt =
-      character.name === TANKER && currentStrategy === usePullStrategies
+      isAssignedAsTanker() && currentStrategy === usePullStrategies
         ? Object.values(parent.entities)
             .filter(
               (mob) =>
@@ -104,11 +104,11 @@ async function priestBuff() {
       //   promises.push(
       //     equipBatch({
       //       mainhand:
-      //         character.name === TANKER || character.map === "crypt"
+      //         isAssignedAsTanker() || character.map === "crypt"
       //           ? "pmace"
       //           : "oozingterror",
       //       orb:
-      //         character.name === TANKER && character.s.burned
+      //         isAssignedAsTanker() && character.s.burned
       //           ? "orba"
       //           : "jacko",
       //     }),
@@ -117,7 +117,7 @@ async function priestBuff() {
       //   promises.push(
       //     equipBatch({
       //       orb:
-      //         character.name === TANKER && character.s.burned
+      //         isAssignedAsTanker() && character.s.burned
       //           ? "orba"
       //           : "jacko",
       //     }),
@@ -194,7 +194,7 @@ async function priestBuff() {
           character.mp > G.skills["absorb"].mp &&
           Object.values(parent.entities).filter(
             (entity) => entity.type === "monster" && entity.target === member,
-          ).length >= (character.name === TANKER ? 1 : 2)
+          ).length >= (isAssignedAsTanker() ? 1 : 2)
         ) {
           use_skill("absorb", get_entity(member));
 

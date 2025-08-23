@@ -174,7 +174,7 @@ async function fight(target) {
   const partyDmgRecieved = avgPartyDmgTaken(partyMems);
   const partyHealer = get_player(HEALER);
   if (
-    character.name === TANKER &&
+    isAssignedAsTanker() &&
     character.mp > G.skills["taunt"].mp &&
     !is_on_cooldown("taunt") &&
     partyHealer &&
@@ -239,6 +239,7 @@ async function fight(target) {
 
 async function mainLoop() {
   try {
+    desiredElixir = isAssignedAsTanker() ? "elixirluck" : "pumpkinspice";
     assignRoles();
 
     if (

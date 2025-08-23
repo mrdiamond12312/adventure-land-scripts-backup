@@ -38,7 +38,7 @@ function getMobsListNearTarget(mob) {
     (othermob) =>
       othermob.type === "monster" &&
       othermob.mtype !== mob.mtype &&
-      distance(othermob, mob) < 250
+      distance(othermob, mob) < 250,
   );
 }
 
@@ -65,38 +65,37 @@ async function useCryptStrategy(target) {
       await advanceSmartMove(VBAT_LOCATION);
     }
 
-    const vbat =
-      character.name === TANKER
-        ? get_nearest_monster({ type: "a2" }) ||
-          get_targeted_monster() ||
-          get_nearest_monster({ type: "vbat" })
-        : get_nearest_monster({ type: "a2" }) ||
-          get_target_of(get_entity(TANKER)) ||
-          get_nearest_monster({ target: TANKER }) ||
-          get_nearest_monster({ target: HEALER }) ||
-          get_nearest_monster({ target: MAGE }) ||
-          get_nearest_monster({ type: "vbat" });
+    const vbat = isAssignedAsTanker()
+      ? get_nearest_monster({ type: "a2" }) ||
+        get_targeted_monster() ||
+        get_nearest_monster({ type: "vbat" })
+      : get_nearest_monster({ type: "a2" }) ||
+        get_target_of(get_entity(TANKER)) ||
+        get_nearest_monster({ target: TANKER }) ||
+        get_nearest_monster({ target: HEALER }) ||
+        get_nearest_monster({ target: MAGE }) ||
+        get_nearest_monster({ type: "vbat" });
 
     const nearestKillableBosses = Object.values(parent.entities).filter(
       (mobs) =>
         mobs.type === "monster" &&
         defeatableBosses.includes(mobs.mtype) &&
-        distance(character, mobs) < 200
+        distance(character, mobs) < 200,
     );
 
     const nearestFormiddableBosses = Object.values(parent.entities).filter(
       (mobs) =>
         mobs.type === "monster" &&
         ![...scarableBosses, "vbat"].includes(mobs.mtype) &&
-        distance(character, mobs) < 300
+        distance(character, mobs) < 300,
     );
 
     if (nearestFormiddableBosses.length || nearestKillableBosses.length > 2) {
       log("Too dangerous");
       await advanceSmartMove(
         CRYPT_JUNCTION.sort(
-          (lhs, rhs) => distance(character, rhs) - distance(character, lhs)
-        ).pop()
+          (lhs, rhs) => distance(character, rhs) - distance(character, lhs),
+        ).pop(),
       );
     } else {
       if (
@@ -137,7 +136,7 @@ async function useCryptStrategy(target) {
             (mob) =>
               mob.type === "monster" &&
               defeatableBosses.includes(mob.mtype) &&
-              getMobsListNearTarget(mob).length < 1
+              getMobsListNearTarget(mob).length < 1,
           );
           if (nearbyBoss.length) {
             set("lastSeenDefeatableCryptBoss", {
@@ -153,7 +152,7 @@ async function useCryptStrategy(target) {
           }
         }, 2000);
         await advanceSmartMove(
-          CRYPT_JUNCTION[currentJunction++ % CRYPT_JUNCTION.length]
+          CRYPT_JUNCTION[currentJunction++ % CRYPT_JUNCTION.length],
         );
       }
     } else {
@@ -163,7 +162,7 @@ async function useCryptStrategy(target) {
         otherBossNearCurrentTarget.length >
           (currentTarget.mtype === "a5" ? 2 : 1) ||
         otherBossNearCurrentTarget.some(
-          (mob) => !defeatableBosses.includes(mob.mtype)
+          (mob) => !defeatableBosses.includes(mob.mtype),
         )
       ) {
         await advanceSmartMove(CRYPT_STARTING_LOCATION);
@@ -233,20 +232,20 @@ async function useCryptStrategy(target) {
       }
 
       if (
-        character.name === TANKER &&
+        isAssignedAsTanker() &&
         character.mp > G.skills["taunt"].mp &&
         !is_on_cooldown("taunt") &&
         mobTargetingAlly &&
         character.hp > character.max_hp * 0.4
       )
         use_skill("taunt", mobTargetingAlly).then(() =>
-          reduce_cooldown("taunt", character.ping * 0.95)
+          reduce_cooldown("taunt", character.ping * 0.95),
         );
 
       break;
 
     case "priest":
-      if (character.name === TANKER && mobTargetingAlly) {
+      if (isAssignedAsTanker() && mobTargetingAlly) {
         const allyToAbsorb = get_player(mobTargetingAlly.target);
         if (
           allyToAbsorb &&

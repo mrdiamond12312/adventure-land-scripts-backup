@@ -216,9 +216,9 @@ async function usePullStrategies(target) {
       }
 
       if (
-        (avgPartyDmgTaken(partyMems) > character.heal * 0.95 * character.frequency &&
-          character.hp <
-            (character.name === TANKER ? 0.3 : 0.5) * character.max_hp) &&
+        avgPartyDmgTaken(partyMems) >
+          character.heal * 0.95 * character.frequency &&
+        character.hp < (isAssignedAsTanker() ? 0.3 : 0.5) * character.max_hp &&
         !is_on_cooldown("scare") &&
         character.cc < 100
       ) {

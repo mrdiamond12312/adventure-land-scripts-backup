@@ -312,6 +312,7 @@ const STORE_ABLE = [
   "feather0",
   "essenceofnature",
   "essenceoffrost",
+  "essenceoffire",
   "dexscroll",
   "cshell",
   "carrot",
@@ -328,6 +329,9 @@ const STORE_ABLE = [
   "orboffrost",
   "orbofplague",
   "orbofresolve",
+  "orba",
+  "orbofstr",
+  "orbofdex",
 ];
 
 const SALE_ABLE = [
@@ -447,7 +451,7 @@ async function sortInv() {
 function calculateRangeRate() {
   switch (character.ctype) {
     case "priest":
-      return character.name === TANKER && currentStrategy === usePullStrategies
+      return isAssignedAsTanker() && currentStrategy === usePullStrategies
         ? 0.2
         : 0.5;
     default:
