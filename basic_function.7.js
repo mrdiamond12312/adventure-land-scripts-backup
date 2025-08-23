@@ -10,13 +10,15 @@ var attack_mode = true;
 var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
 // var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
 
-var TANKER = "MooohMoooh";
-// var TANKER = "CowTheMooh";
-
 const MAGE = "MowTheCooh";
 var HEALER = "CowTheMooh";
 // const HEALER = "CupidCow";
 const RANGER = "MoohThatCow";
+const WARRIOR = "MooohMoooh";
+
+var TANKER =
+  partyMems.find((id) => [HEALER, WARRIOR].includes(id)) ?? partyMems[0];
+// var TANKER = "CowTheMooh";
 
 const MIDAS_CHARACTER = [MAGE];
 
@@ -153,7 +155,7 @@ function filterCompoundableAndStackable() {
     (i) =>
       inv[i] &&
       (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name),
+      !["hpot1", "mpot1"].includes(inv[i].name)
   );
   return res;
 }
@@ -488,7 +490,7 @@ function getMonstersOnDeclares() {
 
 async function withTimeout(
   promise,
-  timeoutInterval = Math.max(...parent.pings),
+  timeoutInterval = Math.max(...parent.pings)
 ) {
   return Promise.race([
     promise,
@@ -557,10 +559,10 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
-            (entity.target === HEALER || entity.target === MAGE),
+            (entity.target === HEALER || entity.target === MAGE)
         )
         .sort(
-          (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
+          (lhs, rhs) => distance(rhs, character) - distance(lhs, character)
         );
       if (
         mobsTargetingNonTanker.length &&
@@ -577,7 +579,7 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack"),
+          is_in_range(mob, "attack")
       );
       if (leader)
         target =
@@ -599,16 +601,16 @@ function getTarget() {
         !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
-            (character.y - leader.y) * (character.y - leader.y),
+            (character.y - leader.y) * (character.y - leader.y)
         ) > spacial &&
         can_move_to(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         )
       )
         move(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         );
       return;
     }
@@ -620,7 +622,7 @@ function getTarget() {
 const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
-    (breakpoint) => (1 / character.frequency / breakpoint) * 1000,
+    (breakpoint) => (1 / character.frequency / breakpoint) * 1000
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
@@ -769,7 +771,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
           //   target ? get_height(target) ?? 0 : 0
           // ))
           extraRangeByMobHitbox +
-          extraRangeBySelfHitbox),
+          extraRangeBySelfHitbox)
     ) *
     2;
   return setTimeout(hitAndRun, getLoopInterval());
@@ -798,7 +800,7 @@ function getPlayersToHeal() {
         (player.max_hp >
           minimumHealingModifier * (character.heal ?? character.attack) +
             player.hp ||
-          player.hp < player.max_hp * 0.8),
+          player.hp < player.max_hp * 0.8)
     )
     .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
 
@@ -813,7 +815,7 @@ function getPlayersToHeal() {
               minimumHealingModifier * (character.heal ?? character.attack) +
                 entity.hp ||
               entity.hp < 0.8 * entity.max_hp)
-          : !entity.s.healed && entity.hp < 7000),
+          : !entity.s.healed && entity.hp < 7000)
     )
     .sort((lhs, rhs) => {
       if (lhs.mtype === "ghost" && rhs.mtype !== "ghost") return 9999;
@@ -991,7 +993,7 @@ async function cupidHeal() {
         entity.hp <
           entity.max_hp -
             character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
+              dps_multiplier(entity.armor - (character.apiercing ?? 0))
     )
     .sort((lhs, rhs) => {
       if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
@@ -1006,7 +1008,7 @@ async function cupidHeal() {
     promises.push(
       equipBatch({
         mainhand: "cupid",
-      }),
+      })
     );
 
     await Promise.all(promises);
@@ -1023,10 +1025,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 5)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -1041,10 +1043,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 3)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -1058,7 +1060,7 @@ async function cupidHeal() {
       set_message("Single Cupid");
       log(`Healing ${lowHealthPlayers[0].name}`);
       attack(lowHealthPlayers[0]).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     }
@@ -1148,7 +1150,7 @@ setInterval(async function () {
         )
           return;
         await send_item(partyMerchant, index, 1000);
-      }),
+      })
     );
   }
 
@@ -1331,7 +1333,7 @@ async function changeToDailyEventTargets() {
               : 1
             : lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp,
+            : lhs.hp - rhs.hp
         )
         .pop();
 
@@ -1471,7 +1473,7 @@ async function changeToDailyEventTargets() {
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype,
+          (element) => element === currentCharacter.ctype
         ),
         entity: currentCharacter,
         sqrDistance:

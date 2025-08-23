@@ -25,15 +25,24 @@ async function fight(target) {
     currentStrategy(target);
 
     // Make Priest prior mobs without poison effect that attacking the party, to reduce their attack spped
+    const targetToTaunt =
+      character.name === TANKER && currentStrategy === usePullStrategt
+        ? Object.values(parent.entities).filter(
+            (mob) =>
+              mob.type === "monster" &&
+              !mob.target &&
+              is_in_range(mob, "attack")
+          )
+        : null;
     const targetToAttack =
       character.slots.orb?.name === "test_orb"
         ? Object.values(parent.entities)
             .filter(
               (mob) =>
+                mob.type === "monster" &&
                 !mob.s.poisoned &&
                 is_in_range(mob, "attack") &&
-                mob.type === "monster" &&
-                partyMems.includes(mob.target),
+                partyMems.includes(mob.target)
             )
             .sort((lhs, rhs) => lhs.attack - rhs.attack)
             .pop() ?? target
@@ -78,7 +87,7 @@ async function priestBuff() {
       if (
         !character.slots.mainhand ||
         ["broom", "froststaff", "pinkies"].includes(
-          character.slots.mainhand?.name,
+          character.slots.mainhand?.name
         ) ||
         !character.slots.mainhand.level
       ) {
@@ -89,13 +98,13 @@ async function priestBuff() {
                 ? "pmace"
                 : "oozingterror",
             orb: "jacko",
-          }),
+          })
         );
       } else if (character.slots.orb?.name !== "jacko") {
         promises.push(
           equipBatch({
             orb: "jacko",
-          }),
+          })
         );
       }
 
@@ -107,7 +116,7 @@ async function priestBuff() {
           healingPrioritizedNames().includes(buffee.name)
         ) {
           promises.push(
-            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
+            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2)
           );
           continue;
         }
@@ -120,8 +129,8 @@ async function priestBuff() {
             withTimeout(
               heal(buffee).then(() => {
                 reduce_cooldown("attack", Math.min(...parent.pings));
-              }),
-            ),
+              })
+            )
           );
 
           set_message("Heal " + buffee.name);
@@ -140,13 +149,13 @@ async function priestBuff() {
       (ally) =>
         (ally.hp < ally.max_hp - character.level * 10 * 2 &&
           !is_in_range(ally, "heal")) ||
-        ally.hp < ally.max_hp * 0.3,
+        ally.hp < ally.max_hp * 0.3
     ) ||
       allies.every((ally) => ally.hp < ally.max_hp - character.level * 10 * 2))
   ) {
     if (!is_on_cooldown("partyheal") && character.mp > 1000) {
       use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", Math.min(...parent.pings)),
+        reduce_cooldown("partyheal", Math.min(...parent.pings))
       );
       set_message("Party Heal");
     }
@@ -157,7 +166,7 @@ async function priestBuff() {
     .map((member) => {
       if (
         Object.values(parent.entities).some(
-          (entity) => entity.target === member,
+          (entity) => entity.target === member
         )
       )
         if (
@@ -166,7 +175,7 @@ async function priestBuff() {
           character.mp > G.skills["absorb"].mp &&
           (get_entity(member).ctype !== "warrior" ||
             Object.values(parent.entities).filter(
-              (entity) => entity.type === "monster" && entity.target === member,
+              (entity) => entity.type === "monster" && entity.target === member
             ).length > 2)
         ) {
           use_skill("absorb", get_entity(member));
