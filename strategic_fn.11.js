@@ -200,6 +200,8 @@ function calculatePriestItems(target) {
     offhand:
       character.map === "crypt"
         ? "wbook1"
+        : character.name === TANKER && character.s.burned
+        ? "wbookhs"
         : haveLowHpMobsNearby
         ? "mshield"
         : TANKER === character.name ||
