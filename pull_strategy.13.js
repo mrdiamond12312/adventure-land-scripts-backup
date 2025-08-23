@@ -129,8 +129,12 @@ async function usePullStrategies(target) {
         !is_on_cooldown("agitate") &&
         // numberOfMonsterInRange <= MAX_TARGET + 2 &&
         listOfNoTargetMonsterInRange.length >= 2 &&
-        !listOfNoTargetMonsterInRange.some((mob) =>
-          MELEE_IGNORE_LIST.includes(mob.mtype)
+        !listOfNoTargetMonsterInRange.some(
+          (mob) =>
+            MELEE_IGNORE_LIST.includes(mob.mtype) ||
+            WATCHOUT_ABILITIES.some((skill) =>
+              Object.keys(mob.abilities).includes(skill)
+            )
         ) &&
         Object.values(parent.entities)
           .filter(
@@ -209,7 +213,7 @@ async function usePullStrategies(target) {
 
       if (
         (avgDmgTaken(character) > character.heal * 0.95 * character.frequency ||
-          character.hp < 0.5 * character.max_hp) &&
+          character.hp < (character.name === TANKER ? 0.3: 0.5) * character.max_hp) &&
         !is_on_cooldown("scare") &&
         character.cc < 100
       ) {

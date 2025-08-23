@@ -73,17 +73,17 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = 423;
 // var mapY = -2614;
 
-// var map = "desertland";
-// var mapX = 223;
-// var mapY = -708;
+var map = "desertland";
+var mapX = 223;
+var mapY = -708;
 
 // var map = "tunnel";
 // var mapX = 0;
 // var mapY = -775;
 
-var map = "halloween";
-var mapX = -219;
-var mapY = 681;
+// var map = "halloween";
+// var mapX = -219;
+// var mapY = 681;
 
 // var map = "main";
 // var mapX = 676;
@@ -104,9 +104,11 @@ var mapY = 681;
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 // var mobsToFarm = ["phoenix", "stompy", "wolf"];
-// var mobsToFarm = ["fireroamer"];
+var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
-var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
+
+// var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
+
 // var mobsToFarm = ["phoenix", "croc", "armadillo"];
 // var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
 // var mobsToFarm = [
@@ -1512,9 +1514,14 @@ async function changeToDailyEventTargets() {
     }
   }
 
+  const partyHealer = get_entity(HEALER);
+  const partyTanker = get_entity(TANKER);
+
   if (
-    get_entity(HEALER) &&
-    !get_entity(HEALER).rip &&
+    partyTanker &&
+    partyTanker.hp > partyTanker.max_hp * 0.3 &&
+    partyHealer &&
+    !partyHealer.rip &&
     character.ping < 600 &&
     (get_targeted_monster()?.level < 5 || get_targeted_monster()?.attack < 500)
   )

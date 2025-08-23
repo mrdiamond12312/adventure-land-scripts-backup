@@ -25,9 +25,10 @@ async function fight(target) {
     currentStrategy(target);
 
     // Make Priest prior mobs without poison effect that attacking the party, to reduce their attack spped
-    const partyDmgRecieved = avgPartyDmmgTaken(partyMems);
+    const partyDmgRecieved = avgPartyDmgTaken(partyMems);
+
     const targetToTaunt =
-      character.name === TANKER && currentStrategy === usePullStrategt
+      character.name === TANKER && currentStrategy === usePullStrategies
         ? Object.values(parent.entities)
             .filter(
               (mob) =>
@@ -35,13 +36,14 @@ async function fight(target) {
                 !mob.target &&
                 is_in_range(mob, "attack") &&
                 partyDmgRecieved + calculateDamage(mob, character) <
-                  character.heal,
+                  character.heal * 0.9
             )
             .sort(
-              (lhs, rhs) => distance(lhs, character) - distance(rhs, character),
+              (lhs, rhs) => distance(lhs, character) - distance(rhs, character)
             )
             .shift()
         : null;
+
     const targetToAttack =
       character.slots.orb?.name === "test_orb"
         ? Object.values(parent.entities)
@@ -50,15 +52,15 @@ async function fight(target) {
                 mob.type === "monster" &&
                 !mob.s.poisoned &&
                 is_in_range(mob, "attack") &&
-                partyMems.includes(mob.target),
+                partyMems.includes(mob.target)
             )
             .sort((lhs, rhs) => lhs.attack - rhs.attack)
             .pop() ?? target
         : target;
-    change_target(targetToAttack);
+    change_target(targetToTaunt ?? targetToAttack);
 
     try {
-      await withTimeout(attack(targetToAttack), 2500);
+      await withTimeout(attack(targetToTaunt ?? targetToAttack), 2500);
       reduce_cooldown("attack", Math.min(...parent.pings));
     } catch (e) {
       if (e.failed && e.response !== "cooldown") {
@@ -130,7 +132,7 @@ async function priestBuff() {
           healingPrioritizedNames().includes(buffee.name)
         ) {
           promises.push(
-            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
+            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2)
           );
           continue;
         }
@@ -139,13 +141,13 @@ async function priestBuff() {
           distance(buffee, character) <
           character.range + character.xrange * 0.9
         ) {
-          await currentStrategy(buffee);
           promises.push(
+            currentStrategy(buffee),
             withTimeout(
               heal(buffee).then(() => {
                 reduce_cooldown("attack", Math.min(...parent.pings));
-              }),
-            ),
+              })
+            )
           );
 
           set_message("Heal " + buffee.name);
@@ -164,13 +166,13 @@ async function priestBuff() {
       (ally) =>
         (ally.hp < ally.max_hp - character.level * 10 * 2 &&
           !is_in_range(ally, "heal")) ||
-        ally.hp < ally.max_hp * 0.3,
+        ally.hp < ally.max_hp * 0.3
     ) ||
       allies.every((ally) => ally.hp < ally.max_hp - character.level * 10 * 2))
   ) {
     if (!is_on_cooldown("partyheal") && character.mp > 1000) {
       use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", Math.min(...parent.pings)),
+        reduce_cooldown("partyheal", Math.min(...parent.pings))
       );
       set_message("Party Heal");
     }
@@ -181,17 +183,16 @@ async function priestBuff() {
     .map((member) => {
       if (
         Object.values(parent.entities).some(
-          (entity) => entity.target === member,
+          (entity) => entity.target === member
         )
       )
         if (
           is_in_range(get_entity(member), "absorb") &&
           !is_on_cooldown("absorb") &&
           character.mp > G.skills["absorb"].mp &&
-          (get_entity(member).ctype !== "warrior" ||
-            Object.values(parent.entities).filter(
-              (entity) => entity.type === "monster" && entity.target === member,
-            ).length > 2)
+          Object.values(parent.entities).filter(
+            (entity) => entity.type === "monster" && entity.target === member
+          ).length >= (character.name === TANKER ? 1 : 2)
         ) {
           use_skill("absorb", get_entity(member));
 
@@ -248,15 +249,11 @@ async function mainLoop() {
           distance(character, { x: mapX, y: mapY, map }) > 500)
       ) {
         changeToNormalStrategies();
-        const scareInterval = setInterval(() => {
-          scareAwayMobs();
-        }, 5000);
         advanceSmartMove({
           map,
           x: mapX,
           y: mapY,
         });
-        clearInterval(scareInterval);
       }
     } else fight(target);
   } catch (e) {

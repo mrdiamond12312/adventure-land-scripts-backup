@@ -3,6 +3,7 @@ const BLAST_RADIUS = character.blast / 3.6 || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 3;
 const MAX_MOB_DPS = 1000;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
+const WATCHOUT_ABILITIES = ["burn"];
 
 function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return [];
@@ -11,7 +12,7 @@ function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
     (entity) =>
       entity.type === "monster" &&
       distance(target, entity) < blastRadius &&
-      entity.target,
+      entity.target
   );
 }
 
@@ -24,7 +25,7 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
       (entity) =>
         distance(target, entity) < blastRadius &&
         !entity.target &&
-        entity.type === "monster",
+        entity.type === "monster"
     )
   )
     return 0;
@@ -33,7 +34,7 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
     (entity) =>
       entity.type === "monster" &&
       distance(target, entity) < blastRadius &&
-      entity.target,
+      entity.target
   ).length;
 }
 
@@ -48,7 +49,7 @@ function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
         parent.distance(target, entity) < blastRadius &&
         entity.attack > 1100 &&
         entity.type === "monster" &&
-        !entity.target,
+        !entity.target
     ).length > 0
   );
 }
@@ -64,7 +65,7 @@ function calculateMageItems() {
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
     (mob) =>
       (partyMems.includes(mob.target) || mob.cooperative) &&
-      mob.hp <= mob.max_hp * 0.15,
+      mob.hp <= mob.max_hp * 0.15
   );
 
   return {
@@ -76,7 +77,7 @@ function calculateMageItems() {
         : character.map === "crypt" && !get_targeted_monster()?.s?.frozen
         ? "froststaff"
         : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
-            get_targeted_monster()?.mtype,
+            get_targeted_monster()?.mtype
           ) || get_targeted_monster()?.max_hp < 2000
         ? "pinkie"
         : "firestaff",
@@ -103,7 +104,7 @@ function calculateWarriorItems() {
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
     (mobs) =>
       (mobs.target === character.name || mobs.cooperative) &&
-      mobs.hp <= mobs.max_hp * 0.15,
+      mobs.hp <= mobs.max_hp * 0.15
   );
 
   if (["pinkgoo", "snowman", "wabbit"].includes(get_targeted_monster()?.mtype))
@@ -129,7 +130,7 @@ function calculateWarriorItems() {
     offhand:
       (character.map === "crypt" &&
         Object.values(parent.entities).some(
-          (mob) => mob.target === character.name && mob.mtype === "a2",
+          (mob) => mob.target === character.name && mob.mtype === "a2"
         )) ||
       haveLowHpMobsNearby
         ? "mshield"
@@ -173,7 +174,7 @@ function calculatePriestItems(target) {
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
     (mobs) =>
       (mobs.target === character.name || mobs.cooperative) &&
-      mobs.hp <= mobs.max_hp * 0.15,
+      mobs.hp <= mobs.max_hp * 0.15
   );
   const currentTarget = get_targeted_monster();
   return {
@@ -181,7 +182,7 @@ function calculatePriestItems(target) {
       target.type !== "monster"
         ? "oozingterror"
         : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
-            get_targeted_monster()?.mtype,
+            get_targeted_monster()?.mtype
           )
         ? "pinkie"
         : character.map === "crypt"
@@ -203,7 +204,10 @@ function calculatePriestItems(target) {
         ? "mshield"
         : TANKER === character.name ||
           Object.values(parent.entities).some(
-            (mob) => mob.type === "monster" && mob.target === character.name,
+            (mob) =>
+              mob.type === "monster" &&
+              mob.target === character.name &&
+              mob.damage_type === "magical"
           ) ||
           character.fear
         ? "wbookhs"
@@ -216,7 +220,7 @@ function calculatePriestItems(target) {
         : target.type !== "monster"
         ? "jacko"
         : "test_orb",
-    amulet: "intamulet",
+    amulet: character.name === TANKER ? "t2stramulet" : "intamulet",
   };
 }
 
@@ -302,20 +306,20 @@ async function equipBatch(suggestedItems, forced = false) {
             suggestedItems[slot] &&
             (suggestedItems[slot] !== character.slots[slot]?.name ||
               character.items[findMaxLevelItem(suggestedItems[slot])]?.level >
-                character.slots[slot]?.level),
+                character.slots[slot]?.level)
         )
         .map((slot) => ({
           slot,
           num: findMaxLevelItem(suggestedItems[slot]),
         }))
-        .filter((equipInfo) => equipInfo.num >= 0),
+        .filter((equipInfo) => equipInfo.num >= 0)
     )
       .then(() => {
         isEquipingItems = false;
       })
       .catch(() => {
         isEquipingItems = false;
-      }),
+      })
   );
   return promises;
 }
@@ -327,7 +331,12 @@ function calculateDamage(target, characterEntity, recursion = true) {
     case "magical":
       return (
         target.attack *
-          dps_multiplier(characterEntity.resistance - (target.rpiercing ?? 0)) *
+          dps_multiplier(
+            characterEntity.resistance -
+              (target.type === "monster"
+                ? G.monsters[target.mtype].rpiercing ?? 0
+                : 0)
+          ) *
           (target.frequency < 0.9 ? 0.9 : target.frequency) +
         (target.dreturn && recursion
           ? characterEntity.range < 100
@@ -345,7 +354,9 @@ function calculateDamage(target, characterEntity, recursion = true) {
               (characterEntity.s["hardshell"]
                 ? G.conditions.hardshell.armor
                 : 0) -
-              (target.apiercing ?? 0),
+              (target.type === "monster"
+                ? G.monsters[target.mtype].apiercing ?? 0
+                : 0)
           ) *
           (target.frequency < 0.9 ? 0.9 : target.frequency) +
         (target.dreturn && recursion
@@ -365,7 +376,7 @@ function listOfMonsterAttacking(characterEntity) {
   if (!characterEntity) return [];
   return Object.values(parent.entities).filter(
     (entity) =>
-      entity.type === "monster" && entity.target === characterEntity.name,
+      entity.type === "monster" && entity.target === characterEntity.name
   );
 }
 
@@ -374,13 +385,13 @@ function mobbingMultiplier(numberOfMobs) {
 }
 
 function avgDmgTaken(characterEntity, dmgType = null) {
-  if (!characterEntity) return Infinity;
+  if (!characterEntity) return 0;
   const numberOfAttackingMobs = listOfMonsterAttacking(characterEntity).length;
   const listOfAttackingMobs = Object.values(parent.entities).filter(
     (mob) =>
       mob.target === characterEntity.name &&
       mob.type === "monster" &&
-      (!dmgType || mob.damage_type === dmgType),
+      (!dmgType || mob.damage_type === dmgType)
   );
 
   // Burn Damage padding
@@ -391,19 +402,23 @@ function avgDmgTaken(characterEntity, dmgType = null) {
       return prev.attack > current.attack ? prev : current;
     }, undefined);
 
+  const fireResist =
+    characterEntity.firesistance ??
+    (characterEntity.slots.orb?.name === "orba" ? 15 : 0);
+
   const burnPadding = highestBurningMob
     ? dps_multiplier(
         highestBurningMob.damage_type === "physical"
-          ? characterEntity.armor - highestBurningMob.apiercing
+          ? characterEntity.armor -
+              (G.monsters[highestBurningMob.mtype].apiercing ?? 0)
           : highestBurningMob.damage_type === "magical"
-          ? characterEntity.resistance - highestBurningMob.rpiercing
-          : 1,
+          ? characterEntity.resistance -
+            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0)
+          : 1
       ) *
       ((100 -
         (characterEntity.firesistance ??
-        characterEntity.slots.orb?.name === "orba"
-          ? 15
-          : 0)) /
+          (characterEntity.slots.orb?.name === "orba" ? 15 : 0))) /
         100) *
       (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
       highestBurningMob.attack
@@ -413,7 +428,7 @@ function avgDmgTaken(characterEntity, dmgType = null) {
     listOfAttackingMobs.reduce(
       (accummulator, currentMob) =>
         accummulator + calculateDamage(currentMob, characterEntity),
-      0,
+      0
     ) *
       mobbingMultiplier(numberOfAttackingMobs) +
     Math.max(characterEntity.s.burn?.intensity ?? 0, burnPadding)
@@ -424,7 +439,7 @@ function avgPartyDmgTaken(partyMems, dmgType = null) {
   return partyMems.reduce(
     (accumulator, current) =>
       accumulator + avgDmgTaken(get_player(current), dmgType),
-    0,
+    0
   );
 }
 
@@ -439,7 +454,7 @@ function assignRoles() {
     const partyDmgTaken = avgPartyDmgTaken(partyMems);
     const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "magical");
 
-    if (partyDmgTaken * 0.5 < partyMagicalDmgTaken) {
+    if (partyMagicalDmgTaken / partyDmgTaken >= 0.5) {
       TANKER = HEALER;
       partyMems = rotateLeader(partyMems, HEALER);
     } else {
@@ -461,7 +476,10 @@ function getMonstersToCBurst() {
         mob.type === "monster" &&
         is_in_range(mob, "cburst") &&
         calculateDamage(mob, partyTanker) < MAX_MOB_DPS &&
-        mob.range < character.range - 20,
+        mob.range < character.range - 20 &&
+        !WATCHOUT_ABILITIES.some((skill) =>
+          Object.keys(mob.abilities).includes(skill)
+        )
     )
     .sort((lhs, rhs) => distance(character, rhs) - distance(character, lhs));
 
@@ -504,7 +522,7 @@ async function warriorCleave(currentStrategy) {
       (mob) =>
         mob.type === "monster" &&
         distance(mob, character) < G.skills["cleave"].range &&
-        mob.mtype !== "porcupine",
+        mob.mtype !== "porcupine"
     ).length === 0 ||
     isCleaving
   )
@@ -539,7 +557,7 @@ async function warriorCleave(currentStrategy) {
               1.5 &&
           mob.attack > 150
         );
-      },
+      }
     );
 
     // Categorize additional mobs that would be cleaved
@@ -557,7 +575,7 @@ async function warriorCleave(currentStrategy) {
 
     // Identify strong mobs that might be risky
     const formidableMob = listOfNoTargetMonsterInRange.some(
-      (mob) => mob.attack * mob.frequency > MAX_MOB_DPS,
+      (mob) => mob.attack * mob.frequency > MAX_MOB_DPS
     );
 
     // Calculate DPS after cleaving
@@ -577,7 +595,14 @@ async function warriorCleave(currentStrategy) {
         ? totalDpsTaken <= healThreshold ||
           listOfNoTargetMonsterInRange.length === 0
         : listOfNoTargetMonsterInRange.length === 0) &&
-      !allMobs.some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype)) &&
+      !allMobs.some(
+        (mob) =>
+          MELEE_IGNORE_LIST.includes(mob.mtype) ||
+          WATCHOUT_ABILITIES.some((skill) =>
+            Object.keys(mob.abilities).includes(skill)
+          )
+      ) &&
+      !listOfNoTargetMonsterInRange.some((mob) => mob.abilities.burn) &&
       !isFeared &&
       !formidableMob &&
       !isEquipingItems
@@ -622,7 +647,7 @@ async function warriorStomp() {
     Object.values(parent.entities).filter(
       (mob) =>
         mob.type === "monster" &&
-        distance(mob, character) < G.skills["stomp"].range,
+        distance(mob, character) < G.skills["stomp"].range
     ).length === 0 ||
     isStomping
   )
@@ -649,7 +674,7 @@ async function warriorStomp() {
           num: findMaxLevelItem(warriorItems.offhand),
         },
       ]);
-    }),
+    })
   );
 
   return Promise.all(promises)

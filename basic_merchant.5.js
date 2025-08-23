@@ -420,7 +420,6 @@ setInterval(async function () {
         character.items
           .filter((item) => item && !IGNORE.includes(item.name))
           .map((item, index) => {
-            console.log(item);
             bank_store(index);
           });
       } catch (e) {
