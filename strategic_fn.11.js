@@ -384,22 +384,23 @@ function avgDmgTaken(characterEntity, dmgType = null) {
       return prev.attack > current.attack ? prev : current;
     }, undefined);
 
-  const burnPadding =
-    dps_multiplier(
-      highestBurningMob.damage_type === "physical"
-        ? characterEntity.armor - highestBurningMob.apiercing
-        : highestBurningMob.damage_type === "magical"
-        ? characterEntity.resistance - highestBurningMob.rpiercing
-        : 1
-    ) *
-    ((100 -
-      (characterEntity.firesistance ??
-      characterEntity.slots.orb?.name === "orba"
-        ? 15
-        : 0)) /
-      100) *
-    (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
-    highestBurningMob.attack;
+  const burnPadding = highestBurningMob
+    ? dps_multiplier(
+        highestBurningMob.damage_type === "physical"
+          ? characterEntity.armor - highestBurningMob.apiercing
+          : highestBurningMob.damage_type === "magical"
+          ? characterEntity.resistance - highestBurningMob.rpiercing
+          : 1
+      ) *
+      ((100 -
+        (characterEntity.firesistance ??
+        characterEntity.slots.orb?.name === "orba"
+          ? 15
+          : 0)) /
+        100) *
+      (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
+      highestBurningMob.attack
+    : 0;
 
   return (
     listOfAttackingMobs.reduce(
@@ -421,9 +422,9 @@ function avgPartyDmgTaken(partyMems, dmgType = null) {
 }
 
 function rotateLeader(mems, value) {
-  const idx = arr.indexOf(value);
-  if (idx === -1) return arr; // not found
-  return arr.slice(idx).concat(arr.slice(0, idx));
+  const idx = mems.indexOf(value);
+  if (idx === -1) return mems; // not found
+  return mems.slice(idx).concat(mems.slice(0, idx));
 }
 
 function assignRoles() {
@@ -455,11 +456,7 @@ function getMonstersToCBurst() {
         calculateDamage(mob, partyTanker) < MAX_MOB_DPS &&
         mob.range < character.range - 20
     )
-    .sort(
-      (lhs, rhs) =>
-        distance(character,rhs) -
-        distance(character, lhs)
-    );
+    .sort((lhs, rhs) => distance(character, rhs) - distance(character, lhs));
 
   const result = [];
 
