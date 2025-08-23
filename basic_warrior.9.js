@@ -87,15 +87,14 @@ async function fight(target) {
   ) {
     set_message("Attacking");
     currentStrategy(target);
-    attack(target)
-      .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
-      .catch(
-        (e) =>
-          e.failed &&
-          !["cooldown"].includes(e.response) &&
-          reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2),
-      );
-    reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2);
+    // Main attack logic
+    const attackPromise = attack(target).catch((e) => {
+      if (e.failed && e.response !== "cooldown") {
+        reduce_cooldown("attack", -e.ms);
+      }
+    });
+
+    const promisesToAwait = [attackPromise];
 
     // Offhand swap logic
     if (
@@ -105,7 +104,8 @@ async function fight(target) {
     ) {
       isEquipingItems = true;
       const warriorItems = calculateWarriorItems();
-      equip_batch([
+
+      const equipPromise = equip_batch([
         {
           slot: "mainhand",
           num: findMaxLevelItem("candycanesword"),
@@ -115,7 +115,7 @@ async function fight(target) {
           num: findMaxLevelItem("candycanesword", 1),
         },
       ])
-        .then(() => {
+        .then(() =>
           equip_batch([
             {
               slot: "mainhand",
@@ -125,13 +125,22 @@ async function fight(target) {
               slot: "offhand",
               num: findMaxLevelItem(warriorItems.offhand),
             },
-          ]);
-        })
+          ]),
+        )
         .finally(() => {
           isEquipingItems = false;
         });
+
+      promisesToAwait.push(equipPromise);
     }
 
+    try {
+      await Promise.all(promisesToAwait);
+      reduce_cooldown("attack", Math.min(...parent.pings));
+    } catch (e) {
+      // Handle any errors from the combined promises here
+      console.error("An error occurred during attack or equip:", e);
+    }
     if (
       character.mp > G.skills["warcry"].mp &&
       !is_on_cooldown("warcry") &&
@@ -181,7 +190,7 @@ async function fight(target) {
         !mob.cooperative,
     );
 
-    if (mobsTargetingAlly) {
+    if (mobsTargetingAlly && is_in_range(mobsTargetingAlly, "taunt")) {
       use_skill("taunt", mobsTargetingAlly).then(() =>
         reduce_cooldown("taunt", character.ping * 0.95),
       );
@@ -189,7 +198,8 @@ async function fight(target) {
       !target.target ||
       (target.target !== character.name &&
         target.attack < 1500 &&
-        !target.cooperative)
+        !target.cooperative &&
+        is_in_range(target, "taunt"))
     ) {
       use_skill("taunt", target).then(() =>
         reduce_cooldown("taunt", character.ping * 0.95),
@@ -211,28 +221,6 @@ async function fight(target) {
       character.cc < 100)
   ) {
     await scareAwayMobs();
-  }
-
-  // Kiting and movement logic
-  if (!smartmoveDebug) {
-    hitAndRun(target, rangeRate);
-    const targetSize = target
-      ? Math.max(get_width(target) ?? 0, get_height(target) ?? 0)
-      : 0;
-    const extraDist =
-      extraDistanceWithinHitbox(target) + extraDistanceWithinHitbox(character);
-
-    angle +=
-      flipRotation *
-      (Math.asin(
-        (character.speed * getLoopInterval()) /
-          1000 /
-          (2 *
-            (character.range * rangeRate + character.xrange * 0.9 + extraDist)),
-      ) *
-        2);
-  } else {
-    angle = undefined;
   }
 
   if (

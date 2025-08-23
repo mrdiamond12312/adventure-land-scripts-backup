@@ -628,7 +628,8 @@ function shouldAttack() {
   return character.map === "crypt"
     ? partyHealer && !partyHealer.rip
     : ["warrior", "rogue"].includes(character.ctype) &&
-      MELEE_IGNORE_LIST.includes(currentTarget.mtype)
+      currentTarget &&
+      MELEE_IGNORE_LIST.includes(currentTarget.mtype ?? currentTarget.ctype)
     ? false
     : currentTarget && currentTarget.attack > 600 && !currentTarget.target
     ? partyHealer && !partyHealer.rip

@@ -144,39 +144,39 @@ async function fight(target) {
 
   if (!smartmoveDebug) {
     if (currentAction === "multishot") stop("move");
-    hitAndRun(
-      Object.keys(parent.entities)
-        .filter(
-          (id) =>
-            parent.entities.type === "monster" &&
-            parent.entities[id].target === character.name,
-        )
-        ?.sort(
-          (lhs, rhs) =>
-            distance(character, parent.entities[lhs]) -
-            distance(character, parent.entities[rhs]),
-        )[0] ?? target,
-      rangeRate,
-    );
+    // hitAndRun(
+    //   Object.keys(parent.entities)
+    //     .filter(
+    //       (id) =>
+    //         parent.entities.type === "monster" &&
+    //         parent.entities[id].target === character.name,
+    //     )
+    //     ?.sort(
+    //       (lhs, rhs) =>
+    //         distance(character, parent.entities[lhs]) -
+    //         distance(character, parent.entities[rhs]),
+    //     )[0] ?? target,
+    //   rangeRate,
+    // );
 
-    angle =
-      angle +
-      flipRotation *
-        Math.asin(
-          (character.speed * loopInterval) /
-            1000 /
-            2 /
-            (character.range * rangeRate +
-              character.xrange * 0.9 +
-              // extraDistanceWithinHitbox(
-              //   angle,
-              //   target ? get_width(target) ?? 0 : 0,
-              //   target ? get_height(target) ?? 0 : 0
-              // ))
-              extraDistanceWithinHitbox(target) +
-              extraDistanceWithinHitbox(character)),
-        ) *
-        2;
+    // angle =
+    //   angle +
+    //   flipRotation *
+    //     Math.asin(
+    //       (character.speed * loopInterval) /
+    //         1000 /
+    //         2 /
+    //         (character.range * rangeRate +
+    //           character.xrange * 0.9 +
+    //           // extraDistanceWithinHitbox(
+    //           //   angle,
+    //           //   target ? get_width(target) ?? 0 : 0,
+    //           //   target ? get_height(target) ?? 0 : 0
+    //           // ))
+    //           extraDistanceWithinHitbox(target) +
+    //           extraDistanceWithinHitbox(character)),
+    //     ) *
+    //     2;
   } else {
     angle = undefined;
   }
