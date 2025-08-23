@@ -23,7 +23,7 @@ async function fight(target) {
   const haveIgnoreMobAroundTarget = (targetMob) => {
     return mobsListAroundTarget(
       targetMob,
-      character.explosion / 3.6 || BLAST_RADIUS
+      character.explosion / 3.6 || BLAST_RADIUS,
     ).some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype));
   };
 
@@ -47,11 +47,11 @@ async function fight(target) {
         .sort((lhs, rhs) => {
           const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
             lhs,
-            character.explosion / 3.6 || BLAST_RADIUS
+            character.explosion / 3.6 || BLAST_RADIUS,
           );
           const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
             rhs,
-            character.explosion / 3.6 || BLAST_RADIUS
+            character.explosion / 3.6 || BLAST_RADIUS,
           );
           if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
             return rhs.hp - lhs.hp;
@@ -125,7 +125,7 @@ async function fight(target) {
               slot: "offhand",
               num: findMaxLevelItem(warriorItems.offhand),
             },
-          ])
+          ]),
         )
         .finally(() => {
           isEquipingItems = false;
@@ -184,16 +184,16 @@ async function fight(target) {
       (mob) =>
         mob.type === "monster" &&
         partyMems.some(
-          (ally) => ally !== character.name && mob.target === ally
+          (ally) => ally !== character.name && mob.target === ally,
         ) &&
         mob.attack > 120 &&
         calculateDamage(mob, character) < 1800 &&
-        !mob.cooperative
+        !mob.cooperative,
     );
 
     if (mobsTargetingAlly && is_in_range(mobsTargetingAlly, "taunt")) {
       use_skill("taunt", mobsTargetingAlly).then(() =>
-        reduce_cooldown("taunt", character.ping * 0.95)
+        reduce_cooldown("taunt", character.ping * 0.95),
       );
     } else if (
       !target.target ||
@@ -203,7 +203,7 @@ async function fight(target) {
         is_in_range(target, "taunt"))
     ) {
       use_skill("taunt", target).then(() =>
-        reduce_cooldown("taunt", character.ping * 0.95)
+        reduce_cooldown("taunt", character.ping * 0.95),
       );
     }
   }
@@ -215,7 +215,7 @@ async function fight(target) {
       get_entity(HEALER)?.rip ||
       character.hp < character.max_hp * 0.3) &&
       Object.values(parent.entities).filter(
-        (mob) => mob.target === character.name
+        (mob) => mob.target === character.name,
       ).length > 2 &&
       !is_on_cooldown("scare") &&
       character.mp > 100 &&
@@ -263,7 +263,7 @@ async function mainLoop() {
         character.range + character.xrange
     )
       await warriorCleave(
-        currentStrategy === usePullStrategies ? "pull" : "normal"
+        currentStrategy === usePullStrategies ? "pull" : "normal",
       );
 
     if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
@@ -285,18 +285,30 @@ async function mainLoop() {
 
     // Targeting & movement logic
     if (!target) {
-      if (!smart.moving && !isAdvanceSmartMoving) {
-        if (get("cryptInstance") && character.map !== "crypt") {
-          changeToNormalStrategies();
-          advanceSmartMove(CRYPT_STARTING_LOCATION);
-        } else if (!get("cryptInstance")) {
-          changeToNormalStrategies();
-          advanceSmartMove({ map, x: mapX, y: mapY });
-        }
+      if (
+        !smart.moving &&
+        !isAdvanceSmartMoving &&
+        get("cryptInstance") &&
+        character.map !== "crypt"
+      ) {
+        changeToNormalStrategies();
+        advanceSmartMove(CRYPT_STARTING_LOCATION);
+      } else if (
+        !smart.moving &&
+        !get("cryptInstance") &&
+        (partyMems[0] === character.name ||
+          !get_entity(partyMems[0]) ||
+          character.map === "crypt" ||
+          distance(character, { x: mapX, y: mapY, map }) > 500)
+      ) {
+        changeToNormalStrategies();
+        advanceSmartMove({
+          map,
+          x: mapX,
+          y: mapY,
+        });
       }
-    } else {
-      fight(target);
-    }
+    } else fight(target);
   } catch (e) {
     console.error(e);
   }

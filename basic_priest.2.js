@@ -36,10 +36,10 @@ async function fight(target) {
                 !mob.target &&
                 is_in_range(mob, "attack") &&
                 partyDmgRecieved + calculateDamage(mob, character) <
-                  character.heal * 0.9
+                  character.heal * 0.9 * character.frequency,
             )
             .sort(
-              (lhs, rhs) => distance(lhs, character) - distance(rhs, character)
+              (lhs, rhs) => distance(lhs, character) - distance(rhs, character),
             )
             .shift()
         : null;
@@ -52,7 +52,7 @@ async function fight(target) {
                 mob.type === "monster" &&
                 !mob.s.poisoned &&
                 is_in_range(mob, "attack") &&
-                partyMems.includes(mob.target)
+                partyMems.includes(mob.target),
             )
             .sort((lhs, rhs) => lhs.attack - rhs.attack)
             .pop() ?? target
@@ -132,7 +132,7 @@ async function priestBuff() {
           healingPrioritizedNames().includes(buffee.name)
         ) {
           promises.push(
-            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2)
+            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
           );
           continue;
         }
@@ -141,13 +141,15 @@ async function priestBuff() {
           distance(buffee, character) <
           character.range + character.xrange * 0.9
         ) {
+          try {
+            promises.push(currentStrategy(buffee));
+          } catch (e) {}
           promises.push(
-            currentStrategy(buffee),
             withTimeout(
               heal(buffee).then(() => {
                 reduce_cooldown("attack", Math.min(...parent.pings));
-              })
-            )
+              }),
+            ),
           );
 
           set_message("Heal " + buffee.name);
@@ -166,13 +168,13 @@ async function priestBuff() {
       (ally) =>
         (ally.hp < ally.max_hp - character.level * 10 * 2 &&
           !is_in_range(ally, "heal")) ||
-        ally.hp < ally.max_hp * 0.3
+        ally.hp < ally.max_hp * 0.3,
     ) ||
       allies.every((ally) => ally.hp < ally.max_hp - character.level * 10 * 2))
   ) {
     if (!is_on_cooldown("partyheal") && character.mp > 1000) {
       use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", Math.min(...parent.pings))
+        reduce_cooldown("partyheal", Math.min(...parent.pings)),
       );
       set_message("Party Heal");
     }
@@ -183,7 +185,7 @@ async function priestBuff() {
     .map((member) => {
       if (
         Object.values(parent.entities).some(
-          (entity) => entity.target === member
+          (entity) => entity.target === member,
         )
       )
         if (
@@ -191,7 +193,7 @@ async function priestBuff() {
           !is_on_cooldown("absorb") &&
           character.mp > G.skills["absorb"].mp &&
           Object.values(parent.entities).filter(
-            (entity) => entity.type === "monster" && entity.target === member
+            (entity) => entity.type === "monster" && entity.target === member,
           ).length >= (character.name === TANKER ? 1 : 2)
         ) {
           use_skill("absorb", get_entity(member));

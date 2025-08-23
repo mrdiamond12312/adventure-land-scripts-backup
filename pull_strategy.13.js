@@ -2,7 +2,7 @@ async function usePullStrategies(target) {
   const partyHealer = get_entity(HEALER);
   const partyTanker = get_entity(TANKER);
   const mobsList = Object.values(parent.entities).filter(
-    (mob) => mob.type === "monster"
+    (mob) => mob.type === "monster",
   );
 
   switch (character.ctype) {
@@ -10,7 +10,7 @@ async function usePullStrategies(target) {
       const suggestedMageItems = calculateMageItems(target);
       if (
         Object.keys(suggestedMageItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
         )
       ) {
         await equipBatch(suggestedMageItems);
@@ -39,7 +39,7 @@ async function usePullStrategies(target) {
         getMonstersToCBurst().length >= 1
       ) {
         use_skill("cburst", getMonstersToCBurst()).then(() =>
-          reduce_cooldown("cburst", -2000)
+          reduce_cooldown("cburst", -2000),
         );
         reduce_cooldown("cburst", -2000);
       }
@@ -51,7 +51,7 @@ async function usePullStrategies(target) {
         character.hp < character.max_hp * 0.7 &&
         Object.values(parent.entities).some(
           (entity) =>
-            entity.type === "monster" && entity.target === character.name
+            entity.type === "monster" && entity.target === character.name,
         )
       )
         scareAwayMobs();
@@ -63,14 +63,14 @@ async function usePullStrategies(target) {
 
       if (
         Object.keys(suggestedWarriorItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot],
         )
       ) {
         await equipBatch(suggestedWarriorItems);
       }
 
       const formidableMonsterAppeared = mobsList.find(
-        (mob) => mob.attack * mob?.frequency > MAX_MOB_DPS
+        (mob) => mob.attack * mob?.frequency > MAX_MOB_DPS,
       );
 
       const havePulledEnoughMobs =
@@ -78,21 +78,22 @@ async function usePullStrategies(target) {
         MAX_TARGET;
 
       const numberOfMonsterInRange = mobsList.filter((mob) =>
-        is_in_range(mob, "agitate")
+        is_in_range(mob, "agitate"),
       ).length;
 
       const listOfNoTargetMonsterInRange = mobsList.filter(
-        (mob) => is_in_range(mob, "agitate") && mob.target !== TANKER
+        (mob) => is_in_range(mob, "agitate") && mob.target !== TANKER,
       );
 
       const magicalMobsTargetingSelf = Object.values(parent.entities).filter(
-        (mob) => mob.damage_type === "magical" && mob.target === character.name
+        (mob) => mob.damage_type === "magical" && mob.target === character.name,
       );
       const physicalMobsTargetingSelf = Object.values(parent.entities).filter(
-        (mob) => mob.damage_type === "physical" && mob.target === character.name
+        (mob) =>
+          mob.damage_type === "physical" && mob.target === character.name,
       );
       const pureMobsTargetingSelf = Object.values(parent.entities).filter(
-        (mob) => mob.damage_type === "pure" && mob.target === character.name
+        (mob) => mob.damage_type === "pure" && mob.target === character.name,
       );
 
       let magicalMobsAfterAgitating = magicalMobsTargetingSelf.length;
@@ -133,15 +134,15 @@ async function usePullStrategies(target) {
           (mob) =>
             MELEE_IGNORE_LIST.includes(mob.mtype) ||
             WATCHOUT_ABILITIES.some((skill) =>
-              Object.keys(mob.abilities).includes(skill)
-            )
+              Object.keys(mob.abilities).includes(skill),
+            ),
         ) &&
         Object.values(parent.entities)
           .filter(
             (entity) =>
               entity.type === "monster" &&
               is_in_range(entity, "agitate") &&
-              entity.target !== character
+              entity.target !== character,
           )
           .reduce((prev, curr) => prev + calculateDamage(curr, character), 0) <
           partyHealer.heal * partyHealer.frequency +
@@ -170,6 +171,9 @@ async function usePullStrategies(target) {
           (mob) =>
             calculateDamage(mob, character) < 4000 &&
             is_in_range(mob, "taunt") &&
+            !WATCHOUT_ABILITIES.some((skill) =>
+              Object.keys(mob.abilities).includes(skill),
+            ) &&
             (!mob.target ||
               partyMems
                 .filter((id) => id !== character.name)
@@ -178,12 +182,12 @@ async function usePullStrategies(target) {
               ? physicalMobsTargetingSelf.length < character.courage
               : mob.damage_type === "magical"
               ? magicalMobsTargetingSelf.length < character.mcourage
-              : pureMobsTargetingSelf.length < character.pcourage)
+              : pureMobsTargetingSelf.length < character.pcourage),
         );
 
         if (mobToPull)
           use_skill("taunt", parent.entities[mobToPull]).then(() =>
-            reduce_cooldown("taunt", character.ping * 0.95)
+            reduce_cooldown("taunt", character.ping * 0.95),
           );
       }
 
@@ -194,7 +198,7 @@ async function usePullStrategies(target) {
 
       if (
         Object.keys(suggestedRangerItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
         )
       ) {
         await equipBatch(suggestedRangerItems);
@@ -205,15 +209,16 @@ async function usePullStrategies(target) {
       const suggestedPriestItems = calculatePriestItems(target);
       if (
         Object.keys(suggestedPriestItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
         )
       ) {
         await equipBatch(suggestedPriestItems);
       }
 
       if (
-        (avgDmgTaken(character) > character.heal * 0.95 * character.frequency ||
-          character.hp < (character.name === TANKER ? 0.3: 0.5) * character.max_hp) &&
+        (avgPartyDmgTaken(partyMems) > character.heal * 0.95 * character.frequency &&
+          character.hp <
+            (character.name === TANKER ? 0.3 : 0.5) * character.max_hp) &&
         !is_on_cooldown("scare") &&
         character.cc < 100
       ) {

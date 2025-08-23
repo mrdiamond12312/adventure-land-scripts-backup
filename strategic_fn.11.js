@@ -179,7 +179,7 @@ function calculatePriestItems(target) {
   const currentTarget = get_targeted_monster();
   return {
     mainhand:
-      target.type !== "monster"
+      target?.type !== "monster"
         ? "oozingterror"
         : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
             get_targeted_monster()?.mtype
@@ -219,7 +219,7 @@ function calculatePriestItems(target) {
         ? "orba"
         : haveLowHpMobsNearby
         ? "rabbitsfoot"
-        : target.type !== "monster"
+        : target?.type !== "monster"
         ? "jacko"
         : "test_orb",
     amulet: character.name === TANKER ? "t2stramulet" : "intamulet",
