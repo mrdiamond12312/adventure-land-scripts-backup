@@ -233,6 +233,7 @@ async function useCryptStrategy(target) {
       });
 
       if (
+        character.name === TANKER &&
         character.mp > G.skills["taunt"].mp &&
         !is_on_cooldown("taunt") &&
         mobTargetingAlly &&

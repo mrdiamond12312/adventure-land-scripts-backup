@@ -189,7 +189,7 @@ if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
   load_code(14);
 }
 
-const disablePullingStrategy = false;
+var disablePullingStrategy = false;
 
 function changeToPullStrategies() {
   currentStrategy = disablePullingStrategy
@@ -667,10 +667,10 @@ function extraDistanceWithinHitbox(target) {
   return Math.min(get_height(target), get_width(target) / 2) / 2;
 }
 
-function hitAndRun(target, rangeRate) {
-  if (!target) {
+async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
+  if (!target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
-    return;
+    return setTimeout(hitAndRun, getLoopInterval());
   }
 
   if (!angle) {
@@ -711,20 +711,20 @@ function hitAndRun(target, rangeRate) {
 
   let new_x =
     target.x +
-    character.range * rangeRate * cosA +
+    character.range * rangeRateFn * cosA +
     (character.xrange * 0.9 + extraRangeByMobHitbox + extraRangeBySelfHitbox) *
       cosA;
 
   let new_y =
     target.y +
-    character.range * rangeRate * sinA +
+    character.range * rangeRateFn * sinA +
     (character.xrange * 0.9 + extraRangeByMobHitbox + extraRangeBySelfHitbox) *
       sinA;
 
   if (flip_cooldown > 9) {
     if (
       distance(character, target) <=
-      (character.range + character.xrange) * 0.1 * rangeRate
+      (character.range + character.xrange) * 0.1 * rangeRateFn
     ) {
       angle += (flipRotation * Math.PI) / 16;
     }
@@ -738,24 +738,43 @@ function hitAndRun(target, rangeRate) {
       let adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
       let alt_x =
         target.x +
-        (character.range * rangeRate + character.xrange) *
+        (character.range * rangeRateFn + character.xrange) *
           Math.cos(adjustedAngle);
       let alt_y =
         target.y +
-        (character.range * rangeRate + character.xrange) *
+        (character.range * rangeRateFn + character.xrange) *
           Math.sin(adjustedAngle);
 
       if (can_move_to(alt_x, alt_y)) {
         angle = adjustedAngle;
         move(alt_x, alt_y);
-        return;
       }
     }
     flipRotation *= -1;
   } else {
     move(new_x, new_y);
   }
+
+  angle +=
+    flipRotation *
+    Math.asin(
+      (character.speed * getLoopInterval()) /
+        1000 /
+        2 /
+        (character.range * rangeRateFn +
+          character.xrange * 0.9 +
+          // extraDistanceWithinHitbox(
+          //   angle,
+          //   target ? get_width(target) ?? 0 : 0,
+          //   target ? get_height(target) ?? 0 : 0
+          // ))
+          extraRangeByMobHitbox +
+          extraRangeBySelfHitbox),
+    ) *
+    2;
+  return setTimeout(hitAndRun, getLoopInterval());
 }
+hitAndRun();
 
 function getLowestHealth() {
   const allies = parent.party_list.map((name) => get_entity(name));
@@ -1365,11 +1384,7 @@ async function changeToDailyEventTargets() {
     if (character.ctype === "warrior") {
       targetCrab = crabxxInstance?.target ? crabxxInstance : crabxInstance;
 
-      if (
-        targetCrab &&
-        (targetCrab.x !== targetCrab.going_x ||
-          targetCrab.y !== targetCrab.going_y)
-      ) {
+      if (targetCrab && targetCrab.moving) {
         rangeRate = 0.05;
       }
     } else {

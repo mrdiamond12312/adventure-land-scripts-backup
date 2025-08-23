@@ -40,15 +40,14 @@ async function fight(target) {
         : target;
     change_target(targetToAttack);
 
-    attack(targetToAttack)
-      .then(() => reduce_cooldown("attack", Math.min(parent.pings)))
-      .catch(
-        (e) =>
-          e.failed &&
-          !["cooldown"].includes(e.response) &&
-          reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2),
-      );
-    reduce_cooldown("attack", ((-1 / character.frequency) * 1000) / 2);
+    try {
+      await withTimeout(attack(targetToAttack), 2500);
+      reduce_cooldown("attack", Math.min(...parent.pings));
+    } catch (e) {
+      if (e.failed && e.response !== "cooldown") {
+        reduce_cooldown("attack", -e.ms);
+      }
+    }
 
     if (
       target &&
@@ -67,31 +66,6 @@ async function fight(target) {
     target.max_hp > 3000
   )
     use_skill("curse", target);
-
-  if (!smartmoveDebug) {
-    hitAndRun(target, rangeRate);
-
-    angle =
-      angle +
-      flipRotation *
-        Math.asin(
-          (character.speed * getLoopInterval()) /
-            1000 /
-            2 /
-            (character.range * rangeRate +
-              character.xrange * 0.9 +
-              // extraDistanceWithinHitbox(
-              //   angle,
-              //   target ? get_width(target) ?? 0 : 0,
-              //   target ? get_height(target) ?? 0 : 0
-              // ))
-              extraDistanceWithinHitbox(target) +
-              extraDistanceWithinHitbox(character)),
-        ) *
-        2;
-  } else {
-    angle = undefined;
-  }
 }
 
 async function priestBuff() {
@@ -201,7 +175,7 @@ async function priestBuff() {
         }
     });
 
-  return promises;
+  return Promise.all(promises);
 }
 
 async function mainLoop() {
@@ -234,13 +208,13 @@ async function mainLoop() {
     //// Logic to targets and farm places
     if (!target) {
       if (
-        !smart.move &&
+        !smart.moving &&
         !isAdvanceSmartMoving &&
         get("cryptInstance") &&
         character.map !== "crypt"
       ) {
         changeToNormalStrategies();
-        await advanceSmartMove(CRYPT_STARTING_LOCATION);
+        advanceSmartMove(CRYPT_STARTING_LOCATION);
       } else if (
         !smart.moving &&
         !get("cryptInstance") &&
@@ -253,7 +227,7 @@ async function mainLoop() {
         const scareInterval = setInterval(() => {
           scareAwayMobs();
         }, 5000);
-        await advanceSmartMove({
+        advanceSmartMove({
           map,
           x: mapX,
           y: mapY,
@@ -293,7 +267,7 @@ if (!parent.caracAL) mainLoop();
 
 //   //// Logic to targets and farm places
 //   if (
-//     !smart.move &&
+//     !smart.moving &&
 //     !isAdvanceSmartMoving &&
 //     get("cryptInstance") &&
 //     character.map !== "crypt" &&

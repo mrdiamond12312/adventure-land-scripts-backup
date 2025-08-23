@@ -412,9 +412,9 @@ setInterval(async function () {
     await moveHome();
 
   if (isInvFull() && !smart.moving && !isAdvanceSmartMoving) {
-    if (!smart.move) await moveHome();
+    if (!smart.moving) await moveHome();
     close_stand();
-    if (!smart.move) await smart_move(bankPosition);
+    if (!smart.moving) await smart_move(bankPosition);
     if (character.map === "bank") {
       try {
         character.items
@@ -427,7 +427,7 @@ setInterval(async function () {
         console.error(e);
       }
     }
-    if (!smart.move) await moveHome();
+    if (!smart.moving) await moveHome();
     onDuty = false;
   }
 }, 750);

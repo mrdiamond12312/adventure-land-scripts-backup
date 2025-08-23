@@ -31,7 +31,7 @@ character.on("cm", async function ({ name, message }) {
     case "buy_mana":
       log(`Buying some mana potions for ${name}`);
       if (isInvFull()) {
-        if (!smart.move) await smart_move(bankPosition);
+        if (!smart.moving) await smart_move(bankPosition);
         if (character.map === "bank") bank_store(0);
       }
       if (locate_item("mpot1") === -1) {
@@ -51,7 +51,7 @@ character.on("cm", async function ({ name, message }) {
     case "buy_hp":
       log(`Buying some health potions for ${name}`);
       if (isInvFull()) {
-        if (!smart.move) await smart_move(bankPosition);
+        if (!smart.moving) await smart_move(bankPosition);
         if (character.map === "bank") bank_store(0);
       }
       if (locate_item("hpot1") === -1) {
@@ -82,7 +82,7 @@ character.on("cm", async function ({ name, message }) {
     case "elixir":
       if (locate_item(message.elixir) === -1) {
         await retrieveBankItem(message.elixir);
-        
+
         if (locate_item(message.elixir) === -1) {
           await smart_move({ map: find_npc("wbartender").map });
           await buy(message.elixir);
