@@ -198,7 +198,7 @@ async function usePullStrategies(target) {
       break;
 
     case "priest":
-      const suggestedPriestItems = calculatePriestItems();
+      const suggestedPriestItems = calculatePriestItems(target);
       if (
         Object.keys(suggestedPriestItems).some(
           (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot]
