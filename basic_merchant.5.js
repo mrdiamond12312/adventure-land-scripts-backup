@@ -270,7 +270,8 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     (!is_on_cooldown("fishing") && locate_item("rod") !== -1) ||
     (!is_on_cooldown("mining") && locate_item("pickaxe") !== -1) ||
     character.c.mining ||
-    character.c.fishing
+    character.c.fishing ||
+    !craftQuantity
   )
     return;
 
@@ -371,6 +372,7 @@ setInterval(async function () {
     craft("orba", 1, { map: "main", x: -152, y: -137 }),
     craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
     craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
+    // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
     !isSortingInventory &&
       Promise.all(
         Array.from({ length: 42 }, (_, i) => i)
@@ -450,8 +452,6 @@ function secondhandsHandler(events) {
   const ITEM_NEEDED = [
     "strring",
     "dexearring",
-    "dexamulet",
-    "intamulet",
     "bataxe",
     "glolipop",
     "ololipop",

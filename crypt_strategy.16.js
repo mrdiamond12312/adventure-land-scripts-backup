@@ -45,11 +45,11 @@ function getMobsListNearTarget(mob) {
 async function useCryptStrategy(target) {
   if (!get("cryptInstance") || character.map !== "crypt") return;
   rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
-  const defeatedCrybtMobs = get("cryptDefeatedMobs") ?? [];
+  const defeatedCryptMobs = get("cryptDefeatedMobs") ?? [];
 
   if (
-    defeatedCrybtMobs.filter((mtype) => mtype === "vbat").length >= 7 &&
-    defeatedCrybtMobs.filter((mtype) => mtype !== "vbat").length >=
+    defeatedCryptMobs.filter((mtype) => mtype === "vbat").length >= 7 &&
+    defeatedCryptMobs.filter((mtype) => mtype !== "vbat").length >=
       defeatableBosses.length
   ) {
     set("cryptInstance", undefined);
@@ -57,12 +57,12 @@ async function useCryptStrategy(target) {
   }
 
   // Check for 7 vbats
-  if (defeatedCrybtMobs.filter((mtype) => mtype === "vbat").length < 7) {
+  if (defeatedCryptMobs.filter((mtype) => mtype === "vbat").length < 7) {
     if (
       !get_nearest_monster({ type: "vbat" }) &&
-      !get_nearest_monster({ type: "a2" })
+      distance(character, VBAT_LOCATION) > 200
     ) {
-      await advanceSmartMove(VBAT_LOCATION);
+      advanceSmartMove(VBAT_LOCATION);
     }
 
     const vbat = isAssignedAsTanker()
@@ -86,13 +86,14 @@ async function useCryptStrategy(target) {
     const nearestFormiddableBosses = Object.values(parent.entities).filter(
       (mobs) =>
         mobs.type === "monster" &&
+        !mobs.s.sleeping &&
         ![...scarableBosses, "vbat"].includes(mobs.mtype) &&
         distance(character, mobs) < 300,
     );
 
-    if (nearestFormiddableBosses.length || nearestKillableBosses.length > 2) {
+    if (nearestFormiddableBosses.length || nearestKillableBosses.length > 3) {
       log("Too dangerous");
-      await advanceSmartMove(
+      advanceSmartMove(
         CRYPT_JUNCTION.sort(
           (lhs, rhs) => distance(character, rhs) - distance(character, lhs),
         ).pop(),
@@ -103,8 +104,8 @@ async function useCryptStrategy(target) {
         distance(character, VBAT_LOCATION) < 200
       ) {
         // const defeatedCryptMobs = get("cryptDefeatedMobs");
-        // defeatedCryptMobs.push(...Array(7).fill("vbat"));
-        // set("cryptDefeatedMobs", defeatedCryptMobs);
+        defeatedCryptMobs.push(...Array(7).fill("vbat"));
+        set("cryptDefeatedMobs", defeatedCryptMobs);
       } else target = vbat;
     }
   }
@@ -136,7 +137,7 @@ async function useCryptStrategy(target) {
             (mob) =>
               mob.type === "monster" &&
               defeatableBosses.includes(mob.mtype) &&
-              getMobsListNearTarget(mob).length < 1,
+              getMobsListNearTarget(mob).length < 2,
           );
           if (nearbyBoss.length) {
             set("lastSeenDefeatableCryptBoss", {
@@ -148,37 +149,53 @@ async function useCryptStrategy(target) {
             change_target(nearbyBoss[0]);
             target = nearbyBoss[0];
             clearInterval(checkBossInterval);
-            stop("smart");
+            stop();
           }
         }, 2000);
-        await advanceSmartMove(
+        advanceSmartMove(
           CRYPT_JUNCTION[currentJunction++ % CRYPT_JUNCTION.length],
-        );
+        ).then(() => clearInterval(checkBossInterval));
       }
     } else {
       const otherBossNearCurrentTarget = getMobsListNearTarget(currentTarget);
+      const elena = Object.values(parent.entities).find(
+        (entity) => entity.type === "monster" && entity.mtype === "a5",
+      );
 
       if (
-        otherBossNearCurrentTarget.length >
-          (currentTarget.mtype === "a5" ? 2 : 1) ||
         otherBossNearCurrentTarget.some(
-          (mob) => !defeatableBosses.includes(mob.mtype),
+          (mob) => !scarableBosses.includes(mob.mtype),
         )
       ) {
-        await advanceSmartMove(CRYPT_STARTING_LOCATION);
+        advanceSmartMove(CRYPT_STARTING_LOCATION);
         set("lastSeenDefeatableCryptBoss", undefined);
-      } else if (
-        otherBossNearCurrentTarget.length === 1 &&
-        otherBossNearCurrentTarget[0]?.mtype === "a5"
-      ) {
+      } else if (elena && elena.focus === currentTarget.id) {
         set("lastSeenDefeatableCryptBoss", {
-          mtype: otherBossNearCurrentTarget[0]?.mtype,
-          x: otherBossNearCurrentTarget[0]?.x,
-          y: otherBossNearCurrentTarget[0]?.y,
+          mtype: elena.mtype,
+          x: elena.x,
+          y: elena.y,
           map: character.map,
         });
-        change_target(otherBossNearCurrentTarget[0]);
-        target = otherBossNearCurrentTarget;
+        change_target(elena);
+        target = elena;
+      } else if (
+        currentTarget &&
+        elena &&
+        currentTarget.mtype === elena.mtype
+      ) {
+        const elenaPartner = elena.focus
+          ? parent.entities[elena.focus]
+          : undefined;
+        if (elenaPartner && !elenaPartner.target) {
+          set("lastSeenDefeatableCryptBoss", {
+            mtype: elenaPartner.mtype,
+            x: elenaPartner.x,
+            y: elenaPartner.y,
+            map: character.map,
+          });
+          change_target(elenaPartner);
+          target = elenaPartner;
+        }
       } else {
         set("lastSeenDefeatableCryptBoss", {
           mtype: currentTarget?.mtype,
@@ -193,16 +210,17 @@ async function useCryptStrategy(target) {
 
   if (
     listOfMonsterAttacking(character).length >
-      (character.ctype === "warrior" ? 1 : 0) ||
+      (currentStrategy === usePullStrategies ? 4 : 1) ||
     character.hp < character.max_hp * 0.6
   ) {
     await scareAwayMobs();
 
-    if (!get_entity(HEALER)) await advanceSmartMove(CRYPT_STARTING_LOCATION);
+    if (!get_entity(HEALER)) advanceSmartMove(CRYPT_STARTING_LOCATION);
   }
 
-  if (get_targeted_monster()?.mtype === "vbat") changeToPullStrategies;
+  if (get_targeted_monster()?.mtype === "vbat") changeToPullStrategies();
   else changeToNormalStrategies();
+  // changeToPullStrategies();
 
   const mobTargetingAlly = Object.values(parent.entities).find((mob) => {
     return (
@@ -279,13 +297,17 @@ async function useCryptStrategy(target) {
   return target;
 }
 
+function addToDefeatedList(mobs) {
+  const defeatedCryptMobs = get("cryptDefeatedMobs");
+  defeatedCryptMobs.push(...mobs);
+  set("cryptDefeatedMobs", defeatedCryptMobs);
+}
+
 character.on("target_hit", (data) => {
   if (data.kill) {
     const target = parent.entities[data?.target]?.mtype;
-    if (defeatableBosses.includes(target) || target === "vbat") {
-      const defeatedCryptMobs = get("cryptDefeatedMobs");
-      defeatedCryptMobs.push(target);
-      set("cryptDefeatedMobs", defeatedCryptMobs);
+    if ([...defeatableBosses, "vbat"].includes(target)) {
+      addToDefeatedList([target]);
       set("lastSeenDefeatableCryptBoss", undefined);
     }
   }

@@ -8,7 +8,7 @@ async function useNormalStrategy(target) {
 
       if (
         Object.keys(suggestedMageItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
         )
       ) {
         await equipBatch(suggestedMageItems);
@@ -20,7 +20,7 @@ async function useNormalStrategy(target) {
         target.max_hp > 3000 &&
         Object.values(parent.entities).some(
           (entity) =>
-            entity.type === "monster" && entity.target === character.name
+            entity.type === "monster" && entity.target === character.name,
         )
       )
         scareAwayMobs();
@@ -32,7 +32,7 @@ async function useNormalStrategy(target) {
 
       if (
         Object.keys(suggestedWarriorItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot],
         )
       ) {
         await equipBatch(suggestedWarriorItems);
@@ -44,7 +44,7 @@ async function useNormalStrategy(target) {
 
       if (
         Object.keys(suggestedRangerItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
         )
       ) {
         await equipBatch(suggestedRangerItems);
@@ -52,16 +52,16 @@ async function useNormalStrategy(target) {
       break;
 
     case "priest":
-      const suggestedPriestItems = calculatePriestItems();
+      const suggestedPriestItems = calculatePriestItems(target);
       if (
         Object.keys(suggestedPriestItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
         )
       ) {
         await equipBatch(suggestedPriestItems);
       }
 
-      await scareAwayMobs();
+      if (!isAssignedAsTanker()) await scareAwayMobs();
       break;
   }
 }

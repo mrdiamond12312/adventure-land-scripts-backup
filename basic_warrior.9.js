@@ -102,36 +102,15 @@ async function fight(target) {
         character.slots.mainhand?.name === "fireblade") &&
       !isEquipingItems
     ) {
-      isEquipingItems = true;
       const warriorItems = calculateWarriorItems();
-
-      const equipPromise = equip_batch([
+      const equipPromises = equipBatch(
         {
-          slot: "mainhand",
-          num: findMaxLevelItem("candycanesword"),
+          mainhand: "candycanesword",
+          offhand: "candycanesword",
         },
-        {
-          slot: "offhand",
-          num: findMaxLevelItem("candycanesword", 1),
-        },
-      ])
-        .then(() =>
-          equip_batch([
-            {
-              slot: "mainhand",
-              num: findMaxLevelItem(warriorItems.mainhand),
-            },
-            {
-              slot: "offhand",
-              num: findMaxLevelItem(warriorItems.offhand),
-            },
-          ]),
-        )
-        .finally(() => {
-          isEquipingItems = false;
-        });
-
-      promisesToAwait.push(equipPromise);
+        true,
+      ).then(() => equipBatch(warriorItems, true));
+      promisesToAwait.push(equipPromises);
     }
 
     try {
@@ -292,14 +271,12 @@ async function mainLoop() {
         get("cryptInstance") &&
         character.map !== "crypt"
       ) {
-        changeToNormalStrategies();
         advanceSmartMove(CRYPT_STARTING_LOCATION);
       } else if (
         !smart.moving &&
         !get("cryptInstance") &&
         (partyMems[0] === character.name ||
           !get_entity(partyMems[0]) ||
-          character.map === "crypt" ||
           distance(character, { x: mapX, y: mapY, map }) > 500)
       ) {
         changeToNormalStrategies();

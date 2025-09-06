@@ -179,14 +179,14 @@ function calculatePriestItems(target) {
   const currentTarget = get_targeted_monster();
   return {
     mainhand:
-      target?.type !== "monster"
+      target && target.type !== "monster"
         ? "oozingterror"
         : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
             get_targeted_monster()?.mtype,
           )
         ? "pinkie"
         : character.map === "crypt"
-        ? currentTarget.s["frozen"]
+        ? currentTarget && currentTarget.s["frozen"]
           ? "oozingterror"
           : "froststaff"
         : currentTarget &&
@@ -237,7 +237,7 @@ function calculateBestItems(characterClass = character.ctype) {
     case "cupid":
       return calculateCupidItems();
     case "priest":
-      return calculatePriestItems();
+      return calculatePriestItems(get_target());
     default:
       return {};
   }
@@ -300,22 +300,27 @@ async function equipBatch(suggestedItems, forced = false) {
   )
     promises.push(unequip("offhand"));
 
-  promises.push(
-    equip_batch(
-      Object.keys(suggestedItems)
-        .filter(
-          (slot) =>
-            suggestedItems[slot] &&
-            (suggestedItems[slot] !== character.slots[slot]?.name ||
-              character.items[findMaxLevelItem(suggestedItems[slot])]?.level >
-                character.slots[slot]?.level),
-        )
-        .map((slot) => ({
-          slot,
-          num: findMaxLevelItem(suggestedItems[slot]),
-        }))
-        .filter((equipInfo) => equipInfo.num >= 0),
+  const usedCounts = {};
+
+  const itemSlots = Object.keys(suggestedItems)
+    .filter(
+      (slot) =>
+        suggestedItems[slot] &&
+        (suggestedItems[slot] !== character.slots[slot]?.name ||
+          character.items[findMaxLevelItem(suggestedItems[slot])]?.level >
+            character.slots[slot]?.level),
     )
+    .map((slot) => {
+      const id = suggestedItems[slot];
+      const count = usedCounts[id] || 0;
+      const num = findMaxLevelItem(id, count); // pick nth item
+      usedCounts[id] = count + 1; // increment for next use
+      return { slot, num };
+    })
+    .filter((equipInfo) => equipInfo.num >= 0);
+
+  promises.push(
+    equip_batch(itemSlots)
       .then(() => {
         isEquipingItems = false;
       })
@@ -323,7 +328,7 @@ async function equipBatch(suggestedItems, forced = false) {
         isEquipingItems = false;
       }),
   );
-  return promises;
+  return Promise.all(promises);
 }
 
 // Utilities
@@ -484,7 +489,7 @@ function getMonstersToCBurst() {
         calculateDamage(mob, partyTanker) < MAX_MOB_DPS &&
         mob.range < character.range - 20 &&
         !WATCHOUT_ABILITIES.some((skill) =>
-          Object.keys(mob.abilities).includes(skill),
+          Object.keys(mob.abilities ?? {}).includes(skill),
         ),
     )
     .sort((lhs, rhs) => distance(character, rhs) - distance(character, lhs));
@@ -523,7 +528,7 @@ async function warriorCleave(currentStrategy) {
   if (
     character.mp < G.skills["cleave"].mp + 280 ||
     is_on_cooldown("cleave") ||
-    character.cc >= 95 ||
+    character.cc >= 120 ||
     Object.values(parent.entities).filter(
       (mob) =>
         mob.type === "monster" &&
@@ -605,7 +610,7 @@ async function warriorCleave(currentStrategy) {
         (mob) =>
           MELEE_IGNORE_LIST.includes(mob.mtype) ||
           WATCHOUT_ABILITIES.some((skill) =>
-            Object.keys(mob.abilities).includes(skill),
+            Object.keys(mob.abilities ?? {}).includes(skill),
           ),
       ) &&
       !listOfNoTargetMonsterInRange.some((mob) => mob.abilities.burn) &&
@@ -613,25 +618,15 @@ async function warriorCleave(currentStrategy) {
       !formidableMob &&
       !isEquipingItems
     ) {
-      await equipBatch({ mainhand: "bataxe", offhand: undefined });
-      promises.push();
-
       const warriorItems = calculateWarriorItems();
       isEquipingItems = true;
-
-      await use_skill("cleave").then(() => {
-        reduce_cooldown("cleave", 0.95 * character.ping);
-        equip_batch([
-          {
-            slot: "mainhand",
-            num: findMaxLevelItem(warriorItems.mainhand),
-          },
-          {
-            slot: "offhand",
-            num: findMaxLevelItem(warriorItems.offhand),
-          },
-        ]);
-      });
+      promises.push(
+        equipBatch({ mainhand: "bataxe", offhand: undefined }, true),
+        use_skill("cleave").then(() => {
+          reduce_cooldown("cleave", 0.95 * character.ping);
+          equipBatch(warriorItems, true);
+        }),
+      );
     }
   } catch (e) {
     isCleaving = false;
@@ -662,24 +657,11 @@ async function warriorStomp() {
   isStomping = true;
   const promises = [];
 
-  await equipBatch({ mainhand: "basher", offhand: undefined });
-
-  const warriorItems = calculateWarriorItems();
-  isEquipingItems = true;
-
   promises.push(
+    equipBatch({ mainhand: "basher", offhand: undefined }, true),
     use_skill("stomp").then(() => {
       reduce_cooldown("stomp", 0.95 * character.ping);
-      equip_batch([
-        {
-          slot: "mainhand",
-          num: findMaxLevelItem(warriorItems.mainhand),
-        },
-        {
-          slot: "offhand",
-          num: findMaxLevelItem(warriorItems.offhand),
-        },
-      ]);
+      equipBatch(warriorItems, true);
     }),
   );
 

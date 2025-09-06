@@ -386,6 +386,8 @@ const SALE_ABLE = [
   // Sell and replace by crypts's drops
   "intearring",
   "strearring",
+  "dexring",
+  "intring",
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
@@ -632,9 +634,12 @@ function getLoopInterval() {
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
-  return ms_to_next_skill("attack") <= 300
-    ? Math.max(ms_to_next_skill("attack"), 100)
-    : dynamicInterval ?? frequencyInterval;
+  return Math.max(
+    ms_to_next_skill("attack") <= 300
+      ? Math.max(ms_to_next_skill("attack"), 100)
+      : dynamicInterval ?? frequencyInterval,
+    character.s.penalty_cd?.ms ?? 0,
+  );
 }
 
 function ms_to_next_skill(skill) {
@@ -963,7 +968,9 @@ function suicide() {
   if (
     !character.rip &&
     character.hp < Math.max(0.15 * character.max_hp, 2000) &&
-    (avgDmgTaken(character) > character.hp || character.ping > 600)
+    (avgDmgTaken(character) > character.hp ||
+      character.ping > 600 ||
+      character.s.burned)
   ) {
     parent.socket.emit("harakiri");
     game_log("Harakiri");
@@ -1249,11 +1256,9 @@ function on_party_invite(name) {
 // var pinkGooVisitedBoundary = [];
 async function changeToDailyEventTargets() {
   let target = getTarget();
-  const isFightingBoss = boss.includes(getTarget()?.mtype);
 
   if (
     (parent.S.goobrawl || get_nearest_monster({ type: "bgoo" })) &&
-    !isFightingBoss &&
     !character.s["hopsickness"]
   ) {
     changeToPullStrategies();
@@ -1276,8 +1281,8 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.dragold?.live && !isFightingBoss) {
-    changeToNormalStrategies();
+  if (parent.S.dragold?.live) {
+    changeToPullStrategies();
 
     const dragoldInstance = get_nearest_monster({ type: "dragold" });
     if (!dragoldInstance) advanceSmartMove(parent.S.dragold);
@@ -1288,7 +1293,7 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.pinkgoo?.live && !isFightingBoss) {
+  if (parent.S.pinkgoo?.live) {
     changeToNormalStrategies();
     let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
     if (!pinkgooInstance) {
@@ -1304,7 +1309,7 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.snowman?.live && !isFightingBoss) {
+  if (parent.S.snowman?.live) {
     changeToNormalStrategies();
 
     const snowmanInstance = get_nearest_monster({ type: "snowman" });
@@ -1320,10 +1325,31 @@ async function changeToDailyEventTargets() {
     }
   }
 
+  if (parent.S.mrpumpkin?.live) {
+    changeToPullStrategies();
+
+    const mrPumpkinInstance = get_nearest_monster({ type: "mrpumpkin" });
+    if (!mrPumpkinInstance) advanceSmartMove(parent.S.pumpkin);
+    else {
+      change_target(mrPumpkinInstance);
+      return mrPumpkinInstance;
+    }
+  }
+
+  if (parent.S.mrgreen?.live) {
+    changeToPullStrategies();
+
+    const mrGreenInstance = get_nearest_monster({ type: "mrgreen" });
+    if (!mrGreenInstance) advanceSmartMove(parent.S.mrgreen);
+    else {
+      change_target(mrGreenInstance);
+      return mrGreenInstance;
+    }
+  }
+
   if (
     parent.S.crabxx?.live &&
     parent.S.crabxx.hp < parent.S.crabxx.max_hp &&
-    !isFightingBoss &&
     parent.S.crabxx?.target &&
     !partyMems.includes(parent.S.crabxx.target)
   ) {
@@ -1413,7 +1439,7 @@ async function changeToDailyEventTargets() {
     return targetCrab;
   }
 
-  if (parent.S.icegolem?.live && !isFightingBoss) {
+  if (parent.S.icegolem?.live) {
     changeToNormalStrategies();
     const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
     if (!iceGolemInstance) {
@@ -1430,8 +1456,7 @@ async function changeToDailyEventTargets() {
   if (
     parent.S.franky?.live &&
     parent.S.franky?.target &&
-    parent.S.franky?.hp < 0.97 * parent.S.franky?.max_hp &&
-    !isFightingBoss
+    parent.S.franky?.hp < 0.97 * parent.S.franky?.max_hp
   ) {
     changeToNormalStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
@@ -1500,7 +1525,7 @@ async function changeToDailyEventTargets() {
     return pvpTarget.entity;
   }
 
-  if (parent.S.wabbit?.live && !isFightingBoss) {
+  if (parent.S.wabbit?.live) {
     changeToNormalStrategies();
     if (character.range < 100) rangeRate = 0.1;
     else rangeRate = 0.4;

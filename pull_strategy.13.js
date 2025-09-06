@@ -134,7 +134,7 @@ async function usePullStrategies(target) {
           (mob) =>
             MELEE_IGNORE_LIST.includes(mob.mtype) ||
             WATCHOUT_ABILITIES.some((skill) =>
-              Object.keys(mob.abilities).includes(skill),
+              Object.keys(mob.abilities ?? {}).includes(skill),
             ),
         ) &&
         Object.values(parent.entities)
@@ -172,7 +172,7 @@ async function usePullStrategies(target) {
             calculateDamage(mob, character) < 4000 &&
             is_in_range(mob, "taunt") &&
             !WATCHOUT_ABILITIES.some((skill) =>
-              Object.keys(mob.abilities).includes(skill),
+              Object.keys(mob.abilities ?? '').includes(skill),
             ) &&
             (!mob.target ||
               partyMems
