@@ -251,7 +251,6 @@ var IGNORE = [
   "stand0",
   "pickaxe",
   "rod",
-  "broom",
   "tracker",
   "sword",
   "throwingstars",
@@ -388,6 +387,7 @@ const SALE_ABLE = [
   "strearring",
   "dexring",
   "intring",
+  "dexbelt",
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
@@ -1200,10 +1200,32 @@ setInterval(async function () {
   }
 }, 10000);
 
+/**
+ * Get all character in the server
+ * @author earthiverse
+ * @returns list of character in server
+ */
+async function getServerPlayers() {
+  const playersData = new Promise((resolve, reject) => {
+    const dataCheck = (data) => {
+      resolve(data);
+    };
+
+    setTimeout(() => {
+      parent.socket.off("players", dataCheck);
+      reject(`getServerPlayers timeout (2500ms)`);
+    }, 2500);
+    parent.socket.once("players", dataCheck);
+  });
+  parent.socket.emit("players");
+  return playersData;
+}
+
 // Party Setups
 setInterval(async function () {
   //// Deploy characters which arent active
   const loadedCharacters = get_active_characters();
+  const serverCharacters = await getServerPlayers();
   const allCharacters = [...partyMems, partyMerchant];
 
   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
@@ -1231,13 +1253,27 @@ setInterval(async function () {
     //   }
     // });
   }
+  const partyWhitelistRegex = [/^earth/];
+  const whitelistPartyMembers = serverCharacters.filter(
+    (char) =>
+      !partyMems.includes(char.name) &&
+      partyWhitelistRegex.some((regex) => regex.test(char.party)),
+  );
+  const hasWhitelistedMember = parent.party_list.some((member) =>
+    whitelistPartyMembers.some((whitelisted) => whitelisted.name === member),
+  );
 
-  // if (!parent.party_list.length || !parent.party_list.includes("earthPri"))
-  //   send_party_request("earthPri");
+  if (
+    whitelistPartyMembers.length &&
+    whitelistPartyMembers.length <= 6 &&
+    (!parent.party_list.length || !hasWhitelistedMember)
+  ) {
+    send_party_request(whitelistPartyMembers[0].name);
+  }
 
   if (partyMems.length !== parent.party_list.length) {
     if (character.name === partyMems[0]) {
-      partyMems.map((member) => {
+      partyMems.forEach((member) => {
         send_party_invite(member);
       });
     }
@@ -1325,18 +1361,22 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.mrpumpkin?.live) {
+  if (
+    parent.S.mrpumpkin &&
+    parent.S.mrpumpkin.live &&
+    parent.S.mrpumpkin.target
+  ) {
     changeToPullStrategies();
 
     const mrPumpkinInstance = get_nearest_monster({ type: "mrpumpkin" });
-    if (!mrPumpkinInstance) advanceSmartMove(parent.S.pumpkin);
+    if (!mrPumpkinInstance) advanceSmartMove(parent.S.mrpumpkin);
     else {
       change_target(mrPumpkinInstance);
       return mrPumpkinInstance;
     }
   }
 
-  if (parent.S.mrgreen?.live) {
+  if (parent.S.mrgreen?.live && parent.S.mrgreen.target) {
     changeToPullStrategies();
 
     const mrGreenInstance = get_nearest_monster({ type: "mrgreen" });

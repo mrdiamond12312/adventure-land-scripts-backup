@@ -18,6 +18,15 @@ if (parent.caracAL) {
 const originRangeRate = 0.97;
 rangeRate = originRangeRate;
 
+const bosses = {
+  icegolem: { type: "icegolem", threshold: 0.7, hoppable: 0.999 },
+  franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
+  mrpumpkin: { type: "mrpumpkin", threshold: 0.7, hoppable: 0.95 },
+  mrgreen: { type: "mrgreen", threshold: 0.7, hoppable: 0.95 },
+  crabxx: { type: "crabxx", threshold: 0.95, hoppable: 0.9999 },
+  dragold: { type: "dragold", threshold: 0.99, hoppable: 1 },
+};
+
 // Main fight function
 async function fight(target) {
   const haveIgnoreMobAroundTarget = (targetMob) => {
@@ -60,6 +69,7 @@ async function fight(target) {
         .shift();
 
       target =
+        !target.cooperative &&
         aoeMob &&
         mobsToFarm.findIndex((id) => id === aoeMob.mtype) <=
           mobsToFarm.findIndex((id) => id === target.mtype)
