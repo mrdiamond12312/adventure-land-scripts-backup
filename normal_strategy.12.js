@@ -1,7 +1,5 @@
 async function useNormalStrategy(target) {
-  const partyHealer = get_entity(HEALER);
-  const partyTanker = get_entity(TANKER);
-
+  const promises = [];
   switch (character.ctype) {
     case "mage":
       const suggestedMageItems = calculateMageItems(target);
@@ -11,7 +9,7 @@ async function useNormalStrategy(target) {
           (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
         )
       ) {
-        await equipBatch(suggestedMageItems);
+        promises.push(equipBatch(suggestedMageItems));
       }
 
       if (
@@ -23,7 +21,7 @@ async function useNormalStrategy(target) {
             entity.type === "monster" && entity.target === character.name,
         )
       )
-        scareAwayMobs();
+        promises.push(scareAwayMobs());
 
       break;
 
@@ -35,7 +33,7 @@ async function useNormalStrategy(target) {
           (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot],
         )
       ) {
-        await equipBatch(suggestedWarriorItems);
+        promises.push(equipBatch(suggestedWarriorItems));
       }
       break;
 
@@ -47,7 +45,7 @@ async function useNormalStrategy(target) {
           (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
         )
       ) {
-        await equipBatch(suggestedRangerItems);
+        promises.push(equipBatch(suggestedRangerItems));
       }
       break;
 
@@ -58,10 +56,11 @@ async function useNormalStrategy(target) {
           (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
         )
       ) {
-        await equipBatch(suggestedPriestItems);
+        promises.push(equipBatch(suggestedPriestItems));
       }
 
-      if (!isAssignedAsTanker()) await scareAwayMobs();
+      if (!isAssignedAsTanker()) promises.push(scareAwayMobs());
       break;
   }
+  return Promise.all(promises);
 }

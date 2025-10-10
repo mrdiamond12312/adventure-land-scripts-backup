@@ -64,8 +64,8 @@ function calculateMageItems() {
 
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
     (mob) =>
-      (partyMems.includes(mob.target) || mob.cooperative) &&
-      mob.hp <= mob.max_hp * 0.15,
+      (character.name === mob.target || mob.cooperative) &&
+      mob.hp <= Math.min(mob.max_hp * 0.15, 30000),
   );
 
   return {
@@ -87,7 +87,7 @@ function calculateMageItems() {
           ? undefined
           : "wbook1"
         : "wbook1",
-    helmet: "eears",
+    helmet: haveLowHpMobsNearby ? "eears" : "gphelmet",
     chest: "epyjamas",
     pants: "starkillers",
     shoes: "wingedboots",
@@ -102,9 +102,9 @@ function calculateWarriorItems() {
     !get_targeted_monster()["1hp"];
 
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
-    (mobs) =>
-      (mobs.target === character.name || mobs.cooperative) &&
-      mobs.hp <= mobs.max_hp * 0.15,
+    (mob) =>
+      (mob.target === character.name || mob.cooperative) &&
+      mob.hp <= Math.min(mob.max_hp * 0.15, 30000),
   );
 
   if (["pinkgoo", "snowman", "wabbit"].includes(get_targeted_monster()?.mtype))
@@ -172,9 +172,9 @@ function calculateCupidItems() {
 
 function calculatePriestItems(target) {
   const haveLowHpMobsNearby = Object.values(parent.entities).some(
-    (mobs) =>
-      (mobs.target === character.name || mobs.cooperative) &&
-      mobs.hp <= mobs.max_hp * 0.15,
+    (mob) =>
+      (mob.target === character.name || mob.cooperative) &&
+      mob.hp <= Math.min(mob.max_hp * 0.15, 30000),
   );
   const currentTarget = get_targeted_monster();
   return {
@@ -271,7 +271,7 @@ function findMaxLevelItem(id, offset = 0) {
 
 var isEquipingItems = false;
 async function equipBatch(suggestedItems, forced = false) {
-  if ((character.cc > 100 || isEquipingItems) && !forced) return;
+  if ((character.cc > 130 || isEquipingItems) && !forced) return;
 
   isEquipingItems = true;
 
@@ -318,17 +318,13 @@ async function equipBatch(suggestedItems, forced = false) {
       return { slot, num };
     })
     .filter((equipInfo) => equipInfo.num >= 0);
-
-  promises.push(
-    equip_batch(itemSlots)
-      .then(() => {
-        isEquipingItems = false;
-      })
-      .catch(() => {
-        isEquipingItems = false;
-      }),
-  );
-  return Promise.all(promises);
+  if (itemSlots.length)
+    if (itemSlots.length <= 2 && !character.s.penalty_cd)
+      for (const item of itemSlots) promises.push(equip(item.num, item.slot));
+    else promises.push(equip_batch(itemSlots));
+  return Promise.all(promises).finally(() => {
+    isEquipingItems = false;
+  });
 }
 
 // Utilities
@@ -525,16 +521,19 @@ function getMonstersToCBurst() {
 
 isCleaving = false;
 async function warriorCleave(currentStrategy) {
+  const mobsList = Object.values(parent.entities).filter(
+    (mob) =>
+      mob.type === "monster" &&
+      distance(mob, character) < G.skills["cleave"].range,
+  );
   if (
+    character.s.sugarrush ||
+    character.s.penalty_cd ||
     character.mp < G.skills["cleave"].mp + 280 ||
     is_on_cooldown("cleave") ||
-    character.cc >= 120 ||
-    Object.values(parent.entities).filter(
-      (mob) =>
-        mob.type === "monster" &&
-        distance(mob, character) < G.skills["cleave"].range &&
-        mob.mtype !== "porcupine",
-    ).length === 0 ||
+    character.cc >= 100 ||
+    mobsList.some((mob) => mob.type === "porcupine") ||
+    mobsList.length === 0 ||
     isCleaving
   )
     return;
@@ -621,10 +620,16 @@ async function warriorCleave(currentStrategy) {
       const warriorItems = calculateWarriorItems();
       isEquipingItems = true;
       promises.push(
-        equipBatch({ mainhand: "bataxe", offhand: undefined }, true),
-        use_skill("cleave").then(() => {
+        Promise.all(
+          [
+            character.slots["offhand"] && unequip("offhand"),
+            equip(findMaxLevelItem("bataxe")),
+          ].filter((promise) => promise !== false),
+        ),
+        // equipBatch({ mainhand: "bataxe", offhand: undefined }, true),
+        use_skill("cleave").then(async () => {
           reduce_cooldown("cleave", 0.95 * character.ping);
-          equipBatch(warriorItems, true);
+          await equipBatch(warriorItems, true);
         }),
       );
     }

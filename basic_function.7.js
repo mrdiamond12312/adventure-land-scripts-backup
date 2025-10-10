@@ -246,6 +246,7 @@ var IGNORE = [
   "ornament",
   "mistletoe",
   "candy1",
+  "candypop",
   "candycane",
   "candy0",
   "stand0",
@@ -258,6 +259,7 @@ var IGNORE = [
   "orboffrost",
   "orbofplague",
   "orbofresolve",
+  "gphelmet",
   ...BUYABLE,
 ];
 
@@ -331,6 +333,10 @@ const STORE_ABLE = [
   "orba",
   "orbofstr",
   "orbofdex",
+  "mysterybox",
+  "weaponbox",
+  "armorbox",
+  "fury",
 ];
 
 const SALE_ABLE = [
@@ -346,6 +352,8 @@ const SALE_ABLE = [
   "carrotsword",
   // "wcap",
   // "wshoes",
+  "wgloves",
+  "wbreeches",
   "cclaw",
   "dagger",
   "rednose",
@@ -361,11 +369,10 @@ const SALE_ABLE = [
   "lantern",
   "hpbelt",
   "hpamulet",
-  "gphelmet",
   "phelmet",
+  "gphelmet",
   "maceofthedead",
   "pmaceofthedead",
-  "maceofthedead",
   "staffofthedead",
   "swordofthedead",
   "throwingstars",
@@ -375,6 +382,8 @@ const SALE_ABLE = [
   "hgloves",
   "harmor",
   "hpants",
+  "glolipop",
+  "whiteegg",
   "hboots",
   "smoke",
   "sword",
@@ -387,7 +396,10 @@ const SALE_ABLE = [
   "strearring",
   "dexring",
   "intring",
+  "intamulet",
+  "stramulet",
   "dexbelt",
+  "intbelt",
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
@@ -630,16 +642,17 @@ function getTarget() {
 const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
-    (breakpoint) => (1 / character.frequency / breakpoint) * 1000,
+    (breakpoint) =>
+      Math.max(
+        (1 / character.frequency) * 1000,
+        character.s.penalty_cd?.ms ?? 0,
+      ) / breakpoint,
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
-  return Math.max(
-    ms_to_next_skill("attack") <= 300
-      ? Math.max(ms_to_next_skill("attack"), 100)
-      : dynamicInterval ?? frequencyInterval,
-    character.s.penalty_cd?.ms ?? 0,
-  );
+  return ms_to_next_skill("attack") <= dynamicInterval
+    ? Math.max(ms_to_next_skill("attack"), 50)
+    : dynamicInterval ?? frequencyInterval;
 }
 
 function ms_to_next_skill(skill) {
@@ -1264,8 +1277,9 @@ setInterval(async function () {
   );
 
   if (
+    !isMerchant() &&
     whitelistPartyMembers.length &&
-    whitelistPartyMembers.length <= 6 &&
+    whitelistPartyMembers.length < 6 &&
     (!parent.party_list.length || !hasWhitelistedMember)
   ) {
     send_party_request(whitelistPartyMembers[0].name);
@@ -1315,6 +1329,7 @@ async function changeToDailyEventTargets() {
       change_target(rgooInstance || bgooInstance);
       return rgooInstance || bgooInstance;
     }
+    return target || rgooInstance || bgooInstance;
   }
 
   if (parent.S.dragold?.live) {
@@ -1361,29 +1376,53 @@ async function changeToDailyEventTargets() {
     }
   }
 
+  const activeBosses = [];
+
   if (
     parent.S.mrpumpkin &&
     parent.S.mrpumpkin.live &&
     parent.S.mrpumpkin.target
   ) {
-    changeToPullStrategies();
-
-    const mrPumpkinInstance = get_nearest_monster({ type: "mrpumpkin" });
-    if (!mrPumpkinInstance) advanceSmartMove(parent.S.mrpumpkin);
-    else {
-      change_target(mrPumpkinInstance);
-      return mrPumpkinInstance;
-    }
+    activeBosses.push({
+      ...parent.S.mrpumpkin,
+      type: "mrpumpkin",
+      strategy: changeToPullStrategies,
+    });
   }
 
   if (parent.S.mrgreen?.live && parent.S.mrgreen.target) {
-    changeToPullStrategies();
+    activeBosses.push({
+      ...parent.S.mrgreen,
+      type: "mrgreen",
+      strategy: changeToPullStrategies,
+    });
+  }
 
-    const mrGreenInstance = get_nearest_monster({ type: "mrgreen" });
-    if (!mrGreenInstance) advanceSmartMove(parent.S.mrgreen);
-    else {
-      change_target(mrGreenInstance);
-      return mrGreenInstance;
+  if (parent.S.icegolem?.live) {
+    activeBosses.push({
+      ...parent.S.icegolem,
+      type: "icegolem",
+      strategy: changeToNormalStrategies,
+    });
+  }
+
+  if (activeBosses.length) {
+    const bossToFight = activeBosses
+      .sort(
+        (lhs, rhs) =>
+          lhs.hp / parent.G.monsters[lhs.type].hp -
+          rhs.hp / parent.G.monsters[rhs.type].hp,
+      )
+      .shift();
+
+    if (bossToFight) {
+      const bossInstance = get_nearest_monster({ type: bossToFight.type });
+      bossToFight.strategy();
+      if (!bossInstance) advanceSmartMove(bossToFight);
+      else {
+        change_target(bossInstance);
+        return bossInstance;
+      }
     }
   }
 
@@ -1477,20 +1516,6 @@ async function changeToDailyEventTargets() {
 
     change_target(targetCrab);
     return targetCrab;
-  }
-
-  if (parent.S.icegolem?.live) {
-    changeToNormalStrategies();
-    const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
-    if (!iceGolemInstance) {
-      await advanceSmartMove({ map: "winterland", x: 792, y: 416 });
-    }
-    change_target(get_nearest_monster({ type: "icegolem" }));
-    return get_nearest_monster({ type: "icegolem" });
-  } else if (get_nearest_monster({ type: "icegolem" })) {
-    changeToNormalStrategies();
-    change_target(target);
-    return get_nearest_monster({ type: "icegolem" });
   }
 
   if (

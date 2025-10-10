@@ -15,7 +15,7 @@ if (parent.caracAL) {
 }
 
 // Kiting settings
-const originRangeRate = 0.97;
+const originRangeRate = 0.9;
 rangeRate = originRangeRate;
 
 const bosses = {
@@ -96,30 +96,26 @@ async function fight(target) {
     shouldAttack()
   ) {
     set_message("Attacking");
-    currentStrategy(target);
     // Main attack logic
-    const attackPromise = attack(target).catch((e) => {
-      if (e.failed && e.response !== "cooldown") {
-        reduce_cooldown("attack", -e.ms);
-      }
-    });
-
-    const promisesToAwait = [attackPromise];
+    const promisesToAwait = [currentStrategy(target), attack(target)];
 
     // Offhand swap logic
     if (
       (character.slots.offhand?.name === "fireblade" ||
         character.slots.mainhand?.name === "fireblade") &&
-      !isEquipingItems
+      character.cc < 100 &&
+      !character.s.penalty_cd &&
+      !character.s.sugarrush
     ) {
+      isEquipingItems = true;
       const warriorItems = calculateWarriorItems();
-      const equipPromises = equipBatch(
-        {
-          mainhand: "candycanesword",
-          offhand: "candycanesword",
-        },
-        true,
-      ).then(() => equipBatch(warriorItems, true));
+      const equipPromises = Promise.all([
+        equip(findMaxLevelItem("candycanesword"), "mainhand"),
+        equip(findMaxLevelItem("candycanesword", 1), "offhand"),
+      ]).then(async () => {
+        await equipBatch(warriorItems, true);
+      });
+
       promisesToAwait.push(equipPromises);
     }
 
@@ -128,7 +124,9 @@ async function fight(target) {
       reduce_cooldown("attack", Math.min(...parent.pings));
     } catch (e) {
       // Handle any errors from the combined promises here
-      console.error("An error occurred during attack or equip:", e);
+      if (e.failed && e.response !== "cooldown") {
+        reduce_cooldown("attack", -e.ms);
+      }
     }
     if (
       character.mp > G.skills["warcry"].mp &&
@@ -248,9 +246,9 @@ async function mainLoop() {
 
     if (
       smart.moving ||
-      is_on_cooldown("attack") ||
+      ms_to_next_skill("attack") > 50 ||
       distance(character, get_targeted_monster()) >
-        character.range + character.xrange
+        character.range + character.xrange * 1.1
     )
       await warriorCleave(
         currentStrategy === usePullStrategies ? "pull" : "normal",
@@ -296,7 +294,7 @@ async function mainLoop() {
           y: mapY,
         });
       }
-    } else fight(target);
+    } else await fight(target);
   } catch (e) {
     console.error(e);
   }

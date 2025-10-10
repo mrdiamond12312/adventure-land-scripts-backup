@@ -4,6 +4,7 @@ async function usePullStrategies(target) {
   const mobsList = Object.values(parent.entities).filter(
     (mob) => mob.type === "monster",
   );
+  const promises = [];
 
   switch (character.ctype) {
     case "mage":
@@ -13,20 +14,8 @@ async function usePullStrategies(target) {
           (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
         )
       ) {
-        await equipBatch(suggestedMageItems);
+        promises.push(equipBatch(suggestedMageItems));
       }
-
-      // if (!is_on_cooldown("energize")) {
-      //   if (character.mp > 4000)
-      //     use_skill("energize", get_entity(TANKER)).then(() =>
-      //       reduce_cooldown("energize", character.ping * 0.95)
-      //     );
-      //   else {
-      //     use_skill("energize", character).then(() =>
-      //       reduce_cooldown("energize", character.ping * 0.95)
-      //     );
-      //   }
-      // }
 
       if (
         ms_to_next_skill("cburst") === 0 &&
@@ -38,10 +27,14 @@ async function usePullStrategies(target) {
         partyHealer?.hp > 0.6 * partyHealer?.max_hp &&
         getMonstersToCBurst().length >= 1
       ) {
-        use_skill("cburst", getMonstersToCBurst()).then(() =>
-          reduce_cooldown("cburst", -2000),
+        promises.push(
+          withTimeout(
+            use_skill("cburst", getMonstersToCBurst()).then(() =>
+              reduce_cooldown("cburst", -2000),
+            ),
+            2500,
+          ),
         );
-        reduce_cooldown("cburst", -2000);
       }
 
       if (
@@ -54,7 +47,7 @@ async function usePullStrategies(target) {
             entity.type === "monster" && entity.target === character.name,
         )
       )
-        scareAwayMobs();
+        promises.push(scareAwayMobs());
 
       break;
 
@@ -66,7 +59,7 @@ async function usePullStrategies(target) {
           (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot],
         )
       ) {
-        await equipBatch(suggestedWarriorItems);
+        promises.push(equipBatch(suggestedWarriorItems));
       }
 
       const formidableMonsterAppeared = mobsList.find(
@@ -77,22 +70,18 @@ async function usePullStrategies(target) {
         mobsList.filter((mob) => mob?.target === character.name).length >=
         MAX_TARGET;
 
-      const numberOfMonsterInRange = mobsList.filter((mob) =>
-        is_in_range(mob, "agitate"),
-      ).length;
-
       const listOfNoTargetMonsterInRange = mobsList.filter(
-        (mob) => is_in_range(mob, "agitate") && mob.target !== TANKER,
+        (mob) => is_in_range(mob, "agitate") && mob.target !== character.name,
       );
 
-      const magicalMobsTargetingSelf = Object.values(parent.entities).filter(
+      const magicalMobsTargetingSelf = mobsList.filter(
         (mob) => mob.damage_type === "magical" && mob.target === character.name,
       );
-      const physicalMobsTargetingSelf = Object.values(parent.entities).filter(
+      const physicalMobsTargetingSelf = mobsList.filter(
         (mob) =>
           mob.damage_type === "physical" && mob.target === character.name,
       );
-      const pureMobsTargetingSelf = Object.values(parent.entities).filter(
+      const pureMobsTargetingSelf = mobsList.filter(
         (mob) => mob.damage_type === "pure" && mob.target === character.name,
       );
 
@@ -101,7 +90,7 @@ async function usePullStrategies(target) {
       let pureMobsAfterAgitating = pureMobsTargetingSelf.length;
 
       for (const mob of listOfNoTargetMonsterInRange) {
-        switch (parent.entities[mob]?.damage_type) {
+        switch (mob.damage_type) {
           case "magical":
             magicalMobsAfterAgitating++;
             break;
@@ -129,6 +118,9 @@ async function usePullStrategies(target) {
         character.mp > G.skills["agitate"].mp &&
         !is_on_cooldown("agitate") &&
         // numberOfMonsterInRange <= MAX_TARGET + 2 &&
+        !listOfNoTargetMonsterInRange.some(
+          (mob) => mob.cooperative && !partyMems.includes(mob.target),
+        ) &&
         listOfNoTargetMonsterInRange.length >= 2 &&
         !listOfNoTargetMonsterInRange.some(
           (mob) =>
@@ -153,7 +145,7 @@ async function usePullStrategies(target) {
             partyDmgRecieved &&
         !isFearedAfterAgitating
       ) {
-        use_skill("agitate");
+        promises.push(withTimeout(use_skill("agitate"), 2500));
       }
 
       if (
@@ -172,7 +164,7 @@ async function usePullStrategies(target) {
             calculateDamage(mob, character) < 4000 &&
             is_in_range(mob, "taunt") &&
             !WATCHOUT_ABILITIES.some((skill) =>
-              Object.keys(mob.abilities ?? '').includes(skill),
+              Object.keys(mob.abilities ?? "").includes(skill),
             ) &&
             (!mob.target ||
               partyMems
@@ -186,8 +178,13 @@ async function usePullStrategies(target) {
         );
 
         if (mobToPull)
-          use_skill("taunt", parent.entities[mobToPull]).then(() =>
-            reduce_cooldown("taunt", character.ping * 0.95),
+          promises.push(
+            withTimeout(
+              use_skill("taunt", parent.entities[mobToPull]).then(() =>
+                reduce_cooldown("taunt", character.ping * 0.95),
+              ),
+              2500,
+            ),
           );
       }
 
@@ -201,7 +198,7 @@ async function usePullStrategies(target) {
           (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
         )
       ) {
-        await equipBatch(suggestedRangerItems);
+        promises.push(equipBatch(suggestedRangerItems));
       }
       break;
 
@@ -212,7 +209,7 @@ async function usePullStrategies(target) {
           (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
         )
       ) {
-        await equipBatch(suggestedPriestItems);
+        promises.push(equipBatch(suggestedPriestItems));
       }
 
       if (
@@ -222,12 +219,14 @@ async function usePullStrategies(target) {
         !is_on_cooldown("scare") &&
         character.cc < 100
       ) {
-        scareAwayMobs();
+        promises.push(scareAwayMobs());
       }
       break;
     default:
       break;
   }
+
+  return Promise.all(promises);
 }
 
 game.on("hit", (data) => {});

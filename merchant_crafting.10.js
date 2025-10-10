@@ -228,6 +228,9 @@ async function compoundInv() {
       }
 
       const scrollType = `cscroll${itemGrade}`;
+      if (getItemBankSlots(scrollType)) {
+        await retrieveBankItem(scrollType);
+      }
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
         if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD)
@@ -320,7 +323,7 @@ async function upgradeInv() {
     if (itemInfo.upgrade) {
       if (
         (character.items[i]?.level > maxUpgrade || itemGrade >= 2) &&
-        character.items[i]?.level >= ITEMS_HIGHEST_LEVEL[itemName].level
+        character.items[i]?.level >= (ITEMS_HIGHEST_LEVEL[itemName]?.level ?? 0)
       )
         if (
           !(
@@ -343,6 +346,9 @@ async function upgradeInv() {
       }
 
       const scrollType = `scroll${itemGrade}`;
+      if (getItemBankSlots(scrollType)) {
+        await retrieveBankItem(scrollType);
+      }
       let scrollSlot = locate_item(scrollType);
       if (scrollSlot === -1) {
         if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD)

@@ -92,8 +92,7 @@ async function holidayExchange() {
   });
 }
 
-function exchangeXyn() {
-  // const itemName = ['candy1', 'candycane', 'candy0', 'mistletoe', 'gem0', 'weaponbox', 'armorbox'];
+async function exchangeXyn() {
   if (isInvFull(6)) return;
 
   const itemName = [
@@ -111,13 +110,17 @@ function exchangeXyn() {
     { name: "basketofeggs", quantity: 1 },
   ];
   let slot = undefined;
-  itemName.map((item) => {
-    if (
-      locate_item(item.name) !== -1 &&
-      character.items[locate_item(item.name)].q >= item.quantity
-    )
-      slot = locate_item(item.name);
-  });
+  for (const item of itemName) {
+    if (getItemBankSlots(item.name).length && locate_item(item.name) === -1) {
+      await retrieveBankItem(item.name);
+    }
+
+    const slotIndex = locate_item(item.name);
+    if (slotIndex !== -1 && character.items[slotIndex].q >= item.quantity) {
+      slot = slotIndex;
+      break;
+    }
+  }
 
   if (slot !== undefined)
     exchange(slot).catch((e) => {
@@ -167,7 +170,9 @@ function moveHome() {
   return smart_move({ map: "main", x: -152, y: -137 })
     .then(() => {
       onDuty = false;
-      open_stand(locate_item("stand0"));
+      if (locate_item("stand0") === -1) {
+        retrieveBankItem("stand0");
+      } else open_stand(locate_item("stand0"));
     })
     .catch((e) => {
       if (e.reason === "failed" && e.failed) use_skill("use_town");
@@ -381,7 +386,7 @@ setInterval(async function () {
             return (
               SALE_ABLE.includes(character.items[i].name) &&
               !character.items[i].shiny &&
-              (character.items[i].level || 0) <= 1
+              (character.items[i].level || 0) <= 2
             );
           })
           .map(async (i) => sell(i, 1000)),
@@ -461,6 +466,8 @@ function secondhandsHandler(events) {
     "firestars",
     "daggerofthedead",
     "jacko",
+    "intamulet",
+    "dexamulet",
   ];
   for (const item of events) {
     if (item && ITEM_NEEDED.includes(item.name)) {

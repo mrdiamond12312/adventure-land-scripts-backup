@@ -3,7 +3,7 @@ const HOP_SERVERS = ["US", "ASIA", "EU"];
 const ignoreServer = [];
 
 const HOME_SERVER = {
-  serverRegion: "EU",
+  serverRegion: "ASIA",
   serverIdentifier: "I",
 };
 
@@ -12,8 +12,8 @@ const tankableBoss = ["snowman", "pinkgoo"];
 const bosses = {
   icegolem: { type: "icegolem", threshold: 0.7, hoppable: 0.999 },
   franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
-  mrpumpkin: { type: "mrpumpkin", threshold: 0.7, hoppable: 0.95 },
-  mrgreen: { type: "mrgreen", threshold: 0.7, hoppable: 0.95 },
+  mrpumpkin: { type: "mrpumpkin", threshold: 0.3, hoppable: 0.9999 },
+  mrgreen: { type: "mrgreen", threshold: 0.3, hoppable: 0.9999 },
   crabxx: { type: "crabxx", threshold: 0.95, hoppable: 0.9999 },
   dragold: { type: "dragold", threshold: 0.99, hoppable: 1 },
 };
@@ -55,7 +55,7 @@ setInterval(async () => {
         parent.S[boss] &&
         parent.S[boss].target &&
         parent.S[boss].hp <
-          (bosses[boss]?.threshold ?? 0.93) * parent.S[boss].max_hp
+          (bosses[boss]?.threshold ?? 0.93) * parent.S[boss].max_hp,
     ) ||
     get("cryptInstance")
   )
@@ -85,7 +85,7 @@ setInterval(async () => {
       .filter((serverBoss) => {
         return (
           !ignoreServer.includes(
-            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`
+            `${serverBoss.serverRegion}${serverBoss.serverIdentifier}`,
           ) &&
           serverBoss.serverIdentifier !== "PVP" &&
           HOP_SERVERS.includes(serverBoss.serverRegion) &&

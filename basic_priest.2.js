@@ -20,44 +20,81 @@ var rangeRate = 0.5;
 const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
 async function fight(target) {
-  if (can_attack(target) && shouldAttack() && !character.s.penalty_cd) {
+  // Make Priest prior mobs without poison effect that attacking the party, to reduce their attack spped
+  const partyDmgRecieved = avgPartyDmgTaken(partyMems);
+  const targetToTaunt =
+    isAssignedAsTanker() && currentStrategy === usePullStrategies
+      ? Object.values(parent.entities)
+          .filter(
+            (mob) =>
+              mob.type === "monster" &&
+              !mob.target &&
+              is_in_range(mob, "attack") &&
+              partyDmgRecieved + calculateDamage(mob, character) <
+                character.heal * 0.9 * character.frequency,
+          )
+          .sort(
+            (lhs, rhs) => distance(lhs, character) - distance(rhs, character),
+          )
+          .shift()
+      : null;
+
+  const targetToAttack =
+    character.slots.orb?.name === "test_orb"
+      ? Object.values(parent.entities)
+          .filter(
+            (mob) =>
+              mob.type === "monster" &&
+              !mob.s.poisoned &&
+              is_in_range(mob, "attack") &&
+              partyMems.includes(mob.target),
+          )
+          .sort((lhs, rhs) => lhs.attack - rhs.attack)
+          .pop() ?? target
+      : target;
+  target = targetToTaunt ?? targetToAttack;
+  change_target(target);
+
+  const promisesToAwait = [];
+
+  if (
+    target &&
+    !target.s.curse &&
+    character.mp > 1100 &&
+    !is_on_cooldown("curse") &&
+    is_in_range(target, "curse") &&
+    target.max_hp > 3000
+  )
+    promisesToAwait.push(
+      withTimeout(use_skill("curse", target), 2500).then(() =>
+        reduce_cooldown("curse", Math.min(...parent.pings)),
+      ),
+    );
+
+  if (
+    target &&
+    shouldAttack() &&
+    !is_on_cooldown("darkblessing") &&
+    character.mp > G.skills["darkblessing"].mp &&
+    !character.s?.darkblessing
+  )
+    promisesToAwait.push(
+      withTimeout(use_skill("darkblessing"), 2500).then(() =>
+        reduce_cooldown("darkblessing", Math.min(...parent.pings)),
+      ),
+    );
+
+  if (
+    target &&
+    can_attack(target) &&
+    shouldAttack() &&
+    !character.s.penalty_cd
+  ) {
     set_message("Attacking");
-    currentStrategy(target);
-
-    // Make Priest prior mobs without poison effect that attacking the party, to reduce their attack spped
-    const partyDmgRecieved = avgPartyDmgTaken(partyMems);
-
-    const targetToTaunt =
-      isAssignedAsTanker() && currentStrategy === usePullStrategies
-        ? Object.values(parent.entities)
-            .filter(
-              (mob) =>
-                mob.type === "monster" &&
-                !mob.target &&
-                is_in_range(mob, "attack") &&
-                partyDmgRecieved + calculateDamage(mob, character) <
-                  character.heal * 0.9 * character.frequency,
-            )
-            .sort(
-              (lhs, rhs) => distance(lhs, character) - distance(rhs, character),
-            )
-            .shift()
-        : null;
-
-    const targetToAttack =
-      character.slots.orb?.name === "test_orb"
-        ? Object.values(parent.entities)
-            .filter(
-              (mob) =>
-                mob.type === "monster" &&
-                !mob.s.poisoned &&
-                is_in_range(mob, "attack") &&
-                partyMems.includes(mob.target),
-            )
-            .sort((lhs, rhs) => lhs.attack - rhs.attack)
-            .pop() ?? target
-        : target;
-    change_target(targetToTaunt ?? targetToAttack);
+    promisesToAwait.push(
+      currentStrategy(target),
+      withTimeout(attack(target), 2500),
+    );
 
     try {
       await withTimeout(attack(targetToTaunt ?? targetToAttack), 2500);
@@ -67,24 +104,7 @@ async function fight(target) {
         reduce_cooldown("attack", -e.ms);
       }
     }
-
-    if (
-      target &&
-      !is_on_cooldown("darkblessing") &&
-      character.mp > G.skills["darkblessing"].mp &&
-      !character.s?.darkblessing
-    )
-      use_skill("darkblessing");
   }
-
-  if (
-    target &&
-    character.mp > 1100 &&
-    !is_on_cooldown("curse") &&
-    is_in_range(target, "curse") &&
-    target.max_hp > 3000
-  )
-    use_skill("curse", target);
 }
 
 async function priestBuff() {
@@ -142,16 +162,15 @@ async function priestBuff() {
           character.range + character.xrange * 0.9
         ) {
           try {
-            promises.push(currentStrategy(buffee));
+            promises.push(
+              currentStrategy(buffee),
+              withTimeout(
+                heal(buffee).then(() => {
+                  reduce_cooldown("attack", Math.min(...parent.pings));
+                }),
+              ),
+            );
           } catch (e) {}
-          promises.push(
-            withTimeout(
-              heal(buffee).then(() => {
-                reduce_cooldown("attack", Math.min(...parent.pings));
-              }),
-            ),
-          );
-
           set_message("Heal " + buffee.name);
           break;
         }
@@ -256,7 +275,7 @@ async function mainLoop() {
           y: mapY,
         });
       }
-    } else fight(target);
+    } else await fight(target);
   } catch (e) {
     console.error(e);
   }

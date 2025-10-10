@@ -57,6 +57,8 @@ async function fight(target) {
 
   if (!target) return;
 
+  const promisesToAwait = [];
+
   if (!is_on_cooldown("energize")) {
     const buffee = getLowestMana();
     if (
@@ -67,13 +69,23 @@ async function fight(target) {
       is_in_range(buffee, "energize")
     ) {
       log("Energize " + buffee.name);
-      use_skill("energize", buffee).then(() =>
-        reduce_cooldown("energize", character.ping * 0.95),
+      promisesToAwait.push(
+        withTimeout(
+          use_skill("energize", buffee).then(() =>
+            reduce_cooldown("energize", character.ping * 0.95),
+          ),
+          2500,
+        ),
       );
-    } else if (ms_to_next_skill("attack") < 10 && !character.s.penalty_cd) {
+    } else if (ms_to_next_skill("attack") <= 0 && !character.s.penalty_cd) {
       log("Energize " + character.name);
-      use_skill("energize", character).then(() =>
-        reduce_cooldown("energize", character.ping * 0.95),
+      promisesToAwait.push(
+        withTimeout(
+          use_skill("energize", character).then(() =>
+            reduce_cooldown("energize", character.ping * 0.95),
+          ),
+          2500,
+        ),
       );
     }
   }
@@ -88,10 +100,11 @@ async function fight(target) {
         extraDistanceWithinHitbox(character) &&
     shouldAttack()
   ) {
-    currentStrategy(target);
+    promisesToAwait.push(currentStrategy(target), attack(target));
+
     set_message("Attacking");
     try {
-      await withTimeout(attack(target), 2500);
+      await Promise.all(promisesToAwait);
       reduce_cooldown("attack", Math.min(...parent.pings));
     } catch (e) {
       if (e.failed && e.response !== "cooldown") {
@@ -188,7 +201,7 @@ async function mainLoop() {
           y: mapY,
         });
       }
-    } else fight(target);
+    } else await fight(target);
   } catch (e) {
     console.error(e);
   }
