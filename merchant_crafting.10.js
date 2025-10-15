@@ -9,7 +9,7 @@ if (parent.caracAL) {
 var BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
 
-const IGNORE_RARE_GOLD_THRESHOLD = 50e8;
+const IGNORE_RARE_GOLD_THRESHOLD = 40e8;
 
 const KEEP_THRESHOLD = {
   // Every character needs
@@ -38,6 +38,8 @@ const ITEMS_HIGHEST_LEVEL = {};
 const RETRIEVE_HISTORY = [];
 
 async function retrieveBankItem(searchId, level = 0) {
+  if (smart.moving) return;
+
   if (character.map !== "bank") {
     close_stand();
     await smart_move(bankPosition);
@@ -228,7 +230,11 @@ async function compoundInv() {
       }
 
       const scrollType = `cscroll${itemGrade}`;
-      if (getItemBankSlots(scrollType)) {
+      if (
+        !character.c.fishing &&
+        !character.c.mining &&
+        getItemBankSlots(scrollType).length > 0
+      ) {
         await retrieveBankItem(scrollType);
       }
       let scrollSlot = locate_item(scrollType);
@@ -346,7 +352,11 @@ async function upgradeInv() {
       }
 
       const scrollType = `scroll${itemGrade}`;
-      if (getItemBankSlots(scrollType)) {
+      if (
+        !character.c.fishing &&
+        !character.c.mining &&
+        getItemBankSlots(scrollType).length > 0
+      ) {
         await retrieveBankItem(scrollType);
       }
       let scrollSlot = locate_item(scrollType);

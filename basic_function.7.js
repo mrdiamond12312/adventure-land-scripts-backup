@@ -400,6 +400,9 @@ const SALE_ABLE = [
   "stramulet",
   "dexbelt",
   "intbelt",
+  // Halloween temp for gold
+  "bowofthedead",
+  "daggerofthedead",
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
@@ -694,9 +697,10 @@ function extraDistanceWithinHitbox(target) {
 }
 
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
+  const loopInterval = Math.max(150, getLoopInterval());
   if (!target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
-    return setTimeout(hitAndRun, getLoopInterval());
+    return setTimeout(hitAndRun, loopInterval);
   }
 
   if (!angle) {
@@ -784,7 +788,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   angle +=
     flipRotation *
     Math.asin(
-      (character.speed * getLoopInterval()) /
+      (character.speed * loopInterval) /
         1000 /
         2 /
         (character.range * rangeRateFn +
@@ -798,7 +802,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
           extraRangeBySelfHitbox),
     ) *
     2;
-  return setTimeout(hitAndRun, getLoopInterval());
+  return setTimeout(hitAndRun, loopInterval);
 }
 hitAndRun();
 

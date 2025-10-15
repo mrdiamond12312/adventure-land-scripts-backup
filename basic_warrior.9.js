@@ -7,6 +7,7 @@ if (parent.caracAL) {
       "adventure-land-scripts-backup/other_class_msg_listener.8.js",
     ])
     .then(() => {
+      cleaveLoop();
       mainLoop();
     });
 } else {
@@ -90,44 +91,56 @@ async function fight(target) {
     !character.s.penalty_cd &&
     distance(target, character) <
       character.range +
-        character.xrange +
+        character.xrange * 0.9 +
         extraDistanceWithinHitbox(target) +
         extraDistanceWithinHitbox(character) &&
     shouldAttack()
   ) {
     set_message("Attacking");
     // Main attack logic
-    const promisesToAwait = [currentStrategy(target), attack(target)];
+    const promisesToAwait = [
+      currentStrategy(target),
+      withTimeout(attack(target), 2500)
+        .then(() => {
+          reduce_cooldown("attack", Math.min(...parent.pings));
+        })
+        .catch((e) => {
+          if (e.failed && e.response !== "cooldown") {
+            reduce_cooldown("attack", -e.ms);
+          }
+        }),
+    ];
 
     // Offhand swap logic
     if (
       (character.slots.offhand?.name === "fireblade" ||
         character.slots.mainhand?.name === "fireblade") &&
-      character.cc < 100 &&
-      !character.s.penalty_cd &&
+      character.cc < 105 &&
       !character.s.sugarrush
     ) {
-      isEquipingItems = true;
       const warriorItems = calculateWarriorItems();
+      const candycane1 = findMaxLevelItem("candycanesword");
+      const candycane2 = findMaxLevelItem("candycanesword", 1);
       const equipPromises = Promise.all([
-        equip(findMaxLevelItem("candycanesword"), "mainhand"),
-        equip(findMaxLevelItem("candycanesword", 1), "offhand"),
+        equip(candycane1, "mainhand"),
+        equip(candycane2, "offhand"),
       ]).then(async () => {
-        await equipBatch(warriorItems, true);
+        await equipBatch(
+          {
+            mainhand: warriorItems.mainhand,
+            offhand: warriorItems.offhand,
+          },
+          true,
+        );
       });
 
       promisesToAwait.push(equipPromises);
     }
 
     try {
-      await Promise.all(promisesToAwait);
-      reduce_cooldown("attack", Math.min(...parent.pings));
-    } catch (e) {
-      // Handle any errors from the combined promises here
-      if (e.failed && e.response !== "cooldown") {
-        reduce_cooldown("attack", -e.ms);
-      }
-    }
+      await withTimeout(Promise.all(promisesToAwait), 2500);
+    } catch (e) {}
+
     if (
       character.mp > G.skills["warcry"].mp &&
       !is_on_cooldown("warcry") &&
@@ -224,6 +237,26 @@ async function fight(target) {
 
 // Main game loop
 
+async function cleaveLoop() {
+  try {
+    if (
+      smart.moving ||
+      ms_to_next_skill("attack") > 50 ||
+      distance(character, get_targeted_monster()) >
+        character.range + character.xrange * 1.1
+    )
+      await warriorCleave(
+        currentStrategy === usePullStrategies ? "pull" : "normal",
+      );
+  } catch (e) {
+    console.log("Error while cleaving: " + e);
+  }
+
+  setTimeout(cleaveLoop, Math.max(ms_to_next_skill("cleave"), 100));
+}
+
+if (!parent.caracAL) cleaveLoop();
+
 async function mainLoop() {
   try {
     desiredElixir = isAssignedAsTanker() ? "elixirluck" : "pumpkinspice";
@@ -244,15 +277,15 @@ async function mainLoop() {
       });
     }
 
-    if (
-      smart.moving ||
-      ms_to_next_skill("attack") > 50 ||
-      distance(character, get_targeted_monster()) >
-        character.range + character.xrange * 1.1
-    )
-      await warriorCleave(
-        currentStrategy === usePullStrategies ? "pull" : "normal",
-      );
+    // if (
+    //   smart.moving ||
+    //   ms_to_next_skill("attack") > 50 ||
+    //   distance(character, get_targeted_monster()) >
+    //     character.range + character.xrange * 1.1
+    // )
+    //   await warriorCleave(
+    //     currentStrategy === usePullStrategies ? "pull" : "normal",
+    //   );
 
     if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
       throw new Error("Smart moving", {
@@ -303,63 +336,3 @@ async function mainLoop() {
 }
 
 if (!parent.caracAL) mainLoop();
-
-// setInterval(async function () {
-//   assignRoles();
-
-//   buff();
-
-//   if (
-//     character.moving &&
-//     character.mp > G.skills["charge"].mp &&
-//     !is_on_cooldown("charge")
-//   ) {
-//     use_skill("charge");
-//   }
-
-//   if (character.rip) {
-//     respawn();
-//     return;
-//   }
-
-//   if (
-//     smart.moving ||
-//     is_on_cooldown("attack") ||
-//     distance(character, get_targeted_monster()) >
-//       character.range + character.xrange
-//   )
-//     await warriorCleave(
-//       currentStrategy === usePullStrategies ? "pull" : "normal"
-//     );
-
-//   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
-
-//   let target = getTarget();
-
-//   // Boss handling
-//   if (goToBoss()) return;
-
-//   // Crypt & Event logic
-//   if (get("cryptInstance")) {
-//     target = await useCryptStrategy(target);
-//   } else {
-//     target = await changeToDailyEventTargets();
-//   }
-
-//   // Targeting & movement logic
-//   if (!target) {
-//     if (!smart.moving && !isAdvanceSmartMoving) {
-//       if (get("cryptInstance") && character.map !== "crypt") {
-//         changeToNormalStrategies();
-//         await advanceSmartMove(CRYPT_STARTING_LOCATION);
-//       } else if (!get("cryptInstance")) {
-//         changeToNormalStrategies();
-//         const scareInterval = setInterval(scareAwayMobs, 5000);
-//         await advanceSmartMove({ map, x: mapX, y: mapY });
-//         clearInterval(scareInterval);
-//       }
-//     }
-//   } else {
-//     await fight(target);
-//   }
-// }, loopInterval);

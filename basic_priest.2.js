@@ -85,32 +85,39 @@ async function fight(target) {
     );
 
   if (
-    target &&
-    can_attack(target) &&
-    shouldAttack() &&
-    !character.s.penalty_cd
+    !character.s.penalty_cd &&
+    ms_to_next_skill("attack") === 0 &&
+    distance(target, character) <
+      character.range +
+        character.xrange +
+        extraDistanceWithinHitbox(target) +
+        extraDistanceWithinHitbox(character) &&
+    shouldAttack()
   ) {
     set_message("Attacking");
     promisesToAwait.push(
       currentStrategy(target),
-      withTimeout(attack(target), 2500),
+      withTimeout(attack(target), 2500)
+        .then(() => {
+          reduce_cooldown("attack", Math.min(...parent.pings));
+        })
+        .catch((e) => {
+          if (e.failed && e.response !== "cooldown") {
+            reduce_cooldown("attack", -e.ms);
+          }
+        }),
     );
-
-    try {
-      await withTimeout(attack(targetToTaunt ?? targetToAttack), 2500);
-      reduce_cooldown("attack", Math.min(...parent.pings));
-    } catch (e) {
-      if (e.failed && e.response !== "cooldown") {
-        reduce_cooldown("attack", -e.ms);
-      }
-    }
   }
+
+  try {
+    await withTimeout(Promise.all(promisesToAwait), 2500);
+  } catch (e) {}
 }
 
 async function priestBuff() {
   const promises = [];
 
-  if (!is_on_cooldown("attack")) {
+  if (ms_to_next_skill("attack") === 0) {
     const buffees = getPlayersToHeal();
 
     if (buffees.length) {

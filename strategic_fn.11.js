@@ -179,7 +179,11 @@ function calculatePriestItems(target) {
   const currentTarget = get_targeted_monster();
   return {
     mainhand:
-      target && target.type !== "monster"
+      target &&
+      target.type !== "monster" &&
+      !["firestaff", "oozingterror", "pmace", "lmace"].includes(
+        character.slots.mainhand?.name,
+      )
         ? "oozingterror"
         : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
             get_targeted_monster()?.mtype,
@@ -534,7 +538,8 @@ async function warriorCleave(currentStrategy) {
     character.cc >= 100 ||
     mobsList.some((mob) => mob.type === "porcupine") ||
     mobsList.length === 0 ||
-    isCleaving
+    isCleaving ||
+    isEquipingItems
   )
     return;
 
@@ -620,16 +625,14 @@ async function warriorCleave(currentStrategy) {
       const warriorItems = calculateWarriorItems();
       isEquipingItems = true;
       promises.push(
-        Promise.all(
-          [
-            character.slots["offhand"] && unequip("offhand"),
-            equip(findMaxLevelItem("bataxe")),
-          ].filter((promise) => promise !== false),
-        ),
-        // equipBatch({ mainhand: "bataxe", offhand: undefined }, true),
-        use_skill("cleave").then(async () => {
+        // equipBatch({ mainhand: "bataxe" }),
+        Promise.all([unequip("offhand"), equip(findMaxLevelItem("bataxe"))]),
+        withTimeout(use_skill("cleave"), 2500).then(async () => {
           reduce_cooldown("cleave", 0.95 * character.ping);
-          await equipBatch(warriorItems, true);
+          await equipBatch(
+            { mainhand: warriorItems.mainhand, offhand: warriorItems.offhand },
+            true,
+          );
         }),
       );
     }

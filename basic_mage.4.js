@@ -100,18 +100,25 @@ async function fight(target) {
         extraDistanceWithinHitbox(character) &&
     shouldAttack()
   ) {
-    promisesToAwait.push(currentStrategy(target), attack(target));
+    promisesToAwait.push(
+      currentStrategy(target),
+      withTimeout(attack(target), 2500)
+        .then(() => {
+          reduce_cooldown("attack", Math.min(...parent.pings));
+        })
+        .catch((e) => {
+          if (e.failed && e.response !== "cooldown") {
+            reduce_cooldown("attack", -e.ms);
+          }
+        }),
+    );
 
     set_message("Attacking");
-    try {
-      await Promise.all(promisesToAwait);
-      reduce_cooldown("attack", Math.min(...parent.pings));
-    } catch (e) {
-      if (e.failed && e.response !== "cooldown") {
-        reduce_cooldown("attack", -e.ms);
-      }
-    }
   }
+
+  try {
+    await Promise.all(promisesToAwait);
+  } catch (e) {}
 
   if (
     target["damage_type"] === "magical" &&
