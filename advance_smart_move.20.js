@@ -104,6 +104,7 @@ function resetSmartMove() {
 async function advanceSmartMove(props) {
   if (
     !smart.moving &&
+    !character.c &&
     !isAdvanceSmartMoving &&
     ["mage", "merchant"].includes(character.ctype) &&
     character.slots.mainhand?.name !== "broom"

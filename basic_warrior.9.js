@@ -125,13 +125,10 @@ async function fight(target) {
         equip(candycane1, "mainhand"),
         equip(candycane2, "offhand"),
       ]).then(async () => {
-        await equipBatch(
-          {
-            mainhand: warriorItems.mainhand,
-            offhand: warriorItems.offhand,
-          },
-          true,
-        );
+        await equipBatch({
+          mainhand: warriorItems.mainhand,
+          offhand: warriorItems.offhand,
+        });
       });
 
       promisesToAwait.push(equipPromises);

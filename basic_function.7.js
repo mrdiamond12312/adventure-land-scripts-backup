@@ -128,7 +128,23 @@ var desiredElixir = "elixirluck";
 //// INVENTORY functions
 function item_info(item) {
   if (!item) return undefined;
-  return parent.G.items[item.name];
+
+  const baseInfo = parent.G.items[item.name];
+  if (!baseInfo) return undefined;
+
+  // Clone to avoid mutating global data
+  const itemInfo = JSON.parse(JSON.stringify(baseInfo));
+  const levelBonuses = itemInfo.upgrade ?? itemInfo.compound ?? undefined;
+
+  if (item.level && levelBonuses) {
+    for (const [key, value] of Object.entries(levelBonuses)) {
+      if (typeof value === "number") {
+        itemInfo[key] = (itemInfo[key] ?? 0) + value * item.level;
+      }
+    }
+  }
+
+  return itemInfo;
 }
 
 function isInvFull(slots = 1) {
@@ -260,6 +276,12 @@ var IGNORE = [
   "orbofplague",
   "orbofresolve",
   "gphelmet",
+  "bowofthedead",
+  "daggerofthedead",
+  "maceofthedead",
+  "pmaceofthedead",
+  "staffofthedead",
+  "swordofthedead",
   ...BUYABLE,
 ];
 
@@ -375,7 +397,6 @@ const SALE_ABLE = [
   "pmaceofthedead",
   "staffofthedead",
   "swordofthedead",
-  "throwingstars",
   "ringsj",
   "mshield",
   "hhelmet",
@@ -396,7 +417,7 @@ const SALE_ABLE = [
   "strearring",
   "dexring",
   "intring",
-  "intamulet",
+  "dexamulet",
   "stramulet",
   "dexbelt",
   "intbelt",
@@ -569,7 +590,7 @@ buff();
 
 function getTarget() {
   const leader = get_entity(partyMems[0]);
-  var target = get_targeted_monster();
+  let target = get_targeted_monster();
 
   if (target && !get_nearest_monster({ type: target.mtype }))
     target = undefined;
@@ -806,12 +827,14 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 }
 hitAndRun();
 
+const HEAL_IGNORE = ["Geoffriel", "CrownPriest"];
 function getLowestHealth() {
   const allies = parent.party_list.map((name) => get_entity(name));
-  allies.filter((entity) => entity);
+  allies.filter((entity) => entity && !HEAL_IGNORE.includes(entity.name));
   allies.sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
   return allies[0] || character;
 }
+
 function healingPrioritizedNames() {
   return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
 }
@@ -837,6 +860,7 @@ function getPlayersToHeal() {
       (entity) =>
         entity &&
         (entity.type === "character" || entity.mtype === "ghost") &&
+        !HEAL_IGNORE.includes(entity.name) &&
         (entity.mtype !== "ghost"
           ? !prioritizedName.includes(entity.name) &&
             (entity.max_hp >
@@ -1185,7 +1209,7 @@ setInterval(async function () {
   }
 
   // Inventory check and potions
-  if (isInvFull(10)) {
+  if (isInvFull(6)) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
   } else if (

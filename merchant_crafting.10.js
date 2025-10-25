@@ -355,7 +355,8 @@ async function upgradeInv() {
       if (
         !character.c.fishing &&
         !character.c.mining &&
-        getItemBankSlots(scrollType).length > 0
+        getItemBankSlots(scrollType).length > 0 &&
+        character.esize
       ) {
         await retrieveBankItem(scrollType);
       }

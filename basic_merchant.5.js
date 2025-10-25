@@ -180,87 +180,123 @@ function moveHome() {
 }
 
 async function goFishing() {
-  if (isInvFull()) return;
   if (
-    !smart.moving &&
-    !isAdvanceSmartMoving &&
-    !character.q.compound &&
-    !character.q.upgrade &&
-    !character.q.exchange &&
-    !character.c.mining &&
-    !character.c.fishing &&
-    !is_on_cooldown("fishing")
+    isInvFull() ||
+    smart.moving ||
+    isAdvanceSmartMoving ||
+    character.c.mining ||
+    character.c.fishing ||
+    is_on_cooldown("fishing")
+  )
+    return;
+
+  const rodItemId = "rod";
+  const availableRodsInBank = getItemBankSlots(rodItemId);
+
+  if (
+    availableRodsInBank.length > 0 &&
+    character.slots.mainhand?.name !== rodItemId &&
+    !isInvFull(2) &&
+    locate_item(rodItemId) === -1
   ) {
-    if (character.slots.mainhand?.name !== "rod" && locate_item("rod") === -1)
-      moveHome();
+    return retrieveBankItem(rodItemId);
+  }
 
-    if (
-      character.real_x != fishingLocation.x &&
-      character.real_y != fishingLocation.y
-    ) {
-      close_stand();
-      equipBroom();
-      await smart_move(fishingLocation);
-    }
-    if (character.mp > 120) {
-      if (!character.c.fishing) {
-        if (
-          character.slots.mainhand?.name !== "rod" &&
-          locate_item("rod") !== -1
-        )
-          await equipBatch({
-            mainhand: "rod",
-            offhand: undefined,
-          });
+  if (
+    locate_item(rodItemId) === -1 &&
+    character.slots.mainhand?.name !== rodItemId &&
+    availableRodsInBank.length === 0 &&
+    !isInvFull(4)
+  ) {
+    return craft(rodItemId);
+  }
 
-        log("Fishin!");
-        use_skill("fishing");
-      }
-    }
+  if (
+    character.slots.mainhand?.name !== rodItemId &&
+    locate_item(rodItemId) === -1
+  )
+    moveHome();
+
+  if (
+    character.real_x != fishingLocation.x &&
+    character.real_y != fishingLocation.y
+  ) {
+    close_stand();
+    equipBroom();
+    await smart_move(fishingLocation);
+  }
+
+  if (character.mp > 120) {
+    log("Fishin!");
+    return Promise.all([
+      equipBatch({
+        mainhand: rodItemId,
+        offhand: undefined,
+      }),
+      use_skill("fishing"),
+    ]);
   }
 }
 
 async function goMining() {
-  if (isInvFull()) return;
   if (
-    !smart.moving &&
-    !isAdvanceSmartMoving &&
-    !character.q.compound &&
-    !character.q.upgrade &&
-    !character.q.exchange &&
-    !character.c.fishing &&
-    !character.c.mining &&
-    !is_on_cooldown("mining")
+    isInvFull() ||
+    smart.moving ||
+    isAdvanceSmartMoving ||
+    character.q.compound ||
+    character.q.upgrade ||
+    character.q.exchange ||
+    character.c.mining ||
+    character.c.fishing ||
+    is_on_cooldown("mining")
+  )
+    return;
+
+  const pickaxeItemId = "pickaxe";
+  const availablePickaxesInBank = getItemBankSlots(pickaxeItemId);
+
+  if (
+    availablePickaxesInBank.length > 0 &&
+    character.slots.mainhand?.name !== pickaxeItemId &&
+    !isInvFull(2) &&
+    locate_item(pickaxeItemId) === -1
   ) {
-    if (
-      character.slots.mainhand?.name !== "pickaxe" &&
-      locate_item("pickaxe") === -1
-    )
-      moveHome();
+    return retrieveBankItem(pickaxeItemId);
+  }
 
-    if (
-      character.real_x != miningLocation.x &&
-      character.real_y != miningLocation.y
-    ) {
-      close_stand();
-      equipBroom();
-      await smart_move(miningLocation);
-    }
-    if (character.mp > 120) {
-      if (!character.c.mining) {
-        if (
-          character.slots.mainhand?.name !== "pickaxe" &&
-          locate_item("pickaxe") !== -1
-        )
-          await equipBatch({
-            mainhand: "pickaxe",
-            offhand: undefined,
-          });
+  if (
+    locate_item(pickaxeItemId) === -1 &&
+    character.slots.mainhand?.name !== pickaxeItemId &&
+    availablePickaxesInBank.length === 0 &&
+    !isInvFull(4)
+  ) {
+    return craft(pickaxeItemId);
+  }
 
-        log("Minin!");
-        use_skill("mining");
-      }
-    }
+  if (
+    character.slots.mainhand?.name !== pickaxeItemId &&
+    locate_item(pickaxeItemId) === -1
+  )
+    moveHome();
+
+  if (
+    character.real_x != miningLocation.x &&
+    character.real_y != miningLocation.y
+  ) {
+    close_stand();
+    equipBroom();
+    await smart_move(miningLocation);
+  }
+
+  if (character.mp > 120) {
+    log("Mining!");
+    return Promise.all([
+      equipBatch({
+        mainhand: pickaxeItemId,
+        offhand: undefined,
+      }),
+      use_skill("mining"),
+    ]);
   }
 }
 
@@ -378,6 +414,7 @@ setInterval(async function () {
     craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
     craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
     // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
+    craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
     !isSortingInventory &&
       Promise.all(
         Array.from({ length: 42 }, (_, i) => i)
@@ -393,17 +430,8 @@ setInterval(async function () {
       ),
   ]);
 
-  if (
-    !is_on_cooldown("mining") &&
-    (locate_item("pickaxe") !== -1 ||
-      character.slots.mainhand?.name === "pickaxe")
-  )
-    goMining();
-  else if (
-    !is_on_cooldown("fishing") &&
-    (locate_item("rod") !== -1 || character.slots.mainhand?.name === "rod")
-  )
-    goFishing();
+  if (!is_on_cooldown("mining")) goMining();
+  else if (!is_on_cooldown("fishing")) goFishing();
   else if (
     locate_item("gemfragment") !== -1 &&
     character.items[locate_item("gemfragment")]?.q >= 50
@@ -452,25 +480,28 @@ function handle_death() {
 }
 
 // Handler to buy from Ponty
+const ITEM_NEEDED = [
+  "strring",
+  "dexearring",
+  "bataxe",
+  "ololipop",
+  "fireblade",
+  "firebow",
+  "firestaff",
+  "firestars",
+  "jacko",
+  "intamulet",
+];
+
 function secondhandsHandler(events) {
   if (isInvFull(6)) return false;
-  const ITEM_NEEDED = [
-    "strring",
-    "dexearring",
-    "bataxe",
-    "glolipop",
-    "ololipop",
-    "fireblade",
-    "firebow",
-    "firestaff",
-    "firestars",
-    "daggerofthedead",
-    "jacko",
-    "intamulet",
-    "dexamulet",
-  ];
   for (const item of events) {
-    if (item && ITEM_NEEDED.includes(item.name)) {
+    if (
+      item &&
+      ITEM_NEEDED.filter((item) => !SALE_ABLE.includes(item)).includes(
+        item.name,
+      )
+    ) {
       parent.socket.emit("sbuy", { rid: item.rid });
     }
   }
