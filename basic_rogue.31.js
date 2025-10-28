@@ -8,6 +8,7 @@ if (parent.caracAL) {
     ])
     .then(() => {
       mainLoop();
+      fuaLoop();
     });
 } else {
   load_code(7);
@@ -25,18 +26,18 @@ async function fight(target) {
         (entity) =>
           entity.type === "monster" &&
           ([...partyMems, ...parent.party_list].includes(entity.target) ||
-            (entity.coorperative && entity.target)),
+            (entity.cooperative && entity.target)),
       )
       .sort((lhs, rhs) => {
         const lhsHpPercentage = lhs.hp / lhs.max_hp;
         const rhsHpPercentage = rhs.hp / rhs.max_hp;
 
-        if (lhs.coorperative && rhs.coorperative) {
+        if (lhs.cooperative && rhs.cooperative) {
           if (lhs["1hp"]) return -1;
           else return 1;
         }
-        if (lhs.coorperative) return -1;
-        if (rhs.coorperative) return 1;
+        if (lhs.cooperative) return -1;
+        if (rhs.cooperative) return 1;
 
         return rhsHpPercentage - lhsHpPercentage;
       });
@@ -48,53 +49,23 @@ async function fight(target) {
 
   const promisesToAwait = [];
 
-  if (!is_on_cooldown("energize")) {
-    const buffee = getLowestMana();
-    if (
-      buffee &&
-      buffee.max_mp - buffee.mp > 500 &&
-      buffee.mp < buffee.max_mp * 0.65 &&
-      character.mp > character.max_mp * 0.75 &&
-      is_in_range(buffee, "energize")
-    ) {
-      log("Energize " + buffee.name);
-      promisesToAwait.push(
-        withTimeout(
-          use_skill("energize", buffee).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95),
-          ),
-          2500,
-        ),
-      );
-    } else if (ms_to_next_skill("attack") <= 0 && !character.s.penalty_cd) {
-      log("Energize " + character.name);
-      promisesToAwait.push(
-        withTimeout(
-          use_skill("energize", character).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95),
-          ),
-          2500,
-        ),
-      );
-    }
-  }
-
   if (
     ms_to_next_skill("attack") === 0 &&
     !character.s.penalty_cd &&
     distance(target, character) < character.range + character.xrange &&
     shouldAttack()
   ) {
+    if (!ms_to_next_skill("invis")) {
+      use_skill("invis").then(() =>
+        reduce_cooldown("invis", Math.min(...parent.pings)),
+      );
+    }
     promisesToAwait.push(
       currentStrategy(target),
       withTimeout(attack(target), 2500)
-        .then(() => {
-          reduce_cooldown("attack", Math.min(...parent.pings));
-        })
+        .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
         .catch((e) => {
-          if (e.failed && e.response !== "cooldown") {
-            reduce_cooldown("attack", -e.ms);
-          }
+          attackErrorHandler(e);
         }),
     );
 
@@ -104,32 +75,68 @@ async function fight(target) {
   try {
     await Promise.all(promisesToAwait);
   } catch (e) {}
+}
 
-  if (
-    target["damage_type"] === "magical" &&
-    !is_on_cooldown("reflection") &&
-    partyMems.includes(target.target) &&
-    character.mp > 1000
-  ) {
-    use_skill("reflection", get_entity(target.target));
+async function fuaLoop() {
+  try {
+    const currentTarget = get_targeted_monster();
+    const promisesToAwait = [];
+
+    const prioritized = prioritizedNames();
+    const playersNearbyWithoutRogueSpeed = [
+      ...Object.values(parent.entities),
+      character,
+    ]
+      .filter(
+        (entity) =>
+          entity.type === "character" &&
+          !entity.s.rspeed &&
+          is_in_range(entity, "rspeed"),
+      )
+      .sort((lhs, rhs) => {
+        const lhsPriority = prioritized.includes(lhs.id || lhs.name) ? 1 : 0;
+        const rhsPriority = prioritized.includes(rhs.id || rhs.name) ? 1 : 0;
+        return rhsPriority - lhsPriority; // higher priority first
+      });
+
+    if (
+      playersNearbyWithoutRogueSpeed.length &&
+      ms_to_next_skill("rspeed") === 0 &&
+      character.mp > G.skills["rspeed"].mp
+    ) {
+      use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift());
+    }
+
+    if (
+      distance(character, currentTarget) < character.range + character.xrange &&
+      ms_to_next_skill("quickstab") === 0 &&
+      character.mp > parent.G.skills["rspeed"].mp * 2
+    ) {
+      const currentMainhand = item_info(character.slots.mainhand);
+      const skillToBeUsed =
+        currentMainhand?.wtype === "dagger"
+          ? "quickstab"
+          : currentMainhand?.wtype === "fist"
+          ? "quickpunch"
+          : undefined;
+      if (skillToBeUsed) {
+        promisesToAwait.push(
+          use_skill(skillToBeUsed, currentTarget).then(() =>
+            reduce_cooldown(skillToBeUsed, Math.min(...parent.pings)),
+          ),
+        );
+      }
+    }
+
+    await withTimeout(Promise.all(promisesToAwait), 500);
+  } catch (e) {
+    console.log("Error while FuA: " + e);
   }
 
-  // if (character.mp > 2000 && !is_on_cooldown("alchemy") && !isInvFull()) {
-  //   const sellableSlot = character.items.findIndex((item) =>
-  //     SALE_ABLE.includes(item?.name)
-  //   );
-
-  //   if (sellableSlot !== -1) {
-  //     if (sellableSlot === 0 && SALE_ABLE.includes(character.items[0]?.name)) {
-  //       use_skill("alchemy");
-  //     } else {
-  //       swap(0, sellableSlot).then(() => {
-  //         if (SALE_ABLE.includes(character.items[0]?.name)) use_skill("alchemy");
-  //       });
-  //     }
-  //   }
-  // }
+  setTimeout(fuaLoop, Math.max(ms_to_next_skill("quickpunch"), 100));
 }
+
+if (!parent.caracAL) fuaLoop();
 
 async function mainLoop() {
   try {
@@ -151,8 +158,6 @@ async function mainLoop() {
       });
 
     let target = getTarget();
-
-    // if (goToBoss()) return;
 
     //// THE CRYPT & EVENTS
     if (get("cryptInstance")) target = await useCryptStrategy(target);
@@ -193,69 +198,3 @@ async function mainLoop() {
 }
 
 if (!parent.caracAL) mainLoop();
-
-// setInterval(async function () {
-//   desiredElixir = "pumpkinspice";
-//   assignRoles();
-
-//   buff();
-
-//   if (character.rip) {
-//     respawn();
-//     return;
-//   }
-
-//   if (character.level > 50) {
-//     set("mageLocation", {
-//       mp: character.mp,
-//       map: character.map,
-//       x: character.x,
-//       y: character.y,
-//     });
-//   }
-
-//   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
-
-//   let target = getTarget();
-
-//   if (goToBoss()) return;
-
-//   //// THE CRYPT & EVENTS
-//   if (get("cryptInstance")) target = await useCryptStrategy(target);
-//   else target = await changeToDailyEventTargets();
-
-//   //// Logic to targets and farm places
-//   if (
-//     !smart.moving &&
-//     !isAdvanceSmartMoving &&
-//     get("cryptInstance") &&
-//     character.map !== "crypt" &&
-//     !target
-//   ) {
-//     changeToNormalStrategies();
-//     await advanceSmartMove(CRYPT_STARTING_LOCATION);
-//   } else if (
-//     !smart.moving &&
-//     !isAdvanceSmartMoving &&
-//     !target &&
-//     !get("cryptInstance") &&
-//     (partyMems[0] == character.name ||
-//       !get_entity(partyMems[0]) ||
-//       character.map === "crypt" ||
-//       distance(character, { x: mapX, y: mapY, map }) > 500)
-//   ) {
-//     log("Moving to farming location");
-//     changeToNormalStrategies();
-//     const scareInterval = setInterval(() => {
-//       scareAwayMobs();
-//     }, 5000);
-//     await advanceSmartMove({
-//       map,
-//       x: mapX,
-//       y: mapY,
-//     });
-//     clearInterval(scareInterval);
-//   }
-
-//   await fight(target);
-// }, loopInterval);

@@ -104,11 +104,7 @@ async function fight(target) {
         .then(() => {
           reduce_cooldown("attack", Math.min(...parent.pings));
         })
-        .catch((e) => {
-          if (e.failed && e.response !== "cooldown") {
-            reduce_cooldown("attack", -e.ms);
-          }
-        }),
+        .catch((e) => attackErrorHandler(e)),
     ];
 
     // Offhand swap logic
@@ -233,7 +229,6 @@ async function fight(target) {
 }
 
 // Main game loop
-
 async function cleaveLoop() {
   try {
     if (
@@ -290,9 +285,6 @@ async function mainLoop() {
       });
 
     let target = getTarget();
-
-    // Boss handling
-    // if (goToBoss()) return;
 
     // Crypt & Event logic
     if (get("cryptInstance")) {

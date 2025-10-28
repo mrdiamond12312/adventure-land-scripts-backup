@@ -54,6 +54,14 @@ function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   );
 }
 
+function shouldWearLuckGear() {
+  return Object.values(parent.entities).some(
+    (mob) =>
+      (mob.target === character.name || mob.cooperative) &&
+      mob.hp <= Math.min(mob.max_hp * 0.15, 300000),
+  );
+}
+
 // Class Items logic
 function calculateMageItems() {
   const shouldUseBlaster =
@@ -62,11 +70,7 @@ function calculateMageItems() {
     !get_targeted_monster()?.["1hp"] &&
     character.mp > G.skills["magiport"].mp + G.skills["blink"].mp;
 
-  const haveLowHpMobsNearby = Object.values(parent.entities).some(
-    (mob) =>
-      (character.name === mob.target || mob.cooperative) &&
-      mob.hp <= Math.min(mob.max_hp * 0.15, 30000),
-  );
+  const haveLowHpMobsNearby = shouldWearLuckGear();
 
   return {
     mainhand:
@@ -101,11 +105,7 @@ function calculateWarriorItems() {
   const shouldUseBlaster =
     numberOfMonsterAroundTarget(currentTarget) >= 2 && !currentTarget["1hp"];
 
-  const haveLowHpMobsNearby = Object.values(parent.entities).some(
-    (mob) =>
-      (mob.target === character.name || mob.cooperative) &&
-      mob.hp <= Math.min(mob.max_hp * 0.15, 30000),
-  );
+  const haveLowHpMobsNearby = shouldWearLuckGear();
 
   if (
     currentTarget &&
@@ -161,27 +161,32 @@ function calculateWarriorItems() {
   };
 }
 
-function calculateRangerItems() {
+function calculateRangerItems(target) {
+  const haveLowHpMobsNearby = shouldWearLuckGear();
+
   return {
-    mainhand: get_targeted_monster()?.cooperative ? "firebow" : "crossbow",
-    orb: "rabbitsfoot",
+    helmet: "wcap",
+    mainhand: target && target.cooperative ? "firebow" : "crossbow",
+    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
+    amulet: haveLowHpMobsNearby ? "spookyamulet" : "dexamulet",
+    shoes: haveLowHpMobsNearby ? "wshoes" : "wingedboots",
+    gloves: haveLowHpMobsNearby ? "wgloves" : "mittens",
   };
 }
 
 function calculateCupidItems() {
+  const haveLowHpMobsNearby = shouldWearLuckGear();
   return {
     mainhand: get_targeted_monster()?.cooperative ? "firebow" : "merry",
-    orb: "talkingskull",
+    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
   };
 }
 
 function calculatePriestItems(target) {
-  const haveLowHpMobsNearby = Object.values(parent.entities).some(
-    (mob) =>
-      (mob.target === character.name || mob.cooperative) &&
-      mob.hp <= Math.min(mob.max_hp * 0.15, 100000),
-  );
+  const haveLowHpMobsNearby = shouldWearLuckGear();
   const currentTarget = get_targeted_monster();
+  const isTanking = isAssignedAsTanker();
+
   return {
     mainhand:
       target &&
@@ -190,11 +195,11 @@ function calculatePriestItems(target) {
         character.slots.mainhand?.name,
       )
         ? "oozingterror"
-        : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
-            get_targeted_monster()?.mtype,
-          )
-        ? "pinkie"
-        : character.map === "crypt"
+        : // : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
+        //     get_targeted_monster()?.mtype,
+        //   )
+        // ? "pinkie"
+        character.map === "crypt"
         ? currentTarget && currentTarget.s["frozen"]
           ? "oozingterror"
           : "froststaff"
@@ -209,7 +214,7 @@ function calculatePriestItems(target) {
     offhand:
       character.map === "crypt"
         ? "wbook1"
-        : isAssignedAsTanker() && character.s.burned
+        : isTanking && character.s.burned
         ? "wbookhs"
         : haveLowHpMobsNearby
         ? "mshield"
@@ -224,43 +229,66 @@ function calculatePriestItems(target) {
         ? "wbookhs"
         : "wbook1",
     orb:
-      isAssignedAsTanker() && character.s.burned
+      isTanking && character.s.burned
         ? "orba"
         : haveLowHpMobsNearby
         ? "rabbitsfoot"
         : target?.type !== "monster"
         ? "jacko"
         : "test_orb",
-    amulet: isAssignedAsTanker() ? "t2stramulet" : "intamulet",
+    gloves: "supermittens",
+    amulet: isTanking ? "t2stramulet" : "intamulet",
   };
 }
 
 function calculateRogueItems(target) {
+  const haveLowHpMobsNearby = shouldWearLuckGear();
   const fieryWeapon = "firestars";
-  const targetStacks = target.s.stack?.s ?? 0;
+
+  // Safely handle missing target
+  if (!target) {
+    return {
+      helmet: haveLowHpMobsNearby ? "wcap" : "fury",
+      mainhand: "daggerofthedead",
+      offhand: "daggerofthedead",
+      shoes: haveLowHpMobsNearby ? "wshoes" : "wingedboots",
+      gloves: haveLowHpMobsNearby ? "wgloves" : "supermittens",
+      amulet: haveLowHpMobsNearby ? "spookyamulet" : "dexamulet",
+      orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
+      chest: "wattire",
+      pants: "wbreeches",
+    };
+  }
+
+  const targetStacks = target.s?.stack?.s ?? 0;
   const fieryWeaponSlot = locate_item(fieryWeapon);
+
   const characterFireStars =
     fieryWeaponSlot !== -1
       ? character.items[fieryWeaponSlot]
       : character.slots.offhand?.name === fieryWeapon
       ? character.slots.offhand
       : undefined;
+
   const equipItemAttackOffset =
-    item_info(character.slots.offhand).attack ??
-    0 - item_info(characterFireStars).attack ??
-    0;
+    (item_info(character.slots.offhand)?.attack ?? 0) -
+    (item_info(characterFireStars)?.attack ?? 0);
+
   const rogueBurnDmg = characterFireStars
-    ? dps_multiplier(target.armor - character.apiercing) *
+    ? dps_multiplier((target.armor ?? 0) - (character.apiercing ?? 0)) *
       ((100 - (target.firesistance ?? 0)) / 100) *
       1.5 *
       (character.attack - equipItemAttackOffset + targetStacks) *
       0.9
     : 0;
 
-  const shouldEquipFireStar = rogueBurnDmg > target.s.burn?.intensity;
+  const shouldEquipFireStar = rogueBurnDmg > (target.s?.burned?.intensity ?? 0);
 
   return {
+    helmet: haveLowHpMobsNearby ? "wcap" : "fury",
     mainhand: "daggerofthedead",
+    shoes: haveLowHpMobsNearby ? "wshoes" : "wingedboots",
+    gloves: haveLowHpMobsNearby ? "wgloves" : "mittens",
     offhand: shouldEquipFireStar ? fieryWeapon : "daggerofthedead",
     amulet: haveLowHpMobsNearby ? "spookyamulet" : "dexamulet",
     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
@@ -276,7 +304,7 @@ function calculateBestItems(characterClass = character.ctype) {
     case "warrior":
       return calculateWarriorItems();
     case "ranger":
-      return calculateRangerItems();
+      return calculateRangerItems(get_target());
     case "cupid":
       return calculateCupidItems();
     case "priest":
@@ -474,7 +502,7 @@ function avgDmgTaken(characterEntity, dmgType = null) {
       0,
     ) *
       mobbingMultiplier(numberOfAttackingMobs) +
-    Math.max(characterEntity.s.burn?.intensity ?? 0, burnPadding)
+    Math.max(characterEntity.s.burned?.intensity ?? 0, burnPadding)
   );
 }
 
@@ -512,8 +540,9 @@ function isAssignedAsTanker() {
 }
 
 function getMonstersToCBurst() {
-  const partyHealer = get_entity(HEALER);
+  const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
   const partyTanker = get_entity(TANKER);
+  const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
 
   if (!(partyHealer && partyTanker)) return [];
 
@@ -536,8 +565,7 @@ function getMonstersToCBurst() {
   let tankerNumberOfAggroedMobs = listOfMonsterAttacking(partyHealer).length;
 
   for (const mob of mobsList) {
-    if (partyDmgRecieved >= partyHealer.heal * partyHealer.frequency * 0.95)
-      break;
+    if (partyDmgRecieved >= healerPower * partyHealer.frequency * 0.95) break;
 
     if (
       is_in_range(mob, "cburst") &&
@@ -545,7 +573,7 @@ function getMonstersToCBurst() {
       partyDmgRecieved +
         calculateDamage(mob, partyTanker) *
           mobbingMultiplier(tankerNumberOfAggroedMobs + 1) <
-        partyHealer.heal * partyHealer.frequency * 0.9
+        healerPower * partyHealer.frequency * 0.9
     ) {
       result.push([mob, 2]);
       tankerNumberOfAggroedMobs += 1;
@@ -637,9 +665,9 @@ async function warriorCleave(currentStrategy) {
         .reduce((acc, dmg) => acc + dmg, 0) * mobbingMultiplier(allMobs.length);
 
     // Check if cleaving is safe and beneficial
-    const healer = get_entity(HEALER);
-    const healThreshold =
-      currentStrategy === "pull" ? (healer?.heal ?? 0) * 0.9 : 0;
+    const healer = get_entity(HEALER) ?? get_entity(RANGER);
+    const healerPower = healer?.heal ?? healer?.attack ?? 0;
+    const healThreshold = currentStrategy === "pull" ? healerPower * 0.9 : 0;
 
     if (
       (currentStrategy === "pull"
@@ -720,7 +748,10 @@ async function warriorStomp() {
 
 function shouldAttack() {
   const currentTarget = get_targeted_monster();
-  const partyHealer = get_entity(HEALER);
+  const partyPriest = parent.party_list
+    .map((id) => get_player(id))
+    .filter((player) => player && player.ctype === "priest");
+  const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
   return character.map === "crypt"
     ? partyHealer && !partyHealer.rip
     : ["warrior", "rogue"].includes(character.ctype) &&
@@ -728,6 +759,6 @@ function shouldAttack() {
       MELEE_IGNORE_LIST.includes(currentTarget.mtype ?? currentTarget.ctype)
     ? false
     : currentTarget && currentTarget.attack > 600 && !currentTarget.target
-    ? partyHealer && !partyHealer.rip
+    ? partyPriest.length > 0 || (partyHealer && !partyHealer.rip)
     : true;
 }

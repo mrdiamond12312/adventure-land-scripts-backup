@@ -107,9 +107,7 @@ async function fight(target) {
           reduce_cooldown("attack", Math.min(...parent.pings));
         })
         .catch((e) => {
-          if (e.failed && e.response !== "cooldown") {
-            reduce_cooldown("attack", -e.ms);
-          }
+          attackErrorHandler(e);
         }),
     );
 
@@ -176,8 +174,6 @@ async function mainLoop() {
 
     let target = getTarget();
 
-    // if (goToBoss()) return;
-
     //// THE CRYPT & EVENTS
     if (get("cryptInstance")) target = await useCryptStrategy(target);
     else target = await changeToDailyEventTargets();
@@ -217,69 +213,3 @@ async function mainLoop() {
 }
 
 if (!parent.caracAL) mainLoop();
-
-// setInterval(async function () {
-//   desiredElixir = "pumpkinspice";
-//   assignRoles();
-
-//   buff();
-
-//   if (character.rip) {
-//     respawn();
-//     return;
-//   }
-
-//   if (character.level > 50) {
-//     set("mageLocation", {
-//       mp: character.mp,
-//       map: character.map,
-//       x: character.x,
-//       y: character.y,
-//     });
-//   }
-
-//   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
-
-//   let target = getTarget();
-
-//   if (goToBoss()) return;
-
-//   //// THE CRYPT & EVENTS
-//   if (get("cryptInstance")) target = await useCryptStrategy(target);
-//   else target = await changeToDailyEventTargets();
-
-//   //// Logic to targets and farm places
-//   if (
-//     !smart.moving &&
-//     !isAdvanceSmartMoving &&
-//     get("cryptInstance") &&
-//     character.map !== "crypt" &&
-//     !target
-//   ) {
-//     changeToNormalStrategies();
-//     await advanceSmartMove(CRYPT_STARTING_LOCATION);
-//   } else if (
-//     !smart.moving &&
-//     !isAdvanceSmartMoving &&
-//     !target &&
-//     !get("cryptInstance") &&
-//     (partyMems[0] == character.name ||
-//       !get_entity(partyMems[0]) ||
-//       character.map === "crypt" ||
-//       distance(character, { x: mapX, y: mapY, map }) > 500)
-//   ) {
-//     log("Moving to farming location");
-//     changeToNormalStrategies();
-//     const scareInterval = setInterval(() => {
-//       scareAwayMobs();
-//     }, 5000);
-//     await advanceSmartMove({
-//       map,
-//       x: mapX,
-//       y: mapY,
-//     });
-//     clearInterval(scareInterval);
-//   }
-
-//   await fight(target);
-// }, loopInterval);

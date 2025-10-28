@@ -38,7 +38,7 @@ async function useNormalStrategy(target) {
       break;
 
     case "ranger":
-      const suggestedRangerItems = calculateRangerItems();
+      const suggestedRangerItems = calculateRangerItems(target);
 
       if (
         Object.keys(suggestedRangerItems).some(
@@ -46,6 +46,17 @@ async function useNormalStrategy(target) {
         )
       ) {
         promises.push(equipBatch(suggestedRangerItems));
+      }
+      break;
+
+    case "rogue":
+      const suggestedRogueItems = calculateRogueItems(target);
+      if (
+        Object.keys(suggestedRogueItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedRogueItems[slot],
+        )
+      ) {
+        promises.push(equipBatch(suggestedRogueItems));
       }
       break;
 

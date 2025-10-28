@@ -1,5 +1,6 @@
 async function usePullStrategies(target) {
-  const partyHealer = get_entity(HEALER);
+  const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
+  const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
   const partyTanker = get_entity(TANKER);
   const mobsList = Object.values(parent.entities).filter(
     (mob) => mob.type === "monster",
@@ -137,7 +138,7 @@ async function usePullStrategies(target) {
               entity.target !== character,
           )
           .reduce((prev, curr) => prev + calculateDamage(curr, character), 0) <
-          partyHealer.heal * partyHealer.frequency +
+          healerPower * partyHealer.frequency +
             (parent.entities["$Caroline"]?.focus &&
             distance(parent.entities["$Caroline"], character) < 250
               ? 1200
@@ -150,7 +151,7 @@ async function usePullStrategies(target) {
 
       if (
         partyDmgRecieved <
-          partyHealer.heal * partyHealer.frequency * 0.9 +
+          healerPower * partyHealer.frequency * 0.9 +
             (parent.entities["$Caroline"]?.focus &&
             distance(parent.entities["$Caroline"], character) < 250
               ? 1200
@@ -190,8 +191,19 @@ async function usePullStrategies(target) {
 
       break;
 
+    case "rogue":
+      const suggestedRogueItems = calculateRogueItems(target);
+      if (
+        Object.keys(suggestedRogueItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedRogueItems[slot],
+        )
+      ) {
+        promises.push(equipBatch(suggestedRogueItems));
+      }
+      break;
+
     case "ranger":
-      const suggestedRangerItems = calculateRangerItems();
+      const suggestedRangerItems = calculateRangerItems(target);
 
       if (
         Object.keys(suggestedRangerItems).some(
@@ -228,7 +240,3 @@ async function usePullStrategies(target) {
 
   return Promise.all(promises);
 }
-
-game.on("hit", (data) => {});
-
-character.on("mobbing", (data) => {});

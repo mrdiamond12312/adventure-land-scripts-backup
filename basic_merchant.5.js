@@ -305,7 +305,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   if (
     onDuty ||
     isInvFull(4) ||
-    character.q.exchange ||
     smart.moving ||
     isAdvanceSmartMoving ||
     (!is_on_cooldown("fishing") && locate_item("rod") !== -1) ||
@@ -414,7 +413,6 @@ setInterval(async function () {
     craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
     craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
     // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
-    craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
     !isSortingInventory &&
       Promise.all(
         Array.from({ length: 42 }, (_, i) => i)

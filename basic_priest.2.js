@@ -102,9 +102,7 @@ async function fight(target) {
           reduce_cooldown("attack", Math.min(...parent.pings));
         })
         .catch((e) => {
-          if (e.failed && e.response !== "cooldown") {
-            reduce_cooldown("attack", -e.ms);
-          }
+          attackErrorHandler(e);
         }),
     );
   }
@@ -121,42 +119,12 @@ async function priestBuff() {
     const buffees = getPlayersToHeal();
 
     if (buffees.length) {
-      // if (
-      //   !character.slots.mainhand ||
-      //   ["broom", "froststaff", "pinkies"].includes(
-      //     character.slots.mainhand?.name,
-      //   ) ||
-      //   !character.slots.mainhand.level
-      // ) {
-      //   promises.push(
-      //     equipBatch({
-      //       mainhand:
-      //         isAssignedAsTanker() || character.map === "crypt"
-      //           ? "pmace"
-      //           : "oozingterror",
-      //       orb:
-      //         isAssignedAsTanker() && character.s.burned
-      //           ? "orba"
-      //           : "jacko",
-      //     }),
-      //   );
-      // } else if (character.slots.orb?.name !== "jacko") {
-      //   promises.push(
-      //     equipBatch({
-      //       orb:
-      //         isAssignedAsTanker() && character.s.burned
-      //           ? "orba"
-      //           : "jacko",
-      //     }),
-      //   );
-      // }
-
       for (const buffee of buffees) {
         if (
           !smart.moving &&
           distance(buffee, character) >=
             character.range + character.xrange * 0.9 &&
-          healingPrioritizedNames().includes(buffee.name)
+          prioritizedNames().includes(buffee.name)
         ) {
           promises.push(
             move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
@@ -251,9 +219,6 @@ async function mainLoop() {
 
     let target = getTarget();
 
-    //// BOSSES
-    // if (goToBoss()) return;
-
     //// THE CRYPT & EVENTS
     if (get("cryptInstance")) target = await useCryptStrategy(target);
     else target = await changeToDailyEventTargets();
@@ -291,58 +256,3 @@ async function mainLoop() {
 }
 
 if (!parent.caracAL) mainLoop();
-
-// setInterval(async function () {
-//   assignRoles();
-
-//   if (character.rip) {
-//     respawn();
-//     return;
-//   }
-
-//   priestBuff();
-
-//   if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
-
-//   let target = getTarget();
-
-//   //// BOSSES
-//   if (goToBoss()) return;
-
-//   //// THE CRYPT & EVENTS
-//   if (get("cryptInstance")) target = await useCryptStrategy(target);
-//   else target = await changeToDailyEventTargets();
-
-//   //// Logic to targets and farm places
-//   if (
-//     !smart.moving &&
-//     !isAdvanceSmartMoving &&
-//     get("cryptInstance") &&
-//     character.map !== "crypt" &&
-//     !target
-//   ) {
-//     changeToNormalStrategies();
-//     await advanceSmartMove(CRYPT_STARTING_LOCATION);
-//   } else if (
-//     !smart.moving &&
-//     !target &&
-//     !get("cryptInstance") &&
-//     (partyMems[0] == character.name ||
-//       !get_entity(partyMems[0]) ||
-//       character.map === "crypt" ||
-//       distance(character, { x: mapX, y: mapY, map }) > 500)
-//   ) {
-//     changeToNormalStrategies();
-//     const scareInterval = setInterval(() => {
-//       scareAwayMobs();
-//     }, 5000);
-//     await advanceSmartMove({
-//       map,
-//       x: mapX,
-//       y: mapY,
-//     });
-//     clearInterval(scareInterval);
-//   }
-
-//   await fight(target);
-// }, loopInterval);

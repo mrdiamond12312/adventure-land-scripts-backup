@@ -12,8 +12,7 @@ var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
 
 const MAGE = "MowTheCooh";
 var HEALER = "CowTheMooh";
-// const HEALER = "CupidCow";
-const RANGER = "MoohThatCow";
+var RANGER = "MoohThatCow";
 const WARRIOR = "MooohMoooh";
 
 var TANKER =
@@ -23,6 +22,41 @@ var TANKER =
 const MIDAS_CHARACTER = [MAGE];
 
 // var partyCodeSlot = [4, 15, 3, 5];
+const CODE_SLOTS = {
+  MoohThatCow: {
+    homeServer: "EUII",
+    script: 32,
+  },
+  CowTheMooh: {
+    homeServer: "ASIAI",
+    script: 2,
+  },
+  MooohMoooh: {
+    homeServer: "ASIAI",
+    script: 9,
+  },
+  MowTheCooh: {
+    homeServer: "ASIAI",
+    script: 4,
+  },
+  MerchantMooh: {
+    homeServer: "ASIAI",
+    script: 5,
+  },
+  MoohChan: {
+    homeServer: "USIII",
+    script: 5,
+  },
+  CupidCow: {
+    homeServer: "USII",
+    script: 32,
+  },
+  MooohSteak: {
+    homeServer: "USI",
+    script: 31,
+  },
+};
+
 var partyCodeSlot = [9, 2, 4, 5];
 // var caracALPartyCodeSlot = [
 //   "adventure-land-scripts-backup/basic_mage.4.js",
@@ -348,6 +382,7 @@ const STORE_ABLE = [
   "cscale",
   "spiderkey",
   "svenom",
+  "vblood",
   "orboffire",
   "orboffrost",
   "orbofplague",
@@ -409,6 +444,7 @@ const SALE_ABLE = [
   "smoke",
   "sword",
   "spear",
+  "throwingstars",
   // Easter's loots
   // "eears",
   // "eslippers",
@@ -828,54 +864,51 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 hitAndRun();
 
 const HEAL_IGNORE = ["Geoffriel", "CrownPriest"];
-function getLowestHealth() {
-  const allies = parent.party_list.map((name) => get_entity(name));
-  allies.filter((entity) => entity && !HEAL_IGNORE.includes(entity.name));
-  allies.sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
-  return allies[0] || character;
-}
 
-function healingPrioritizedNames() {
+function prioritizedNames() {
   return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
 }
 
-function getPlayersToHeal() {
-  const minimumHealingModifier = 0.9;
-  const prioritizedName = healingPrioritizedNames();
+function getPlayersToHeal(ignoreGhost = false) {
+  const minHealMod = 0.9;
+  const healPower = character.heal || character.attack;
+  const prioritizedNamesList = prioritizedNames();
 
-  const prioritizedTarget = prioritizedName
-    .map((id) => get_player(id))
-    .filter(
-      (player) =>
-        player &&
-        (player.max_hp >
-          minimumHealingModifier * (character.heal ?? character.attack) +
-            player.hp ||
-          player.hp < player.max_hp * 0.8),
-    )
+  const shouldHeal = (entity) => {
+    const missing = entity.max_hp - entity.hp;
+    return missing > minHealMod * healPower || entity.hp < 0.8 * entity.max_hp;
+  };
+
+  // Prioritized characters
+  const prioritized = prioritizedNamesList
+    .map((name) => get_player(name))
+    .filter((player) => player && shouldHeal(player))
     .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
 
-  const otherEntities = Object.values(parent.entities)
-    .filter(
-      (entity) =>
-        entity &&
-        (entity.type === "character" || entity.mtype === "ghost") &&
-        !HEAL_IGNORE.includes(entity.name) &&
-        (entity.mtype !== "ghost"
-          ? !prioritizedName.includes(entity.name) &&
-            (entity.max_hp >
-              minimumHealingModifier * (character.heal ?? character.attack) +
-                entity.hp ||
-              entity.hp < 0.8 * entity.max_hp)
-          : !entity.s.healed && entity.hp < 7000),
-    )
-    .sort((lhs, rhs) => {
-      if (lhs.mtype === "ghost" && rhs.mtype !== "ghost") return 9999;
-      if (rhs.mtype === "ghost" && lhs.mtype !== "ghost") return -9999;
-      return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
+  // Other healable entities
+  const others = Object.values(parent.entities)
+    .filter((entity) => {
+      if (!entity) return false;
+      if (entity.mtype === "ghost") {
+        if (ignoreGhost) return false;
+        return !entity.s.healed && entity.hp < 7000;
+      }
+
+      if (entity.type === "monster") return false;
+      if (HEAL_IGNORE.includes(entity.name)) return false;
+      if (prioritizedNamesList.includes(entity.name)) return false;
+
+      return shouldHeal(entity);
+    })
+    .sort((a, b) => {
+      // Ghosts first if both exist
+      const ghostA = a.mtype === "ghost";
+      const ghostB = b.mtype === "ghost";
+      if (ghostA !== ghostB) return ghostA ? -1 : 1;
+      return a.hp / a.max_hp - b.hp / b.max_hp;
     });
 
-  return [...prioritizedTarget, ...otherEntities];
+  return [...prioritized, ...others];
 }
 
 function getLowestMana() {
@@ -1037,87 +1070,105 @@ async function cupidHeal() {
   )
     return;
 
-  const lowHealthPlayers = Object.values(parent.entities)
-    .filter(
-      (entity) =>
-        entity &&
-        entity.player &&
-        is_in_range(entity, "attack") &&
-        entity.hp < entity.max_hp * 0.8 &&
-        entity.hp <
-          entity.max_hp -
-            character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
-    )
-    .sort((lhs, rhs) => {
-      if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
-      if ([...partyMems, partyMerchant].includes(rhs.name)) return 1;
+  const characterRange = character.range + character.xrange;
+  const prioritized = prioritizedNames();
 
-      return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
-    });
+  const lowHealthPlayers = getPlayersToHeal(true).filter(
+    (player) => player.name !== character.name && player.ctype !== "priest",
+  );
+  const lowHealthPlayersInRange = lowHealthPlayers.filter(
+    (player) => distance(player, character) < characterRange,
+  );
+  const prioritizedPlayers = lowHealthPlayers.filter((player) =>
+    prioritized.includes(player.name),
+  );
 
-  const promises = [];
+  const promisesToAwait = [];
 
-  if (lowHealthPlayers.length > 0) {
-    promises.push(
+  // if (
+  //   prioritizedPlayers.length &&
+  //   prioritizedPlayers.some(
+  //     (player) =>
+  //       distance(character, player) > characterRange &&
+  //       distance(character, player) < 300,
+  //   )
+  // ) {
+  //   const prioritizedPlayersLength = prioritizedPlayers.length;
+  //   const sumsPosition = prioritizedPlayers.reduce(
+  //     (accumulator, currentPlayer) => {
+  //       accumulator.sumX += currentPlayer.x;
+  //       accumulator.sumY += currentPlayer.y;
+  //       return accumulator;
+  //     },
+  //     { sumX: 0, sumY: 0 },
+  //   );
+  //   promisesToAwait.push(
+  //     move(
+  //       sumsPosition.sumX / prioritizedPlayersLength,
+  //       sumsPosition.sumY / prioritizedPlayersLength,
+  //     ),
+  //   );
+  // }
+
+  if (lowHealthPlayersInRange.length > 0) {
+    promisesToAwait.push(
       equipBatch({
         mainhand: "cupid",
       }),
     );
 
-    await Promise.all(promises);
-
     if (
       character.level >= G.skills["5shot"].level &&
-      lowHealthPlayers.length >= 4 &&
-      character.mp > 400 &&
-      !character.fear &&
-      ms_to_next_skill("attack") === 0
+      lowHealthPlayersInRange.length >= 4 &&
+      character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp &&
+      !character.fear
     ) {
       set_message("5shot Cupid");
       log(
-        `Healing ${lowHealthPlayers
+        `Healing ${lowHealthPlayersInRange
           .slice(0, 5)
           .map((player) => player.name)
           .join(", ")}`,
       );
-      use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+      promisesToAwait.push(
+        use_skill("5shot", lowHealthPlayersInRange.slice(0, 5)).then(() =>
+          reduce_cooldown("attack", Math.min(...parent.pings)),
+        ),
       );
-      reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
       character.level >= G.skills["3shot"].level &&
-      lowHealthPlayers.length >= 2 &&
-      character.mp > 300 &&
-      !character.fear &&
-      ms_to_next_skill("attack") === 0
+      lowHealthPlayersInRange.length >= 2 &&
+      character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp &&
+      !character.fear
     ) {
       set_message("3shot Cupid");
       log(
-        `Healing ${lowHealthPlayers
+        `Healing ${lowHealthPlayersInRange
           .slice(0, 3)
           .map((player) => player.name)
           .join(", ")}`,
       );
-      use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+      promisesToAwait.push(
+        use_skill("3shot", lowHealthPlayersInRange.slice(0, 3)).then(() =>
+          reduce_cooldown("attack", Math.min(...parent.pings)),
+        ),
       );
-      reduce_cooldown("attack", -(1 / character.frequency) * 1000);
-    } else if (
-      ms_to_next_skill("attack") === 0 &&
-      distance(lowHealthPlayers[0], character) <
-        character.range +
-          character.xrange +
-          extraDistanceWithinHitbox(lowHealthPlayers[0]) +
-          extraDistanceWithinHitbox(character)
-    ) {
+    } else if (lowHealthPlayersInRange.length) {
       set_message("Single Cupid");
-      log(`Healing ${lowHealthPlayers[0].name}`);
-      attack(lowHealthPlayers[0]).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+      log(`Healing ${lowHealthPlayersInRange[0].name}`);
+      promisesToAwait.push(
+        attack(lowHealthPlayersInRange[0]).then(() =>
+          reduce_cooldown("attack", Math.min(...parent.pings)),
+        ),
       );
-      reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     }
+  }
+
+  try {
+    await withTimeout(Promise.all(promisesToAwait), 1000);
+  } catch (e) {
+    attackErrorHandler(e);
+    console.error("Error while Cupiding!", e);
   }
 }
 
@@ -1270,29 +1321,19 @@ setInterval(async function () {
   const allCharacters = [...partyMems, partyMerchant];
 
   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
-    for (const [index, id] of allCharacters.entries()) {
-      if (
-        parent.caracAL &&
-        !parent.caracAL.siblings.find((sibling) => sibling === id)
-      ) {
-        parent.caracAL.deploy(id, null, caracALPartyCodeSlot[index]);
-      }
-    }
+    allCharacters
+      .filter((id) => parent.caracAL && !parent.caracAL.siblings.includes(id))
+      .forEach((id) => {
+        parent.caracAL.deploy(id, null, caracALconfig.characters[id].script);
+      });
   } else if (
     !character.controller &&
     allCharacters.filter((characterId) => characterId !== character.name)
       .length !== loadedCharacters.length
   ) {
-    for (const [index, id] of allCharacters.entries()) {
-      if (!loadedCharacters[id]) {
-        start_character(id, partyCodeSlot[index]);
-      }
-    }
-    // allCharacters.forEach((characterId, index) => {
-    //   if (!loadedCharacters[characterId]) {
-    //     start_character(characterId, partyCodeSlot[index]);
-    //   }
-    // });
+    allCharacters
+      .filter((id) => !loadedCharacters[id])
+      .forEach((id) => start_character(id, CODE_SLOTS[id].script));
   }
   const partyWhitelistRegex = [/^earth/];
   const whitelistPartyMembers = serverCharacters.filter(
@@ -1329,6 +1370,27 @@ setInterval(async function () {
 function on_party_invite(name) {
   if (name === partyMems[0]) accept_party_invite(name);
 }
+
+function dynamicParty() {
+  if (parent.S.mrgreen?.live || parent.S.mrpumpkin?.live) {
+    const currentServer = `${server.region}${server.id}`;
+    if (currentServer === "USI") {
+      partyMems = ["MooohMoooh", "CowTheMooh", "MooohSteak"];
+    } else if (currentServer === "EUII") {
+      RANGER = "MoohThatCow";
+      partyMems = [WARRIOR, RANGER, MAGE];
+    } else if (currentServer === "USII") {
+      RANGER = "CupidCow";
+      partyMems = [WARRIOR, RANGER, MAGE];
+    } else {
+      partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
+    }
+  } else {
+    partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
+  }
+}
+dynamicParty();
+setInterval(dynamicParty, 3000);
 
 //// Daily Events
 // var pinkGooVisitedBoundary = [];
@@ -1659,3 +1721,15 @@ function on_magiport(name) {
     accept_magiport(name);
   }
 }
+
+function attackErrorHandler(error) {
+  if (error.failed && error.response === "cooldown") {
+    reduce_cooldown("attack", -error.ms);
+  }
+
+  if (error.failed && error.reason === "not_there") {
+    parent.socket.emit("send_updates", {});
+  }
+}
+
+setInterval(() => parent.socket.emit("send_updates", {}), 30000);
