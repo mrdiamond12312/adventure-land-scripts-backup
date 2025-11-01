@@ -106,6 +106,7 @@ function calculateWarriorItems() {
     numberOfMonsterAroundTarget(currentTarget) >= 2 && !currentTarget["1hp"];
 
   const haveLowHpMobsNearby = shouldWearLuckGear();
+  const isTanker = isAssignedAsTanker();
 
   if (
     currentTarget &&
@@ -129,7 +130,7 @@ function calculateWarriorItems() {
     mainhand:
       currentStrategy === usePullStrategies && shouldUseBlaster
         ? "vhammer"
-        : "xmace",
+        : "fireblade",
     offhand:
       (character.map === "crypt" &&
         Object.values(parent.entities).some(
@@ -142,7 +143,7 @@ function calculateWarriorItems() {
         : "fireblade",
     amulet: haveLowHpMobsNearby
       ? "spookyamulet"
-      : (isAssignedAsTanker() &&
+      : (isTanker &&
           Object.values(parent.entities)
             .filter((entity) => entity.type === "monster")
             .some((mob) => mob.target === character.name)) ||
@@ -155,7 +156,7 @@ function calculateWarriorItems() {
       : character.map === "crypt"
       ? "xarmor"
       : "coat1",
-    pants: character.map === "crypt" ? "frankypants" : "frankypants",
+    pants: isTanker ? "frankypants" : "fallen",
     ring2:
       currentTarget && currentTarget.armor > 125 ? "suckerpunch" : "strring",
   };
@@ -282,13 +283,14 @@ function calculateRogueItems(target) {
       0.9
     : 0;
 
-  const shouldEquipFireStar = rogueBurnDmg > (target.s?.burned?.intensity ?? 0);
+  const shouldEquipFireStar =
+    rogueBurnDmg > (target.s?.burned?.intensity ?? 0) || target.cooperative;
 
   return {
     helmet: haveLowHpMobsNearby ? "wcap" : "fury",
     mainhand: "daggerofthedead",
     shoes: haveLowHpMobsNearby ? "wshoes" : "wingedboots",
-    gloves: haveLowHpMobsNearby ? "wgloves" : "mittens",
+    gloves: haveLowHpMobsNearby ? "wgloves" : "supermittens",
     offhand: shouldEquipFireStar ? fieryWeapon : "daggerofthedead",
     amulet: haveLowHpMobsNearby ? "spookyamulet" : "dexamulet",
     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
@@ -686,16 +688,20 @@ async function warriorCleave(currentStrategy) {
       !formidableMob &&
       !isEquipingItems
     ) {
+      isEquipingItems = true;
       const warriorItems = calculateWarriorItems();
       promises.push(
         // equipBatch({ mainhand: "bataxe" }),
         Promise.all([unequip("offhand"), equip(findMaxLevelItem("bataxe"))]),
         withTimeout(use_skill("cleave"), 2500).then(async () => {
           reduce_cooldown("cleave", 0.95 * character.ping);
-          await equipBatch({
-            mainhand: warriorItems.mainhand,
-            offhand: warriorItems.offhand,
-          });
+          await equipBatch(
+            {
+              mainhand: warriorItems.mainhand,
+              offhand: warriorItems.offhand,
+            },
+            true,
+          );
         }),
       );
     }
@@ -714,7 +720,6 @@ async function warriorStomp() {
   if (
     character.mp < G.skills["stomp"].mp ||
     is_on_cooldown("stomp") ||
-    character.cc >= 100 ||
     Object.values(parent.entities).filter(
       (mob) =>
         mob.type === "monster" &&
@@ -729,21 +734,16 @@ async function warriorStomp() {
 
   promises.push(
     equipBatch({ mainhand: "basher", offhand: undefined }, true),
-    use_skill("stomp").then(() => {
+    use_skill("stomp").then(async () => {
       reduce_cooldown("stomp", 0.95 * character.ping);
-      equipBatch(warriorItems, true);
+      await equipBatch(warriorItems, true);
     }),
   );
 
-  return Promise.all(promises)
-    .then(() => {
-      isStomping = false;
-      isEquipingItems = false;
-    })
-    .catch(() => {
-      isStomping = false;
-      isEquipingItems = false;
-    });
+  return Promise.all(promises).finally(() => {
+    isStomping = false;
+    isEquipingItems = false;
+  });
 }
 
 function shouldAttack() {

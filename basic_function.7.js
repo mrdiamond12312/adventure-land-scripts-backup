@@ -80,8 +80,8 @@ const movementHistory = [];
 var flipRotation = 1;
 var flipRotationCooldown = 0;
 var angle; // Your desired angle from the monster, in radians
-var flip_cooldown = 0;
-var stuck_threshold = 2;
+var flipCooldown = 0;
+var stuckThreshold = 2;
 var basicRangeRate = 0.5; // Is used to reset
 var rangeRate = basicRangeRate; // Variate range rate
 
@@ -310,7 +310,7 @@ var IGNORE = [
   "orbofplague",
   "orbofresolve",
   "gphelmet",
-  "bowofthedead",
+  // "bowofthedead",
   "daggerofthedead",
   "maceofthedead",
   "pmaceofthedead",
@@ -409,8 +409,8 @@ const SALE_ABLE = [
   "carrotsword",
   // "wcap",
   // "wshoes",
-  "wgloves",
-  "wbreeches",
+  // "wgloves",
+  // "wbreeches",
   "cclaw",
   "dagger",
   "rednose",
@@ -458,7 +458,7 @@ const SALE_ABLE = [
   "dexbelt",
   "intbelt",
   // Halloween temp for gold
-  "bowofthedead",
+  // "bowofthedead",
   "daggerofthedead",
 ];
 var maxUpgrade = 7;
@@ -475,6 +475,7 @@ if (parent.caracAL) {
 }
 // Pre-set function
 var isSortingInventory = false;
+
 async function sortInv() {
   if (
     isSortingInventory ||
@@ -485,38 +486,52 @@ async function sortInv() {
     return;
 
   isSortingInventory = true;
-  var inv = character.items;
-  const invLength = inv.length;
+
+  // Snapshot items with their original slot
+  const inv = character.items.map((item, slot) => ({ item, slot }));
+
+  // Sorting name -> level -> slot order -> null
+  inv.sort((lhs, rhs) => {
+    const lhsItem = lhs.item;
+    const rhsItem = rhs.item;
+
+    if (!lhsItem && !rhsItem) return 0;
+    if (!lhsItem) return 1; // nulls last
+    if (!rhsItem) return -1;
+
+    const nameOrder = lhsItem.name.localeCompare(rhsItem.name);
+    if (nameOrder !== 0) return nameOrder;
+
+    const levelOrder = (lhsItem.level ?? 0) - (rhsItem.level ?? 0);
+    if (levelOrder !== 0) return levelOrder;
+
+    // same name + same level — preserve original slot order for stability
+    return lhs.slot - rhs.slot;
+  });
+
+  // We’ll create a mapping from target slot → original slot
   const promises = [];
-  for (let i = 0; i < invLength; i++) {
-    for (let j = i; j < invLength; j++) {
-      const lhs = inv[i];
-      const rhs = inv[j];
-      if (rhs === null) continue;
-      if (lhs === null) {
-        const temp = inv[i];
-        inv[i] = inv[j];
-        inv[j] = temp;
-        promises.push(swap(i, j));
-        continue;
-      }
-      if (lhs.name.localeCompare(rhs.name) === -1) {
-        const temp = inv[i];
-        inv[i] = inv[j];
-        inv[j] = temp;
-        promises.push(swap(i, j));
-        continue;
-      }
-      if (lhs.name === rhs.name) {
-        if ((lhs?.level ?? 0) > (rhs?.level ?? 0)) {
-          const temp = inv[i];
-          inv[i] = inv[j];
-          inv[j] = temp;
-          promises.push(swap(i, j));
-        }
-      }
+  const usedSlots = new Set();
+
+  for (let index = 0; index < inv.length; index++) {
+    const desired = inv[index];
+    const targetItem = character.items[index];
+
+    // skip if already correct
+    if (desired.item === targetItem) continue;
+
+    // find the specific matching slot by identity
+    const fromSlot = character.items.findIndex(
+      (x, idx) => x === desired.item && !usedSlots.has(idx),
+    );
+
+    if (fromSlot !== -1 && fromSlot !== index) {
+      usedSlots.add(fromSlot);
+      usedSlots.add(index);
+      promises.push(swap(fromSlot, index));
     }
   }
+
   return Promise.all(promises).finally(() => {
     isSortingInventory = false;
   });
@@ -561,11 +576,6 @@ function getMonstersOnDeclares() {
       return get_nearest_monster({ min_xp, type: monster });
     }
   }
-  // return (
-  //   get_nearest_monster({ min_xp, max_att, type }) ??
-  //   get_nearest_monster({ min_xp, max_att, type: altType1 }) ??
-  //   get_nearest_monster({ min_xp, max_att, type: altType2 })
-  // );
 }
 
 async function withTimeout(
@@ -753,113 +763,148 @@ function extraDistanceWithinHitbox(target) {
   return Math.min(get_height(target), get_width(target) / 2) / 2;
 }
 
+var lastKitingTarget = undefined;
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
-  const loopInterval = Math.max(150, getLoopInterval());
+  const loopInterval = Math.max(200, getLoopInterval());
+
+  // --- 1. Early exits and sanity checks ---
+  if (character.cc > 150) return setTimeout(hitAndRun, loopInterval);
   if (!target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
     return setTimeout(hitAndRun, loopInterval);
   }
 
-  if (!angle) {
-    const diff_x = character.real_x - target.real_x;
-    const diff_y = character.real_y - target.real_y;
-    angle = Math.atan2(diff_y, diff_x);
+  if (
+    character.ctype === "warrior" &&
+    distance(character, target) > character.range * 0.5 &&
+    distance(character, target) < character.range * rangeRate + character.xrange
+  ) {
+    const allEntities = Object.values(parent.entities);
+    const noAggro = allEntities
+      .filter((entity) => entity.type === "monster")
+      .every((mob) => mob.target !== character.name);
+    const noNearbyPlayers = allEntities
+      .filter((entity) => entity.type === "character" && !entity.moving)
+      .every((char) => distance(character, char) >= 8);
+
+    if (noAggro && noNearbyPlayers) {
+      const dx = character.real_x - target.real_x;
+      const dy = character.real_y - target.real_y;
+      angle = Math.atan2(dy, dx);
+      return setTimeout(hitAndRun, loopInterval);
+    }
   }
 
-  let cosA = Math.cos(angle);
-  let sinA = Math.sin(angle);
+  // Reset angle when switching or losing target
+  const targetChanged =
+    !lastKitingTarget || distance(lastKitingTarget, target) > 30;
+  if (targetChanged) angle = undefined;
 
+  // --- 2. Initialize angle if needed ---
+  if (!angle) {
+    const dx = character.real_x - target.real_x;
+    const dy = character.real_y - target.real_y;
+    angle = Math.atan2(dy, dx);
+  }
+
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+
+  // --- 3. Track recent movement to detect being stuck ---
   movementHistory.push({ x: character.real_x, y: character.real_y });
   if (movementHistory.length > 5) movementHistory.shift();
 
   let totalMovement = 0;
   for (let i = 1; i < movementHistory.length; i++) {
-    let dx = movementHistory[i].x - movementHistory[i - 1].x;
-    let dy = movementHistory[i].y - movementHistory[i - 1].y;
-    totalMovement += Math.sqrt(dx * dx + dy * dy);
+    const dx = movementHistory[i].x - movementHistory[i - 1].x;
+    const dy = movementHistory[i].y - movementHistory[i - 1].y;
+    totalMovement += Math.hypot(dx, dy);
   }
 
-  if (totalMovement < stuck_threshold * movementHistory.length) {
+  const averageMovement = totalMovement / movementHistory.length;
+  if (averageMovement < stuckThreshold) {
     if (flipRotationCooldown <= 0) {
       flipRotation *= -1;
       flipRotationCooldown = 4;
-      angle += (flipRotation * Math.PI) / 2;
+      angle += (flipRotation * Math.PI) / 2; // turn 90°
     }
   }
 
-  // const extraRangeByMobHitbox = extraDistanceWithinHitbox(
-  //   angle,
-  //   target ? get_width(target) ?? 0 : 0,
-  //   target ? get_height(target) ?? 0 : 0
-  // );
+  // --- 4. Calculate range offsets ---
+  const extraRangeTarget = extraDistanceWithinHitbox(target);
+  const extraRangeSelf = extraDistanceWithinHitbox(character);
+  const totalExtraRange = extraRangeTarget + extraRangeSelf;
+  const rangeRadius = character.range * rangeRateFn;
+  const extendedRadius = character.xrange * 0.9 + totalExtraRange;
 
-  const extraRangeByMobHitbox = extraDistanceWithinHitbox(target);
-  const extraRangeBySelfHitbox = extraDistanceWithinHitbox(character);
+  // --- 5. Desired destination based on current orbit angle ---
+  let new_x = target.x + (rangeRadius + extendedRadius) * cosA;
+  let new_y = target.y + (rangeRadius + extendedRadius) * sinA;
 
-  let new_x =
-    target.x +
-    character.range * rangeRateFn * cosA +
-    (character.xrange * 0.9 + extraRangeByMobHitbox + extraRangeBySelfHitbox) *
-      cosA;
-
-  let new_y =
-    target.y +
-    character.range * rangeRateFn * sinA +
-    (character.xrange * 0.9 + extraRangeByMobHitbox + extraRangeBySelfHitbox) *
-      sinA;
-
-  if (flip_cooldown > 9) {
-    if (
+  // --- 6. Smooth micro-rotation when close to target ---
+  if (flipCooldown > 9) {
+    const closeToTarget =
       distance(character, target) <=
-      (character.range + character.xrange) * 0.1 * rangeRateFn
-    ) {
-      angle += (flipRotation * Math.PI) / 16;
+      (character.range + character.xrange) * 0.1 * rangeRateFn;
+
+    if (closeToTarget) {
+      angle += (flipRotation * Math.PI) / 16; // subtle orbit shift
     }
-    flip_cooldown = 0;
+
+    flipCooldown = 0;
   }
-  flip_cooldown--;
+
+  flipCooldown--;
   flipRotationCooldown--;
 
+  // --- 7. Collision handling and alternative movement path ---
+  let destinationX, destinationY;
+
   if (!can_move_to(new_x, new_y)) {
-    for (let i = 1; i <= 8; i++) {
-      let adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
-      let alt_x =
-        target.x +
-        (character.range * rangeRateFn + character.xrange) *
-          Math.cos(adjustedAngle);
-      let alt_y =
-        target.y +
-        (character.range * rangeRateFn + character.xrange) *
-          Math.sin(adjustedAngle);
+    // Try small angular adjustments in the current flip direction
+    flipRotation *= -1;
+    for (let i = 2; i <= 8; i++) {
+      const adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
+      const alt_x =
+        target.x + (rangeRadius + character.xrange) * Math.cos(adjustedAngle);
+      const alt_y =
+        target.y + (rangeRadius + character.xrange) * Math.sin(adjustedAngle);
 
       if (can_move_to(alt_x, alt_y)) {
         angle = adjustedAngle;
-        move(alt_x, alt_y);
+        destinationX = alt_x;
+        destinationY = alt_y;
+        break;
       }
     }
-    flipRotation *= -1;
   } else {
-    move(new_x, new_y);
+    destinationX = new_x;
+    destinationY = new_y;
   }
 
-  angle +=
+  // --- 8. Execute movement or retry later ---
+  if (destinationX && destinationY) {
+    move(destinationX, destinationY);
+    lastKitingTarget = target;
+  } else {
+    return setTimeout(hitAndRun, loopInterval);
+  }
+
+  // --- 9. Advance orbit angle for next iteration ---
+  const radiusTotal = rangeRadius + extendedRadius;
+  const rotationStep =
     flipRotation *
-    Math.asin(
-      (character.speed * loopInterval) /
-        1000 /
-        2 /
-        (character.range * rangeRateFn +
-          character.xrange * 0.9 +
-          // extraDistanceWithinHitbox(
-          //   angle,
-          //   target ? get_width(target) ?? 0 : 0,
-          //   target ? get_height(target) ?? 0 : 0
-          // ))
-          extraRangeByMobHitbox +
-          extraRangeBySelfHitbox),
-    ) *
+    Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
     2;
-  return setTimeout(hitAndRun, loopInterval);
+
+  angle += rotationStep;
+
+  const moveTime =
+    (distance(character, { x: destinationX, y: destinationY }) /
+      character.speed) *
+    1000;
+
+  setTimeout(hitAndRun, Math.max(moveTime, 200));
 }
 hitAndRun();
 
@@ -869,7 +914,7 @@ function prioritizedNames() {
   return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
 }
 
-function getPlayersToHeal(ignoreGhost = false) {
+function getPlayersToHeal() {
   const minHealMod = 0.9;
   const healPower = character.heal || character.attack;
   const prioritizedNamesList = prioritizedNames();
@@ -890,7 +935,7 @@ function getPlayersToHeal(ignoreGhost = false) {
     .filter((entity) => {
       if (!entity) return false;
       if (entity.mtype === "ghost") {
-        if (ignoreGhost) return false;
+        if (character.ctype !== "priest") return false;
         return !entity.s.healed && entity.hp < 7000;
       }
 
@@ -1071,17 +1116,18 @@ async function cupidHeal() {
     return;
 
   const characterRange = character.range + character.xrange;
-  const prioritized = prioritizedNames();
+  // const prioritized = prioritizedNames();
 
-  const lowHealthPlayers = getPlayersToHeal(true).filter(
+  const lowHealthPlayers = getPlayersToHeal().filter(
     (player) => player.name !== character.name && player.ctype !== "priest",
   );
   const lowHealthPlayersInRange = lowHealthPlayers.filter(
     (player) => distance(player, character) < characterRange,
   );
-  const prioritizedPlayers = lowHealthPlayers.filter((player) =>
-    prioritized.includes(player.name),
-  );
+
+  // const prioritizedPlayers = lowHealthPlayers.filter((player) =>
+  //   prioritized.includes(player.name),
+  // );
 
   const promisesToAwait = [];
 
@@ -1111,6 +1157,11 @@ async function cupidHeal() {
   // }
 
   if (lowHealthPlayersInRange.length > 0) {
+    console.log(
+      lowHealthPlayersInRange
+        .map((player) => `${player.name} (${player.hp}/${player.max_hp})`)
+        .join(", "),
+    );
     promisesToAwait.push(
       equipBatch({
         mainhand: "cupid",
@@ -1157,7 +1208,7 @@ async function cupidHeal() {
       set_message("Single Cupid");
       log(`Healing ${lowHealthPlayersInRange[0].name}`);
       promisesToAwait.push(
-        attack(lowHealthPlayersInRange[0]).then(() =>
+        use_skill("attack", lowHealthPlayersInRange[0]).then(() =>
           reduce_cooldown("attack", Math.min(...parent.pings)),
         ),
       );
@@ -1202,16 +1253,17 @@ setInterval(async function () {
   ) {
     smartmoveDebug = true;
     log("Debug being stuck while kiting");
-    await advanceSmartMove({
-      map: character.map,
-      x: currentTarget.x,
-      y: currentTarget.y,
-    });
+    if (can_move_to(currentTarget.x, currentTarget.y))
+      await move(currentTarget.x, currentTarget.y);
+    else
+      await advanceSmartMove({
+        map: character.map,
+        x: currentTarget.x,
+        y: currentTarget.y,
+      });
 
     smartmoveDebug = false;
   }
-
-  // Re-equip
 
   const obj = {
     map: character.map,
@@ -1396,6 +1448,7 @@ setInterval(dynamicParty, 3000);
 // var pinkGooVisitedBoundary = [];
 async function changeToDailyEventTargets() {
   let target = getTarget();
+  rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
 
   if (
     (parent.S.goobrawl || get_nearest_monster({ type: "bgoo" })) &&
@@ -1712,7 +1765,6 @@ async function changeToDailyEventTargets() {
     changeToPullStrategies();
   else changeToNormalStrategies();
 
-  rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
   return target;
 }
 

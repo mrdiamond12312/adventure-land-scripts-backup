@@ -196,7 +196,7 @@ async function priestBuff() {
         }
     });
 
-  return Promise.all(promises);
+  return withTimeout(Promise.all(promises), 1000);
 }
 
 async function mainLoop() {

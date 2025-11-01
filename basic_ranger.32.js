@@ -77,8 +77,6 @@ async function fight(target) {
     });
 
   const weakMobs = potentialTargets.filter(isWeak);
-  console.log(potentialTargets.map((entity) => entity.id));
-  console.log(weakMobs.map((entity) => entity.id));
 
   if (currentStrategy === usePullStrategies && potentialTargets.length)
     target = potentialTargets[0];

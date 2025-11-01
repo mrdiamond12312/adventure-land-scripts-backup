@@ -109,29 +109,40 @@ async function fight(target) {
 
     // Offhand swap logic
     if (
+      !isEquipingItems &&
       (character.slots.offhand?.name === "fireblade" ||
         character.slots.mainhand?.name === "fireblade") &&
-      character.cc < 105 &&
+      character.slots.offhand?.name !== "mshield" &&
+      character.cc < 100 &&
       !character.s.sugarrush
     ) {
       const warriorItems = calculateWarriorItems();
       const candycane1 = findMaxLevelItem("candycanesword");
       const candycane2 = findMaxLevelItem("candycanesword", 1);
-      const equipPromises = Promise.all([
-        equip(candycane1, "mainhand"),
-        equip(candycane2, "offhand"),
-      ]).then(async () => {
-        await equipBatch({
-          mainhand: warriorItems.mainhand,
-          offhand: warriorItems.offhand,
-        });
-      });
+      if (candycane1 !== -1 && candycane2 !== -1) {
+        isEquipingItems = true;
+        const equipPromises = Promise.all([
+          Promise.all([
+            equip(candycane1, "mainhand"),
+            equip(candycane2, "offhand"),
+          ]),
+        ])
+          .then(async () => {
+            Promise.all([
+              equip(candycane1, "mainhand"),
+              equip(candycane2, "offhand"),
+            ]);
+          })
+          .finally(() => {
+            isEquipingItems = false;
+          });
 
-      promisesToAwait.push(equipPromises);
+        promisesToAwait.push(equipPromises);
+      }
     }
 
     try {
-      await withTimeout(Promise.all(promisesToAwait), 2500);
+      await withTimeout(Promise.all(promisesToAwait), 1000);
     } catch (e) {}
 
     if (
@@ -155,12 +166,12 @@ async function fight(target) {
 
   if (
     locate_item("basher") !== -1 &&
-    (Object.keys(get_party()) ?? [character])
+    (parent.party_list.length ? parent.party_list : [character])
       .map((id) => get_player(id))
       .filter((entity) => entity)
       .some((player) => player.hp < player.max_hp * 0.4)
   ) {
-    await warriorStomp();
+    warriorStomp();
   }
 
   // Taunt logic to protect allies
@@ -241,7 +252,7 @@ async function cleaveLoop() {
         currentStrategy === usePullStrategies ? "pull" : "normal",
       );
   } catch (e) {
-    console.log("Error while cleaving: " + e);
+    console.log("Error while cleaving: ", e);
   }
 
   setTimeout(cleaveLoop, Math.max(ms_to_next_skill("cleave"), 100));
