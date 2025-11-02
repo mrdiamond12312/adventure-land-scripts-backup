@@ -1,4 +1,5 @@
 // Load basic functions from other code snippet
+
 if (parent.caracAL) {
   parent.caracAL
     .load_scripts([
@@ -7,7 +8,6 @@ if (parent.caracAL) {
     ])
     .then(() => {
       mainLoop();
-      fuaLoop();
     });
 } else {
   load_code(7);
@@ -18,68 +18,74 @@ if (parent.caracAL) {
 var originRangeRate = 0.85;
 rangeRate = originRangeRate;
 
-var rangerTarget = ["phoenix", "crab", "squig"];
-var rangerMap = "main";
-var rangerMapX = -1163;
-var rangerMapY = 74;
-
-function getRangerTarget() {
-  if (rangerTarget && rangerTarget.length) {
-    for (const monsterName of rangerTarget) {
-      const monsterInstance = get_nearest_monster({ type: monsterName });
-      if (monsterInstance) return monsterInstance;
-    }
-  }
-  return undefined;
-}
+const isWeak = (monster) =>
+  monster.hp < calculateDamage(character, monster) * 0.9 || monster.target;
+const isCooperative = (monster) => monster.cooperative;
+const isMob = (entity) => entity.type === "monster";
+const reduceCd = (skill) => reduce_cooldown(skill, Math.min(...parent.pings));
+const tryMultiShot = async (skill, entityList) => {
+  if (entityList.length === 0) return false;
+  set_message(`${skill} Shooting`);
+  return use_skill(skill, entityList)
+    .then(() => reduceCd("attack"))
+    .catch((e) => attackErrorHandler(e));
+};
 
 async function fight(target) {
-  // Early exit if attack is still on cooldown
   if (ms_to_next_skill("attack") > 0) return;
 
-  const attackReady = ms_to_next_skill("attack") === 0;
-  const canAct = attackReady && !character.fear;
+  const canMultiShot = !character.fear;
+  const inRange = (entity) => distance(entity, character) < nearRange;
   const nearRange = character.range + character.xrange;
   const explosionRadius = character.explosion
     ? character.explosion / 3.6
     : BLAST_RADIUS;
-  const inRange = (entity) => distance(entity, character) < nearRange;
-  const isWeak = (monster) =>
-    monster.hp < calculateDamage(character, monster) * 0.9 || monster.target;
-  const isCooperative = (monster) => monster.cooperative;
-  const isMob = (entity) => entity.type === "monster";
   const notCupid = character.slots.mainhand?.name !== "cupid";
   const entitiesInVision = Object.values(parent.entities);
-  const reduceCd = (skill) => reduce_cooldown(skill, Math.min(...parent.pings));
   const promisesToAwait = [];
 
   // Potential and weak mobs
-  const potentialTargets = Object.values(parent.entities)
+  const potentialTargets = entitiesInVision
     .filter(
-      (m) =>
-        m.type === "monster" &&
-        inRange(m) &&
-        !m.s?.fullguardx &&
-        (m.attack * (m.frequency > 1 ? m.frequency : 1) < 500 ||
-          (m.cooperative && m.target && !partyMems.includes(m.target)) ||
-          m["1hp"] ||
-          m.target),
+      (entity) =>
+        entity.type === "monster" &&
+        !entity.dead &&
+        !entity.rip &&
+        inRange(entity) &&
+        !entity.s?.fullguardx &&
+        (entity.attack * (entity.frequency > 1 ? entity.frequency : 1) < 500 ||
+          (entity.cooperative &&
+            entity.target &&
+            !partyMems.includes(entity.target)) ||
+          entity["1hp"] ||
+          entity.target),
     )
+    .map((entity) => {
+      // **Expensive calculation moved here, runs only N times (number of targets), not N log N times.**
+      entity.cluster_count = numberOfMonsterAroundTarget(
+        entity,
+        explosionRadius,
+      );
+      entity.distance = distance(character, entity);
+      return entity;
+    })
     .sort((lhs, rhs) => {
       if (lhs.cooperative || (lhs.target && !rhs.target)) return -1;
       if (rhs.cooperative || (rhs.target && !lhs.target)) return 1;
+
       return (
-        numberOfMonsterAroundTarget(rhs, explosionRadius) -
-          numberOfMonsterAroundTarget(lhs, explosionRadius) ||
-        lhs.hp - rhs.hp ||
-        distance(character, lhs) - distance(character, rhs)
+        rhs.cluster_count - lhs.cluster_count || // Sort by cluster count (highest first)
+        rhs.hp - lhs.hp || // Then by HP (lowest first)
+        rhs.distance - lhs.distance // Then by distance (closest first)
       );
     });
 
   const weakMobs = potentialTargets.filter(isWeak);
 
-  if (currentStrategy === usePullStrategies && potentialTargets.length)
+  if (currentStrategy === usePullStrategies && potentialTargets.length) {
     target = potentialTargets[0];
+    change_target(target);
+  }
 
   // Reacquire target if feared
   if (character.fear) {
@@ -132,20 +138,10 @@ async function fight(target) {
       );
   }
 
-  // === Handle multishot logic ===
-
-  const tryMultiShot = async (skill, mobs) => {
-    if (!canAct || mobs.length === 0) return false;
-    set_message(`${skill} Shooting`);
-    // log(`Using ${skill} on ${mobs.map((m) => m.id).join(", ")}`);
-    return use_skill(skill, mobs)
-      .then(() => reduceCd("attack"))
-      .catch((e) => attackErrorHandler(e));
-  };
-
   // Prioritize 5shot > 3shot > single
   if (
     character.level >= G.skills["5shot"].level &&
+    canMultiShot &&
     notCupid &&
     character.hp > character.max_hp * 0.55 &&
     character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp &&
@@ -154,6 +150,7 @@ async function fight(target) {
     promisesToAwait.push(tryMultiShot("5shot", weakMobs.slice(0, 5)));
   } else if (
     character.level >= G.skills["3shot"].level &&
+    canMultiShot &&
     notCupid &&
     character.hp > character.max_hp * 0.55 &&
     character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp &&
@@ -176,6 +173,89 @@ async function fight(target) {
   }
 }
 
+async function cupidHeal(playersToHeal) {
+  if (
+    (locate_item("cupid") === -1 &&
+      character.slots.mainhand?.name !== "cupid") ||
+    ms_to_next_skill("attack") > 0
+  )
+    return;
+
+  const characterRange = character.range + character.xrange;
+  // const prioritized = prioritizedNames();
+
+  const lowHealthPlayers = playersToHeal.filter(
+    (player) => player.name !== character.name,
+  );
+  const lowHealthPlayersInRange = lowHealthPlayers.filter(
+    (player) => distance(player, character) < characterRange,
+  );
+
+  const promisesToAwait = [];
+
+  if (lowHealthPlayersInRange.length > 0) {
+    console.log(
+      lowHealthPlayersInRange
+        .map((player) => `${player.name} (${player.hp}/${player.max_hp})`)
+        .join(", "),
+    );
+    promisesToAwait.push(
+      equipBatch({
+        mainhand: "cupid",
+      }),
+    );
+
+    if (
+      character.level >= G.skills["5shot"].level &&
+      lowHealthPlayersInRange.length >= 4 &&
+      character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp &&
+      !character.fear
+    ) {
+      set_message("5shot Cupid");
+      log(
+        `Healing ${lowHealthPlayersInRange
+          .slice(0, 5)
+          .map((player) => player.name)
+          .join(", ")}`,
+      );
+      promisesToAwait.push(
+        tryMultiShot("5shot", lowHealthPlayersInRange.slice(0, 5)),
+      );
+    } else if (
+      character.level >= G.skills["3shot"].level &&
+      lowHealthPlayersInRange.length >= 2 &&
+      character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp &&
+      !character.fear
+    ) {
+      set_message("3shot Cupid");
+      log(
+        `Healing ${lowHealthPlayersInRange
+          .slice(0, 3)
+          .map((player) => player.name)
+          .join(", ")}`,
+      );
+      promisesToAwait.push(
+        tryMultiShot("3shot", lowHealthPlayersInRange.slice(0, 3)),
+      );
+    } else if (lowHealthPlayersInRange.length) {
+      set_message("Single Cupid");
+      log(`Healing ${lowHealthPlayersInRange[0].name}`);
+      promisesToAwait.push(
+        use_skill("attack", lowHealthPlayersInRange[0]).then(() =>
+          reduce_cooldown("attack", Math.min(...parent.pings)),
+        ),
+      );
+    }
+  }
+
+  try {
+    await withTimeout(Promise.all(promisesToAwait), 1000);
+  } catch (e) {
+    attackErrorHandler(e);
+    console.error("Error while Cupiding!", e);
+  }
+}
+
 async function mainLoop() {
   try {
     desiredElixir = "pumpkinspice";
@@ -190,7 +270,8 @@ async function mainLoop() {
       });
     }
 
-    await cupidHeal();
+    const playersToHeal = getPlayersToHeal();
+    await cupidHeal(playersToHeal);
 
     if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
       throw new Error("Smart moving", {

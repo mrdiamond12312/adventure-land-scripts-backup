@@ -38,17 +38,17 @@ async function fight(target) {
   };
 
   if (currentStrategy === usePullStrategies) {
-    aggroedMobs = Object.values(parent.entities).filter((mob) => {
+    const aggroedMobs = Object.values(parent.entities).filter((entity) => {
       return (
-        !haveFormidableMonsterAroundTarget(mob) &&
-        distance(mob, character) <
+        entity.type === "monster" &&
+        !MELEE_IGNORE_LIST.includes(entity.mtype) &&
+        entity.target &&
+        !haveFormidableMonsterAroundTarget(entity) &&
+        distance(entity, character) <
           character.range +
             character.xrange * 0.9 +
             extraDistanceWithinHitbox(character) &&
-        mob.target &&
-        mob.type === "monster" &&
-        !MELEE_IGNORE_LIST.includes(mob.mtype) &&
-        !haveIgnoreMobAroundTarget(mob)
+        !haveIgnoreMobAroundTarget(entity)
       );
     });
 
@@ -86,6 +86,8 @@ async function fight(target) {
     changeToNormalStrategies();
   }
 
+  const promisesToAwait = [];
+
   if (
     ms_to_next_skill("attack") === 0 &&
     !character.s.penalty_cd &&
@@ -98,14 +100,12 @@ async function fight(target) {
   ) {
     set_message("Attacking");
     // Main attack logic
-    const promisesToAwait = [
+    promisesToAwait.push(
       currentStrategy(target),
-      withTimeout(attack(target), 2500)
-        .then(() => {
-          reduce_cooldown("attack", Math.min(...parent.pings));
-        })
+      attack(target)
+        .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
         .catch((e) => attackErrorHandler(e)),
-    ];
+    );
 
     // Offhand swap logic
     if (
@@ -116,7 +116,6 @@ async function fight(target) {
       character.cc < 100 &&
       !character.s.sugarrush
     ) {
-      const warriorItems = calculateWarriorItems();
       const candycane1 = findMaxLevelItem("candycanesword");
       const candycane2 = findMaxLevelItem("candycanesword", 1);
       if (candycane1 !== -1 && candycane2 !== -1) {
@@ -141,16 +140,16 @@ async function fight(target) {
       }
     }
 
-    try {
-      await withTimeout(Promise.all(promisesToAwait), 1000);
-    } catch (e) {}
-
     if (
       character.mp > G.skills["warcry"].mp &&
       !is_on_cooldown("warcry") &&
       !character.s["warcry"]
     ) {
-      use_skill("warcry");
+      promisesToAwait.push(
+        use_skill("warcry").then(() =>
+          reduce_cooldown("warcry", character.ping * 0.95),
+        ),
+      );
     }
   }
 
@@ -161,7 +160,7 @@ async function fight(target) {
     avgDmgTaken(character) > 500 &&
     character.hp < character.max_hp * 0.5
   ) {
-    use_skill("hardshell");
+    promisesToAwait.push(use_skill("hardshell"));
   }
 
   if (
@@ -171,11 +170,10 @@ async function fight(target) {
       .filter((entity) => entity)
       .some((player) => player.hp < player.max_hp * 0.4)
   ) {
-    warriorStomp();
+    promisesToAwait.push(warriorStomp());
   }
 
   // Taunt logic to protect allies
-  const partyDmgRecieved = avgPartyDmgTaken(partyMems);
   const partyHealer = get_player(HEALER);
   if (
     isAssignedAsTanker() &&
@@ -196,8 +194,10 @@ async function fight(target) {
     );
 
     if (mobsTargetingAlly && is_in_range(mobsTargetingAlly, "taunt")) {
-      use_skill("taunt", mobsTargetingAlly).then(() =>
-        reduce_cooldown("taunt", character.ping * 0.95),
+      promisesToAwait.push(
+        use_skill("taunt", mobsTargetingAlly).then(() =>
+          reduce_cooldown("taunt", character.ping * 0.95),
+        ),
       );
     } else if (
       !target.target ||
@@ -206,26 +206,30 @@ async function fight(target) {
         !target.cooperative &&
         is_in_range(target, "taunt"))
     ) {
-      use_skill("taunt", target).then(() =>
-        reduce_cooldown("taunt", character.ping * 0.95),
+      promisesToAwait.push(
+        use_skill("taunt", target).then(() =>
+          reduce_cooldown("taunt", character.ping * 0.95),
+        ),
       );
     }
   }
 
   // Emergency scare if overwhelmed
-  if (
-    character.fear ||
-    ((!get_entity(HEALER) ||
-      get_entity(HEALER)?.rip ||
-      character.hp < character.max_hp * 0.3) &&
-      Object.values(parent.entities).filter(
-        (mob) => mob.target === character.name,
-      ).length > 2 &&
-      !is_on_cooldown("scare") &&
-      character.mp > 100 &&
-      character.cc < 100)
-  ) {
-    await scareAwayMobs();
+  const isDangerouslyLow =
+    !partyHealer || partyHealer.rip || character.hp < character.max_hp * 0.3;
+
+  // 2. Is the character being targeted by too many mobs?
+  const isOverwhelmed =
+    Object.values(parent.entities).filter(
+      (mob) => mob.target === character.name,
+    ).length > 2;
+
+  // 3. Are the ability resources/cooldowns ready?
+  const isReadyToScare =
+    !is_on_cooldown("scare") && character.mp > 100 && character.cc < 100;
+
+  if (character.fear || (isDangerouslyLow && isOverwhelmed && isReadyToScare)) {
+    scareAwayMobs();
   }
 
   if (
@@ -236,6 +240,12 @@ async function fight(target) {
     rangeRate = target.speed / character.speed;
   } else {
     rangeRate = originRangeRate;
+  }
+
+  try {
+    await withTimeout(Promise.all(promisesToAwait), 1000);
+  } catch (e) {
+    console.error("Error while attacking", e);
   }
 }
 
@@ -248,8 +258,10 @@ async function cleaveLoop() {
       distance(character, get_targeted_monster()) >
         character.range + character.xrange * 1.1
     )
-      await warriorCleave(
-        currentStrategy === usePullStrategies ? "pull" : "normal",
+      await withTimeout(
+        warriorCleave(
+          currentStrategy === usePullStrategies ? "pull" : "normal",
+        ),
       );
   } catch (e) {
     console.log("Error while cleaving: ", e);

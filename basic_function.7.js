@@ -409,8 +409,8 @@ const SALE_ABLE = [
   "carrotsword",
   // "wcap",
   // "wshoes",
-  // "wgloves",
-  // "wbreeches",
+  "wgloves",
+  "wbreeches",
   "cclaw",
   "dagger",
   "rednose",
@@ -441,7 +441,6 @@ const SALE_ABLE = [
   "glolipop",
   "whiteegg",
   "hboots",
-  "smoke",
   "sword",
   "spear",
   "throwingstars",
@@ -509,7 +508,7 @@ async function sortInv() {
     return lhs.slot - rhs.slot;
   });
 
-  // We’ll create a mapping from target slot → original slot
+  // Create a mapping from target slot → original slot
   const promises = [];
   const usedSlots = new Set();
 
@@ -721,7 +720,7 @@ function getLoopInterval() {
   const frequencyInterval = (1 / character.frequency) * 1000;
 
   return ms_to_next_skill("attack") <= dynamicInterval
-    ? Math.max(ms_to_next_skill("attack"), 50)
+    ? Math.max(ms_to_next_skill("attack"), 25)
     : dynamicInterval ?? frequencyInterval;
 }
 
@@ -863,7 +862,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   if (!can_move_to(new_x, new_y)) {
     // Try small angular adjustments in the current flip direction
     flipRotation *= -1;
-    for (let i = 2; i <= 8; i++) {
+    for (let i = 1; i <= 16; i++) {
       const adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
       const alt_x =
         target.x + (rangeRadius + character.xrange) * Math.cos(adjustedAngle);
@@ -916,7 +915,7 @@ function prioritizedNames() {
 
 function getPlayersToHeal() {
   const minHealMod = 0.9;
-  const healPower = character.heal || character.attack;
+  const healPower = character.heal || character.attack * 1.5;
   const prioritizedNamesList = prioritizedNames();
 
   const shouldHeal = (entity) => {
@@ -925,35 +924,44 @@ function getPlayersToHeal() {
   };
 
   // Prioritized characters
-  const prioritized = prioritizedNamesList
-    .map((name) => get_player(name))
-    .filter((player) => player && shouldHeal(player))
-    .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
+  // const prioritized = prioritizedNamesList
+  //   .map((name) => get_entity(name))
+  //   .filter(
+  //     (player) => player && !player.dead && !player.rip && shouldHeal(player),
+  //   )
+  //   .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
 
   // Other healable entities
-  const others = Object.values(parent.entities)
+  const potentialHealees = Object.values(parent.entities)
     .filter((entity) => {
       if (!entity) return false;
-      if (entity.mtype === "ghost") {
-        if (character.ctype !== "priest") return false;
+      if (entity.dead || entity.rip) return false;
+
+      if (character.ctype === "priest" && entity.mtype === "ghost") {
         return !entity.s.healed && entity.hp < 7000;
       }
 
-      if (entity.type === "monster") return false;
+      if (entity.type === "monster" || entity.citizen) return false;
       if (HEAL_IGNORE.includes(entity.name)) return false;
-      if (prioritizedNamesList.includes(entity.name)) return false;
 
       return shouldHeal(entity);
     })
-    .sort((a, b) => {
+    .sort((lhs, rhs) => {
       // Ghosts first if both exist
-      const ghostA = a.mtype === "ghost";
-      const ghostB = b.mtype === "ghost";
-      if (ghostA !== ghostB) return ghostA ? -1 : 1;
-      return a.hp / a.max_hp - b.hp / b.max_hp;
+
+      const isLhsPrioritized = prioritizedNamesList.includes(lhs.name);
+      const isRhsPrioritized = prioritizedNamesList.includes(rhs.name);
+
+      if (isLhsPrioritized !== isRhsPrioritized)
+        return isLhsPrioritized ? -1 : 1;
+
+      const ghostLhs = lhs.mtype === "ghost";
+      const ghostRhs = rhs.mtype === "ghost";
+      if (ghostLhs !== ghostRhs) return ghostLhs ? -1 : 1;
+      return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
     });
 
-  return [...prioritized, ...others];
+  return potentialHealees;
 }
 
 function getLowestMana() {
@@ -1107,122 +1115,6 @@ setInterval(() => {
   }
 }, 100);
 
-async function cupidHeal() {
-  if (
-    (locate_item("cupid") === -1 &&
-      character.slots.mainhand?.name !== "cupid") ||
-    ms_to_next_skill("attack") > 0
-  )
-    return;
-
-  const characterRange = character.range + character.xrange;
-  // const prioritized = prioritizedNames();
-
-  const lowHealthPlayers = getPlayersToHeal().filter(
-    (player) => player.name !== character.name && player.ctype !== "priest",
-  );
-  const lowHealthPlayersInRange = lowHealthPlayers.filter(
-    (player) => distance(player, character) < characterRange,
-  );
-
-  // const prioritizedPlayers = lowHealthPlayers.filter((player) =>
-  //   prioritized.includes(player.name),
-  // );
-
-  const promisesToAwait = [];
-
-  // if (
-  //   prioritizedPlayers.length &&
-  //   prioritizedPlayers.some(
-  //     (player) =>
-  //       distance(character, player) > characterRange &&
-  //       distance(character, player) < 300,
-  //   )
-  // ) {
-  //   const prioritizedPlayersLength = prioritizedPlayers.length;
-  //   const sumsPosition = prioritizedPlayers.reduce(
-  //     (accumulator, currentPlayer) => {
-  //       accumulator.sumX += currentPlayer.x;
-  //       accumulator.sumY += currentPlayer.y;
-  //       return accumulator;
-  //     },
-  //     { sumX: 0, sumY: 0 },
-  //   );
-  //   promisesToAwait.push(
-  //     move(
-  //       sumsPosition.sumX / prioritizedPlayersLength,
-  //       sumsPosition.sumY / prioritizedPlayersLength,
-  //     ),
-  //   );
-  // }
-
-  if (lowHealthPlayersInRange.length > 0) {
-    console.log(
-      lowHealthPlayersInRange
-        .map((player) => `${player.name} (${player.hp}/${player.max_hp})`)
-        .join(", "),
-    );
-    promisesToAwait.push(
-      equipBatch({
-        mainhand: "cupid",
-      }),
-    );
-
-    if (
-      character.level >= G.skills["5shot"].level &&
-      lowHealthPlayersInRange.length >= 4 &&
-      character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp &&
-      !character.fear
-    ) {
-      set_message("5shot Cupid");
-      log(
-        `Healing ${lowHealthPlayersInRange
-          .slice(0, 5)
-          .map((player) => player.name)
-          .join(", ")}`,
-      );
-      promisesToAwait.push(
-        use_skill("5shot", lowHealthPlayersInRange.slice(0, 5)).then(() =>
-          reduce_cooldown("attack", Math.min(...parent.pings)),
-        ),
-      );
-    } else if (
-      character.level >= G.skills["3shot"].level &&
-      lowHealthPlayersInRange.length >= 2 &&
-      character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp &&
-      !character.fear
-    ) {
-      set_message("3shot Cupid");
-      log(
-        `Healing ${lowHealthPlayersInRange
-          .slice(0, 3)
-          .map((player) => player.name)
-          .join(", ")}`,
-      );
-      promisesToAwait.push(
-        use_skill("3shot", lowHealthPlayersInRange.slice(0, 3)).then(() =>
-          reduce_cooldown("attack", Math.min(...parent.pings)),
-        ),
-      );
-    } else if (lowHealthPlayersInRange.length) {
-      set_message("Single Cupid");
-      log(`Healing ${lowHealthPlayersInRange[0].name}`);
-      promisesToAwait.push(
-        use_skill("attack", lowHealthPlayersInRange[0]).then(() =>
-          reduce_cooldown("attack", Math.min(...parent.pings)),
-        ),
-      );
-    }
-  }
-
-  try {
-    await withTimeout(Promise.all(promisesToAwait), 1000);
-  } catch (e) {
-    attackErrorHandler(e);
-    console.error("Error while Cupiding!", e);
-  }
-}
-
 //// Interval threads
 // Code Messaging
 setInterval(async function () {
@@ -1245,7 +1137,7 @@ setInterval(async function () {
     currentTarget &&
     distance(currentTarget, character) >
       character.range +
-        character.xrange +
+        character.xrange * 0.9 +
         extraDistanceWithinHitbox(currentTarget) +
         extraDistanceWithinHitbox(character) &&
     !smart.moving &&
@@ -1400,14 +1292,14 @@ setInterval(async function () {
   if (
     !isMerchant() &&
     whitelistPartyMembers.length &&
-    whitelistPartyMembers.length < 6 &&
+    whitelistPartyMembers.length <= 6 &&
     (!parent.party_list.length || !hasWhitelistedMember)
   ) {
     send_party_request(whitelistPartyMembers[0].name);
   }
 
-  if (partyMems.length !== parent.party_list.length) {
-    if (character.name === partyMems[0]) {
+  if (partyMems.every((id) => !parent.party_list.includes(id))) {
+    if (character.name === TANKER) {
       partyMems.forEach((member) => {
         send_party_invite(member);
       });
@@ -1777,10 +1669,6 @@ function on_magiport(name) {
 function attackErrorHandler(error) {
   if (error.failed && error.response === "cooldown") {
     reduce_cooldown("attack", -error.ms);
-  }
-
-  if (error.failed && error.reason === "not_there") {
-    parent.socket.emit("send_updates", {});
   }
 }
 

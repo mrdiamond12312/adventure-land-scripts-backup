@@ -79,7 +79,7 @@ async function fight(target) {
 
 async function fuaLoop() {
   try {
-    const currentTarget = get_targeted_monster();
+    const currentTarget = get_target();
     const promisesToAwait = [];
 
     const prioritized = prioritizedNames();
@@ -128,9 +128,9 @@ async function fuaLoop() {
       }
     }
 
-    await withTimeout(Promise.all(promisesToAwait), 500);
+    await withTimeout(Promise.allSettled(promisesToAwait), 500);
   } catch (e) {
-    console.log("Error while FuA: " + e);
+    console.log("Error while FuA: ", e);
   }
 
   setTimeout(fuaLoop, Math.max(ms_to_next_skill("quickpunch"), 100));

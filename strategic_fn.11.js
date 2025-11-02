@@ -516,10 +516,12 @@ function avgPartyDmgTaken(partyMems, dmgType = null) {
   );
 }
 
-function rotateLeader(mems, value) {
-  const idx = mems.indexOf(value);
-  if (idx === -1) return mems; // not found
-  return mems.slice(idx).concat(mems.slice(0, idx));
+function rotateLeader(partyList, newLeaderId) {
+  const newLeaderIndex = partyList.indexOf(newLeaderId);
+  if (newLeaderIndex === -1) return partyList; // not found
+  return partyList
+    .slice(newLeaderIndex)
+    .concat(partyList.slice(0, newLeaderIndex));
 }
 
 function assignRoles() {
@@ -527,13 +529,10 @@ function assignRoles() {
     const partyDmgTaken = avgPartyDmgTaken(partyMems);
     const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "magical");
 
-    if (partyMagicalDmgTaken / partyDmgTaken >= 0.5) {
-      TANKER = HEALER;
-      partyMems = rotateLeader(partyMems, HEALER);
-    } else {
-      TANKER = WARRIOR;
-      partyMems = rotateLeader(partyMems, WARRIOR);
-    }
+    // If more than half of taken DMG is magical, set our HEALER to be TANKER
+    const magicDmgRatio = partyMagicalDmgTaken / partyDmgTaken;
+    TANKER = magicDmgRatio > 0.5 ? HEALER : WARRIOR;
+    partyMems = rotateLeader(partyMems, TANKER);
   }
 }
 
@@ -542,13 +541,27 @@ function isAssignedAsTanker() {
 }
 
 function getMonstersToCBurst() {
+  // 1. Party Data and Early Exit Preparation
   const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
   const partyTanker = get_entity(TANKER);
-  const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
+  // Calculate the healer's effective power (Heal > Attack > 0)
+  const healerPower = partyHealer?.heal || partyHealer?.attack * 0.5 || 0;
 
-  if (!(partyHealer && partyTanker)) return [];
+  if (!partyHealer || !partyTanker) return [];
 
-  const mobsList = Object.values(parent.entities)
+  // Healer's effective healing output (with a 5% buffer)
+  const MAX_SAFE_DPS = healerPower * partyHealer.frequency * 0.95;
+  // The damage threshold for adding a new mob (with a 10% buffer)
+  const NEW_MOB_DMG_LIMIT = healerPower * partyHealer.frequency * 0.9;
+
+  // 2. Identify and Filter Eligible Monsters
+  // This section filters the world for mobs that are:
+  // - A 'monster'
+  // - Within 'cburst' range
+  // - Safe for the tank (DPS < MAX_MOB_DPS)
+  // - Out of the mage's range (mob.range < character.range - 20)
+  // - Does NOT have any abilities in the WATCHOUT_ABILITIES list
+  const eligibleMobs = Object.values(parent.entities)
     .filter(
       (mob) =>
         mob.type === "monster" &&
@@ -561,32 +574,45 @@ function getMonstersToCBurst() {
     )
     .sort((lhs, rhs) => distance(character, rhs) - distance(character, lhs));
 
-  const result = [];
+  // 3. Iterative Selection Logic
+  const selectedMobs = [];
 
-  let partyDmgRecieved = avgPartyDmgTaken(partyMems);
-  let tankerNumberOfAggroedMobs = listOfMonsterAttacking(partyHealer).length;
+  // Initial State Variables
+  let currentPartyDmgRecieved = avgPartyDmgTaken(partyMems);
+  let tankerCurrentAggroCount = listOfMonsterAttacking(partyTanker).length;
 
-  for (const mob of mobsList) {
-    if (partyDmgRecieved >= healerPower * partyHealer.frequency * 0.95) break;
+  for (const mob of eligibleMobs) {
+    // Stop adding mobs if the party is already taking too much damage
+    if (currentPartyDmgRecieved >= MAX_SAFE_DPS) break;
 
+    // Check if the mob can be safely added:
     if (
-      is_in_range(mob, "cburst") &&
-      !mob.target &&
-      partyDmgRecieved +
+      is_in_range(mob, "cburst") && // Check range again (safety/original code)
+      !mob.target && // Mob must be untargeted
+      currentPartyDmgRecieved +
         calculateDamage(mob, partyTanker) *
-          mobbingMultiplier(tankerNumberOfAggroedMobs + 1) <
-        healerPower * partyHealer.frequency * 0.9
+          mobbingMultiplier(tankerCurrentAggroCount + 1) <
+        NEW_MOB_DMG_LIMIT // Aggroing the mob must be within the safe limit
     ) {
-      result.push([mob, 2]);
-      tankerNumberOfAggroedMobs += 1;
-      partyDmgRecieved =
-        (partyDmgRecieved * mobbingMultiplier(tankerNumberOfAggroedMobs + 1)) /
-          mobbingMultiplier(tankerNumberOfAggroedMobs) +
-        calculateDamage(mob, partyTanker) *
-          mobbingMultiplier(tankerNumberOfAggroedMobs + 1);
+      // Select the mob
+      selectedMobs.push(mob);
+
+      // Update state variables for the next iteration
+      const oldAggroMult = mobbingMultiplier(tankerCurrentAggroCount);
+      tankerCurrentAggroCount += 1;
+      const newAggroMult = mobbingMultiplier(tankerCurrentAggroCount);
+
+      // Scale previous DPS to the new multiplier context and add the new mob's contribution
+      // This ensures the damage calculation correctly accounts for the change
+      // in the mobbing multiplier when aggro count increases.
+      currentPartyDmgRecieved =
+        (currentPartyDmgRecieved * newAggroMult) / oldAggroMult +
+        calculateDamage(mob, partyTanker) * newAggroMult;
     }
   }
-  return result;
+
+  // Return a ready to use list for mage to cburst, with 2 mp per target
+  return selectedMobs.map((mob) => [mob, 2]);
 }
 
 isCleaving = false;
@@ -596,6 +622,7 @@ async function warriorCleave(currentStrategy) {
       mob.type === "monster" &&
       distance(mob, character) < G.skills["cleave"].range,
   );
+
   if (
     character.s.sugarrush ||
     character.s.penalty_cd ||
@@ -611,102 +638,98 @@ async function warriorCleave(currentStrategy) {
 
   isCleaving = true;
   const promises = [];
-  try {
-    // List monsters attacking the character
-    const mobsTargetingSelf = listOfMonsterAttacking(character);
-    const magicalMobs = [],
-      physicalMobs = [],
-      pureMobs = [];
 
-    for (const mob of mobsTargetingSelf) {
-      if (mob.damage_type === "magical") magicalMobs.push(mob);
-      else if (mob.damage_type === "physical") physicalMobs.push(mob);
-      else if (mob.damage_type === "pure") pureMobs.push(mob);
-    }
+  // List monsters attacking the character
+  const mobsTargetingSelf = listOfMonsterAttacking(character);
+  const magicalMobs = [],
+    physicalMobs = [],
+    pureMobs = [];
 
-    // Get non-targeted monsters in cleave range
-    const listOfNoTargetMonsterInRange = Object.values(parent.entities).filter(
-      (mob) => {
-        return (
-          distance(mob, character) <
-            G.skills["cleave"].range + character.xrange &&
-          !mob.target &&
-          mob.type === "monster" &&
-          mob.hp >
-            character.attack *
-              dps_multiplier(mob.armor - character.apiercing) *
-              1.5 &&
-          mob.attack > 150
-        );
-      },
-    );
+  for (const mob of mobsTargetingSelf) {
+    if (mob.damage_type === "magical") magicalMobs.push(mob);
+    else if (mob.damage_type === "physical") physicalMobs.push(mob);
+    else if (mob.damage_type === "pure") pureMobs.push(mob);
+  }
 
-    // Categorize additional mobs that would be cleaved
-    for (const mob of listOfNoTargetMonsterInRange) {
-      if (mob.damage_type === "magical") magicalMobs.push(mob);
-      else if (mob.damage_type === "physical") physicalMobs.push(mob);
-      else if (mob.damage_type === "pure") pureMobs.push(mob);
-    }
-
-    // Check if cleaving would cause fear
-    const isFeared =
-      magicalMobs.length > character.mcourage ||
-      physicalMobs.length > character.courage ||
-      pureMobs.length > character.pcourage;
-
-    // Identify strong mobs that might be risky
-    const formidableMob = listOfNoTargetMonsterInRange.some(
-      (mob) => mob.attack * mob.frequency > MAX_MOB_DPS,
-    );
-
-    // Calculate DPS after cleaving
-    const allMobs = [...magicalMobs, ...physicalMobs, ...pureMobs];
-    const totalDpsTaken =
-      allMobs
-        .map((mob) => calculateDamage(mob, character) * mob.frequency)
-        .reduce((acc, dmg) => acc + dmg, 0) * mobbingMultiplier(allMobs.length);
-
-    // Check if cleaving is safe and beneficial
-    const healer = get_entity(HEALER) ?? get_entity(RANGER);
-    const healerPower = healer?.heal ?? healer?.attack ?? 0;
-    const healThreshold = currentStrategy === "pull" ? healerPower * 0.9 : 0;
-
-    if (
-      (currentStrategy === "pull"
-        ? totalDpsTaken <= healThreshold ||
-          listOfNoTargetMonsterInRange.length === 0
-        : listOfNoTargetMonsterInRange.length === 0) &&
-      !allMobs.some(
-        (mob) =>
-          MELEE_IGNORE_LIST.includes(mob.mtype) ||
-          WATCHOUT_ABILITIES.some((skill) =>
-            Object.keys(mob.abilities ?? {}).includes(skill),
-          ),
-      ) &&
-      !listOfNoTargetMonsterInRange.some((mob) => mob.abilities.burn) &&
-      !isFeared &&
-      !formidableMob &&
-      !isEquipingItems
-    ) {
-      isEquipingItems = true;
-      const warriorItems = calculateWarriorItems();
-      promises.push(
-        // equipBatch({ mainhand: "bataxe" }),
-        Promise.all([unequip("offhand"), equip(findMaxLevelItem("bataxe"))]),
-        withTimeout(use_skill("cleave"), 2500).then(async () => {
-          reduce_cooldown("cleave", 0.95 * character.ping);
-          await equipBatch(
-            {
-              mainhand: warriorItems.mainhand,
-              offhand: warriorItems.offhand,
-            },
-            true,
-          );
-        }),
+  // Get non-targeted monsters in cleave range
+  const listOfNoTargetMonsterInRange = Object.values(parent.entities).filter(
+    (mob) => {
+      return (
+        distance(mob, character) <
+          G.skills["cleave"].range + character.xrange &&
+        !mob.target &&
+        mob.type === "monster" &&
+        mob.hp >
+          character.attack *
+            dps_multiplier(mob.armor - character.apiercing) *
+            1.5 &&
+        mob.attack > 150
       );
-    }
-  } catch (e) {
-    isCleaving = false;
+    },
+  );
+
+  // Categorize additional mobs that would be cleaved
+  for (const mob of listOfNoTargetMonsterInRange) {
+    if (mob.damage_type === "magical") magicalMobs.push(mob);
+    else if (mob.damage_type === "physical") physicalMobs.push(mob);
+    else if (mob.damage_type === "pure") pureMobs.push(mob);
+  }
+
+  // Check if cleaving would cause fear
+  const isFeared =
+    magicalMobs.length > character.mcourage ||
+    physicalMobs.length > character.courage ||
+    pureMobs.length > character.pcourage;
+
+  // Identify strong mobs that might be risky
+  const formidableMob = listOfNoTargetMonsterInRange.some(
+    (mob) => mob.attack * mob.frequency > MAX_MOB_DPS,
+  );
+
+  // Calculate DPS after cleaving
+  const allMobs = [...magicalMobs, ...physicalMobs, ...pureMobs];
+  const totalDpsTaken =
+    allMobs
+      .map((mob) => calculateDamage(mob, character) * mob.frequency)
+      .reduce((acc, dmg) => acc + dmg, 0) * mobbingMultiplier(allMobs.length);
+
+  // Check if cleaving is safe and beneficial
+  const healer = get_entity(HEALER) ?? get_entity(RANGER);
+  const healerPower = healer?.heal ?? healer?.attack ?? 0;
+  const healThreshold = currentStrategy === "pull" ? healerPower * 0.9 : 0;
+  if (
+    (currentStrategy === "pull"
+      ? totalDpsTaken <= healThreshold ||
+        listOfNoTargetMonsterInRange.length === 0
+      : listOfNoTargetMonsterInRange.length === 0) &&
+    !allMobs.some(
+      (mob) =>
+        MELEE_IGNORE_LIST.includes(mob.mtype) ||
+        WATCHOUT_ABILITIES.some((skill) =>
+          Object.keys(mob.abilities ?? {}).includes(skill),
+        ),
+    ) &&
+    !listOfNoTargetMonsterInRange.some((mob) => mob.abilities?.burn) &&
+    !isFeared &&
+    !formidableMob &&
+    !isEquipingItems
+  ) {
+    isEquipingItems = true;
+    const warriorItems = calculateWarriorItems();
+    promises.push(
+      // equipBatch({ mainhand: "bataxe" }),
+      Promise.all([unequip("offhand"), equip(findMaxLevelItem("bataxe"))]),
+      withTimeout(use_skill("cleave"), 2500).then(async () => {
+        reduce_cooldown("cleave", 0.95 * character.ping);
+        await equipBatch(
+          {
+            mainhand: warriorItems.mainhand,
+            offhand: warriorItems.offhand,
+          },
+          true,
+        );
+      }),
+    );
   }
 
   return Promise.all(promises).finally(() => {

@@ -1,6 +1,7 @@
 async function usePullStrategies(target) {
   const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
   const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
+  const healerFreq = partyHealer?.frequency || 1;
   const partyTanker = get_entity(TANKER);
   const mobsList = Object.values(parent.entities).filter(
     (mob) => mob.type === "monster",
@@ -22,6 +23,7 @@ async function usePullStrategies(target) {
         ms_to_next_skill("cburst") === 0 &&
         character.mp > 400 &&
         !get_targeted_monster()?.["1hp"] &&
+        partyHealer &&
         partyHealer.ctype === "priest" &&
         distance(partyHealer, character) <
           (partyHealer.range ?? character.range * 0.7) &&
@@ -138,7 +140,7 @@ async function usePullStrategies(target) {
               entity.target !== character,
           )
           .reduce((prev, curr) => prev + calculateDamage(curr, character), 0) <
-          healerPower * partyHealer.frequency +
+          healerPower * healerFreq +
             (parent.entities["$Caroline"]?.focus &&
             distance(parent.entities["$Caroline"], character) < 250
               ? 1200
@@ -151,7 +153,7 @@ async function usePullStrategies(target) {
 
       if (
         partyDmgRecieved <
-          healerPower * partyHealer.frequency * 0.9 +
+          healerPower * healerFreq * 0.9 +
             (parent.entities["$Caroline"]?.focus &&
             distance(parent.entities["$Caroline"], character) < 250
               ? 1200
@@ -225,8 +227,7 @@ async function usePullStrategies(target) {
       }
 
       if (
-        avgPartyDmgTaken(partyMems) >
-          character.heal * 0.95 * character.frequency &&
+        avgPartyDmgTaken(partyMems) > character.heal * 0.95 * healerFreq &&
         character.hp < (isAssignedAsTanker() ? 0.3 : 0.5) * character.max_hp &&
         !is_on_cooldown("scare") &&
         character.cc < 100

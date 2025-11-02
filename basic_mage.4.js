@@ -19,112 +19,127 @@ var originRangeRate = 0.85;
 rangeRate = originRangeRate;
 const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 4);
 
+const reduceCd = (skillName) =>
+  reduce_cooldown(skillName, Math.min(...parent.pings));
+
 async function fight(target) {
   if (currentStrategy === usePullStrategies) {
-    aggroedMobs = Object.values(parent.entities).filter((mob) => {
-      return (
-        !haveFormidableMonsterAroundTarget(mob) &&
-        distance(mob, character) <
-          character.range +
-            character.xrange * 0.4 +
-            extraDistanceWithinHitbox(mob) +
-            extraDistanceWithinHitbox(character) &&
-        mob.target &&
-        mob.type === "monster"
-      );
-    });
+    const attackRange = character.range + character.xrange;
+    const blastRadius = character.blast / 3.6 || BLAST_RADIUS;
+
+    // Define the maximum distance for a mob to be considered "pullable"
+    const maxPullDistance =
+      attackRange * 0.9 + extraDistanceWithinHitbox(character);
+
+    // Filter: Find all aggroed mobs within a reasonable pull distance, excluding formidable ones
+    const aggroedMobs = Object.values(parent.entities)
+      .filter(
+        (entity) =>
+          entity.type === "monster" &&
+          entity.target && // Must be aggroed
+          !entity.dead &&
+          !haveFormidableMonsterAroundTarget(entity) &&
+          distance(entity, character) <
+            maxPullDistance + extraDistanceWithinHitbox(entity),
+      )
+      // Map: Pre-calculate the cluster count (The performance optimization)
+      .map((mob) => {
+        mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
+        return mob;
+      });
 
     if (aggroedMobs.length) {
-      target =
-        aggroedMobs
-          .sort((lhs, rhs) => {
-            const lhsNumberOfSurrounding = numberOfMonsterAroundTarget(
-              lhs,
-              character.blast / 3.6 || BLAST_RADIUS,
-            );
-            const rhsNumberOfSurrounding = numberOfMonsterAroundTarget(
-              rhs,
-              character.blast / 3.6 || BLAST_RADIUS,
-            );
-            if (lhsNumberOfSurrounding === rhsNumberOfSurrounding)
-              return rhs.hp - lhs.hp;
-            return rhsNumberOfSurrounding - lhsNumberOfSurrounding;
-          })
-          .shift() ?? target;
+      // Sort: Find the best mob to target for cluster damage
+      const bestPullTarget = aggroedMobs
+        .sort((lhs, rhs) => {
+          // 1. Prioritize highest cluster count
+          if (lhs.cluster_count !== rhs.cluster_count) {
+            return rhs.cluster_count - lhs.cluster_count;
+          }
+          // 2. If cluster counts are equal, prioritize highest HP to apply max damage
+          return rhs.hp - lhs.hp;
+        })
+        .shift(); // Get the first (best) target
+
+      target = bestPullTarget ?? target;
       change_target(target);
     }
   }
 
+  // --- Early Exit ---
   if (!target) return;
 
   const promisesToAwait = [];
 
-  if (!is_on_cooldown("energize")) {
+  // --- Energize Logic ---
+  const canEnergize = !is_on_cooldown("energize");
+  if (canEnergize) {
+    let energizeTarget = null;
+
     const buffee = getLowestMana();
-    if (
+    const shouldEnergizeBuffee =
       buffee &&
       buffee.max_mp - buffee.mp > 500 &&
       buffee.mp < buffee.max_mp * 0.65 &&
       character.mp > character.max_mp * 0.75 &&
-      is_in_range(buffee, "energize")
-    ) {
-      log("Energize " + buffee.name);
+      is_in_range(buffee, "energize");
+
+    const shouldEnergizeSelf =
+      ms_to_next_skill("attack") <= 0 && !character.s.penalty_cd;
+
+    if (shouldEnergizeBuffee) {
+      energizeTarget = buffee;
+    } else if (shouldEnergizeSelf) {
+      energizeTarget = character;
+    }
+
+    if (energizeTarget) {
       promisesToAwait.push(
-        withTimeout(
-          use_skill("energize", buffee).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95),
-          ),
-          2500,
-        ),
-      );
-    } else if (ms_to_next_skill("attack") <= 0 && !character.s.penalty_cd) {
-      log("Energize " + character.name);
-      promisesToAwait.push(
-        withTimeout(
-          use_skill("energize", character).then(() =>
-            reduce_cooldown("energize", character.ping * 0.95),
-          ),
-          2500,
+        use_skill("energize", energizeTarget).then(
+          () => reduceCd("energize"), // <-- Now uses reduceCd()
         ),
       );
     }
   }
 
-  if (
-    ms_to_next_skill("attack") === 0 &&
-    !character.s.penalty_cd &&
+  // --- Attack Logic ---
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  const isTargetInAttackRange =
     distance(target, character) <
-      character.range +
-        character.xrange +
-        extraDistanceWithinHitbox(target) +
-        extraDistanceWithinHitbox(character) &&
-    shouldAttack()
-  ) {
+    character.range +
+      character.xrange +
+      extraDistanceWithinHitbox(target) +
+      extraDistanceWithinHitbox(character);
+
+  if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
+    set_message("Attacking");
     promisesToAwait.push(
-      currentStrategy(target),
-      withTimeout(attack(target), 2500)
+      currentStrategy(target), // Assumes currentStrategy includes moving/kiting logic
+      attack(target)
         .then(() => {
-          reduce_cooldown("attack", Math.min(...parent.pings));
+          reduceCd("attack");
         })
         .catch((e) => {
           attackErrorHandler(e);
         }),
     );
-
-    set_message("Attacking");
   }
 
+  // --- Await and Error Handling ---
   try {
-    await Promise.all(promisesToAwait);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
   } catch (e) {}
 
-  if (
-    target["damage_type"] === "magical" &&
-    !is_on_cooldown("reflection") &&
-    partyMems.includes(target.target) &&
-    character.mp > 1000
-  ) {
-    use_skill("reflection", get_entity(target.target));
+  // --- Reflection Logic ---
+  const isMagicalTarget = target["damage_type"] === "magical";
+  const canReflect = !is_on_cooldown("reflection") && character.mp > 1000;
+  const targetAggroesParty = partyMems.includes(target.target);
+
+  if (isMagicalTarget && canReflect && targetAggroesParty) {
+    use_skill("reflection", get_entity(target.target)).then(() =>
+      reduceCd("reflection"),
+    );
   }
 
   // if (character.mp > 2000 && !is_on_cooldown("alchemy") && !isInvFull()) {
@@ -146,11 +161,11 @@ async function fight(target) {
 
 async function mainLoop() {
   try {
+    // --- Initialization and Status Checks ---
     desiredElixir = "pumpkinspice";
     assignRoles();
 
-    // buff();
-
+    // Handle immediate death state
     if (character.rip) {
       respawn();
       throw new Error("Character's down", {
@@ -158,7 +173,8 @@ async function mainLoop() {
       });
     }
 
-    if (character.level > 50) {
+    // Save location data for other characters/storage once high level
+    if (character.level > G.skills['magiport'].level) {
       set("mageLocation", {
         mp: character.mp,
         map: character.map,
@@ -167,35 +183,42 @@ async function mainLoop() {
       });
     }
 
-    if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
+    // Halt logic if character is performing a controlled move
+    const isMovingControlled =
+      (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
+    if (isMovingControlled) {
       throw new Error("Smart moving", {
         cause: "smart_move",
       });
+    }
 
+    // --- Target Selection ---
     let target = getTarget();
 
-    //// THE CRYPT & EVENTS
-    if (get("cryptInstance")) target = await useCryptStrategy(target);
-    else target = await changeToDailyEventTargets();
+    // Prioritize Crypt/Event targets
+    if (get("cryptInstance")) {
+      target = await useCryptStrategy(target);
+    } else {
+      target = await changeToDailyEventTargets();
+    }
 
-    //// Logic to targets and farm places
+    // --- Movement Logic ---
     if (!target) {
-      if (
-        !smart.moving &&
-        !isAdvanceSmartMoving &&
-        get("cryptInstance") &&
-        character.map !== "crypt"
-      ) {
-        changeToNormalStrategies();
+      const cryptKey = get("cryptInstance");
+      const needsToEnterCrypt = cryptKey && character.map !== "crypt";
+      const isPartyLeaderOrAlone =
+        TANKER === character.name || !get_entity(TANKER);
+      const isFarFromPartyLeader =
+        distance(character, { x: mapX, y: mapY, map }) > 500;
+
+      const needsToMoveToFarmLocation =
+        !cryptKey && (isPartyLeaderOrAlone || isFarFromPartyLeader);
+
+      if (needsToEnterCrypt) {
+        // Move to Crypt start if a crypt instance is active but we aren't there
         advanceSmartMove(CRYPT_STARTING_LOCATION);
-      } else if (
-        !smart.moving &&
-        !isAdvanceSmartMoving &&
-        !get("cryptInstance") &&
-        (partyMems[0] == character.name ||
-          !get_entity(partyMems[0]) ||
-          distance(character, { x: mapX, y: mapY, map }) > 500)
-      ) {
+      } else if (needsToMoveToFarmLocation) {
+        // Move to the designated farming spot
         log("Moving to farming location");
         changeToNormalStrategies();
         advanceSmartMove({
@@ -204,11 +227,19 @@ async function mainLoop() {
           y: mapY,
         });
       }
-    } else await fight(target);
+    } else {
+      // Target found, chilling with my staff :cow2:
+      await fight(target);
+    }
   } catch (e) {
-    console.error(e);
+    // If the error is 'smart_move' or 'death', it was handled internally (by the throw)
+    // If it's a real runtime error, log it
+    if (e.cause !== "smart_move" && e.cause !== "death") {
+      console.error(e);
+    }
   }
 
+  // Schedule the next loop execution
   setTimeout(mainLoop, getLoopInterval());
 }
 
