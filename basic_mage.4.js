@@ -27,10 +27,6 @@ async function fight(target) {
     const attackRange = character.range + character.xrange;
     const blastRadius = character.blast / 3.6 || BLAST_RADIUS;
 
-    // Define the maximum distance for a mob to be considered "pullable"
-    const maxPullDistance =
-      attackRange * 0.9 + extraDistanceWithinHitbox(character);
-
     // Filter: Find all aggroed mobs within a reasonable pull distance, excluding formidable ones
     const aggroedMobs = Object.values(parent.entities)
       .filter(
@@ -39,8 +35,7 @@ async function fight(target) {
           entity.target && // Must be aggroed
           !entity.dead &&
           !haveFormidableMonsterAroundTarget(entity) &&
-          distance(entity, character) <
-            maxPullDistance + extraDistanceWithinHitbox(entity),
+          distance(entity, character) <= attackRange,
       )
       // Map: Pre-calculate the cluster count (The performance optimization)
       .map((mob) => {
@@ -73,6 +68,10 @@ async function fight(target) {
 
   // --- Energize Logic ---
   const canEnergize = !is_on_cooldown("energize");
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  const isTargetInAttackRange =
+    distance(target, character) <= character.range + character.xrange;
   if (canEnergize) {
     let energizeTarget = null;
 
@@ -84,42 +83,27 @@ async function fight(target) {
       character.mp > character.max_mp * 0.75 &&
       is_in_range(buffee, "energize");
 
-    const shouldEnergizeSelf =
-      ms_to_next_skill("attack") <= 0 && !character.s.penalty_cd;
-
     if (shouldEnergizeBuffee) {
       energizeTarget = buffee;
-    } else if (shouldEnergizeSelf) {
+    } else if (isAttackReady && isTargetInAttackRange) {
       energizeTarget = character;
     }
 
     if (energizeTarget) {
       promisesToAwait.push(
-        use_skill("energize", energizeTarget).then(
-          () => reduceCd("energize"), // <-- Now uses reduceCd()
-        ),
+        use_skill("energize", energizeTarget).then(() => reduceCd("energize")),
       );
     }
   }
 
   // --- Attack Logic ---
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-  const isTargetInAttackRange =
-    distance(target, character) <
-    character.range +
-      character.xrange +
-      extraDistanceWithinHitbox(target) +
-      extraDistanceWithinHitbox(character);
 
   if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
     set_message("Attacking");
     promisesToAwait.push(
       currentStrategy(target), // Assumes currentStrategy includes moving/kiting logic
       attack(target)
-        .then(() => {
-          reduceCd("attack");
-        })
+        .then(() => reduceCd("attack"))
         .catch((e) => {
           attackErrorHandler(e);
         }),
@@ -129,7 +113,9 @@ async function fight(target) {
   // --- Await and Error Handling ---
   try {
     await withTimeout(Promise.allSettled(promisesToAwait), 1000);
-  } catch (e) {}
+  } catch (e) {
+    console.log(e);
+  }
 
   // --- Reflection Logic ---
   const isMagicalTarget = target["damage_type"] === "magical";
@@ -174,7 +160,7 @@ async function mainLoop() {
     }
 
     // Save location data for other characters/storage once high level
-    if (character.level > G.skills['magiport'].level) {
+    if (character.max_mp > G.skills["magiport"].mp * 1.5) {
       set("mageLocation", {
         mp: character.mp,
         map: character.map,

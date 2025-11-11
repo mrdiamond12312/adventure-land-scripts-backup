@@ -11,9 +11,10 @@ var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
 // var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
 
 const MAGE = "MowTheCooh";
+const WARRIOR = "MooohMoooh";
+const ROGUE = "MooohSteak";
 var HEALER = "CowTheMooh";
 var RANGER = "MoohThatCow";
-const WARRIOR = "MooohMoooh";
 
 var TANKER =
   partyMems.find((id) => [HEALER, WARRIOR].includes(id)) ?? partyMems[0];
@@ -107,9 +108,9 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = 423;
 // var mapY = -2614;
 
-var map = "desertland";
-var mapX = 223;
-var mapY = -708;
+// var map = "desertland";
+// var mapX = 223;
+// var mapY = -708;
 
 // var map = "tunnel";
 // var mapX = 0;
@@ -131,14 +132,14 @@ var mapY = -708;
 // var mapX = -1111;
 // var mapY = 132;
 
-// var map = "desertland";
-// var mapX = -800;
-// var mapY = -354;
+var map = "desertland";
+var mapX = -800;
+var mapY = -354;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 // var mobsToFarm = ["phoenix", "stompy", "wolf"];
-var mobsToFarm = ["fireroamer"];
+// var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 
 // var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
@@ -154,7 +155,7 @@ var mobsToFarm = ["fireroamer"];
 //   "turtle",
 //   "crabx",
 // ];
-// var mobsToFarm = ["plantoid"];
+var mobsToFarm = ["plantoid"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -311,7 +312,7 @@ var IGNORE = [
   "orbofresolve",
   "gphelmet",
   // "bowofthedead",
-  "daggerofthedead",
+  // "daggerofthedead",
   "maceofthedead",
   "pmaceofthedead",
   "staffofthedead",
@@ -397,6 +398,7 @@ const STORE_ABLE = [
 ];
 
 const SALE_ABLE = [
+  "smoke",
   "vgloves",
   "mcape",
   "wbook0",
@@ -458,7 +460,7 @@ const SALE_ABLE = [
   "intbelt",
   // Halloween temp for gold
   // "bowofthedead",
-  "daggerofthedead",
+  // "daggerofthedead",
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
@@ -668,26 +670,40 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack"),
+          distance(mob, character) < character.range + character.xrange,
       );
-      if (leader)
+      if (leader) {
+        let tempTarget =
+          get_target_of(leader) ||
+          get_nearest_monster({ target: partyMems[0] });
+        const tempTargetIsPartyMember =
+          tempTarget &&
+          tempTarget.name &&
+          [...partyMems, ...parent.party_list].includes(tempTarget.name);
+
+        if (tempTarget && tempTargetIsPartyMember) {
+          tempTarget = undefined;
+        }
+
         target =
-          get_target_of(leader) ?? aggroedMobs.length > 0
+          tempTarget ?? aggroedMobs.length > 0
             ? aggroedMobs[0]
             : mob && mob.attack < 200
             ? mob
             : undefined;
-      else target = mob;
+      } else target = mob;
     }
 
     if (target) change_target(target);
     else {
       set_message("No Monsters");
       if (
+        !character.moving &&
         character.map !== "crypt" &&
         leader &&
         !smart.moving &&
         !isAdvanceSmartMoving &&
+        character.cc < 125 &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
             (character.y - leader.y) * (character.y - leader.y),
@@ -759,7 +775,7 @@ async function leaveJail() {
 
 function extraDistanceWithinHitbox(target) {
   if (!target) return 0;
-  return Math.min(get_height(target), get_width(target) / 2) / 2;
+  return Math.min(get_height(target) / 2, get_width(target) / 2) / 2;
 }
 
 var lastKitingTarget = undefined;
@@ -767,7 +783,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   const loopInterval = Math.max(200, getLoopInterval());
 
   // --- 1. Early exits and sanity checks ---
-  if (character.cc > 150) return setTimeout(hitAndRun, loopInterval);
+  if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
   if (!target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
     return setTimeout(hitAndRun, loopInterval);
@@ -832,9 +848,10 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   // --- 4. Calculate range offsets ---
   const extraRangeTarget = extraDistanceWithinHitbox(target);
   const extraRangeSelf = extraDistanceWithinHitbox(character);
-  const totalExtraRange = extraRangeTarget + extraRangeSelf;
+  // const totalExtraRange = extraRangeTarget + extraRangeSelf;
   const rangeRadius = character.range * rangeRateFn;
-  const extendedRadius = character.xrange * 0.9 + totalExtraRange;
+  const extendedRadius = character.xrange;
+  // + totalExtraRange;
 
   // --- 5. Desired destination based on current orbit angle ---
   let new_x = target.x + (rangeRadius + extendedRadius) * cosA;
@@ -853,7 +870,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     flipCooldown = 0;
   }
 
-  flipCooldown--;
+  flipCooldown++;
   flipRotationCooldown--;
 
   // --- 7. Collision handling and alternative movement path ---
@@ -861,7 +878,10 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   if (!can_move_to(new_x, new_y)) {
     // Try small angular adjustments in the current flip direction
-    flipRotation *= -1;
+    if (flipRotationCooldown < 0) {
+      flipRotation *= -1;
+      flipRotationCooldown = 6;
+    }
     for (let i = 1; i <= 16; i++) {
       const adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
       const alt_x =
@@ -915,12 +935,16 @@ function prioritizedNames() {
 
 function getPlayersToHeal() {
   const minHealMod = 0.9;
-  const healPower = character.heal || character.attack * 1.5;
+  const healThreshold = character.ctype === "priest" ? 0.8 : 0.65;
+  const healPower = character.heal || character.attack * 2.5;
   const prioritizedNamesList = prioritizedNames();
 
   const shouldHeal = (entity) => {
     const missing = entity.max_hp - entity.hp;
-    return missing > minHealMod * healPower || entity.hp < 0.8 * entity.max_hp;
+    return (
+      missing > minHealMod * healPower ||
+      entity.hp < healThreshold * entity.max_hp
+    );
   };
 
   // Prioritized characters
@@ -932,7 +956,10 @@ function getPlayersToHeal() {
   //   .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
 
   // Other healable entities
-  const potentialHealees = Object.values(parent.entities)
+  const potentialHealees = [
+    ...Object.values(parent.entities),
+    ...(character.ctype === "priest" ? [character] : []),
+  ]
     .filter((entity) => {
       if (!entity) return false;
       if (entity.dead || entity.rip) return false;
@@ -1173,7 +1200,7 @@ setInterval(async function () {
     send_cm(partyMerchant, { msg: "buff_mluck", ...obj });
   }
 
-  // Send gold to merchant if he's nearby
+  // Send things to merchant if he's nearby
   if (get_entity(partyMerchant)) {
     send_gold(partyMerchant, character.gold - 1000000);
     await Promise.all(
@@ -1265,6 +1292,11 @@ setInterval(async function () {
   const allCharacters = [...partyMems, partyMerchant];
 
   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
+    if (character.ctype === "merchant" && parent.caracAL.siblings.length)
+      parent.caracAL.siblings
+        .filter((id) => id !== character.name && !partyMems.includes(id))
+        .forEach((id) => parent.caracAL.shutdown(id));
+
     allCharacters
       .filter((id) => parent.caracAL && !parent.caracAL.siblings.includes(id))
       .forEach((id) => {
@@ -1298,8 +1330,8 @@ setInterval(async function () {
     send_party_request(whitelistPartyMembers[0].name);
   }
 
-  if (partyMems.every((id) => !parent.party_list.includes(id))) {
-    if (character.name === TANKER) {
+  if (partyMems.some((id) => !parent.party_list.includes(id))) {
+    if (character.name === partyMems[0]) {
       partyMems.forEach((member) => {
         send_party_invite(member);
       });
@@ -1315,23 +1347,59 @@ function on_party_invite(name) {
   if (name === partyMems[0]) accept_party_invite(name);
 }
 
-function dynamicParty() {
-  if (parent.S.mrgreen?.live || parent.S.mrpumpkin?.live) {
-    const currentServer = `${server.region}${server.id}`;
-    if (currentServer === "USI") {
-      partyMems = ["MooohMoooh", "CowTheMooh", "MooohSteak"];
-    } else if (currentServer === "EUII") {
+const DYNAMIC_PARTY_PRESETS = {
+  snowman: [WARRIOR, RANGER, MAGE],
+  mrgreen: {
+    USI: [WARRIOR, HEALER, ROGUE],
+    EUII: () => {
       RANGER = "MoohThatCow";
-      partyMems = [WARRIOR, RANGER, MAGE];
-    } else if (currentServer === "USII") {
+      return [WARRIOR, RANGER, MAGE];
+    },
+    USII: () => {
       RANGER = "CupidCow";
-      partyMems = [WARRIOR, RANGER, MAGE];
-    } else {
-      partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
-    }
-  } else {
-    partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
-  }
+      return [WARRIOR, RANGER, MAGE];
+    },
+    default: [WARRIOR, HEALER, MAGE],
+  },
+  mrpumpkin: "mrgreen", // share config
+  franky: () => {
+    const isAggroed = !!parent.S.franky?.target;
+    return [WARRIOR, HEALER, isAggroed ? ROGUE : MAGE];
+  },
+
+  crabxx: () => {
+    const isAggroed = !!parent.S.crabxx?.target;
+    return [
+      WARRIOR,
+      isAggroed ? RANGER : HEALER,
+      isAggroed ? "CupidCow" : MAGE,
+    ];
+  },
+  default: [WARRIOR, HEALER, MAGE],
+};
+
+function getPresetMembers(preset, currentServer) {
+  if (typeof preset === "function") return preset();
+  if (Array.isArray(preset)) return preset;
+  if (typeof preset === "string")
+    return getPresetMembers(DYNAMIC_PARTY_PRESETS[preset], currentServer);
+
+  const value = preset[currentServer] ?? DYNAMIC_PARTY_PRESETS.default;
+  return typeof value === "function" ? value() : value;
+}
+
+function dynamicParty() {
+  const currentServer = `${server.region}${server.id}`;
+  const activeEvent =
+    Object.keys(DYNAMIC_PARTY_PRESETS).find((name) => parent.S[name]?.live) ??
+    "default";
+
+  if (!activeEvent) return;
+
+  const preset = DYNAMIC_PARTY_PRESETS[activeEvent];
+  const members = getPresetMembers(preset, currentServer);
+
+  if (members) partyMems = members;
 }
 dynamicParty();
 setInterval(dynamicParty, 3000);
@@ -1667,9 +1735,31 @@ function on_magiport(name) {
 }
 
 function attackErrorHandler(error) {
-  if (error.failed && error.response === "cooldown") {
-    reduce_cooldown("attack", -error.ms);
-  }
+  if (error.failed) {
+    if (error.response === "cooldown")
+      reduce_cooldown("attack", -error.ms + Math.min(...parent.pings) / 2);
+    else if (
+      error.reason === "too_far" &&
+      character.cc < 125 &&
+      !character.moving
+    ) {
+      const currentX = character.x;
+      const currentY = character.y;
+
+      const target = get_target();
+      const targetX = target.going_x ?? target.x;
+      const targetY = target.going_y ?? target.y;
+
+      const newX = currentX + 0.4 * (targetX - currentX);
+      const newY = currentY + 0.4 * (targetY - currentY);
+      console.log(
+        `Too far, ${Math.round(error.distance)} distance / ${
+          character.range + character.xrange
+        } range`,
+      );
+      move(newX, newY);
+    }
+  } else console.log("Error while attacking:", error);
 }
 
 setInterval(() => parent.socket.emit("send_updates", {}), 30000);

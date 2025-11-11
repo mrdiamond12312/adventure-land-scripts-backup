@@ -38,6 +38,8 @@ const bosses = {
 // Main fight function
 async function fight(target) {
   const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
+  const attackRange = character.range + character.xrange;
+  const inRange = (entity) => distance(entity, character) < attackRange;
 
   const haveIgnoreMobAroundTarget = (targetMob) => {
     return mobsListAroundTarget(targetMob, blastRadius).some((mob) =>
@@ -47,10 +49,6 @@ async function fight(target) {
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
   if (currentStrategy === usePullStrategies) {
-    const attackRange = character.range + character.xrange;
-    const maxPullDistance =
-      attackRange * 0.9 + extraDistanceWithinHitbox(character);
-
     const aggroedMobs = Object.values(parent.entities)
       .filter((entity) => {
         return (
@@ -58,8 +56,7 @@ async function fight(target) {
           !MELEE_IGNORE_LIST.includes(entity.mtype) &&
           entity.target &&
           !haveFormidableMonsterAroundTarget(entity) &&
-          distance(entity, character) <
-            maxPullDistance + extraDistanceWithinHitbox(entity) &&
+          inRange(entity) &&
           !haveIgnoreMobAroundTarget(entity)
         );
       })
@@ -107,14 +104,8 @@ async function fight(target) {
   // --- Attack & Warcry Logic ---
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-  const attackRange =
-    character.range +
-    character.xrange * 0.9 +
-    extraDistanceWithinHitbox(character) +
-    extraDistanceWithinHitbox(target);
-  const isTargetInAttackRange = distance(target, character) < attackRange;
 
-  if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
+  if (isAttackReady && inRange(target) && shouldAttack()) {
     set_message("Attacking");
 
     // Main attack execution
@@ -127,12 +118,13 @@ async function fight(target) {
 
     // Offhand swap logic: Use Candy Canes for farming
     const shouldUseCandyCanes =
+      character.ping < 1000 &&
+      !character.s.sugarrush &&
       !isEquipingItems &&
       (character.slots.offhand?.name === "fireblade" ||
         character.slots.mainhand?.name === "fireblade") &&
       character.slots.offhand?.name !== "mshield" &&
-      character.cc < 100 &&
-      !character.s.sugarrush;
+      character.cc < 100;
 
     if (shouldUseCandyCanes) {
       const candycane1 = findMaxLevelItem("candycanesword");
@@ -141,19 +133,26 @@ async function fight(target) {
       if (candycane1 !== -1 && candycane2 !== -1) {
         isEquipingItems = true;
         const equipPromise = Promise.all([
-          equip(candycane1, "mainhand"),
-          equip(candycane2, "offhand"),
-        ])
-          .then(() =>
-            Promise.all([
-              // Swap back to proc the previous weapon effect
-              equip(candycane1, "mainhand"),
-              equip(candycane2, "offhand"),
-            ]),
-          )
-          .finally(() => {
-            isEquipingItems = false;
-          });
+          // Immediate equip
+          Promise.all([
+            equip(candycane1, "mainhand"),
+            equip(candycane2, "offhand"),
+          ]),
+
+          // Delayed re-equip
+          new Promise((resolve) => {
+            setTimeout(() => {
+              resolve(
+                Promise.all([
+                  equip(candycane1, "mainhand"),
+                  equip(candycane2, "offhand"),
+                ]),
+              );
+            }, 150);
+          }),
+        ]).finally(() => {
+          isEquipingItems = false;
+        });
 
         promisesToAwait.push(equipPromise);
       }
@@ -202,7 +201,7 @@ async function fight(target) {
   const isTanker = isAssignedAsTanker();
   const canTaunt =
     isTanker && character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt");
-  const partyHealer = get_player(HEALER);
+  const partyHealer = get_player(HEALER) || get_player(RANGER);
   const isHealerAlive = partyHealer && !partyHealer.rip;
 
   if (canTaunt && isHealerAlive) {
@@ -265,7 +264,7 @@ async function fight(target) {
 
   // --- Await and Error Handling ---
   try {
-    await withTimeout(Promise.all(promisesToAwait), 1000);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
   } catch (e) {
     console.error("Error while attacking", e);
   }

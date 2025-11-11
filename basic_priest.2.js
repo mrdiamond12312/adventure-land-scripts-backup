@@ -43,7 +43,7 @@ async function fight(target) {
       : null;
 
   const targetToAttack =
-    character.slots.orb?.name === "test_orb"
+    character.slots.orb?.name === "test_orb" && !target.cooperative
       ? Object.values(parent.entities)
           .filter(
             (mob) =>
@@ -57,7 +57,7 @@ async function fight(target) {
                 : partyMems
               ).includes(mob.target),
           )
-          .sort((lhs, rhs) => lhs.attack - rhs.attack)
+          .sort((lhs, rhs) => rhs.attack - lhs.attack)
           .pop() ?? target
       : target;
   target = targetToTaunt ?? targetToAttack;

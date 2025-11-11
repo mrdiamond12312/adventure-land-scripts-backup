@@ -50,10 +50,12 @@ async function scareAwayMobs() {
     !is_on_cooldown("scare") &&
     character.mp > 100
   ) {
-    await equipBatch({
-      orb: "jacko",
-    });
-    await use_skill("scare");
+    return Promise.all([
+      equipBatch({
+        orb: "jacko",
+      }),
+      use_skill("scare"),
+    ]);
   }
 }
 

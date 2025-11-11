@@ -66,7 +66,9 @@ async function usePullStrategies(target) {
       }
 
       const formidableMonsterAppeared = mobsList.find(
-        (mob) => mob.attack * mob?.frequency > MAX_MOB_DPS,
+        (mob) =>
+          mob.attack * mob.frequency > MAX_MOB_DPS ||
+          MELEE_IGNORE_LIST.includes(mob.mtype),
       );
 
       const havePulledEnoughMobs =

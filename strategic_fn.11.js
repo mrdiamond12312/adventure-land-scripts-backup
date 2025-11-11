@@ -57,8 +57,18 @@ function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
 function shouldWearLuckGear() {
   return Object.values(parent.entities).some(
     (mob) =>
+      mob.type === "monster" &&
       (mob.target === character.name || mob.cooperative) &&
       mob.hp <= Math.min(mob.max_hp * 0.15, 300000),
+  );
+}
+
+function shouldWearExpGear() {
+  return Object.values(parent.entities).some(
+    (mob) =>
+      mob.type === "monster" &&
+      (parent.party_list.includes(mob.target) || mob.cooperative) &&
+      mob.hp <= Math.min(mob.max_hp * 0.1, 300000),
   );
 }
 
@@ -70,7 +80,8 @@ function calculateMageItems() {
     !get_targeted_monster()?.["1hp"] &&
     character.mp > G.skills["magiport"].mp + G.skills["blink"].mp;
 
-  const haveLowHpMobsNearby = shouldWearLuckGear();
+  const feelingLucky = shouldWearLuckGear();
+  const feelingWise = shouldWearExpGear();
 
   return {
     mainhand:
@@ -91,17 +102,19 @@ function calculateMageItems() {
           ? undefined
           : "wbook1"
         : "wbook1",
-    helmet: haveLowHpMobsNearby ? "eears" : "gphelmet",
+    helmet: feelingLucky ? "eears" : "gphelmet",
     chest: "epyjamas",
     pants: "starkillers",
     shoes: "wingedboots",
     gloves: "supermittens",
-    amulet: haveLowHpMobsNearby ? "spookyamulet" : "intamulet",
+    orb: feelingLucky ? "rabbitsfoot" : feelingWise ? "talkingskull" : "jacko",
+    amulet: feelingWise ? "spookyamulet" : "intamulet",
   };
 }
 
+const STUN_FOCUS_LIST = ["crabxx"];
 function calculateWarriorItems() {
-  const currentTarget = get_targeted_monster();
+  const currentTarget = get_target();
   const shouldUseBlaster =
     numberOfMonsterAroundTarget(currentTarget) >= 2 && !currentTarget["1hp"];
 
@@ -130,6 +143,8 @@ function calculateWarriorItems() {
     mainhand:
       currentStrategy === usePullStrategies && shouldUseBlaster
         ? "vhammer"
+        : currentTarget && STUN_FOCUS_LIST.includes(currentTarget.mtype)
+        ? "xmace"
         : "fireblade",
     offhand:
       (character.map === "crypt" &&
@@ -162,12 +177,107 @@ function calculateWarriorItems() {
   };
 }
 
+const RANGER_INV_ITEMS = {
+  poucher: "pouchbow",
+  fireBow: "firebow",
+  crossBow: "crossbow",
+};
 function calculateRangerItems(target) {
+  // Sanitize input
+  const targets = !target ? [] : Array.isArray(target) ? target : [target];
   const haveLowHpMobsNearby = shouldWearLuckGear();
+  const someTargetCooperative = targets.some((mob) => mob.cooperative);
+
+  // Start with current mainhand
+  let mainhand = character.slots.mainhand?.name;
+
+  const poucherAvailable = findMaxLevelItem(RANGER_INV_ITEMS.poucher) !== -1;
+
+  // --- Poucher priority for pull strategy ---
+  if (targets.length)
+    if (
+      (poucherAvailable || mainhand === RANGER_INV_ITEMS.poucher) &&
+      currentStrategy === usePullStrategies &&
+      targets.some(
+        (mob) =>
+          numberOfMonsterAroundTarget(
+            mob,
+            character.explosion / 3.6 ?? BLAST_RADIUS,
+          ) > 1,
+      )
+    ) {
+      mainhand = RANGER_INV_ITEMS.poucher;
+    }
+    // --- Cooperative ---
+    else if (
+      someTargetCooperative
+      // || targets.every((mob) => mob.target)
+    ) {
+      mainhand = RANGER_INV_ITEMS.fireBow;
+    }
+    // --- Calculate oneshot with crossbow ---
+    else {
+      const currentEquippedBowInfo = character.slots.mainhand
+        ? item_info(character.slots.mainhand)
+        : {
+            name: undefined,
+            attack: 0,
+            apiercing: 0,
+          };
+
+      const fireBowInfo =
+        currentEquippedBowInfo.name === RANGER_INV_ITEMS.fireBow
+          ? currentEquippedBowInfo
+          : item_info(
+              character.items[findMaxLevelItem(RANGER_INV_ITEMS.fireBow)],
+            );
+      const crossbowInfo =
+        currentEquippedBowInfo.name === RANGER_INV_ITEMS.crossBow
+          ? currentEquippedBowInfo
+          : item_info(
+              character.items[findMaxLevelItem(RANGER_INV_ITEMS.crossBow)],
+            );
+      if (crossbowInfo && fireBowInfo) {
+        // Effective attack with crossbow
+        const attackStatEquippingCrossbow =
+          character.attack +
+          (crossbowInfo.attack - currentEquippedBowInfo.attack);
+
+        // Effective AP for crossbow
+        let aPiercingAfterEquipingCrossbow = character.apiercing;
+        if (currentEquippedBowInfo.name !== crossbowInfo.name) {
+          aPiercingAfterEquipingCrossbow += 120;
+        }
+
+        // Calculate damage per target
+        const attackDealtByCrossbow = targets.map(
+          (mob) =>
+            dps_multiplier(mob.armor - aPiercingAfterEquipingCrossbow) *
+            attackStatEquippingCrossbow,
+        );
+
+        const shotMultiplier =
+          targets.length >= 4 ? 0.5 : targets.length >= 2 ? 0.7 : 1;
+
+        // Check if any target can be oneshot by crossbow
+        const oneshotableWithCrossbow = targets.some(
+          (mob, i) =>
+            mob.max_hp <= attackDealtByCrossbow[i] * 0.9 * shotMultiplier,
+        );
+
+        mainhand = oneshotableWithCrossbow
+          ? RANGER_INV_ITEMS.crossBow
+          : RANGER_INV_ITEMS.fireBow;
+      }
+      // --- Fallback if only one bow is available ---
+      else if (!crossbowInfo) mainhand = RANGER_INV_ITEMS.fireBow;
+      else if (!fireBowInfo) mainhand = RANGER_INV_ITEMS.crossBow;
+      else mainhand = "bow";
+    }
 
   return {
     helmet: "wcap",
-    mainhand: target && target.cooperative ? "firebow" : "crossbow",
+    mainhand,
     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
     amulet: haveLowHpMobsNearby ? "spookyamulet" : "dexamulet",
     shoes: haveLowHpMobsNearby ? "wshoes" : "wingedboots",
@@ -178,15 +288,16 @@ function calculateRangerItems(target) {
 function calculateCupidItems() {
   const haveLowHpMobsNearby = shouldWearLuckGear();
   return {
-    mainhand: get_targeted_monster()?.cooperative ? "firebow" : "merry",
+    mainhand,
     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
   };
 }
 
 function calculatePriestItems(target) {
-  const haveLowHpMobsNearby = shouldWearLuckGear();
   const currentTarget = get_targeted_monster();
   const isTanking = isAssignedAsTanker();
+  const feelingLucky = shouldWearLuckGear();
+  const feelingWise = shouldWearExpGear();
 
   return {
     mainhand:
@@ -204,7 +315,7 @@ function calculatePriestItems(target) {
         ? currentTarget && currentTarget.s["frozen"]
           ? "oozingterror"
           : "froststaff"
-        : haveLowHpMobsNearby
+        : feelingLucky
         ? "lmace"
         : currentTarget &&
           (currentTarget.cooperative ||
@@ -217,7 +328,7 @@ function calculatePriestItems(target) {
         ? "wbook1"
         : isTanking && character.s.burned
         ? "wbookhs"
-        : haveLowHpMobsNearby
+        : feelingLucky
         ? "mshield"
         : TANKER === character.name ||
           Object.values(parent.entities).some(
@@ -232,10 +343,12 @@ function calculatePriestItems(target) {
     orb:
       isTanking && character.s.burned
         ? "orba"
-        : haveLowHpMobsNearby
+        : feelingLucky
         ? "rabbitsfoot"
         : target?.type !== "monster"
         ? "jacko"
+        : feelingWise
+        ? "talkingskull"
         : "test_orb",
     gloves: "supermittens",
     amulet: isTanking ? "t2stramulet" : "intamulet",
@@ -620,7 +733,7 @@ async function warriorCleave(currentStrategy) {
   const mobsList = Object.values(parent.entities).filter(
     (mob) =>
       mob.type === "monster" &&
-      distance(mob, character) < G.skills["cleave"].range,
+      distance(mob, character) < G.skills["cleave"].range + character.xrange,
   );
 
   if (
@@ -629,7 +742,7 @@ async function warriorCleave(currentStrategy) {
     character.mp < G.skills["cleave"].mp + 280 ||
     is_on_cooldown("cleave") ||
     character.cc >= 100 ||
-    mobsList.some((mob) => mob.type === "porcupine") ||
+    mobsList.some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype)) ||
     mobsList.length === 0 ||
     isCleaving ||
     isEquipingItems
@@ -715,6 +828,7 @@ async function warriorCleave(currentStrategy) {
     !isEquipingItems
   ) {
     isEquipingItems = true;
+    isCleaving = true;
     const warriorItems = calculateWarriorItems();
     promises.push(
       // equipBatch({ mainhand: "bataxe" }),
@@ -732,7 +846,7 @@ async function warriorCleave(currentStrategy) {
     );
   }
 
-  return Promise.all(promises).finally(() => {
+  return Promise.allSettled(promises).finally(() => {
     isCleaving = false;
     isEquipingItems = false;
   });
@@ -755,6 +869,7 @@ async function warriorStomp() {
   isStomping = true;
   const promises = [];
 
+  const warriorItems = calculateWarriorItems();
   promises.push(
     equipBatch({ mainhand: "basher", offhand: undefined }, true),
     use_skill("stomp").then(async () => {
@@ -763,14 +878,14 @@ async function warriorStomp() {
     }),
   );
 
-  return Promise.all(promises).finally(() => {
+  return Promise.allSettled(promises).finally(() => {
     isStomping = false;
     isEquipingItems = false;
   });
 }
 
 function shouldAttack() {
-  const currentTarget = get_targeted_monster();
+  const currentTarget = get_target();
   const partyPriest = parent.party_list
     .map((id) => get_player(id))
     .filter((player) => player && player.ctype === "priest");

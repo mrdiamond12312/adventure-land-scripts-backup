@@ -69,8 +69,8 @@ async function useCryptStrategy(target) {
       ? get_nearest_monster({ type: "a2" }) ||
         get_targeted_monster() ||
         get_nearest_monster({ type: "vbat" })
-      : get_nearest_monster({ type: "a2" }) ||
-        get_target_of(get_entity(TANKER)) ||
+      : get_target_of(get_entity(TANKER)) ||
+        get_nearest_monster({ type: "a2" }) ||
         get_nearest_monster({ target: TANKER }) ||
         get_nearest_monster({ target: HEALER }) ||
         get_nearest_monster({ target: MAGE }) ||

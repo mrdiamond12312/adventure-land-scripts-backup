@@ -215,7 +215,7 @@ async function goFishing() {
     character.slots.mainhand?.name !== rodItemId &&
     locate_item(rodItemId) === -1
   )
-    moveHome();
+    return moveHome();
 
   if (
     character.real_x != fishingLocation.x &&
@@ -277,7 +277,7 @@ async function goMining() {
     character.slots.mainhand?.name !== pickaxeItemId &&
     locate_item(pickaxeItemId) === -1
   )
-    moveHome();
+    return moveHome();
 
   if (
     character.real_x != miningLocation.x &&
@@ -402,32 +402,35 @@ setInterval(async function () {
 
   await sortInv();
 
-  Promise.all([
-    compoundInv(),
-    upgradeInv(),
-    exchangeXyn(),
-    // holidayExchange(),
-    craft("xbox"),
-    craft("basketofeggs"),
-    craft("orba", 1, { map: "main", x: -152, y: -137 }),
-    craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
-    craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
-    craft("pouchbow", character.esize - 6, { map: "main", x: -2, y: 295 }),
-    // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
-    !isSortingInventory &&
-      Promise.all(
-        Array.from({ length: 42 }, (_, i) => i)
-          .filter((i) => {
-            if (!character.items[i]) return false;
-            return (
-              SALE_ABLE.includes(character.items[i].name) &&
-              !character.items[i].shiny &&
-              (character.items[i].level || 0) <= 2
-            );
-          })
-          .map(async (i) => sell(i, 1000)),
-      ),
-  ]);
+  await withTimeout(
+    Promise.allSettled([
+      compoundInv(),
+      upgradeInv(),
+      exchangeXyn(),
+      // holidayExchange(),
+      craft("xbox"),
+      craft("basketofeggs"),
+      craft("orba", 1, { map: "main", x: -152, y: -137 }),
+      craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
+      craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
+      craft("pouchbow", character.esize - 8, { map: "main", x: -2, y: 295 }),
+      // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
+      !isSortingInventory &&
+        Promise.all(
+          Array.from({ length: 42 }, (_, i) => i)
+            .filter((i) => {
+              if (!character.items[i]) return false;
+              return (
+                SALE_ABLE.includes(character.items[i].name) &&
+                !character.items[i].shiny &&
+                (character.items[i].level || 0) <= 2
+              );
+            })
+            .map(async (i) => sell(i, 1000)),
+        ),
+    ]),
+    300000,
+  );
 
   if (!is_on_cooldown("mining")) goMining();
   else if (!is_on_cooldown("fishing")) goFishing();
