@@ -1,17 +1,15 @@
 async function useNormalStrategy(target) {
-  const partyHealer = get_entity(HEALER);
-  const partyTanker = get_entity(TANKER);
-
+  const promises = [];
   switch (character.ctype) {
     case "mage":
       const suggestedMageItems = calculateMageItems(target);
 
       if (
         Object.keys(suggestedMageItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
         )
       ) {
-        await equipBatch(suggestedMageItems);
+        promises.push(equipBatch(suggestedMageItems));
       }
 
       if (
@@ -20,10 +18,10 @@ async function useNormalStrategy(target) {
         target.max_hp > 3000 &&
         Object.values(parent.entities).some(
           (entity) =>
-            entity.type === "monster" && entity.target === character.name
+            entity.type === "monster" && entity.target === character.name,
         )
       )
-        scareAwayMobs();
+        promises.push(scareAwayMobs());
 
       break;
 
@@ -32,36 +30,48 @@ async function useNormalStrategy(target) {
 
       if (
         Object.keys(suggestedWarriorItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot],
         )
       ) {
-        await equipBatch(suggestedWarriorItems);
+        promises.push(equipBatch(suggestedWarriorItems));
       }
       break;
 
     case "ranger":
-      const suggestedRangerItems = calculateRangerItems();
+      const suggestedRangerItems = calculateRangerItems(target);
 
       if (
         Object.keys(suggestedRangerItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
         )
       ) {
-        await equipBatch(suggestedRangerItems);
+        promises.push(equipBatch(suggestedRangerItems));
+      }
+      break;
+
+    case "rogue":
+      const suggestedRogueItems = calculateRogueItems(target);
+      if (
+        Object.keys(suggestedRogueItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedRogueItems[slot],
+        )
+      ) {
+        promises.push(equipBatch(suggestedRogueItems));
       }
       break;
 
     case "priest":
-      const suggestedPriestItems = calculatePriestItems();
+      const suggestedPriestItems = calculatePriestItems(target);
       if (
         Object.keys(suggestedPriestItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot]
+          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
         )
       ) {
-        await equipBatch(suggestedPriestItems);
+        promises.push(equipBatch(suggestedPriestItems));
       }
 
-      await scareAwayMobs();
+      if (!isAssignedAsTanker()) promises.push(scareAwayMobs());
       break;
   }
+  return Promise.all(promises);
 }

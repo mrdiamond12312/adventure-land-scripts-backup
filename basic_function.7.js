@@ -10,17 +10,54 @@ var attack_mode = true;
 var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
 // var partyMems = ["CowTheMooh", "MowTheCooh", "MoohThatCow"];
 
-var TANKER = "MooohMoooh";
-// var TANKER = "CowTheMooh";
-
 const MAGE = "MowTheCooh";
+const WARRIOR = "MooohMoooh";
+const ROGUE = "MooohSteak";
 var HEALER = "CowTheMooh";
-// const HEALER = "CupidCow";
-const RANGER = "MoohThatCow";
+var RANGER = "MoohThatCow";
+
+var TANKER =
+  partyMems.find((id) => [HEALER, WARRIOR].includes(id)) ?? partyMems[0];
+// var TANKER = "CowTheMooh";
 
 const MIDAS_CHARACTER = [MAGE];
 
 // var partyCodeSlot = [4, 15, 3, 5];
+const CODE_SLOTS = {
+  MoohThatCow: {
+    homeServer: "EUII",
+    script: 32,
+  },
+  CowTheMooh: {
+    homeServer: "ASIAI",
+    script: 2,
+  },
+  MooohMoooh: {
+    homeServer: "ASIAI",
+    script: 9,
+  },
+  MowTheCooh: {
+    homeServer: "ASIAI",
+    script: 4,
+  },
+  MerchantMooh: {
+    homeServer: "ASIAI",
+    script: 5,
+  },
+  MoohChan: {
+    homeServer: "USIII",
+    script: 5,
+  },
+  CupidCow: {
+    homeServer: "USII",
+    script: 32,
+  },
+  MooohSteak: {
+    homeServer: "USI",
+    script: 31,
+  },
+};
+
 var partyCodeSlot = [9, 2, 4, 5];
 // var caracALPartyCodeSlot = [
 //   "adventure-land-scripts-backup/basic_mage.4.js",
@@ -44,8 +81,8 @@ const movementHistory = [];
 var flipRotation = 1;
 var flipRotationCooldown = 0;
 var angle; // Your desired angle from the monster, in radians
-var flip_cooldown = 0;
-var stuck_threshold = 2;
+var flipCooldown = 0;
+var stuckThreshold = 2;
 var basicRangeRate = 0.5; // Is used to reset
 var rangeRate = basicRangeRate; // Variate range rate
 
@@ -79,9 +116,9 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = 0;
 // var mapY = -775;
 
-var map = "halloween";
-var mapX = -219;
-var mapY = 681;
+// var map = "halloween";
+// var mapX = -219;
+// var mapY = 681;
 
 // var map = "main";
 // var mapX = 676;
@@ -95,16 +132,18 @@ var mapY = 681;
 // var mapX = -1111;
 // var mapY = 132;
 
-// var map = "desertland";
-// var mapX = -800;
-// var mapY = -354;
+var map = "desertland";
+var mapX = -800;
+var mapY = -354;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 // var mobsToFarm = ["phoenix", "stompy", "wolf"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
-var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
+
+// var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
+
 // var mobsToFarm = ["phoenix", "croc", "armadillo"];
 // var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
 // var mobsToFarm = [
@@ -116,7 +155,7 @@ var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
 //   "turtle",
 //   "crabx",
 // ];
-// var mobsToFarm = ["plantoid"];
+var mobsToFarm = ["plantoid"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -124,7 +163,23 @@ var desiredElixir = "elixirluck";
 //// INVENTORY functions
 function item_info(item) {
   if (!item) return undefined;
-  return parent.G.items[item.name];
+
+  const baseInfo = parent.G.items[item.name];
+  if (!baseInfo) return undefined;
+
+  // Clone to avoid mutating global data
+  const itemInfo = JSON.parse(JSON.stringify(baseInfo));
+  const levelBonuses = itemInfo.upgrade ?? itemInfo.compound ?? undefined;
+
+  if (item.level && levelBonuses) {
+    for (const [key, value] of Object.entries(levelBonuses)) {
+      if (typeof value === "number") {
+        itemInfo[key] = (itemInfo[key] ?? 0) + value * item.level;
+      }
+    }
+  }
+
+  return itemInfo;
 }
 
 function isInvFull(slots = 1) {
@@ -242,12 +297,12 @@ var IGNORE = [
   "ornament",
   "mistletoe",
   "candy1",
+  "candypop",
   "candycane",
   "candy0",
   "stand0",
   "pickaxe",
   "rod",
-  "broom",
   "tracker",
   "sword",
   "throwingstars",
@@ -255,6 +310,13 @@ var IGNORE = [
   "orboffrost",
   "orbofplague",
   "orbofresolve",
+  "gphelmet",
+  // "bowofthedead",
+  // "daggerofthedead",
+  "maceofthedead",
+  "pmaceofthedead",
+  "staffofthedead",
+  "swordofthedead",
   ...BUYABLE,
 ];
 
@@ -308,6 +370,7 @@ const STORE_ABLE = [
   "feather0",
   "essenceofnature",
   "essenceoffrost",
+  "essenceoffire",
   "dexscroll",
   "cshell",
   "carrot",
@@ -320,13 +383,22 @@ const STORE_ABLE = [
   "cscale",
   "spiderkey",
   "svenom",
+  "vblood",
   "orboffire",
   "orboffrost",
   "orbofplague",
   "orbofresolve",
+  "orba",
+  "orbofstr",
+  "orbofdex",
+  "mysterybox",
+  "weaponbox",
+  "armorbox",
+  "fury",
 ];
 
 const SALE_ABLE = [
+  "smoke",
   "vgloves",
   "mcape",
   "wbook0",
@@ -339,6 +411,8 @@ const SALE_ABLE = [
   "carrotsword",
   // "wcap",
   // "wshoes",
+  "wgloves",
+  "wbreeches",
   "cclaw",
   "dagger",
   "rednose",
@@ -354,30 +428,39 @@ const SALE_ABLE = [
   "lantern",
   "hpbelt",
   "hpamulet",
-  "gphelmet",
   "phelmet",
+  "gphelmet",
   "maceofthedead",
   "pmaceofthedead",
-  "maceofthedead",
   "staffofthedead",
   "swordofthedead",
-  "throwingstars",
   "ringsj",
   "mshield",
   "hhelmet",
   "hgloves",
   "harmor",
   "hpants",
+  "glolipop",
+  "whiteegg",
   "hboots",
-  "smoke",
   "sword",
   "spear",
+  "throwingstars",
   // Easter's loots
   // "eears",
   // "eslippers",
   // Sell and replace by crypts's drops
   "intearring",
   "strearring",
+  "dexring",
+  "intring",
+  "dexamulet",
+  "stramulet",
+  "dexbelt",
+  "intbelt",
+  // Halloween temp for gold
+  // "bowofthedead",
+  // "daggerofthedead",
 ];
 var maxUpgrade = 7;
 var maxCompound = 3;
@@ -393,6 +476,7 @@ if (parent.caracAL) {
 }
 // Pre-set function
 var isSortingInventory = false;
+
 async function sortInv() {
   if (
     isSortingInventory ||
@@ -403,38 +487,52 @@ async function sortInv() {
     return;
 
   isSortingInventory = true;
-  var inv = character.items;
-  const invLength = inv.length;
+
+  // Snapshot items with their original slot
+  const inv = character.items.map((item, slot) => ({ item, slot }));
+
+  // Sorting name -> level -> slot order -> null
+  inv.sort((lhs, rhs) => {
+    const lhsItem = lhs.item;
+    const rhsItem = rhs.item;
+
+    if (!lhsItem && !rhsItem) return 0;
+    if (!lhsItem) return 1; // nulls last
+    if (!rhsItem) return -1;
+
+    const nameOrder = lhsItem.name.localeCompare(rhsItem.name);
+    if (nameOrder !== 0) return nameOrder;
+
+    const levelOrder = (lhsItem.level ?? 0) - (rhsItem.level ?? 0);
+    if (levelOrder !== 0) return levelOrder;
+
+    // same name + same level — preserve original slot order for stability
+    return lhs.slot - rhs.slot;
+  });
+
+  // Create a mapping from target slot → original slot
   const promises = [];
-  for (let i = 0; i < invLength; i++) {
-    for (let j = i; j < invLength; j++) {
-      const lhs = inv[i];
-      const rhs = inv[j];
-      if (rhs === null) continue;
-      if (lhs === null) {
-        const temp = inv[i];
-        inv[i] = inv[j];
-        inv[j] = temp;
-        promises.push(swap(i, j));
-        continue;
-      }
-      if (lhs.name.localeCompare(rhs.name) === -1) {
-        const temp = inv[i];
-        inv[i] = inv[j];
-        inv[j] = temp;
-        promises.push(swap(i, j));
-        continue;
-      }
-      if (lhs.name === rhs.name) {
-        if ((lhs?.level ?? 0) > (rhs?.level ?? 0)) {
-          const temp = inv[i];
-          inv[i] = inv[j];
-          inv[j] = temp;
-          promises.push(swap(i, j));
-        }
-      }
+  const usedSlots = new Set();
+
+  for (let index = 0; index < inv.length; index++) {
+    const desired = inv[index];
+    const targetItem = character.items[index];
+
+    // skip if already correct
+    if (desired.item === targetItem) continue;
+
+    // find the specific matching slot by identity
+    const fromSlot = character.items.findIndex(
+      (x, idx) => x === desired.item && !usedSlots.has(idx),
+    );
+
+    if (fromSlot !== -1 && fromSlot !== index) {
+      usedSlots.add(fromSlot);
+      usedSlots.add(index);
+      promises.push(swap(fromSlot, index));
     }
   }
+
   return Promise.all(promises).finally(() => {
     isSortingInventory = false;
   });
@@ -443,7 +541,7 @@ async function sortInv() {
 function calculateRangeRate() {
   switch (character.ctype) {
     case "priest":
-      return character.name === TANKER && currentStrategy === usePullStrategies
+      return isAssignedAsTanker() && currentStrategy === usePullStrategies
         ? 0.2
         : 0.5;
     default:
@@ -479,11 +577,6 @@ function getMonstersOnDeclares() {
       return get_nearest_monster({ min_xp, type: monster });
     }
   }
-  // return (
-  //   get_nearest_monster({ min_xp, max_att, type }) ??
-  //   get_nearest_monster({ min_xp, max_att, type: altType1 }) ??
-  //   get_nearest_monster({ min_xp, max_att, type: altType2 })
-  // );
 }
 
 async function withTimeout(
@@ -544,7 +637,7 @@ buff();
 
 function getTarget() {
   const leader = get_entity(partyMems[0]);
-  var target = get_targeted_monster();
+  let target = get_targeted_monster();
 
   if (target && !get_nearest_monster({ type: target.mtype }))
     target = undefined;
@@ -577,26 +670,40 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack"),
+          distance(mob, character) < character.range + character.xrange,
       );
-      if (leader)
+      if (leader) {
+        let tempTarget =
+          get_target_of(leader) ||
+          get_nearest_monster({ target: partyMems[0] });
+        const tempTargetIsPartyMember =
+          tempTarget &&
+          tempTarget.name &&
+          [...partyMems, ...parent.party_list].includes(tempTarget.name);
+
+        if (tempTarget && tempTargetIsPartyMember) {
+          tempTarget = undefined;
+        }
+
         target =
-          get_target_of(leader) ?? aggroedMobs.length > 0
+          tempTarget ?? aggroedMobs.length > 0
             ? aggroedMobs[0]
             : mob && mob.attack < 200
             ? mob
             : undefined;
-      else target = mob;
+      } else target = mob;
     }
 
     if (target) change_target(target);
     else {
       set_message("No Monsters");
       if (
+        !character.moving &&
         character.map !== "crypt" &&
         leader &&
         !smart.moving &&
         !isAdvanceSmartMoving &&
+        character.cc < 125 &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
             (character.y - leader.y) * (character.y - leader.y),
@@ -620,12 +727,16 @@ function getTarget() {
 const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
-    (breakpoint) => (1 / character.frequency / breakpoint) * 1000,
+    (breakpoint) =>
+      Math.max(
+        (1 / character.frequency) * 1000,
+        character.s.penalty_cd?.ms ?? 0,
+      ) / breakpoint,
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
-  return ms_to_next_skill("attack") <= 300
-    ? Math.max(ms_to_next_skill("attack"), 100)
+  return ms_to_next_skill("attack") <= dynamicInterval
+    ? Math.max(ms_to_next_skill("attack"), 25)
     : dynamicInterval ?? frequencyInterval;
 }
 
@@ -664,164 +775,220 @@ async function leaveJail() {
 
 function extraDistanceWithinHitbox(target) {
   if (!target) return 0;
-  return Math.min(get_height(target), get_width(target) / 2) / 2;
+  return Math.min(get_height(target) / 2, get_width(target) / 2) / 2;
 }
 
+var lastKitingTarget = undefined;
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
+  const loopInterval = Math.max(200, getLoopInterval());
+
+  // --- 1. Early exits and sanity checks ---
+  if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
   if (!target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
-    return setTimeout(hitAndRun, getLoopInterval());
+    return setTimeout(hitAndRun, loopInterval);
   }
 
+  if (
+    character.ctype === "warrior" &&
+    distance(character, target) > character.range * 0.5 &&
+    distance(character, target) < character.range * rangeRate + character.xrange
+  ) {
+    const allEntities = Object.values(parent.entities);
+    const noAggro = allEntities
+      .filter((entity) => entity.type === "monster")
+      .every((mob) => mob.target !== character.name);
+    const noNearbyPlayers = allEntities
+      .filter((entity) => entity.type === "character" && !entity.moving)
+      .every((char) => distance(character, char) >= 8);
+
+    if (noAggro && noNearbyPlayers) {
+      const dx = character.real_x - target.real_x;
+      const dy = character.real_y - target.real_y;
+      angle = Math.atan2(dy, dx);
+      return setTimeout(hitAndRun, loopInterval);
+    }
+  }
+
+  // Reset angle when switching or losing target
+  const targetChanged =
+    !lastKitingTarget || distance(lastKitingTarget, target) > 30;
+  if (targetChanged) angle = undefined;
+
+  // --- 2. Initialize angle if needed ---
   if (!angle) {
-    const diff_x = character.real_x - target.real_x;
-    const diff_y = character.real_y - target.real_y;
-    angle = Math.atan2(diff_y, diff_x);
+    const dx = character.real_x - target.real_x;
+    const dy = character.real_y - target.real_y;
+    angle = Math.atan2(dy, dx);
   }
 
-  let cosA = Math.cos(angle);
-  let sinA = Math.sin(angle);
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
 
+  // --- 3. Track recent movement to detect being stuck ---
   movementHistory.push({ x: character.real_x, y: character.real_y });
   if (movementHistory.length > 5) movementHistory.shift();
 
   let totalMovement = 0;
   for (let i = 1; i < movementHistory.length; i++) {
-    let dx = movementHistory[i].x - movementHistory[i - 1].x;
-    let dy = movementHistory[i].y - movementHistory[i - 1].y;
-    totalMovement += Math.sqrt(dx * dx + dy * dy);
+    const dx = movementHistory[i].x - movementHistory[i - 1].x;
+    const dy = movementHistory[i].y - movementHistory[i - 1].y;
+    totalMovement += Math.hypot(dx, dy);
   }
 
-  if (totalMovement < stuck_threshold * movementHistory.length) {
+  const averageMovement = totalMovement / movementHistory.length;
+  if (averageMovement < stuckThreshold) {
     if (flipRotationCooldown <= 0) {
       flipRotation *= -1;
       flipRotationCooldown = 4;
-      angle += (flipRotation * Math.PI) / 2;
+      angle += (flipRotation * Math.PI) / 2; // turn 90°
     }
   }
 
-  // const extraRangeByMobHitbox = extraDistanceWithinHitbox(
-  //   angle,
-  //   target ? get_width(target) ?? 0 : 0,
-  //   target ? get_height(target) ?? 0 : 0
-  // );
+  // --- 4. Calculate range offsets ---
+  const extraRangeTarget = extraDistanceWithinHitbox(target);
+  const extraRangeSelf = extraDistanceWithinHitbox(character);
+  // const totalExtraRange = extraRangeTarget + extraRangeSelf;
+  const rangeRadius = character.range * rangeRateFn;
+  const extendedRadius = character.xrange;
+  // + totalExtraRange;
 
-  const extraRangeByMobHitbox = extraDistanceWithinHitbox(target);
-  const extraRangeBySelfHitbox = extraDistanceWithinHitbox(character);
+  // --- 5. Desired destination based on current orbit angle ---
+  let new_x = target.x + (rangeRadius + extendedRadius) * cosA;
+  let new_y = target.y + (rangeRadius + extendedRadius) * sinA;
 
-  let new_x =
-    target.x +
-    character.range * rangeRateFn * cosA +
-    (character.xrange * 0.9 + extraRangeByMobHitbox + extraRangeBySelfHitbox) *
-      cosA;
-
-  let new_y =
-    target.y +
-    character.range * rangeRateFn * sinA +
-    (character.xrange * 0.9 + extraRangeByMobHitbox + extraRangeBySelfHitbox) *
-      sinA;
-
-  if (flip_cooldown > 9) {
-    if (
+  // --- 6. Smooth micro-rotation when close to target ---
+  if (flipCooldown > 9) {
+    const closeToTarget =
       distance(character, target) <=
-      (character.range + character.xrange) * 0.1 * rangeRateFn
-    ) {
-      angle += (flipRotation * Math.PI) / 16;
+      (character.range + character.xrange) * 0.1 * rangeRateFn;
+
+    if (closeToTarget) {
+      angle += (flipRotation * Math.PI) / 16; // subtle orbit shift
     }
-    flip_cooldown = 0;
+
+    flipCooldown = 0;
   }
-  flip_cooldown--;
+
+  flipCooldown++;
   flipRotationCooldown--;
 
+  // --- 7. Collision handling and alternative movement path ---
+  let destinationX, destinationY;
+
   if (!can_move_to(new_x, new_y)) {
-    for (let i = 1; i <= 8; i++) {
-      let adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
-      let alt_x =
-        target.x +
-        (character.range * rangeRateFn + character.xrange) *
-          Math.cos(adjustedAngle);
-      let alt_y =
-        target.y +
-        (character.range * rangeRateFn + character.xrange) *
-          Math.sin(adjustedAngle);
+    // Try small angular adjustments in the current flip direction
+    if (flipRotationCooldown < 0) {
+      flipRotation *= -1;
+      flipRotationCooldown = 6;
+    }
+    for (let i = 1; i <= 16; i++) {
+      const adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
+      const alt_x =
+        target.x + (rangeRadius + character.xrange) * Math.cos(adjustedAngle);
+      const alt_y =
+        target.y + (rangeRadius + character.xrange) * Math.sin(adjustedAngle);
 
       if (can_move_to(alt_x, alt_y)) {
         angle = adjustedAngle;
-        move(alt_x, alt_y);
+        destinationX = alt_x;
+        destinationY = alt_y;
+        break;
       }
     }
-    flipRotation *= -1;
   } else {
-    move(new_x, new_y);
+    destinationX = new_x;
+    destinationY = new_y;
   }
 
-  angle +=
+  // --- 8. Execute movement or retry later ---
+  if (destinationX && destinationY) {
+    move(destinationX, destinationY);
+    lastKitingTarget = target;
+  } else {
+    return setTimeout(hitAndRun, loopInterval);
+  }
+
+  // --- 9. Advance orbit angle for next iteration ---
+  const radiusTotal = rangeRadius + extendedRadius;
+  const rotationStep =
     flipRotation *
-    Math.asin(
-      (character.speed * getLoopInterval()) /
-        1000 /
-        2 /
-        (character.range * rangeRateFn +
-          character.xrange * 0.9 +
-          // extraDistanceWithinHitbox(
-          //   angle,
-          //   target ? get_width(target) ?? 0 : 0,
-          //   target ? get_height(target) ?? 0 : 0
-          // ))
-          extraRangeByMobHitbox +
-          extraRangeBySelfHitbox),
-    ) *
+    Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
     2;
-  return setTimeout(hitAndRun, getLoopInterval());
+
+  angle += rotationStep;
+
+  const moveTime =
+    (distance(character, { x: destinationX, y: destinationY }) /
+      character.speed) *
+    1000;
+
+  setTimeout(hitAndRun, Math.max(moveTime, 200));
 }
 hitAndRun();
 
-function getLowestHealth() {
-  const allies = parent.party_list.map((name) => get_entity(name));
-  allies.filter((entity) => entity);
-  allies.sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
-  return allies[0] || character;
-}
-function healingPrioritizedNames() {
+const HEAL_IGNORE = ["Geoffriel", "CrownPriest"];
+
+function prioritizedNames() {
   return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
 }
 
 function getPlayersToHeal() {
-  const minimumHealingModifier = 0.9;
-  const prioritizedName = healingPrioritizedNames();
+  const minHealMod = 0.9;
+  const healThreshold = character.ctype === "priest" ? 0.8 : 0.65;
+  const healPower = character.heal || character.attack * 2.5;
+  const prioritizedNamesList = prioritizedNames();
 
-  const prioritizedTarget = prioritizedName
-    .map((id) => get_player(id))
-    .filter(
-      (player) =>
-        player &&
-        (player.max_hp >
-          minimumHealingModifier * (character.heal ?? character.attack) +
-            player.hp ||
-          player.hp < player.max_hp * 0.8),
-    )
-    .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
+  const shouldHeal = (entity) => {
+    const missing = entity.max_hp - entity.hp;
+    return (
+      missing > minHealMod * healPower ||
+      entity.hp < healThreshold * entity.max_hp
+    );
+  };
 
-  const otherEntities = Object.values(parent.entities)
-    .filter(
-      (entity) =>
-        entity &&
-        (entity.type === "character" || entity.mtype === "ghost") &&
-        (entity.mtype !== "ghost"
-          ? !prioritizedName.includes(entity.name) &&
-            (entity.max_hp >
-              minimumHealingModifier * (character.heal ?? character.attack) +
-                entity.hp ||
-              entity.hp < 0.8 * entity.max_hp)
-          : !entity.s.healed && entity.hp < 7000),
-    )
+  // Prioritized characters
+  // const prioritized = prioritizedNamesList
+  //   .map((name) => get_entity(name))
+  //   .filter(
+  //     (player) => player && !player.dead && !player.rip && shouldHeal(player),
+  //   )
+  //   .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
+
+  // Other healable entities
+  const potentialHealees = [
+    ...Object.values(parent.entities),
+    ...(character.ctype === "priest" ? [character] : []),
+  ]
+    .filter((entity) => {
+      if (!entity) return false;
+      if (entity.dead || entity.rip) return false;
+
+      if (character.ctype === "priest" && entity.mtype === "ghost") {
+        return !entity.s.healed && entity.hp < 7000;
+      }
+
+      if (entity.type === "monster" || entity.citizen) return false;
+      if (HEAL_IGNORE.includes(entity.name)) return false;
+
+      return shouldHeal(entity);
+    })
     .sort((lhs, rhs) => {
-      if (lhs.mtype === "ghost" && rhs.mtype !== "ghost") return 9999;
-      if (rhs.mtype === "ghost" && lhs.mtype !== "ghost") return -9999;
+      // Ghosts first if both exist
+
+      const isLhsPrioritized = prioritizedNamesList.includes(lhs.name);
+      const isRhsPrioritized = prioritizedNamesList.includes(rhs.name);
+
+      if (isLhsPrioritized !== isRhsPrioritized)
+        return isLhsPrioritized ? -1 : 1;
+
+      const ghostLhs = lhs.mtype === "ghost";
+      const ghostRhs = rhs.mtype === "ghost";
+      if (ghostLhs !== ghostRhs) return ghostLhs ? -1 : 1;
       return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
     });
 
-  return [...prioritizedTarget, ...otherEntities];
+  return potentialHealees;
 }
 
 function getLowestMana() {
@@ -955,7 +1122,9 @@ function suicide() {
   if (
     !character.rip &&
     character.hp < Math.max(0.15 * character.max_hp, 2000) &&
-    (avgDmgTaken(character) > character.hp || character.ping > 600)
+    (avgDmgTaken(character) > character.hp ||
+      character.ping > 600 ||
+      character.s.burned)
   ) {
     parent.socket.emit("harakiri");
     game_log("Harakiri");
@@ -972,98 +1141,6 @@ setInterval(() => {
     midasLooting();
   }
 }, 100);
-
-async function cupidHeal() {
-  if (
-    (locate_item("cupid") === -1 &&
-      character.slots.mainhand?.name !== "cupid") ||
-    ms_to_next_skill("attack") > 0
-  )
-    return;
-
-  const lowHealthPlayers = Object.values(parent.entities)
-    .filter(
-      (entity) =>
-        entity &&
-        entity.player &&
-        is_in_range(entity, "attack") &&
-        entity.hp < entity.max_hp * 0.8 &&
-        entity.hp <
-          entity.max_hp -
-            character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
-    )
-    .sort((lhs, rhs) => {
-      if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
-      if ([...partyMems, partyMerchant].includes(rhs.name)) return 1;
-
-      return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
-    });
-
-  const promises = [];
-
-  if (lowHealthPlayers.length > 0) {
-    promises.push(
-      equipBatch({
-        mainhand: "cupid",
-      }),
-    );
-
-    await Promise.all(promises);
-
-    if (
-      character.level >= G.skills["5shot"].level &&
-      lowHealthPlayers.length >= 4 &&
-      character.mp > 400 &&
-      !character.fear &&
-      ms_to_next_skill("attack") === 0
-    ) {
-      set_message("5shot Cupid");
-      log(
-        `Healing ${lowHealthPlayers
-          .slice(0, 5)
-          .map((player) => player.name)
-          .join(", ")}`,
-      );
-      use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
-      );
-      reduce_cooldown("attack", -(1 / character.frequency) * 1000);
-    } else if (
-      character.level >= G.skills["3shot"].level &&
-      lowHealthPlayers.length >= 2 &&
-      character.mp > 300 &&
-      !character.fear &&
-      ms_to_next_skill("attack") === 0
-    ) {
-      set_message("3shot Cupid");
-      log(
-        `Healing ${lowHealthPlayers
-          .slice(0, 3)
-          .map((player) => player.name)
-          .join(", ")}`,
-      );
-      use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
-      );
-      reduce_cooldown("attack", -(1 / character.frequency) * 1000);
-    } else if (
-      ms_to_next_skill("attack") === 0 &&
-      distance(lowHealthPlayers[0], character) <
-        character.range +
-          character.xrange +
-          extraDistanceWithinHitbox(lowHealthPlayers[0]) +
-          extraDistanceWithinHitbox(character)
-    ) {
-      set_message("Single Cupid");
-      log(`Healing ${lowHealthPlayers[0].name}`);
-      attack(lowHealthPlayers[0]).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
-      );
-      reduce_cooldown("attack", -(1 / character.frequency) * 1000);
-    }
-  }
-}
 
 //// Interval threads
 // Code Messaging
@@ -1087,7 +1164,7 @@ setInterval(async function () {
     currentTarget &&
     distance(currentTarget, character) >
       character.range +
-        character.xrange +
+        character.xrange * 0.9 +
         extraDistanceWithinHitbox(currentTarget) +
         extraDistanceWithinHitbox(character) &&
     !smart.moving &&
@@ -1095,16 +1172,17 @@ setInterval(async function () {
   ) {
     smartmoveDebug = true;
     log("Debug being stuck while kiting");
-    await advanceSmartMove({
-      map: character.map,
-      x: currentTarget.x,
-      y: currentTarget.y,
-    });
+    if (can_move_to(currentTarget.x, currentTarget.y))
+      await move(currentTarget.x, currentTarget.y);
+    else
+      await advanceSmartMove({
+        map: character.map,
+        x: currentTarget.x,
+        y: currentTarget.y,
+      });
 
     smartmoveDebug = false;
   }
-
-  // Re-equip
 
   const obj = {
     map: character.map,
@@ -1122,7 +1200,7 @@ setInterval(async function () {
     send_cm(partyMerchant, { msg: "buff_mluck", ...obj });
   }
 
-  // Send gold to merchant if he's nearby
+  // Send things to merchant if he's nearby
   if (get_entity(partyMerchant)) {
     send_gold(partyMerchant, character.gold - 1000000);
     await Promise.all(
@@ -1153,7 +1231,7 @@ setInterval(async function () {
   }
 
   // Inventory check and potions
-  if (isInvFull(10)) {
+  if (isInvFull(6)) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
   } else if (
@@ -1185,44 +1263,76 @@ setInterval(async function () {
   }
 }, 10000);
 
+/**
+ * Get all character in the server
+ * @author earthiverse
+ * @returns list of character in server
+ */
+async function getServerPlayers() {
+  const playersData = new Promise((resolve, reject) => {
+    const dataCheck = (data) => {
+      resolve(data);
+    };
+
+    setTimeout(() => {
+      parent.socket.off("players", dataCheck);
+      reject(`getServerPlayers timeout (2500ms)`);
+    }, 2500);
+    parent.socket.once("players", dataCheck);
+  });
+  parent.socket.emit("players");
+  return playersData;
+}
+
 // Party Setups
 setInterval(async function () {
   //// Deploy characters which arent active
   const loadedCharacters = get_active_characters();
+  const serverCharacters = await getServerPlayers();
   const allCharacters = [...partyMems, partyMerchant];
 
   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
-    for (const [index, id] of allCharacters.entries()) {
-      if (
-        parent.caracAL &&
-        !parent.caracAL.siblings.find((sibling) => sibling === id)
-      ) {
-        parent.caracAL.deploy(id, null, caracALPartyCodeSlot[index]);
-      }
-    }
+    if (character.ctype === "merchant" && parent.caracAL.siblings.length)
+      parent.caracAL.siblings
+        .filter((id) => id !== character.name && !partyMems.includes(id))
+        .forEach((id) => parent.caracAL.shutdown(id));
+
+    allCharacters
+      .filter((id) => parent.caracAL && !parent.caracAL.siblings.includes(id))
+      .forEach((id) => {
+        parent.caracAL.deploy(id, null, caracALconfig.characters[id].script);
+      });
   } else if (
     !character.controller &&
     allCharacters.filter((characterId) => characterId !== character.name)
       .length !== loadedCharacters.length
   ) {
-    for (const [index, id] of allCharacters.entries()) {
-      if (!loadedCharacters[id]) {
-        start_character(id, partyCodeSlot[index]);
-      }
-    }
-    // allCharacters.forEach((characterId, index) => {
-    //   if (!loadedCharacters[characterId]) {
-    //     start_character(characterId, partyCodeSlot[index]);
-    //   }
-    // });
+    allCharacters
+      .filter((id) => !loadedCharacters[id])
+      .forEach((id) => start_character(id, CODE_SLOTS[id].script));
+  }
+  const partyWhitelistRegex = [/^earth/];
+  const whitelistPartyMembers = serverCharacters.filter(
+    (char) =>
+      !partyMems.includes(char.name) &&
+      partyWhitelistRegex.some((regex) => regex.test(char.party)),
+  );
+  const hasWhitelistedMember = parent.party_list.some((member) =>
+    whitelistPartyMembers.some((whitelisted) => whitelisted.name === member),
+  );
+
+  if (
+    !isMerchant() &&
+    whitelistPartyMembers.length &&
+    whitelistPartyMembers.length <= 6 &&
+    (!parent.party_list.length || !hasWhitelistedMember)
+  ) {
+    send_party_request(whitelistPartyMembers[0].name);
   }
 
-  // if (!parent.party_list.length || !parent.party_list.includes("earthPri"))
-  //   send_party_request("earthPri");
-
-  if (partyMems.length !== parent.party_list.length) {
+  if (partyMems.some((id) => !parent.party_list.includes(id))) {
     if (character.name === partyMems[0]) {
-      partyMems.map((member) => {
+      partyMems.forEach((member) => {
         send_party_invite(member);
       });
     }
@@ -1237,15 +1347,71 @@ function on_party_invite(name) {
   if (name === partyMems[0]) accept_party_invite(name);
 }
 
+const DYNAMIC_PARTY_PRESETS = {
+  snowman: [WARRIOR, RANGER, MAGE],
+  mrgreen: {
+    USI: [WARRIOR, HEALER, ROGUE],
+    EUII: () => {
+      RANGER = "MoohThatCow";
+      return [WARRIOR, RANGER, MAGE];
+    },
+    USII: () => {
+      RANGER = "CupidCow";
+      return [WARRIOR, RANGER, MAGE];
+    },
+    default: [WARRIOR, HEALER, MAGE],
+  },
+  mrpumpkin: "mrgreen", // share config
+  franky: () => {
+    const isAggroed = !!parent.S.franky?.target;
+    return [WARRIOR, HEALER, isAggroed ? ROGUE : MAGE];
+  },
+
+  crabxx: () => {
+    const isAggroed = !!parent.S.crabxx?.target;
+    return [
+      WARRIOR,
+      isAggroed ? RANGER : HEALER,
+      isAggroed ? "CupidCow" : MAGE,
+    ];
+  },
+  default: [WARRIOR, HEALER, MAGE],
+};
+
+function getPresetMembers(preset, currentServer) {
+  if (typeof preset === "function") return preset();
+  if (Array.isArray(preset)) return preset;
+  if (typeof preset === "string")
+    return getPresetMembers(DYNAMIC_PARTY_PRESETS[preset], currentServer);
+
+  const value = preset[currentServer] ?? DYNAMIC_PARTY_PRESETS.default;
+  return typeof value === "function" ? value() : value;
+}
+
+function dynamicParty() {
+  const currentServer = `${server.region}${server.id}`;
+  const activeEvent =
+    Object.keys(DYNAMIC_PARTY_PRESETS).find((name) => parent.S[name]?.live) ??
+    "default";
+
+  if (!activeEvent) return;
+
+  const preset = DYNAMIC_PARTY_PRESETS[activeEvent];
+  const members = getPresetMembers(preset, currentServer);
+
+  if (members) partyMems = members;
+}
+dynamicParty();
+setInterval(dynamicParty, 3000);
+
 //// Daily Events
 // var pinkGooVisitedBoundary = [];
 async function changeToDailyEventTargets() {
   let target = getTarget();
-  const isFightingBoss = boss.includes(getTarget()?.mtype);
+  rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
 
   if (
     (parent.S.goobrawl || get_nearest_monster({ type: "bgoo" })) &&
-    !isFightingBoss &&
     !character.s["hopsickness"]
   ) {
     changeToPullStrategies();
@@ -1266,10 +1432,11 @@ async function changeToDailyEventTargets() {
       change_target(rgooInstance || bgooInstance);
       return rgooInstance || bgooInstance;
     }
+    return target || rgooInstance || bgooInstance;
   }
 
-  if (parent.S.dragold?.live && !isFightingBoss) {
-    changeToNormalStrategies();
+  if (parent.S.dragold?.live) {
+    changeToPullStrategies();
 
     const dragoldInstance = get_nearest_monster({ type: "dragold" });
     if (!dragoldInstance) advanceSmartMove(parent.S.dragold);
@@ -1280,7 +1447,7 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.pinkgoo?.live && !isFightingBoss) {
+  if (parent.S.pinkgoo?.live) {
     changeToNormalStrategies();
     let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
     if (!pinkgooInstance) {
@@ -1296,7 +1463,7 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.snowman?.live && !isFightingBoss) {
+  if (parent.S.snowman?.live) {
     changeToNormalStrategies();
 
     const snowmanInstance = get_nearest_monster({ type: "snowman" });
@@ -1312,10 +1479,59 @@ async function changeToDailyEventTargets() {
     }
   }
 
+  const activeBosses = [];
+
+  if (
+    parent.S.mrpumpkin &&
+    parent.S.mrpumpkin.live &&
+    parent.S.mrpumpkin.target
+  ) {
+    activeBosses.push({
+      ...parent.S.mrpumpkin,
+      type: "mrpumpkin",
+      strategy: changeToPullStrategies,
+    });
+  }
+
+  if (parent.S.mrgreen?.live && parent.S.mrgreen.target) {
+    activeBosses.push({
+      ...parent.S.mrgreen,
+      type: "mrgreen",
+      strategy: changeToPullStrategies,
+    });
+  }
+
+  if (parent.S.icegolem?.live) {
+    activeBosses.push({
+      ...parent.S.icegolem,
+      type: "icegolem",
+      strategy: changeToNormalStrategies,
+    });
+  }
+
+  if (activeBosses.length) {
+    const bossToFight = activeBosses
+      .sort(
+        (lhs, rhs) =>
+          lhs.hp / parent.G.monsters[lhs.type].hp -
+          rhs.hp / parent.G.monsters[rhs.type].hp,
+      )
+      .shift();
+
+    if (bossToFight) {
+      const bossInstance = get_nearest_monster({ type: bossToFight.type });
+      bossToFight.strategy();
+      if (!bossInstance) advanceSmartMove(bossToFight);
+      else {
+        change_target(bossInstance);
+        return bossInstance;
+      }
+    }
+  }
+
   if (
     parent.S.crabxx?.live &&
     parent.S.crabxx.hp < parent.S.crabxx.max_hp &&
-    !isFightingBoss &&
     parent.S.crabxx?.target &&
     !partyMems.includes(parent.S.crabxx.target)
   ) {
@@ -1405,25 +1621,10 @@ async function changeToDailyEventTargets() {
     return targetCrab;
   }
 
-  if (parent.S.icegolem?.live && !isFightingBoss) {
-    changeToNormalStrategies();
-    const iceGolemInstance = get_nearest_monster({ type: "icegolem" });
-    if (!iceGolemInstance) {
-      await advanceSmartMove({ map: "winterland", x: 792, y: 416 });
-    }
-    change_target(get_nearest_monster({ type: "icegolem" }));
-    return get_nearest_monster({ type: "icegolem" });
-  } else if (get_nearest_monster({ type: "icegolem" })) {
-    changeToNormalStrategies();
-    change_target(target);
-    return get_nearest_monster({ type: "icegolem" });
-  }
-
   if (
     parent.S.franky?.live &&
     parent.S.franky?.target &&
-    parent.S.franky?.hp < 0.97 * parent.S.franky?.max_hp &&
-    !isFightingBoss
+    parent.S.franky?.hp < 0.97 * parent.S.franky?.max_hp
   ) {
     changeToNormalStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
@@ -1492,7 +1693,7 @@ async function changeToDailyEventTargets() {
     return pvpTarget.entity;
   }
 
-  if (parent.S.wabbit?.live && !isFightingBoss) {
+  if (parent.S.wabbit?.live) {
     changeToNormalStrategies();
     if (character.range < 100) rangeRate = 0.1;
     else rangeRate = 0.4;
@@ -1510,16 +1711,20 @@ async function changeToDailyEventTargets() {
     }
   }
 
+  const partyHealer = get_entity(HEALER);
+  const partyTanker = get_entity(TANKER);
+
   if (
-    get_entity(HEALER) &&
-    !get_entity(HEALER).rip &&
+    partyTanker &&
+    partyTanker.hp > partyTanker.max_hp * 0.35 &&
+    partyHealer &&
+    !partyHealer.rip &&
     character.ping < 600 &&
     (get_targeted_monster()?.level < 5 || get_targeted_monster()?.attack < 500)
   )
     changeToPullStrategies();
   else changeToNormalStrategies();
 
-  rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
   return target;
 }
 
@@ -1528,3 +1733,33 @@ function on_magiport(name) {
     accept_magiport(name);
   }
 }
+
+function attackErrorHandler(error) {
+  if (error.failed) {
+    if (error.response === "cooldown")
+      reduce_cooldown("attack", -error.ms + Math.min(...parent.pings) / 2);
+    else if (
+      error.reason === "too_far" &&
+      character.cc < 125 &&
+      !character.moving
+    ) {
+      const currentX = character.x;
+      const currentY = character.y;
+
+      const target = get_target();
+      const targetX = target.going_x ?? target.x;
+      const targetY = target.going_y ?? target.y;
+
+      const newX = currentX + 0.4 * (targetX - currentX);
+      const newY = currentY + 0.4 * (targetY - currentY);
+      console.log(
+        `Too far, ${Math.round(error.distance)} distance / ${
+          character.range + character.xrange
+        } range`,
+      );
+      move(newX, newY);
+    }
+  } else console.log("Error while attacking:", error);
+}
+
+setInterval(() => parent.socket.emit("send_updates", {}), 30000);

@@ -75,16 +75,16 @@ async function fight(target) {
 
     const potentialTargets = Object.values(parent.entities)
       .filter(
-        (mobs) =>
-          is_in_range(mobs, "attack") &&
+        (entity) =>
+          is_in_range(entity, "attack") &&
           // distance(mobs, character) < character.range + character.xrange &&
-          mobs.type === "monster" &&
-          !mobs.s?.fullguardx &&
-          (mobs.attack * (mobs.frequency > 1 ? mobs.frequency : 1) < 500 ||
-            (mobs.cooperative &&
-              mobs.target &&
-              (!partyMems.includes(mobs.target) || mobs["1hp"])) ||
-            mobs.target),
+          entity.type === "monster" && entity.hp && !entity.rip &&
+          !entity.s?.fullguardx &&
+          (entity.attack * (entity.frequency > 1 ? entity.frequency : 1) < 500 ||
+            (entity.cooperative &&
+              entity.target &&
+              (!partyMems.includes(entity.target) || entity["1hp"])) ||
+            entity.target),
       )
       .sort((lhs, rhs) => {
         if (lhs.cooperative || lhs.target) return -1;

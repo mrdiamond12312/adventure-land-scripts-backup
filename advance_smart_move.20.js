@@ -50,10 +50,12 @@ async function scareAwayMobs() {
     !is_on_cooldown("scare") &&
     character.mp > 100
   ) {
-    await equipBatch({
-      orb: "jacko",
-    });
-    await use_skill("scare");
+    return Promise.all([
+      equipBatch({
+        orb: "jacko",
+      }),
+      use_skill("scare"),
+    ]);
   }
 }
 
@@ -104,6 +106,7 @@ function resetSmartMove() {
 async function advanceSmartMove(props) {
   if (
     !smart.moving &&
+    !character.c &&
     !isAdvanceSmartMoving &&
     ["mage", "merchant"].includes(character.ctype) &&
     character.slots.mainhand?.name !== "broom"
