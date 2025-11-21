@@ -224,6 +224,9 @@ async function advanceSmartMove(props) {
         !get_entity(MAGE) &&
         character.map !== "bank"
       ) {
+        if (character.ctype === "rogue" && character.s.invis) {
+          stop("invis");
+        }
         send_cm(MAGE, "magiport");
         await smart_move(props);
         log("Whoosh!");

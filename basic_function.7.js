@@ -13,8 +13,10 @@ var partyMems = ["MooohMoooh", "CowTheMooh", "MowTheCooh"];
 const MAGE = "MowTheCooh";
 const WARRIOR = "MooohMoooh";
 const ROGUE = "MooohSteak";
+const RANGER1 = "MoohThatCow";
+const RANGER2 = "CupidCow";
 var HEALER = "CowTheMooh";
-var RANGER = "MoohThatCow";
+var RANGER = RANGER1;
 
 var TANKER =
   partyMems.find((id) => [HEALER, WARRIOR].includes(id)) ?? partyMems[0];
@@ -398,7 +400,7 @@ const STORE_ABLE = [
 ];
 
 const SALE_ABLE = [
-  "smoke",
+  // "smoke",
   "vgloves",
   "mcape",
   "wbook0",
@@ -1049,7 +1051,8 @@ const LOOTING_LIMIT = 10;
 var isLooting = false;
 async function midasLooting(forced = false) {
   const chests = Object.values(parent.chests);
-  if ((isLooting && !forced) || !chests.length) return;
+  if ((isLooting && !forced) || !chests.length || character.s.penalty_cd)
+    return;
 
   const promises = [];
   const partyMidasUsers = Object.keys(parent.party)
@@ -1330,6 +1333,8 @@ setInterval(async function () {
     send_party_request(whitelistPartyMembers[0].name);
   }
 
+  if (character.ping > 5000) disconnect();
+
   if (partyMems.some((id) => !parent.party_list.includes(id))) {
     if (character.name === partyMems[0]) {
       partyMems.forEach((member) => {
@@ -1348,16 +1353,19 @@ function on_party_invite(name) {
 }
 
 const DYNAMIC_PARTY_PRESETS = {
-  snowman: [WARRIOR, RANGER, MAGE],
+  snowman: () => {
+    RANGER = RANGER2;
+    return [WARRIOR, RANGER2, MAGE];
+  },
   mrgreen: {
     USI: [WARRIOR, HEALER, ROGUE],
     EUII: () => {
-      RANGER = "MoohThatCow";
-      return [WARRIOR, RANGER, MAGE];
+      RANGER = RANGER1;
+      return [WARRIOR, RANGER1, MAGE];
     },
     USII: () => {
-      RANGER = "CupidCow";
-      return [WARRIOR, RANGER, MAGE];
+      RANGER = RANGER2;
+      return [WARRIOR, RANGER2, MAGE];
     },
     default: [WARRIOR, HEALER, MAGE],
   },
@@ -1366,13 +1374,16 @@ const DYNAMIC_PARTY_PRESETS = {
     const isAggroed = !!parent.S.franky?.target;
     return [WARRIOR, HEALER, isAggroed ? ROGUE : MAGE];
   },
+  icegolem: () => {
+    return [HEALER, ROGUE, MAGE];
+  },
 
   crabxx: () => {
     const isAggroed = !!parent.S.crabxx?.target;
     return [
       WARRIOR,
-      isAggroed ? RANGER : HEALER,
-      isAggroed ? "CupidCow" : MAGE,
+      isAggroed ? RANGER1 : HEALER,
+      isAggroed ? RANGER2 : MAGE,
     ];
   },
   default: [WARRIOR, HEALER, MAGE],

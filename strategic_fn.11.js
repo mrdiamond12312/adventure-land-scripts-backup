@@ -1,4 +1,4 @@
-const MAX_TARGET = 5;
+const MAX_TARGET = 10;
 const BLAST_RADIUS = character.blast / 3.6 || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 3;
 const MAX_MOB_DPS = 1000;
@@ -226,17 +226,18 @@ function calculateRangerItems(target) {
           };
 
       const fireBowInfo =
-        currentEquippedBowInfo.name === RANGER_INV_ITEMS.fireBow
+        currentEquippedBowInfo.id === RANGER_INV_ITEMS.fireBow
           ? currentEquippedBowInfo
           : item_info(
               character.items[findMaxLevelItem(RANGER_INV_ITEMS.fireBow)],
             );
       const crossbowInfo =
-        currentEquippedBowInfo.name === RANGER_INV_ITEMS.crossBow
+        currentEquippedBowInfo.id === RANGER_INV_ITEMS.crossBow
           ? currentEquippedBowInfo
           : item_info(
               character.items[findMaxLevelItem(RANGER_INV_ITEMS.crossBow)],
             );
+
       if (crossbowInfo && fireBowInfo) {
         // Effective attack with crossbow
         const attackStatEquippingCrossbow =
@@ -352,6 +353,8 @@ function calculatePriestItems(target) {
         : "test_orb",
     gloves: "supermittens",
     amulet: isTanking ? "t2stramulet" : "intamulet",
+    ring1: "cring",
+    ring2: "zapper",
   };
 }
 
@@ -570,7 +573,9 @@ function listOfMonsterAttacking(characterEntity) {
 }
 
 function mobbingMultiplier(numberOfMobs) {
-  return numberOfMobs < 5 ? 1.7 : numberOfMobs < 6 ? 1.8 : 2;
+  // return numberOfMobs < 5 ? 1.7 : numberOfMobs < 6 ? 1.8 : 2;
+
+  return numberOfMobs < 3 ? 1 : 1.7;
 }
 
 function avgDmgTaken(characterEntity, dmgType = null) {

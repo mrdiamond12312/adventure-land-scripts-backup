@@ -90,7 +90,7 @@ async function fuaLoop() {
       .filter(
         (entity) =>
           entity.type === "character" &&
-          !entity.s.rspeed &&
+          (!entity.s.rspeed || entity.s.rspeed.ms < 2.1e6) &&
           is_in_range(entity, "rspeed"),
       )
       .sort((lhs, rhs) => {

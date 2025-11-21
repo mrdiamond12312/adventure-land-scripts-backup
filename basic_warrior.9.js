@@ -270,7 +270,6 @@ async function fight(target) {
   }
 }
 
-// Main game loop (cleaveLoop is separate for timing)
 async function cleaveLoop() {
   try {
     const shouldCleave =
