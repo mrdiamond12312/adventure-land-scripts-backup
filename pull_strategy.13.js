@@ -2,6 +2,12 @@ async function usePullStrategies(target) {
   const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
   const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
   const healerFreq = partyHealer?.frequency || 1;
+  const healReceivableAmount =
+    healerPower * 0.925 * healerFreq +
+    (parent.entities["$Caroline"]?.focus &&
+    distance(parent.entities["$Caroline"], character) < 250
+      ? 1200
+      : 0);
   const partyTanker = get_entity(TANKER);
   const mobsList = Object.values(parent.entities).filter(
     (mob) => mob.type === "monster",
@@ -72,7 +78,7 @@ async function usePullStrategies(target) {
       );
 
       const havePulledEnoughMobs =
-        mobsList.filter((mob) => mob?.target === character.name).length >=
+        mobsList.filter((mob) => mob.target === character.name).length >=
         MAX_TARGET;
 
       const listOfNoTargetMonsterInRange = mobsList.filter(
@@ -115,7 +121,7 @@ async function usePullStrategies(target) {
         physicalMobsAfterAgitating > character.courage ||
         pureMobsAfterAgitating > character.pcourage;
 
-      let partyDmgRecieved = avgPartyDmgTaken(partyMems);
+      const partyDmgRecieved = avgPartyDmgTaken(partyMems);
 
       if (
         !havePulledEnoughMobs &&
@@ -142,24 +148,13 @@ async function usePullStrategies(target) {
               entity.target !== character,
           )
           .reduce((prev, curr) => prev + calculateDamage(curr, character), 0) <
-          healerPower * healerFreq +
-            (parent.entities["$Caroline"]?.focus &&
-            distance(parent.entities["$Caroline"], character) < 250
-              ? 1200
-              : 0) -
-            partyDmgRecieved &&
+          healReceivableAmount - partyDmgRecieved &&
         !isFearedAfterAgitating
       ) {
         promises.push(withTimeout(use_skill("agitate"), 2500));
       }
-
       if (
-        partyDmgRecieved <
-          healerPower * healerFreq * 0.9 +
-            (parent.entities["$Caroline"]?.focus &&
-            distance(parent.entities["$Caroline"], character) < 250
-              ? 1200
-              : 0) &&
+        partyDmgRecieved < healReceivableAmount &&
         !havePulledEnoughMobs &&
         character.mp > G.skills["taunt"].mp &&
         !is_on_cooldown("taunt")
@@ -169,7 +164,7 @@ async function usePullStrategies(target) {
             calculateDamage(mob, character) < 4000 &&
             is_in_range(mob, "taunt") &&
             !WATCHOUT_ABILITIES.some((skill) =>
-              Object.keys(mob.abilities ?? "").includes(skill),
+              Object.keys(mob.abilities ?? {}).includes(skill),
             ) &&
             (!mob.target ||
               partyMems

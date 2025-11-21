@@ -8,6 +8,7 @@ if (parent.caracAL) {
     ])
     .then(() => {
       mainLoop();
+      zapperLoop();
     });
 } else {
   load_code(7);
@@ -224,6 +225,73 @@ async function priestBuff() {
   }
 
   return withTimeout(Promise.all(promises), 750);
+}
+
+async function zapperLoop() {
+  if (
+    ms_to_next_skill("zapperzap") !== 0 ||
+    character.mp < character.max_mp * 0.6 ||
+    character.penalty_cd ||
+    character.cc > 100 ||
+    (character.slots.ring1?.name !== "zapper" &&
+      character.slots.ring2?.name !== "zapper")
+  )
+    return setTimeout(zapperLoop, Math.max(ms_to_next_skill("zapperzap"), 50));
+
+  try {
+    const promisesToAwait = [];
+    const isTanking = isAssignedAsTanker();
+    const targetInSight = Object.values(parent.entities)
+      .filter(
+        (entity) =>
+          entity.type === "monster" &&
+          is_in_range(entity, "zapperzap") &&
+          !entity["1hp"] &&
+          (entity.target ||
+            entity.hp < 1000 ||
+            calculateDamage(entity, get_player(TANKER) ?? character) < 150),
+      )
+      .map((entity) => ({
+        ...entity,
+        distance: distance(entity, character),
+        hp_percent: entity.hp / entity.max_hp,
+        weak: entity.max_hp < 1000,
+      }));
+
+    if (isTanking) {
+    } else {
+      const sortedTargets = targetInSight.sort((lhs, rhs) => {
+        const lhsHasTarget = Boolean(lhs.target);
+        const rhsHasTarget = Boolean(rhs.target);
+        if (lhsHasTarget !== rhsHasTarget) return lhsHasTarget ? -1 : 1;
+
+        // higher hp% mobs first to balance the aoe cluster
+        if (lhsHasTarget && rhsHasTarget) {
+          if (lhs.hp_percent !== rhs.hp_percent)
+            return rhs.hp_percent - lhs.hp_percent;
+          else return rhs.distance - lhs.distance;
+        }
+
+        // sort weak mobs among other mob if above criterias not met
+        if (lhs.weak !== rhs.weak) return lhs.weak ? -1 : 1;
+
+        // fallback: furthest ones
+        return rhs.distance - lhs.distance;
+      });
+      if (sortedTargets) {
+        const zapTarget = sortedTargets[0];
+        promisesToAwait.push(
+          use_skill("zapperzap", zapTarget).then(() =>
+            reduce_cooldown("zapperzap", Math.min(...parent.pings)),
+          ),
+        );
+      }
+    }
+    await withTimeout(Promise.all(promisesToAwait), 500);
+  } catch (e) {
+    console.log("Error while zapping: ", e);
+  }
+  setTimeout(zapperLoop, Math.max(ms_to_next_skill("zapperzap"), 50));
 }
 
 async function mainLoop() {
