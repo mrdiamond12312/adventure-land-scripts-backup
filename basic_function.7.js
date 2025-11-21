@@ -1287,11 +1287,9 @@ async function getServerPlayers() {
   return playersData;
 }
 
-// Party Setups
-setInterval(async function () {
+function deployCharacters() {
   //// Deploy characters which arent active
   const loadedCharacters = get_active_characters();
-  const serverCharacters = await getServerPlayers();
   const allCharacters = [...partyMems, partyMerchant];
 
   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
@@ -1314,6 +1312,16 @@ setInterval(async function () {
       .filter((id) => !loadedCharacters[id])
       .forEach((id) => start_character(id, CODE_SLOTS[id].script));
   }
+}
+
+// Party Setups
+setTimeout(deployCharacters, 5000);
+setInterval(deployCharacters, 30000);
+
+setInterval(async () => {
+  if (isMerchant()) return;
+
+  const serverCharacters = await getServerPlayers();
   const partyWhitelistRegex = [/^earth/];
   const whitelistPartyMembers = serverCharacters.filter(
     (char) =>
@@ -1325,7 +1333,6 @@ setInterval(async function () {
   );
 
   if (
-    !isMerchant() &&
     whitelistPartyMembers.length &&
     whitelistPartyMembers.length <= 6 &&
     (!parent.party_list.length || !hasWhitelistedMember)
@@ -1380,11 +1387,7 @@ const DYNAMIC_PARTY_PRESETS = {
 
   crabxx: () => {
     const isAggroed = !!parent.S.crabxx?.target;
-    return [
-      WARRIOR,
-      isAggroed ? RANGER1 : HEALER,
-      isAggroed ? RANGER2 : MAGE,
-    ];
+    return [WARRIOR, isAggroed ? RANGER1 : HEALER, isAggroed ? RANGER2 : MAGE];
   },
   default: [WARRIOR, HEALER, MAGE],
 };
