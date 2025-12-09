@@ -14,7 +14,7 @@ if (parent.caracAL) {
 }
 
 // Kiting (unchanged)
-var originRangeRate = 0.85;
+var originRangeRate = 0.65;
 rangeRate = originRangeRate;
 
 // --- Helper Functions ---
@@ -31,7 +31,7 @@ const tryMultiShot = async (skill, entityList) => {
   if (entityList.length === 0) return false;
   set_message(`${skill} Shooting`);
   return use_skill(skill, entityList)
-    .then(() => reduceCd(skill)) // Use reduceCd for the skill (was incorrectly hardcoded to "attack")
+    .then(() => reduceCd("attack")) // Use reduceCd for the skill (was incorrectly hardcoded to "attack")
     .catch((e) => attackErrorHandler(e));
 };
 
@@ -302,11 +302,11 @@ async function mainLoop() {
         get("cryptInstance") && character.map !== "crypt";
       const isPartyLeaderOrAlone =
         partyMems[0] === character.name || !get_entity(partyMems[0]);
-      const isFarFromPartyLeader =
+      const isFarFromFarmingSpot =
         distance(character, { x: mapX, y: mapY, map }) > 500;
 
       const needsToMoveToFarmLocation =
-        !get("cryptInstance") && (isPartyLeaderOrAlone || isFarFromPartyLeader);
+        !get("cryptInstance") && (isPartyLeaderOrAlone || isFarFromFarmingSpot);
 
       if (needsToEnterCrypt) {
         changeToNormalStrategies();

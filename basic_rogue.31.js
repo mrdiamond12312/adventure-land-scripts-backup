@@ -20,13 +20,17 @@ var originRangeRate = 0.95;
 rangeRate = originRangeRate;
 
 async function fight(target) {
+  const inRange = (entity) =>
+    distance(entity, character) < character.range + character.xrange;
+
   if (currentStrategy === usePullStrategies) {
     const allAggroedByParty = Object.values(parent.entities)
       .filter(
         (entity) =>
           entity.type === "monster" &&
           ([...partyMems, ...parent.party_list].includes(entity.target) ||
-            (entity.cooperative && entity.target)),
+            (entity.cooperative && entity.target)) &&
+          inRange(entity),
       )
       .sort((lhs, rhs) => {
         const lhsHpPercentage = lhs.hp / lhs.max_hp;
@@ -52,7 +56,7 @@ async function fight(target) {
   if (
     ms_to_next_skill("attack") === 0 &&
     !character.s.penalty_cd &&
-    distance(target, character) < character.range + character.xrange &&
+    inRange(target) &&
     shouldAttack()
   ) {
     if (!ms_to_next_skill("invis")) {
@@ -90,7 +94,7 @@ async function fuaLoop() {
       .filter(
         (entity) =>
           entity.type === "character" &&
-          (!entity.s.rspeed || entity.s.rspeed.ms < 2.1e6) &&
+          (!entity.s.rspeed || entity.s.rspeed.ms < 2.22e6) &&
           is_in_range(entity, "rspeed"),
       )
       .sort((lhs, rhs) => {
@@ -177,7 +181,7 @@ async function mainLoop() {
         !smart.moving &&
         !isAdvanceSmartMoving &&
         !get("cryptInstance") &&
-        (partyMems[0] == character.name ||
+        (partyMems[0] === character.name ||
           !get_entity(partyMems[0]) ||
           distance(character, { x: mapX, y: mapY, map }) > 500)
       ) {

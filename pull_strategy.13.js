@@ -37,11 +37,8 @@ async function usePullStrategies(target) {
         getMonstersToCBurst().length >= 1
       ) {
         promises.push(
-          withTimeout(
-            use_skill("cburst", getMonstersToCBurst()).then(() =>
-              reduce_cooldown("cburst", -2000),
-            ),
-            2500,
+          use_skill("cburst", getMonstersToCBurst()).then(() =>
+            reduce_cooldown("cburst", -2000),
           ),
         );
       }
@@ -130,7 +127,11 @@ async function usePullStrategies(target) {
         !is_on_cooldown("agitate") &&
         // numberOfMonsterInRange <= MAX_TARGET + 2 &&
         !listOfNoTargetMonsterInRange.some(
-          (mob) => mob.cooperative && !partyMems.includes(mob.target),
+          (mob) =>
+            (mob.cooperative && !partyMems.includes(mob.target)) ||
+            parent.party_list
+              .filter((id) => !partyMems.includes(id))
+              .includes(mob.target),
         ) &&
         listOfNoTargetMonsterInRange.length >= 2 &&
         !listOfNoTargetMonsterInRange.some(
@@ -151,7 +152,7 @@ async function usePullStrategies(target) {
           healReceivableAmount - partyDmgRecieved &&
         !isFearedAfterAgitating
       ) {
-        promises.push(withTimeout(use_skill("agitate"), 2500));
+        promises.push(use_skill("agitate"));
       }
       if (
         partyDmgRecieved < healReceivableAmount &&
@@ -179,11 +180,8 @@ async function usePullStrategies(target) {
 
         if (mobToPull)
           promises.push(
-            withTimeout(
-              use_skill("taunt", parent.entities[mobToPull]).then(() =>
-                reduce_cooldown("taunt", character.ping * 0.95),
-              ),
-              2500,
+            use_skill("taunt", parent.entities[mobToPull]).then(() =>
+              reduce_cooldown("taunt", character.ping * 0.95),
             ),
           );
       }

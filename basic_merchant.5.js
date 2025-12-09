@@ -20,8 +20,9 @@ const miningLocation = { map: "tunnel", x: -279, y: -148 };
 function equipBroom() {
   const currentWeapon = character.slots.mainhand;
   if (!currentWeapon || currentWeapon.name !== "broom") {
-    const broom = locate_item("broom");
-    if (broom !== -1)
+    const broom = findMaxLevelItem("broom");
+    if (broom === -1) retrieveBankItem("broom");
+    else
       equipBatch({
         mainhand: "broom",
         offhand: "wbookhs",
@@ -47,7 +48,7 @@ function shouldGoExchangeXmas() {
   );
 }
 async function holidayExchange() {
-  if (!shouldGoExchangeXmas() || !party.S.holiday) return;
+  if (!shouldGoExchangeXmas() || !parent.S["holidayseason"]) return;
 
   const holidayItems = [
     {
@@ -70,13 +71,18 @@ async function holidayExchange() {
     },
   ];
 
-  const exchangableItem = holidayItems.find((item) => {
-    const slot = locate_item(item.name);
+  const exchangableItem = holidayItems.find(async (item) => {
+    const itemName = item.name;
+    const slot = locate_item(itemName);
+    if (slot === -1 && getItemBankSlots(itemName).length) {
+      retrieveBankItem(itemName);
+    }
+
     if (slot === -1) return false;
     return character.items[slot]?.q >= item.quantity + item.keep;
   });
 
-  if (!exchangableItem) return;
+  if (!exchangableItem || smart.moving) return;
 
   if (get_nearest_npc()?.npc !== exchangableItem.npc) {
     close_stand();
@@ -407,7 +413,7 @@ setInterval(async function () {
       compoundInv(),
       upgradeInv(),
       exchangeXyn(),
-      // holidayExchange(),
+      holidayExchange(),
       craft("xbox"),
       craft("basketofeggs"),
       craft("orba", 1, { map: "main", x: -152, y: -137 }),
@@ -493,7 +499,6 @@ const ITEM_NEEDED = [
   "firestaff",
   "firestars",
   "jacko",
-  "intamulet",
 ];
 
 function secondhandsHandler(events) {

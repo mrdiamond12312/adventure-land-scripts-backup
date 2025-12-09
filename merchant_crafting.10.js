@@ -47,7 +47,7 @@ async function retrieveBankItem(searchId, level = 0) {
   }
 
   for (const [bankPack, items] of Object.entries(character.bank).filter(
-    ([key, value]) => key !== "gold",
+    ([key, value]) => !["gold", "items9"].includes(key),
   )) {
     const slot = items.findIndex(
       (item) =>
@@ -465,7 +465,7 @@ setInterval(async () => {
       if (!item) return;
       const isRareItem = item_grade(item) >= 2;
       const isHighLevelItem =
-        item?.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
+        item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
 
       const isStoreable = STORE_ABLE.includes(item.name);
       const isEquipable = item_info(item).compound || item_info(item).upgrade;
@@ -476,7 +476,8 @@ setInterval(async () => {
         ((!shouldItemBeIgnore &&
           (isRareItem || (isEquipable && isHighLevelItem))) ||
           isStoreable ||
-          RETRIEVE_HISTORY?.[RETRIEVE_HISTORY.length - 1] === item?.name)
+          RETRIEVE_HISTORY.includes(item.name) ||
+          Object.keys(ITEMS_HIGHEST_LEVEL).includes(item.name))
       )
         bank_store(index);
     });

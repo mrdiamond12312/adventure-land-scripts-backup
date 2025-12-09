@@ -118,8 +118,10 @@ function calculateWarriorItems() {
   const shouldUseBlaster =
     numberOfMonsterAroundTarget(currentTarget) >= 2 && !currentTarget["1hp"];
 
-  const haveLowHpMobsNearby = shouldWearLuckGear();
-  const isTanker = isAssignedAsTanker();
+  const feelingLucky = shouldWearLuckGear();
+  const feelingWise = shouldWearExpGear();
+  const isTanker =
+    isAssignedAsTanker() && avgDmgTaken(character, "physical") > 300;
 
   if (
     currentTarget &&
@@ -135,7 +137,7 @@ function calculateWarriorItems() {
     };
 
   return {
-    helmet: haveLowHpMobsNearby
+    helmet: feelingLucky
       ? "oxhelmet"
       : character.map === "crypt"
       ? "xhelmet"
@@ -151,12 +153,12 @@ function calculateWarriorItems() {
         Object.values(parent.entities).some(
           (mob) => mob.target === character.name && mob.mtype === "a2",
         )) ||
-      haveLowHpMobsNearby
+      feelingLucky
         ? "mshield"
         : currentStrategy === usePullStrategies && shouldUseBlaster
         ? "ololipop"
         : "fireblade",
-    amulet: haveLowHpMobsNearby
+    amulet: feelingLucky
       ? "spookyamulet"
       : (isTanker &&
           Object.values(parent.entities)
@@ -165,8 +167,12 @@ function calculateWarriorItems() {
         character.map === "crypt"
       ? "snring"
       : "stramulet",
-    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofstr",
-    chest: haveLowHpMobsNearby
+    orb: feelingLucky
+      ? "rabbitsfoot"
+      : feelingWise
+      ? "talkingskull"
+      : "orbofstr",
+    chest: feelingLucky
       ? "cdragon"
       : character.map === "crypt"
       ? "xarmor"
@@ -185,7 +191,8 @@ const RANGER_INV_ITEMS = {
 function calculateRangerItems(target) {
   // Sanitize input
   const targets = !target ? [] : Array.isArray(target) ? target : [target];
-  const haveLowHpMobsNearby = shouldWearLuckGear();
+  const feelingLucky = shouldWearLuckGear();
+  const feelingWise = shouldWearExpGear();
   const someTargetCooperative = targets.some((mob) => mob.cooperative);
 
   // Start with current mainhand
@@ -200,10 +207,11 @@ function calculateRangerItems(target) {
       currentStrategy === usePullStrategies &&
       targets.some(
         (mob) =>
-          numberOfMonsterAroundTarget(
-            mob,
-            character.explosion / 3.6 ?? BLAST_RADIUS,
-          ) > 1,
+          (mob.cluster_count ??
+            numberOfMonsterAroundTarget(
+              mob,
+              character.explosion / 3.6 || BLAST_RADIUS,
+            )) > 1,
       )
     ) {
       mainhand = RANGER_INV_ITEMS.poucher;
@@ -279,10 +287,14 @@ function calculateRangerItems(target) {
   return {
     helmet: "wcap",
     mainhand,
-    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
-    amulet: haveLowHpMobsNearby ? "spookyamulet" : "dexamulet",
-    shoes: haveLowHpMobsNearby ? "wshoes" : "wingedboots",
-    gloves: haveLowHpMobsNearby ? "wgloves" : "mittens",
+    orb: feelingLucky
+      ? "rabbitsfoot"
+      : feelingWise
+      ? "talkingskull"
+      : "orbofdex",
+    amulet: feelingWise ? "spookyamulet" : "dexamulet",
+    shoes: feelingLucky ? "wshoes" : "wingedboots",
+    gloves: feelingLucky ? "wgloves" : "mittens",
   };
 }
 
@@ -460,19 +472,28 @@ function findMaxLevelItem(id, offset = 0) {
 
 var isEquipingItems = false;
 async function equipBatch(suggestedItems, forced = false) {
-  if ((character.cc > 130 || isEquipingItems) && !forced) return;
+  if (
+    (character.cc > 130 ||
+      isEquipingItems ||
+      character.s.penalty_cd ||
+      isLooting) &&
+    !forced
+  )
+    return false;
 
   isEquipingItems = true;
 
   const promises = [];
-
   const currentBooster = findInvBooster();
 
-  if (!isLooting && currentBooster) {
-    if (
-      (get_targeted_monster()?.cooperative &&
-        currentBooster !== "luckbooster") ||
-      TANKER === character.name
+  if ((!isLooting && currentBooster) || forced) {
+    if (suggestedItems.booster && currentBooster !== suggestedItems.booster) {
+      promises.push(shift(locate_item(currentBooster), suggestedItems.booster));
+      delete suggestedItems.booster;
+    } else if (
+      currentBooster !== "luckbooster" &&
+      (get_target()?.cooperative ||
+        (isAssignedAsTanker() && avgDmgTaken(character) > 300))
     ) {
       promises.push(shift(locate_item(currentBooster), "luckbooster"));
     } else if (currentBooster !== "xpbooster") {

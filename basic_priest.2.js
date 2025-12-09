@@ -210,13 +210,11 @@ async function priestBuff() {
       (entity) => entity.type === "monster" && entity.target === memberName,
     );
 
-    const requiredMonsterCount = isAssignedAsTanker() ? 1 : 2;
-
     if (
       is_in_range(member, "absorb") &&
       !is_on_cooldown("absorb") &&
       character.mp >= G.skills["absorb"].mp &&
-      monstersTargetingMember.length >= requiredMonsterCount
+      monstersTargetingMember.length
     ) {
       use_skill("absorb", member);
       set_message("Absorb " + memberName);

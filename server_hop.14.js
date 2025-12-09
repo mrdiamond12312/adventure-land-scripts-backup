@@ -3,13 +3,14 @@ const HOP_SERVERS = ["US", "ASIA", "EU"];
 const ignoreServer = [];
 
 const HOME_SERVER = {
-  serverRegion: "EU",
+  serverRegion: "US",
   serverIdentifier: "II",
 };
 
 const tankableBoss = ["snowman", "pinkgoo"];
 
 const bosses = {
+  grinch: { type: "grinch", threshold: 0.425, hoppable: 1 },
   icegolem: { type: "icegolem", threshold: 0.7, hoppable: 0.999 },
   franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
   mrpumpkin: { type: "mrpumpkin", threshold: 0.3, hoppable: 0.9999 },
@@ -53,7 +54,7 @@ setInterval(async () => {
     Object.keys(bosses).some(
       (boss) =>
         parent.S[boss] &&
-        parent.S[boss].target &&
+        (parent.S[boss].target || bosses[boss].hoppable === 1) &&
         parent.S[boss].hp <
           (bosses[boss]?.threshold ?? 0.93) * parent.S[boss].max_hp,
     ) ||
@@ -79,6 +80,16 @@ setInterval(async () => {
 
     const data = await response.json();
 
+    if (parent.S.grinch?.live && data.constructor === Array) {
+      data.push({
+        ...parent.S.grinch,
+        id: 1,
+        type: "grinch",
+        serverIdentifier: server.id,
+        serverRegion: server.region,
+      });
+    }
+
     if (!data) return;
 
     const hopAbleServers = data
@@ -100,7 +111,13 @@ setInterval(async () => {
         );
       })
       .sort((lhs, rhs) => {
-        // const bossPriority = [...tankableBoss, ...Object.keys(bosses)];
+        const lhsIsTankable = tankableBoss.includes(lhs.type);
+        const rhsIsTankable = tankableBoss.includes(rhs.type);
+
+        if (lhsIsTankable !== rhsIsTankable) {
+          return rhsIsTankable - lhsIsTankable;
+        }
+
         return (
           lhs.hp / G.monsters[lhs.type].hp - rhs.hp / G.monsters[rhs.type].hp
         );
@@ -113,11 +130,18 @@ setInterval(async () => {
       });
 
     if (hopAbleServers && hopAbleServers.length) {
+      console.log(
+        hopAbleServers.map(
+          (server) =>
+            `${server.serverRegion}${server.serverIdentifier} ${server.type} ${server.hp}`,
+        ),
+      );
       const toServer = hopAbleServers.shift();
       if (
         `${toServer.serverRegion}${toServer.serverIdentifier}` !== currentServer
       ) {
         log(`Hopping to ${toServer.serverRegion}${toServer.serverIdentifier}`);
+        set("currentParty", undefined);
         await hopToServer(toServer.serverRegion, toServer.serverIdentifier);
       }
       return true;
@@ -125,6 +149,7 @@ setInterval(async () => {
 
     if (currentServer !== getHomeServer()) {
       log("Hopping back home server!");
+      set("currentParty", undefined);
       await hopToServer(HOME_SERVER.serverRegion, HOME_SERVER.serverIdentifier);
     }
 

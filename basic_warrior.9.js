@@ -53,6 +53,7 @@ async function fight(target) {
       .filter((entity) => {
         return (
           entity.type === "monster" &&
+          !entity.s?.fullguardx &&
           !MELEE_IGNORE_LIST.includes(entity.mtype) &&
           entity.target &&
           !haveFormidableMonsterAroundTarget(entity) &&
@@ -185,7 +186,7 @@ async function fight(target) {
   }
 
   // Warrior Stomp (Basher logic)
-  const hasBasherEquipped = locate_item("basher") !== -1;
+  const hasBasherInInventory = locate_item("basher") !== -1;
   const partyHasInjured = (
     parent.party_list.length ? parent.party_list : [character]
   )
@@ -193,7 +194,7 @@ async function fight(target) {
     .filter((entity) => entity)
     .some((player) => player.hp < player.max_hp * 0.4);
 
-  if (hasBasherEquipped && partyHasInjured) {
+  if (hasBasherInInventory && partyHasInjured) {
     promisesToAwait.push(warriorStomp());
   }
 
@@ -230,6 +231,7 @@ async function fight(target) {
     const shouldTauntTarget =
       !target.target ||
       (target.target !== character.name &&
+        partyMems.includes(target.target) &&
         target.attack < 1500 &&
         !target.cooperative &&
         is_in_range(target, "taunt"));
@@ -299,7 +301,10 @@ if (!parent.caracAL) cleaveLoop();
 async function mainLoop() {
   try {
     // --- Initialization and Status Checks ---
-    desiredElixir = isAssignedAsTanker() ? "elixirluck" : "pumpkinspice";
+    desiredElixir =
+      isAssignedAsTanker() && avgDmgTaken(character) > 300
+        ? "elixirluck"
+        : "pumpkinspice";
     assignRoles();
 
     // Use Charge if moving (for speed boost)
@@ -345,12 +350,12 @@ async function mainLoop() {
         get("cryptInstance") && character.map !== "crypt";
       const isPartyLeaderOrAlone =
         partyMems[0] === character.name || !get_entity(partyMems[0]);
-      const isFarFromPartyLeader =
+      const isFarFromFarmingSpot =
         distance(character, { x: mapX, y: mapY, map }) > 500;
 
       // Only move to farm location if not doing crypt and either the leader/alone or far away.
       const needsToMoveToFarmLocation =
-        !get("cryptInstance") && (isPartyLeaderOrAlone || isFarFromPartyLeader);
+        !get("cryptInstance") && isPartyLeaderOrAlone && isFarFromFarmingSpot;
 
       if (needsToEnterCrypt) {
         advanceSmartMove(CRYPT_STARTING_LOCATION);

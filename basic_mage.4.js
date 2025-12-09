@@ -15,7 +15,7 @@ if (parent.caracAL) {
 }
 
 // Kiting
-var originRangeRate = 0.85;
+var originRangeRate = 0.75;
 rangeRate = originRangeRate;
 const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 4);
 
@@ -91,7 +91,11 @@ async function fight(target) {
 
     if (energizeTarget) {
       promisesToAwait.push(
-        use_skill("energize", energizeTarget).then(() => reduceCd("energize")),
+        use_skill(
+          "energize",
+          energizeTarget,
+          Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
+        ).then(() => reduceCd("energize")),
       );
     }
   }
@@ -194,11 +198,11 @@ async function mainLoop() {
       const needsToEnterCrypt = cryptKey && character.map !== "crypt";
       const isPartyLeaderOrAlone =
         TANKER === character.name || !get_entity(TANKER);
-      const isFarFromPartyLeader =
+      const isFarFromFarmingSpot =
         distance(character, { x: mapX, y: mapY, map }) > 500;
 
       const needsToMoveToFarmLocation =
-        !cryptKey && (isPartyLeaderOrAlone || isFarFromPartyLeader);
+        !cryptKey && (isPartyLeaderOrAlone || isFarFromFarmingSpot);
 
       if (needsToEnterCrypt) {
         // Move to Crypt start if a crypt instance is active but we aren't there

@@ -1,7 +1,12 @@
 // Other class message listener;
 
 character.on("cm", async function ({ name, message }) {
-  if (!partyMems.includes(name) && name !== partyMerchant) return;
+  if (
+    !partyMems.includes(name) &&
+    name !== partyMerchant &&
+    message !== "magiport"
+  )
+    return;
   switch (message.msg || message) {
     case "inv_full_merchant_near":
       log("The merchant is nearby, sending compoundable");
@@ -28,7 +33,7 @@ character.on("cm", async function ({ name, message }) {
           )
             return;
           await send_item(partyMerchant, index, 1000);
-        })
+        }),
       );
       // const compoundables = filterCompoundableAndStackable();
       // const others = Array.from({ length: 42 }, (_, i) => i + 0).filter(
@@ -63,7 +68,7 @@ character.on("cm", async function ({ name, message }) {
     case "party_heal":
       log(`Remotely heal ${name}!`);
       use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", character.ping * 0.95)
+        reduce_cooldown("partyheal", character.ping * 0.95),
       );
       break;
 
