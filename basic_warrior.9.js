@@ -116,6 +116,7 @@ async function fight(target) {
         .then(() => reduceCd("attack")) // <-- Use reduceCd()
         .catch((e) => attackErrorHandler(e)),
     );
+    reduce_cooldown("attack", -1000 / character.frequency);
 
     // Offhand swap logic: Use Candy Canes for farming
     const shouldUseCandyCanes =
@@ -135,18 +136,34 @@ async function fight(target) {
         isEquipingItems = true;
         const equipPromise = Promise.all([
           // Immediate equip
-          Promise.all([
-            equip(candycane1, "mainhand"),
-            equip(candycane2, "offhand"),
+          equip_batch([
+            {
+              num: candycane1,
+              slot: "mainhand",
+            },
+            {
+              num: candycane2,
+              slot: "offhand",
+            },
           ]),
+          // Promise.all([
+          //   equip(candycane1, "mainhand"),
+          //   equip(candycane2, "offhand"),
+          // ]),
 
           // Delayed re-equip
           new Promise((resolve) => {
             setTimeout(() => {
               resolve(
-                Promise.all([
-                  equip(candycane1, "mainhand"),
-                  equip(candycane2, "offhand"),
+                equip_batch([
+                  {
+                    num: candycane1,
+                    slot: "mainhand",
+                  },
+                  {
+                    num: candycane2,
+                    slot: "offhand",
+                  },
                 ]),
               );
             }, 150);
@@ -276,7 +293,7 @@ async function cleaveLoop() {
   try {
     const shouldCleave =
       smart.moving ||
-      ms_to_next_skill("attack") > 50 ||
+      ms_to_next_skill("attack") > 360 ||
       distance(character, get_targeted_monster()) >
         character.range + character.xrange * 1.1;
 

@@ -58,6 +58,9 @@ function shouldWearLuckGear() {
   return Object.values(parent.entities).some(
     (mob) =>
       mob.type === "monster" &&
+      !mob.rip &&
+      !mob.dead &&
+      mob.hp > 0 &&
       (mob.target === character.name || mob.cooperative) &&
       mob.hp <= Math.min(mob.max_hp * 0.15, 300000),
   );
@@ -67,6 +70,9 @@ function shouldWearExpGear() {
   return Object.values(parent.entities).some(
     (mob) =>
       mob.type === "monster" &&
+      !mob.rip &&
+      !mob.dead &&
+      mob.hp > 0 &&
       (parent.party_list.includes(mob.target) || mob.cooperative) &&
       mob.hp <= Math.min(mob.max_hp * 0.1, 300000),
   );
@@ -74,10 +80,14 @@ function shouldWearExpGear() {
 
 // Class Items logic
 function calculateMageItems() {
+  const currentTarget = get_target();
+  const numberOfMobsAroundCurrentTarget =
+    numberOfMonsterAroundTarget(currentTarget);
+  const haveEnoughMobsToSplash =
+    numberOfMobsAroundCurrentTarget >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON;
   const shouldUseBlaster =
-    numberOfMonsterAroundTarget(get_targeted_monster()) >=
-      TARGET_TO_SWITCH_TO_BLASTER_WEAPON &&
-    !get_targeted_monster()?.["1hp"] &&
+    haveEnoughMobsToSplash &&
+    !currentTarget?.["1hp"] &&
     character.mp > G.skills["magiport"].mp + G.skills["blink"].mp;
 
   const feelingLucky = shouldWearLuckGear();
@@ -85,16 +95,18 @@ function calculateMageItems() {
 
   return {
     mainhand:
-      currentStrategy === usePullStrategies
+      character.map === "crypt" && !currentTarget?.s?.frozen
+        ? "froststaff"
+        : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
+            currentTarget?.mtype,
+          ) ||
+          (currentTarget?.max_hp < 2000 &&
+            (currentStrategy !== usePullStrategies || !haveEnoughMobsToSplash))
+        ? "pinkie"
+        : currentStrategy === usePullStrategies
         ? shouldUseBlaster
           ? "sparkstaff"
           : "firestaff"
-        : character.map === "crypt" && !get_targeted_monster()?.s?.frozen
-        ? "froststaff"
-        : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
-            get_targeted_monster()?.mtype,
-          ) || get_targeted_monster()?.max_hp < 2000
-        ? "pinkie"
         : "firestaff",
     offhand:
       currentStrategy === usePullStrategies
@@ -112,7 +124,7 @@ function calculateMageItems() {
   };
 }
 
-const STUN_FOCUS_LIST = ["crabxx"];
+const STUN_FOCUS_LIST = ["crabxx", "grinch"];
 function calculateWarriorItems() {
   const currentTarget = get_target();
   const shouldUseBlaster =
@@ -343,7 +355,7 @@ function calculatePriestItems(target) {
         ? "wbookhs"
         : feelingLucky
         ? "mshield"
-        : TANKER === character.name ||
+        : isTanking ||
           Object.values(parent.entities).some(
             (mob) =>
               mob.type === "monster" &&
@@ -365,8 +377,9 @@ function calculatePriestItems(target) {
         : "test_orb",
     gloves: "supermittens",
     amulet: isTanking ? "t2stramulet" : "intamulet",
-    ring1: "cring",
+    ring1: feelingLucky ? "ringhs" : "cring",
     ring2: "zapper",
+    cape: "angelwings",
   };
 }
 
@@ -910,19 +923,27 @@ async function warriorStomp() {
   });
 }
 
-function shouldAttack() {
-  const currentTarget = get_target();
-  const partyPriest = parent.party_list
-    .map((id) => get_player(id))
-    .filter((player) => player && player.ctype === "priest");
+function shouldAttack(target = get_target()) {
   const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
-  return character.map === "crypt"
-    ? partyHealer && !partyHealer.rip
-    : ["warrior", "rogue"].includes(character.ctype) &&
-      currentTarget &&
-      MELEE_IGNORE_LIST.includes(currentTarget.mtype ?? currentTarget.ctype)
-    ? false
-    : currentTarget && currentTarget.attack > 600 && !currentTarget.target
-    ? partyPriest.length > 0 || (partyHealer && !partyHealer.rip)
-    : true;
+
+  if (character.map === "crypt") {
+    return !!partyHealer && !partyHealer.rip;
+  }
+
+  if (
+    ["warrior", "rogue"].includes(character.ctype) &&
+    target &&
+    MELEE_IGNORE_LIST.includes(target.mtype ?? target.ctype)
+  ) {
+    return false;
+  }
+
+  if (target && target.attack > 600 && !target.target) {
+    const partyPriest = [...parent.party_list, ...partyMems]
+      .map((id) => get_player(id))
+      .filter((player) => player?.ctype === "priest");
+    return partyPriest.length > 0 || (partyHealer && !partyHealer.rip);
+  }
+
+  return true;
 }

@@ -16,6 +16,8 @@ var isExeing = false;
 
 const fishingLocation = { map: "main", x: -1368, y: -82 };
 const miningLocation = { map: "tunnel", x: -279, y: -148 };
+const haveAComputer = () =>
+  locate_item("computer") !== -1 || locate_item("ancientcomputer") !== -1;
 
 function equipBroom() {
   const currentWeapon = character.slots.mainhand;
@@ -71,7 +73,7 @@ async function holidayExchange() {
     },
   ];
 
-  const exchangableItem = holidayItems.find(async (item) => {
+  const exchangableItem = holidayItems.find((item) => {
     const itemName = item.name;
     const slot = locate_item(itemName);
     if (slot === -1 && getItemBankSlots(itemName).length) {
@@ -84,7 +86,7 @@ async function holidayExchange() {
 
   if (!exchangableItem || smart.moving) return;
 
-  if (get_nearest_npc()?.npc !== exchangableItem.npc) {
+  if (get_nearest_npc()?.npc !== exchangableItem.npc && !haveAComputer()) {
     close_stand();
     equipBroom();
     await smart_move(find_npc(exchangableItem.npc));
@@ -145,7 +147,12 @@ async function exchangeMines() {
   });
 
   if (slot && character.items[slot].q >= 50) {
-    if (!smart.moving && !isAdvanceSmartMoving && character.map !== "tunnel") {
+    if (
+      !smart.moving &&
+      !isAdvanceSmartMoving &&
+      character.map !== "tunnel" &&
+      !haveAComputer()
+    ) {
       await smart_move(miningLocation);
     }
     await exchange(slot).catch((e) => {
@@ -387,7 +394,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   }
 
   if (isEnoughIngredients) {
-    if (get_nearest_npc()?.name !== "Leo") {
+    if (get_nearest_npc()?.name !== "Leo" && !haveAComputer()) {
       close_stand();
       await smart_move(place);
     }
@@ -407,6 +414,11 @@ setInterval(async function () {
   scareAwayMobs();
 
   await sortInv();
+
+  const computerSlot = locate_item("computer");
+  if (computerSlot === -1 && getItemBankSlots("computer").length) {
+    retrieveBankItem("computer");
+  }
 
   await withTimeout(
     Promise.allSettled([
@@ -462,7 +474,7 @@ setInterval(async function () {
     if (character.map === "bank") {
       try {
         character.items
-          .filter((item) => item && !IGNORE.includes(item.name))
+          .filter((item) => item && !item.l && !IGNORE.includes(item.name))
           .map((item, index) => {
             bank_store(index);
           });
@@ -499,6 +511,10 @@ const ITEM_NEEDED = [
   "firestaff",
   "firestars",
   "jacko",
+  "gcape",
+  "mshield",
+  "carrot",
+  "harbringer",
 ];
 
 function secondhandsHandler(events) {

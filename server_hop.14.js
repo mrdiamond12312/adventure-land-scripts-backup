@@ -4,13 +4,13 @@ const ignoreServer = [];
 
 const HOME_SERVER = {
   serverRegion: "US",
-  serverIdentifier: "II",
+  serverIdentifier: "III",
 };
 
 const tankableBoss = ["snowman", "pinkgoo"];
 
 const bosses = {
-  grinch: { type: "grinch", threshold: 0.425, hoppable: 1 },
+  grinch: { type: "grinch", threshold: 0.7, hoppable: 1 },
   icegolem: { type: "icegolem", threshold: 0.7, hoppable: 0.999 },
   franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
   mrpumpkin: { type: "mrpumpkin", threshold: 0.3, hoppable: 0.9999 },

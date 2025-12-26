@@ -34,6 +34,7 @@ async function fight(target) {
           entity.type === "monster" &&
           entity.target && // Must be aggroed
           !entity.dead &&
+          !entity.s?.fullguardx &&
           !haveFormidableMonsterAroundTarget(entity) &&
           distance(entity, character) <= attackRange,
       )
@@ -45,18 +46,21 @@ async function fight(target) {
 
     if (aggroedMobs.length) {
       // Sort: Find the best mob to target for cluster damage
-      const bestPullTarget = aggroedMobs
+      const bestTarget = aggroedMobs
         .sort((lhs, rhs) => {
-          // 1. Prioritize highest cluster count
+          if (lhs.cooperative !== rhs.cooperative) {
+            return lhs.cooperative ? -1 : 1;
+          }
+          // Prioritize highest cluster count
           if (lhs.cluster_count !== rhs.cluster_count) {
             return rhs.cluster_count - lhs.cluster_count;
           }
-          // 2. If cluster counts are equal, prioritize highest HP to apply max damage
+          // If cluster counts are equal, prioritize highest HP to apply max damage
           return rhs.hp - lhs.hp;
         })
         .shift(); // Get the first (best) target
 
-      target = bestPullTarget ?? target;
+      target = bestTarget ?? target;
       change_target(target);
     }
   }
@@ -70,6 +74,8 @@ async function fight(target) {
   const canEnergize = !is_on_cooldown("energize");
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  const shouldEnergizeSelf =
+    ms_to_next_skill("attack") < 300 && !character.s.penalty_cd;
   const isTargetInAttackRange =
     distance(target, character) <= character.range + character.xrange;
   if (canEnergize) {
@@ -85,7 +91,7 @@ async function fight(target) {
 
     if (shouldEnergizeBuffee) {
       energizeTarget = buffee;
-    } else if (isAttackReady && isTargetInAttackRange) {
+    } else if (shouldEnergizeSelf && isTargetInAttackRange) {
       energizeTarget = character;
     }
 

@@ -256,7 +256,18 @@ async function advanceSmartMove(props) {
             clearInterval(checkingMageMagiportInterval);
           }
         }, 1000);
-        await smart_move(props);
+        if (
+          can_move({
+            map: props.map,
+            x: character.real_x,
+            y: character.real_y,
+            going_x: props.x,
+            going_y: props.y,
+            base: character.base,
+          })
+        ) {
+          await move(props.x, props.y);
+        } else await smart_move(props);
         clearInterval(checkingMageMagiportInterval);
         isAdvanceSmartMoving = false;
         clearInterval(scareInterval);

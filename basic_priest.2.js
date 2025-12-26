@@ -185,9 +185,10 @@ async function priestBuff() {
           (ally.hp < ally.max_hp - moderatelyInjuredThreshold &&
             !is_in_range(ally, "heal")), // Moderately low & out of range
       ) ||
-      allies.every(
+      (allies.every(
         (ally) => ally.hp < ally.max_hp - moderatelyInjuredThreshold, // All moderately low
-      );
+      ) &&
+        allies.length > 1);
 
     if (shouldPartyHeal) {
       use_skill("partyheal").then(() =>
@@ -256,35 +257,35 @@ async function zapperLoop() {
         weak: entity.max_hp < 1000,
       }));
 
-    if (isTanking) {
-    } else {
-      const sortedTargets = targetInSight.sort((lhs, rhs) => {
-        const lhsHasTarget = Boolean(lhs.target);
-        const rhsHasTarget = Boolean(rhs.target);
-        if (lhsHasTarget !== rhsHasTarget) return lhsHasTarget ? -1 : 1;
+    // if (isTanking) {
+    // } else {
+    const sortedTargets = targetInSight.sort((lhs, rhs) => {
+      const lhsHasTarget = Boolean(lhs.target);
+      const rhsHasTarget = Boolean(rhs.target);
+      if (lhsHasTarget !== rhsHasTarget) return lhsHasTarget ? -1 : 1;
 
-        // higher hp% mobs first to balance the aoe cluster
-        if (lhsHasTarget && rhsHasTarget) {
-          if (lhs.hp_percent !== rhs.hp_percent)
-            return rhs.hp_percent - lhs.hp_percent;
-          else return rhs.distance - lhs.distance;
-        }
-
-        // sort weak mobs among other mob if above criterias not met
-        if (lhs.weak !== rhs.weak) return lhs.weak ? -1 : 1;
-
-        // fallback: furthest ones
-        return rhs.distance - lhs.distance;
-      });
-      if (sortedTargets) {
-        const zapTarget = sortedTargets[0];
-        promisesToAwait.push(
-          use_skill("zapperzap", zapTarget).then(() =>
-            reduce_cooldown("zapperzap", Math.min(...parent.pings)),
-          ),
-        );
+      // higher hp% mobs first to balance the aoe cluster
+      if (lhsHasTarget && rhsHasTarget) {
+        if (lhs.hp_percent !== rhs.hp_percent)
+          return rhs.hp_percent - lhs.hp_percent;
+        else return rhs.distance - lhs.distance;
       }
+
+      // sort weak mobs among other mob if above criterias not met
+      if (lhs.weak !== rhs.weak) return lhs.weak ? -1 : 1;
+
+      // fallback: furthest ones
+      return rhs.distance - lhs.distance;
+    });
+    if (sortedTargets) {
+      const zapTarget = sortedTargets[0];
+      promisesToAwait.push(
+        use_skill("zapperzap", zapTarget).then(() =>
+          reduce_cooldown("zapperzap", Math.min(...parent.pings)),
+        ),
+      );
     }
+    // }
     await withTimeout(Promise.all(promisesToAwait), 500);
   } catch (e) {
     console.log("Error while zapping: ", e);
@@ -301,6 +302,15 @@ async function mainLoop() {
       throw new Error("Character's down", {
         cause: "death",
       });
+    }
+
+    if (!character.skin || character.skin !== "snow_angel") {
+      if (!character.slots.cape || character.slots.cape.name !== "angelwings") {
+        await equipBatch({ cape: "angelwings" });
+      }
+      if (character.slots.cape && character.slots.cape.name === "angelwings") {
+        parent.socket.emit("activate", { slot: "cape" });
+      }
     }
 
     await priestBuff();

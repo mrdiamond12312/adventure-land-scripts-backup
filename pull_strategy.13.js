@@ -74,14 +74,17 @@ async function usePullStrategies(target) {
           MELEE_IGNORE_LIST.includes(mob.mtype),
       );
 
+      // Check if the character is already targeting enough mobs
       const havePulledEnoughMobs =
         mobsList.filter((mob) => mob.target === character.name).length >=
         MAX_TARGET;
 
+      // Monsters that are in range of 'agitate' but *not* currently targeting the character
       const listOfNoTargetMonsterInRange = mobsList.filter(
         (mob) => is_in_range(mob, "agitate") && mob.target !== character.name,
       );
 
+      // Count mobs targeting self
       const magicalMobsTargetingSelf = mobsList.filter(
         (mob) => mob.damage_type === "magical" && mob.target === character.name,
       );
@@ -93,10 +96,12 @@ async function usePullStrategies(target) {
         (mob) => mob.damage_type === "pure" && mob.target === character.name,
       );
 
+      // Initialize counters
       let magicalMobsAfterAgitating = magicalMobsTargetingSelf.length;
       let physicalMobsAfterAgitating = physicalMobsTargetingSelf.length;
       let pureMobsAfterAgitating = pureMobsTargetingSelf.length;
 
+      // Add counts for mobs that *will* target self after 'agitate'
       for (const mob of listOfNoTargetMonsterInRange) {
         switch (mob.damage_type) {
           case "magical":
@@ -113,60 +118,82 @@ async function usePullStrategies(target) {
         }
       }
 
+      // Check if the character would be feared after the new mobs are pulled (based on courage stats)
       const isFearedAfterAgitating =
         magicalMobsAfterAgitating > character.mcourage ||
         physicalMobsAfterAgitating > character.courage ||
         pureMobsAfterAgitating > character.pcourage;
 
+      // Calculate average party damage taken
       const partyDmgRecieved = avgPartyDmgTaken(partyMems);
 
-      if (
+      // Basic Requirements
+      const canUseAgitate =
         !havePulledEnoughMobs &&
         !formidableMonsterAppeared &&
-        character.mp > G.skills["agitate"].mp &&
-        !is_on_cooldown("agitate") &&
-        // numberOfMonsterInRange <= MAX_TARGET + 2 &&
-        !listOfNoTargetMonsterInRange.some(
-          (mob) =>
-            (mob.cooperative && !partyMems.includes(mob.target)) ||
-            parent.party_list
-              .filter((id) => !partyMems.includes(id))
-              .includes(mob.target),
-        ) &&
-        listOfNoTargetMonsterInRange.length >= 2 &&
-        !listOfNoTargetMonsterInRange.some(
-          (mob) =>
-            MELEE_IGNORE_LIST.includes(mob.mtype) ||
-            WATCHOUT_ABILITIES.some((skill) =>
-              Object.keys(mob.abilities ?? {}).includes(skill),
-            ),
-        ) &&
-        Object.values(parent.entities)
-          .filter(
-            (entity) =>
-              entity.type === "monster" &&
-              is_in_range(entity, "agitate") &&
-              entity.target !== character,
-          )
-          .reduce((prev, curr) => prev + calculateDamage(curr, character), 0) <
-          healReceivableAmount - partyDmgRecieved &&
-        !isFearedAfterAgitating
+        character.mp >= G.skills["agitate"].mp &&
+        !is_on_cooldown("agitate");
+
+      // Mob Quantity Requirement
+      const sufficientNoTargetMobs = listOfNoTargetMonsterInRange.length >= 2;
+
+      // Mob Safety Check: No bad mobs in the list
+      const safeToAgitateMobs = !listOfNoTargetMonsterInRange.some(
+        (mob) =>
+          MELEE_IGNORE_LIST.includes(mob.mtype) ||
+          WATCHOUT_ABILITIES.some((skill) =>
+            Object.keys(mob.abilities ?? {}).includes(skill),
+          ),
+      );
+
+      // Mob Target Check: Agitate won't steal from others or cooperative mobs
+      const wontStealOrBreakCoop = !listOfNoTargetMonsterInRange.some(
+        (mob) =>
+          (mob.cooperative && // Cooperative mob
+            !mob["1hp"] && // Is not a 1HP cooperative mob (maybe ignored?)
+            !partyMems.includes(mob.target)) || // And its target is not one of my character
+          parent.party_list
+            .filter((id) => !partyMems.includes(id))
+            .includes(mob.target), // OR its target is other player in the party
+      );
+
+      // Fear Check
+      const willNotBeFeared = !isFearedAfterAgitating;
+
+      // Damage Check
+      const currentAggroDamage = Object.values(parent.entities)
+        .filter(
+          (entity) =>
+            entity.type === "monster" &&
+            is_in_range(entity, "agitate") &&
+            !partyMems.includes(entity.target),
+        )
+        .reduce((prev, curr) => prev + calculateDamage(curr, character), 0);
+
+      const damageIsAcceptable =
+        currentAggroDamage < healReceivableAmount - partyDmgRecieved;
+
+      if (
+        canUseAgitate &&
+        sufficientNoTargetMobs &&
+        safeToAgitateMobs &&
+        wontStealOrBreakCoop &&
+        willNotBeFeared &&
+        damageIsAcceptable
       ) {
         promises.push(use_skill("agitate"));
       }
+
       if (
         partyDmgRecieved < healReceivableAmount &&
         !havePulledEnoughMobs &&
         character.mp > G.skills["taunt"].mp &&
-        !is_on_cooldown("taunt")
+        !is_on_cooldown("taunt") && isAssignedAsTanker()
       ) {
         const mobToPull = mobsList.find(
           (mob) =>
             calculateDamage(mob, character) < 4000 &&
             is_in_range(mob, "taunt") &&
-            !WATCHOUT_ABILITIES.some((skill) =>
-              Object.keys(mob.abilities ?? {}).includes(skill),
-            ) &&
             (!mob.target ||
               partyMems
                 .filter((id) => id !== character.name)

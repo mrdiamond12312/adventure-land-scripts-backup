@@ -139,6 +139,10 @@ var mapY = -2614;
 // var mapX = -800;
 // var mapY = -354;
 
+// var map = "level1";
+// var mapX = 50;
+// var mapY = 425;
+
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 var mobsToFarm = ["phoenix", "stompy", "wolf"];
@@ -159,6 +163,7 @@ var mobsToFarm = ["phoenix", "stompy", "wolf"];
 //   "crabx",
 // ];
 // var mobsToFarm = ["plantoid"];
+// var mobsToFarm = ["prat"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -354,6 +359,7 @@ const STORE_ABLE = [
   "frozenkey",
   "funtoken",
   "gem1",
+  "rfangs",
   "whiteegg",
   "sstinger",
   "spores",
@@ -440,7 +446,6 @@ const SALE_ABLE = [
   "staffofthedead",
   "swordofthedead",
   "ringsj",
-  "mshield",
   "hhelmet",
   "hgloves",
   "harmor",
@@ -454,7 +459,14 @@ const SALE_ABLE = [
   // Easter's loots
   // "eears",
   // "eslippers",
-  // Sell and replace by crypts's drops
+
+  //Christmas loots
+  // "xmashat",
+  // "xmassweater",
+  // "xmaspants",
+  // "warmscarf",
+
+  // Sell and replace by crypt's loots
   "intearring",
   "strearring",
   // "dexring",
@@ -685,7 +697,8 @@ function getTarget() {
           (entity) =>
             entity.type === "monster" &&
             entity.target &&
-            party.has(entity.target),
+            party.has(entity.target) &&
+            distance(entity, character) < character.range + character.xrange,
         )
         .sort(
           (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
@@ -845,7 +858,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   for (let i = 1; i < movementHistory.length; i++) {
     const dx = movementHistory[i].x - movementHistory[i - 1].x;
     const dy = movementHistory[i].y - movementHistory[i - 1].y;
-    totalMovement += Math.hypot(dx, dy);
+    totalMovement += Math.sqrt(dx * dx + dy * dy);
   }
 
   const averageMovement = totalMovement / movementHistory.length;
@@ -857,9 +870,6 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     }
   }
 
-  // --- 4. Calculate range offsets ---
-  const extraRangeTarget = extraDistanceWithinHitbox(target);
-  const extraRangeSelf = extraDistanceWithinHitbox(character);
   // const totalExtraRange = extraRangeTarget + extraRangeSelf;
   const rangeRadius = character.range * rangeRateFn;
   const extendedRadius = character.xrange;
@@ -1070,46 +1080,53 @@ async function midasLooting(forced = false) {
   const promises = [];
 
   const bestLooterCharacter = bestLooter();
-  const partyMidasUsers = [...parent.party_list, character.name]
+  const partyMidasUsers = [...parent.party_list, ...partyMems, character.name]
     .map((id) => get_player(id))
     .filter((player) => player && MIDAS_CHARACTER.includes(player.name));
 
   try {
-    if (
-      MIDAS_CHARACTER.includes(character.name) &&
-      (chests.length >= LOOTING_LIMIT ||
+    if (MIDAS_CHARACTER.includes(character.name)) {
+      if (
+        chests.length >= LOOTING_LIMIT ||
         ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) ||
-        forced)
-    ) {
-      isLooting = true;
-      shouldReset = true;
+        forced
+      ) {
+        isLooting = true;
+        shouldReset = true;
 
-      if ((!smart.moving && !isAdvanceSmartMoving) || forced)
-        await withTimeout(
-          equipBatch(
-            {
-              helmet: "wcap",
-              chest: "wattire",
-              pants: "wbreeches",
-              shoes: "wshoes",
-              gloves: "handofmidas",
-              amulet: "spookyamulet",
-              booster: "goldbooster",
-            },
-            true,
-          ),
-          500,
-        );
+        if ((!smart.moving && !isAdvanceSmartMoving) || forced)
+          await withTimeout(
+            equipBatch(
+              {
+                helmet: "wcap",
+                chest: "wattire",
+                pants: "wbreeches",
+                shoes: "wshoes",
+                gloves: "handofmidas",
+                amulet: "spookyamulet",
+                booster: "goldbooster",
+              },
+              true,
+            ),
+            500,
+          );
 
-      let breakFlag = LOOTING_LIMIT * 2;
-      for (const chest of chests) {
-        if (breakFlag-- <= 0) break;
-        if (distance(chest, character) <= 800) {
-          promises.push(loot(chest.id));
+        let breakFlag = LOOTING_LIMIT * 2;
+        for (const chest of chests) {
+          if (breakFlag-- <= 0) break;
+          if (distance(chest, character) <= 800) {
+            promises.push(loot(chest.id));
+          }
         }
       }
-    } else if (!MIDAS_CHARACTER.includes(character.name) && partyMidasUsers.length) {
-      if (chests.length >= LOOTING_LIMIT && (smart.moving || isAdvanceSmartMoving || forced)) {
+    } else if (
+      !MIDAS_CHARACTER.includes(character.name) &&
+      partyMidasUsers.length
+    ) {
+      if (
+        chests.length >= LOOTING_LIMIT &&
+        (smart.moving || isAdvanceSmartMoving || forced)
+      ) {
         isLooting = true;
         shouldReset = true;
 
@@ -1366,7 +1383,13 @@ setInterval(async () => {
     );
   }
 
-  if (character.ping > 5000) disconnect();
+  if (character.ping > 1000) {
+    if (character.ctype === "merchant") disconnect();
+    else {
+      if (parent.caracAL) parent.caracAL.shutdown();
+      else disconnect();
+    }
+  }
 
   if (partyMems.some((id) => !parent.party_list.includes(id))) {
     if (character.name === partyMems[0]) {
@@ -1440,7 +1463,7 @@ const shouldDeployRogue = () => {
 
 const DYNAMIC_PARTY_PRESETS = {
   snowman: () => {
-    RANGER = RANGER1;
+    RANGER = RANGER2;
     HEALER = RANGER;
     return [WARRIOR, RANGER, MAGE];
   },
@@ -1582,8 +1605,7 @@ async function changeToDailyEventTargets() {
   }
 
   if (parent.S.snowman?.live) {
-    if (!["mage"].includes(character.ctype)) changeToPullStrategies();
-    else changeToNormalStrategies();
+    changeToPullStrategies();
 
     const currentTarget = get_target();
     const snowmanInstance = get_nearest_monster({ type: "snowman" });
