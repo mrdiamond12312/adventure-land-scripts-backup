@@ -1875,7 +1875,7 @@ async function changeToDailyEventTargets() {
     partyHealer &&
     !partyHealer.rip &&
     character.ping < 600 &&
-    (get_targeted_monster()?.level < 5 || get_targeted_monster()?.attack < 500)
+    (get_targeted_monster()?.level < 5 || get_target()?.attack < 500)
   )
     changeToPullStrategies();
   else changeToNormalStrategies();

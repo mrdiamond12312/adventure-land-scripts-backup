@@ -512,7 +512,6 @@ const ITEM_NEEDED = [
   "firestars",
   "jacko",
   "gcape",
-  "mshield",
   "carrot",
   "harbringer",
 ];

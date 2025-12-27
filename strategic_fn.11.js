@@ -273,7 +273,7 @@ function calculateRangerItems(target) {
         // Calculate damage per target
         const attackDealtByCrossbow = targets.map(
           (mob) =>
-            dps_multiplier(mob.armor - aPiercingAfterEquipingCrossbow) *
+            dps_multiplier(mob.armor - aPiercingAfterEquipingCrossbow * 2) *
             attackStatEquippingCrossbow,
         );
 
@@ -297,7 +297,7 @@ function calculateRangerItems(target) {
     }
 
   return {
-    helmet: "wcap",
+    helmet: feelingLucky ? "wcap" : "fury",
     mainhand,
     orb: feelingLucky
       ? "rabbitsfoot"
@@ -384,19 +384,19 @@ function calculatePriestItems(target) {
 }
 
 function calculateRogueItems(target) {
-  const haveLowHpMobsNearby = shouldWearLuckGear();
+  const feelingLucky = shouldWearLuckGear();
   const fieryWeapon = "firestars";
 
   // Safely handle missing target
   if (!target) {
     return {
-      helmet: haveLowHpMobsNearby ? "wcap" : "fury",
+      helmet: feelingLucky ? "wcap" : "fury",
       mainhand: "daggerofthedead",
       offhand: "daggerofthedead",
-      shoes: haveLowHpMobsNearby ? "wshoes" : "wingedboots",
-      gloves: haveLowHpMobsNearby ? "wgloves" : "supermittens",
-      amulet: haveLowHpMobsNearby ? "spookyamulet" : "dexamulet",
-      orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
+      shoes: feelingLucky ? "wshoes" : "wingedboots",
+      gloves: feelingLucky ? "wgloves" : "supermittens",
+      amulet: feelingLucky ? "spookyamulet" : "dexamulet",
+      orb: feelingLucky ? "rabbitsfoot" : "orbofdex",
       chest: "wattire",
       pants: "wbreeches",
     };
@@ -417,7 +417,7 @@ function calculateRogueItems(target) {
     (item_info(characterFireStars)?.attack ?? 0);
 
   const rogueBurnDmg = characterFireStars
-    ? dps_multiplier((target.armor ?? 0) - (character.apiercing ?? 0)) *
+    ? dps_multiplier((target.armor ?? 0) - (character.apiercing * 2 ?? 0)) *
       ((100 - (target.firesistance ?? 0)) / 100) *
       1.5 *
       (character.attack - equipItemAttackOffset + targetStacks) *
@@ -428,13 +428,13 @@ function calculateRogueItems(target) {
     rogueBurnDmg > (target.s?.burned?.intensity ?? 0) || target.cooperative;
 
   return {
-    helmet: haveLowHpMobsNearby ? "wcap" : "fury",
+    helmet: feelingLucky ? "wcap" : "fury",
     mainhand: "daggerofthedead",
-    shoes: haveLowHpMobsNearby ? "wshoes" : "wingedboots",
-    gloves: haveLowHpMobsNearby ? "wgloves" : "supermittens",
+    shoes: feelingLucky ? "wshoes" : "wingedboots",
+    gloves: feelingLucky ? "wgloves" : "supermittens",
     offhand: shouldEquipFireStar ? fieryWeapon : "daggerofthedead",
-    amulet: haveLowHpMobsNearby ? "spookyamulet" : "dexamulet",
-    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
+    amulet: feelingLucky ? "spookyamulet" : "dexamulet",
+    orb: feelingLucky ? "rabbitsfoot" : "orbofdex",
     chest: "wattire",
     pants: "wbreeches",
   };
@@ -563,7 +563,7 @@ function calculateDamage(target, characterEntity, recursion = true) {
                 ? G.monsters[target.mtype].rpiercing ?? 0
                 : 0),
           ) *
-          (target.frequency < 0.9 ? 0.9 : target.frequency) +
+          target.frequency +
         (target.dreturn && recursion
           ? characterEntity.range < 100
             ? (calculateDamage(characterEntity, target, false) *
@@ -582,9 +582,10 @@ function calculateDamage(target, characterEntity, recursion = true) {
                 : 0) -
               (target.type === "monster"
                 ? G.monsters[target.mtype].apiercing ?? 0
-                : 0),
+                : 0) *
+                2,
           ) *
-          (target.frequency < 0.9 ? 0.9 : target.frequency) +
+          target.frequency +
         (target.dreturn && recursion
           ? characterEntity.range < 100
             ? (calculateDamage(characterEntity, target, false) *
@@ -638,7 +639,7 @@ function avgDmgTaken(characterEntity, dmgType = null) {
     ? dps_multiplier(
         highestBurningMob.damage_type === "physical"
           ? characterEntity.armor -
-              (G.monsters[highestBurningMob.mtype].apiercing ?? 0)
+              (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
           : highestBurningMob.damage_type === "magical"
           ? characterEntity.resistance -
             (G.monsters[highestBurningMob.mtype].rpiercing ?? 0)
@@ -813,7 +814,7 @@ async function warriorCleave(currentStrategy) {
         mob.type === "monster" &&
         mob.hp >
           character.attack *
-            dps_multiplier(mob.armor - character.apiercing) *
+            dps_multiplier(mob.armor - character.apiercing * 2) *
             1.5 &&
         mob.attack > 150
       );
