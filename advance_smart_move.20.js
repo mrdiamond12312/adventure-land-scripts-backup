@@ -357,7 +357,7 @@ async function smartMoveAStar(
 
   if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
     throw new Error(
-      `Unable to find path from ${character.map},${character.x},${character.y}`,
+      `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
     );
   }
   isAdvanceSmartMoving = true;
@@ -381,7 +381,7 @@ async function smartMoveAStar(
       }
 
       if (segment.method === "town") {
-        await smartMoveAStar({ map: segment.map }, { speed: 999999 });
+        await smartMoveAStar({ map: segment.map }, { speed: 999999999 });
       }
     }
   } catch (e) {
