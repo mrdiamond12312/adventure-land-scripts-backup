@@ -1383,7 +1383,7 @@ setInterval(async () => {
     );
   }
 
-  if (character.ping > 1000) {
+  if (Math.min(...parent.pings) > 1000) {
     if (character.ctype === "merchant") disconnect();
     else {
       if (parent.caracAL) parent.caracAL.shutdown();

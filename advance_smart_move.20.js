@@ -1,3 +1,4 @@
+// Global vars and Constants
 var isAdvanceSmartMoving = false;
 
 const CRYPT_DOOR = {
@@ -33,12 +34,361 @@ const ALIA_FROM_POSITION = {
   },
 };
 
+const CELL = Object.freeze({
+  unknown: 0,
+  unstandable: -1,
+  standable: 1,
+});
+const GRID_CACHE = {};
+
+// Utils
+
+/**
+ * @author earthiverse
+ *
+ * Only use within DOM environment to search for character's ifram
+ * @param {string} name Character's ID
+ * @returns
+ */
 function getCharacter(name) {
   for (const iframe of top.$("iframe")) {
     const char = iframe.contentWindow.character;
     if (!char) continue; // Character isn't loaded yet
     if (char.name == name) return char;
   }
+}
+
+if (parent.caracAL && parent.caracAL.ALPathfinder) {
+  parent.caracAL.ALPathfinder.prepare(parent.G);
+}
+
+/**
+ * Generates and caches a grid object for the target map on cache miss.
+ * TODO: Account for mob spawn points as additional standable seeds.
+ *
+ * @version 20251227vCow
+ * @param {string} mapString - The target map ID
+ * @returns {Object} Grid data including standability map and map boundaries
+ */
+function getGrid(mapString) {
+  if (GRID_CACHE[mapString]) return GRID_CACHE[mapString];
+  const data = parent.G.geometry[mapString];
+  const { min_x, min_y, max_x, max_y, x_lines, y_lines, points } = data;
+  const mapMobs = parent.G.maps[mapString].monsters;
+  const mapSpawns = mapMobs
+    .filter((p) => !p.boundaries && p.boundary)
+    .reduce((acc, current) => {
+      acc.push([
+        (current.boundary[0] + current.boundary[2]) / 2,
+        (current.boundary[1] + current.boundary[3]) / 2,
+      ]);
+      return acc;
+    }, []);
+
+  // Init Array for Grid coloring
+  const gridWidth = Math.ceil(max_x - min_x);
+  const gridHeight = Math.ceil(max_y - min_y);
+  const mapGrid = new Int8Array(gridWidth * gridHeight);
+  mapGrid.fill(CELL.unknown);
+
+  // Color Boundaries with CELL.unstandable
+  for (const yLine of y_lines) {
+    const y = Math.round(yLine[0] - min_y);
+    const fromX = Math.max(0, Math.round(yLine[1] - min_x));
+    const toX = Math.min(gridWidth - 1, Math.round(yLine[2] - min_x));
+    for (let x = fromX; x <= toX; x++) {
+      if (y >= 0 && y < gridHeight)
+        mapGrid[y * gridWidth + x] = CELL.unstandable;
+    }
+  }
+
+  for (const xLine of x_lines) {
+    const x = Math.round(xLine[0] - min_x);
+    const fromY = Math.max(0, Math.round(xLine[1] - min_y));
+    const toY = Math.min(gridHeight - 1, Math.round(xLine[2] - min_y));
+    for (let y = fromY; y <= toY; y++) {
+      if (x >= 0 && x < gridWidth)
+        mapGrid[y * gridWidth + x] = CELL.unstandable;
+    }
+  }
+
+  // Prepare Seeds (The points where we KNOW we can stand)
+  const queue = [];
+  for (let key in points) {
+    const p = points[key];
+    const px = Math.round(p[0] - min_x);
+    const py = Math.round(p[1] - min_y);
+    const idx = py * gridWidth + px;
+    if (mapGrid[idx] === CELL.unknown) {
+      mapGrid[idx] = CELL.standable;
+      queue.push(idx);
+    }
+  }
+
+  // Seed from monster spawn centers
+  for (const [x, y] of mapSpawns) {
+    const px = Math.round(x - min_x);
+    const py = Math.round(y - min_y);
+    const idx = py * gridWidth + px;
+
+    if (mapGrid[idx] === CELL.unknown) {
+      mapGrid[idx] = CELL.standable;
+      queue.push(idx);
+    }
+  }
+
+  // Flood Fill (BFS)
+  let head = 0;
+  while (head < queue.length) {
+    const currIdx = queue[head++];
+    const x = currIdx % gridWidth;
+    const y = (currIdx / gridWidth) | 0;
+
+    // Standard 4-direction check (1 pixel at a time)
+    const neighbors = [
+      [x + 1, y],
+      [x - 1, y],
+      [x, y + 1],
+      [x, y - 1],
+    ];
+
+    for (const [nx, ny] of neighbors) {
+      if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
+        const nextIdx = ny * gridWidth + nx;
+        if (mapGrid[nextIdx] === 0) {
+          // If CELL.unknown and not a wall
+          mapGrid[nextIdx] = 1;
+          queue.push(nextIdx);
+        }
+      }
+    }
+  }
+
+  GRID_CACHE[mapString] = {
+    gridWidth,
+    gridHeight,
+    mapGrid,
+    maxX: max_x,
+    maxY: max_y,
+    minX: min_x,
+    minY: min_y,
+  };
+
+  return GRID_CACHE[mapString];
+}
+
+/**
+ * Helper to check against the grid
+ * @param {Object} position a position object with `x`, `y`, and `map` id
+ * @returns
+ */
+function isStandablePoint(position) {
+  const { x, y, map } = position;
+  const { gridWidth, gridHeight, mapGrid, minX, minY } = getGrid(map);
+
+  // Convert world → grid coordinates
+  const gx = Math.round(x - minX);
+  const gy = Math.round(y - minY);
+
+  // Out of bounds = not standable
+  if (gx < 0 || gx >= gridWidth || gy < 0 || gy >= gridHeight) {
+    return false;
+  }
+
+  const idx = gy * gridWidth + gx;
+  return mapGrid[idx] === CELL.standable;
+}
+
+/**
+ * Returns spawns data for the given monster
+ *
+ * @param {string} monster
+ * @param {Object} g
+ * @returns {Array<{ map: string, x: number, y: number }>}
+ */
+function getMonsterSpawns(monster, g = parent.G) {
+  const spawns = [];
+
+  for (const [mapKey, gMap] of Object.entries(g.maps)) {
+    if (gMap.ignore) continue; // Ignore map
+    if (!gMap.monsters) continue; // No monsters on map
+
+    for (const mapMonster of gMap.monsters) {
+      if (mapMonster.type !== monster) continue; // Different monster
+
+      const boundaries = mapMonster.boundaries ?? [
+        [mapKey, ...mapMonster.boundary],
+      ];
+
+      for (const [map, x1, y1, x2, y2] of boundaries) {
+        spawns.push({
+          map,
+          x: (x1 + x2) / 2,
+          y: (y1 + y2) / 2,
+        });
+      }
+    }
+  }
+
+  return spawns;
+}
+
+/**
+ * Pathfinding using earth's ALPathfinder
+ * @param {Object} toPosition includes `x`, `y` and `map`
+ * @param {number} speed set the speed to a very big number to disable use_town, default: character's speed
+ */
+function pathfinderGetPath(toPosition, speed = character.speed) {
+  return parent.caracAL.ALPathfinder.getPath(
+    character.map,
+    character.x,
+    character.y,
+    toPosition.map,
+    toPosition.x,
+    toPosition.y,
+    speed,
+  );
+}
+
+/**
+ * A smart move helper using earth's ALPathfinder
+ * @param {Object} toPosition
+ * @param {Object} options
+ */
+async function smartMoveAStar(
+  toPosition,
+  options = {
+    useBlink: true,
+    useMagiport: true,
+    stopCondition: undefined,
+    speed: character.speed,
+  },
+) {
+  if (!toPosition) return;
+
+  let pathFindingResult;
+
+  // If position is a mob's name id
+  if (typeof toPosition === "string") {
+    if (!parent.G.monsters[toPosition]) {
+      throw new Error("Unknown monster");
+    }
+
+    const monsterSpawns = getMonsterSpawns(toPosition);
+    if (!monsterSpawns.length) {
+      throw new Error("Monster has no spawns");
+    }
+
+    let shortest = Infinity;
+
+    for (const spawn of monsterSpawns) {
+      const result = pathfinderGetPath(spawn, options.speed);
+
+      if (Array.isArray(result) && result.length < shortest) {
+        shortest = result.length;
+        pathFindingResult = result;
+
+        // prefer same-map immediately
+        if (spawn.map === character.map) break;
+      }
+    }
+  } else {
+    /* Position filler */
+
+    // Fill map first
+    if (
+      toPosition.map === undefined &&
+      toPosition.x !== undefined &&
+      toPosition.y !== undefined
+    ) {
+      toPosition.map = character.map;
+    }
+
+    let mapData = parent.G.maps[toPosition.map];
+
+    // Fill x/y from spawn
+    if (
+      mapData.spawns?.length &&
+      (toPosition.x === undefined || toPosition.y === undefined)
+    ) {
+      toPosition.x = mapData.spawns[0][0];
+      toPosition.y = mapData.spawns[0][1];
+    }
+
+    // Final validation
+    if (
+      toPosition.map === undefined ||
+      toPosition.x === undefined ||
+      toPosition.y === undefined
+    ) {
+      throw new Error(
+        `Unable to find path from ${character.map},${character.x},${character.y} ` +
+          `to ${toPosition.map},${toPosition.x},${toPosition.y}`,
+      );
+    }
+
+    pathFindingResult = pathfinderGetPath(toPosition, options.speed);
+
+    // Standable fallback (for example: icegolem spawn)
+    if (
+      (!pathFindingResult || !pathFindingResult.length) &&
+      mapData?.spawns?.length &&
+      isStandablePoint(toPosition)
+    ) {
+      pathFindingResult = pathfinderGetPath(
+        {
+          ...toPosition,
+          x: mapData.spawns[0][0],
+          y: mapData.spawns[0][1],
+        },
+        options.speed,
+      );
+
+      if (Array.isArray(pathFindingResult)) {
+        pathFindingResult.push({
+          map: toPosition.map,
+          x: toPosition.x,
+          y: toPosition.y,
+          method: "move",
+        });
+      }
+    }
+  }
+
+  if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
+    throw new Error(
+      `Unable to find path from ${character.map},${character.x},${character.y}`,
+    );
+  }
+  isAdvanceSmartMoving = true;
+
+  try {
+    // Moving
+    for (const segment of pathFindingResult) {
+      if (segment.method === "move") {
+        if (segment.map !== character.map) {
+          throw new Error(
+            `Expected map ${segment.map}, currently on ${character.map}`,
+          );
+        }
+        console.log(await move(segment.x, segment.y));
+        continue;
+      }
+
+      if (segment.method === "door" || segment.method === "transport") {
+        await transport(segment.map, segment.spawn);
+        continue;
+      }
+
+      if (segment.method === "town") {
+        await smartMoveAStar({ map: segment.map }, { speed: 999999 });
+      }
+    }
+  } catch (e) {
+    isAdvanceSmartMoving = false;
+  }
+
+  isAdvanceSmartMoving = false;
 }
 
 async function scareAwayMobs() {
@@ -51,9 +401,12 @@ async function scareAwayMobs() {
     character.mp > 100
   ) {
     return Promise.all([
-      equipBatch({
-        orb: "jacko",
-      }),
+      equipBatch(
+        {
+          orb: "jacko",
+        },
+        true,
+      ),
       use_skill("scare"),
     ]);
   }
