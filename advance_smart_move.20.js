@@ -261,7 +261,7 @@ async function smartMove(
     useBlink: true,
     useMagiport: true,
     stopCondition: undefined,
-    speed: character.speed,
+    speed: 999999999,
   },
 ) {
   if (!toPosition) return;
@@ -381,7 +381,8 @@ async function smartMove(
       }
 
       if (segment.method === "town") {
-        await smartMove({ map: segment.map }, { speed: 999999999 });
+        await use_skill("use_town");
+        await sleep(500);
       }
     }
   } catch (e) {
