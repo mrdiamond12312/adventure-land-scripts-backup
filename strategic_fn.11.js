@@ -314,7 +314,12 @@ function calculateRangerItems(target) {
           if (!item) return null;
 
           const info = item_info(item);
-          if (!["bow", "crossbow"].includes(info.wtype)) return null;
+
+          if (
+            !["bow", "crossbow"].includes(info.wtype) ||
+            item.name === "cupid"
+          )
+            return null;
 
           return {
             slot,
@@ -994,7 +999,6 @@ function shouldAttack(target = get_target()) {
   return true;
 }
 
-// New Temporal Surge Logic
 // New Temporal Surge Logic
 async function useTemporalSurge() {
   if (isAdvanceSmartMoving || smart.moving) return false;
