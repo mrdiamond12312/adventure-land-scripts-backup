@@ -55,7 +55,7 @@ function rawAttackMultiplier() {
 
   if (character.ctype === "paladin")
     return character.str / 20 + character.int / 40;
-  else return mainStat / 20;
+  else return character[mainStat] / 20;
 }
 
 function canOneShotWithWeapon(weaponInfo, targets) {
