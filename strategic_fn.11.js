@@ -948,3 +948,68 @@ function shouldAttack(target = get_target()) {
 
   return true;
 }
+
+// New Temporal Surge Logic
+async function useTemporalSurge() {
+  if (
+    is_on_cooldown("temporalsurge") ||
+    character.mp < G.skills["temporalsurge"].mp + 400
+  )
+    return false;
+
+  if (
+    findMaxLevelItem("orboftemporal") === -1 &&
+    character.slots.orb?.name !== "orboftemporal"
+  ) {
+    return false;
+  }
+
+  const currentMap = character.map;
+  const temporalsurgeRange = G.skills["temporalsurge"].range;
+
+  const isSpawnInRange = (boundary) => {
+    const [x1, y1, x2, y2] = boundary;
+
+    return (
+      distance(character, {
+        map: currentMap,
+        x: (x1 + x2) / 2,
+        y: (y1 + y2) / 2,
+        awidth: Math.abs(x2 - x1),
+        aheight: Math.abs(y2 - y1),
+      }) < temporalsurgeRange
+    );
+  };
+
+  const nearbySpawn = Object.values(parent.G.maps[currentMap].spawns).filter(
+    (spawn) => {
+      if (spawn.boundaries) {
+        return spawn.boundaries.some((boundary) => isSpawnInRange(boundary));
+      } else {
+        return isSpawnInRange(spawn.boundary);
+      }
+    },
+  );
+
+  const nearbySpawnWithSpawnMechanic = nearbySpawn.filter(
+    (spawn) => G.monsters[spawn.type].spawns,
+  );
+
+  const promises = [];
+
+  if (nearbySpawn.length && nearbySpawnWithSpawnMechanic.length === 0) {
+    if (character.slots.orb?.name !== "orboftemporal") {
+      promises.push(equipBatch({ orb: "orboftemporal" }, true));
+    }
+    promises.push(use_skill("temporalsurge"));
+  }
+
+  return withTimeout(Promise.allSettled(promises)).finally(() => {
+    reduce_cooldown("temporalsurge", 0.95 * character.ping);
+  });
+}
+
+// Surge loop
+setInterval(() => {
+  useTemporalSurge();
+}, 1000);

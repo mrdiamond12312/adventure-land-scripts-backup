@@ -1491,9 +1491,10 @@ const DYNAMIC_PARTY_PRESETS = {
     HEALER = PRIEST;
     return [PRIEST, ROGUE, MAGE];
   },
-
   crabxx: () => {
     const isAggroed = !!parent.S.crabxx?.target;
+    if (isAggroed) RANGER = RANGER1;
+    HEALER = isAggroed ? RANGER1 : PRIEST;
     return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
   },
   default: () => {

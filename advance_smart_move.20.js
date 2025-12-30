@@ -255,7 +255,7 @@ function pathfinderGetPath(toPosition, speed = character.speed) {
  * @param {Object} toPosition
  * @param {Object} options
  */
-async function smartMoveAStar(
+async function smartMove(
   toPosition,
   options = {
     useBlink: true,
@@ -381,7 +381,7 @@ async function smartMoveAStar(
       }
 
       if (segment.method === "town") {
-        await smartMoveAStar({ map: segment.map }, { speed: 999999999 });
+        await smartMove({ map: segment.map }, { speed: 999999999 });
       }
     }
   } catch (e) {
