@@ -16,6 +16,7 @@ var isExeing = false;
 
 const fishingLocation = { map: "main", x: -1368, y: -82 };
 const miningLocation = { map: "tunnel", x: -279, y: -148 };
+const homeLocation = { map: "main", x: -152, y: -137 };
 const haveAComputer = () =>
   locate_item("computer") !== -1 || locate_item("ancientcomputer") !== -1;
 
@@ -166,9 +167,7 @@ async function exchangeMines() {
 
 function moveHome() {
   if (
-    (character.map === "main" &&
-      character.real_x === -152 &&
-      character.real_y === -137) ||
+    distance(character, homeLocation) < 50 ||
     smart.moving ||
     isAdvanceSmartMoving ||
     character.moving ||
@@ -180,7 +179,7 @@ function moveHome() {
   log("Moving back Town!");
   close_stand();
   equipBroom();
-  return smart_move({ map: "main", x: -152, y: -137 })
+  return smart_move(homeLocation)
     .then(() => {
       onDuty = false;
       if (locate_item("stand0") === -1) {
@@ -428,7 +427,7 @@ setInterval(async function () {
       holidayExchange(),
       craft("xbox"),
       craft("basketofeggs"),
-      craft("orba", 1, { map: "main", x: -152, y: -137 }),
+      craft("orba", 1, homeLocation),
       craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
       craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
       craft("wingedboots", character.esize - 8, { map: "main", x: -2, y: 295 }),
