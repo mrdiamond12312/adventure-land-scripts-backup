@@ -16,6 +16,76 @@ function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
   );
 }
 
+function getRelevantPiercing(wtype) {
+  const classData = G.classes?.[character.ctype];
+  if (!classData) return 0;
+
+  const damageType = classData.damage_type;
+  const weaponData = classData.mainhand?.[wtype];
+
+  if (!weaponData) return 0;
+
+  if (damageType === "physical") {
+    return weaponData.apiercing ?? 0;
+  }
+
+  if (damageType === "magical") {
+    return weaponData.rpiercing ?? 0;
+  }
+
+  return 0;
+}
+
+function getMobDefense(mob) {
+  const damageType = G.classes[character.ctype]?.damage_type;
+
+  if (damageType === "physical") {
+    return mob.armor ?? 0;
+  }
+
+  if (damageType === "magical") {
+    return mob.resistance ?? 0;
+  }
+
+  return 0;
+}
+
+function canOneShotWithWeapon(weaponInfo, targets) {
+  const classData = G.classes[character.ctype];
+  const damageType = classData.damage_type;
+
+  const currentInfo = character.slots.mainhand
+    ? item_info(character.slots.mainhand)
+    : { attack: 0, name: null, wtype: null };
+
+  const effectiveAttack =
+    character.attack + (weaponInfo.attack - currentInfo.attack);
+
+  let effectivePiercing =
+    damageType === "physical" ? character.apiercing : character.rpiercing;
+
+  if (currentInfo.name !== weaponInfo.name) {
+    effectivePiercing += getRelevantPiercing(weaponInfo.wtype);
+  }
+
+  const piercingMultiplier = damageType === "physical" ? 2 : 1;
+
+  const shotMultiplier =
+    targets.length >= 4 ? 0.5 : targets.length >= 2 ? 0.7 : 1;
+
+  return targets.some((mob) => {
+    const defense = getMobDefense(mob);
+
+    const dmg =
+      dps_multiplier(defense - effectivePiercing * piercingMultiplier) *
+      effectiveAttack *
+      0.9 *
+      shotMultiplier;
+
+    return mob.max_hp <= dmg;
+  });
+}
+
 // Counting
 function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return 0;
@@ -237,63 +307,38 @@ function calculateRangerItems(target) {
     }
     // --- Calculate oneshot with crossbow ---
     else {
-      const currentEquippedBowInfo = character.slots.mainhand
-        ? item_info(character.slots.mainhand)
-        : {
-            name: undefined,
-            attack: 0,
-            apiercing: 0,
+      const current = character.slots.mainhand;
+      const currentInfo = current ? item_info(current) : { attack: 0 };
+      const rangedWeapons = character.items
+        .map((item, slot) => {
+          if (!item) return null;
+
+          const info = item_info(item);
+          if (!["bow", "crossbow"].includes(info.wtype)) return null;
+
+          return {
+            slot,
+            name: item.name,
+            info,
+            attackDelta: info.attack - currentInfo.attack,
           };
+        })
+        .filter(Boolean);
 
-      const fireBowInfo =
-        currentEquippedBowInfo.id === RANGER_INV_ITEMS.fireBow
-          ? currentEquippedBowInfo
-          : item_info(
-              character.items[findMaxLevelItem(RANGER_INV_ITEMS.fireBow)],
-            );
-      const crossbowInfo =
-        currentEquippedBowInfo.id === RANGER_INV_ITEMS.crossBow
-          ? currentEquippedBowInfo
-          : item_info(
-              character.items[findMaxLevelItem(RANGER_INV_ITEMS.crossBow)],
-            );
+      // Sort by smallest upgrade first (asc)
+      rangedWeapons.sort((lhs, rhs) => lhs.attackDelta - rhs.attackDelta);
 
-      if (crossbowInfo && fireBowInfo) {
-        // Effective attack with crossbow
-        const attackStatEquippingCrossbow =
-          character.attack +
-          (crossbowInfo.attack - currentEquippedBowInfo.attack);
+      const winningWeapon = rangedWeapons.find((weapon) =>
+        canOneShotWithWeapon(weapon.info, targets),
+      );
 
-        // Effective AP for crossbow
-        let aPiercingAfterEquipingCrossbow = character.apiercing;
-        if (currentEquippedBowInfo.name !== crossbowInfo.name) {
-          aPiercingAfterEquipingCrossbow += 120;
-        }
-
-        // Calculate damage per target
-        const attackDealtByCrossbow = targets.map(
-          (mob) =>
-            dps_multiplier(mob.armor - aPiercingAfterEquipingCrossbow * 2) *
-            attackStatEquippingCrossbow,
-        );
-
-        const shotMultiplier =
-          targets.length >= 4 ? 0.5 : targets.length >= 2 ? 0.7 : 1;
-
-        // Check if any target can be oneshot by crossbow
-        const oneshotableWithCrossbow = targets.some(
-          (mob, i) =>
-            mob.max_hp <= attackDealtByCrossbow[i] * 0.9 * shotMultiplier,
-        );
-
-        mainhand = oneshotableWithCrossbow
-          ? RANGER_INV_ITEMS.crossBow
-          : RANGER_INV_ITEMS.fireBow;
+      if (winningWeapon) {
+        mainhand = winningWeapon.name;
+      } else {
+        // fallback: strongest ranged weapon
+        const strongest = rangedWeapons.at(-1);
+        mainhand = strongest?.name ?? character.slots.mainhand?.name ?? "bow";
       }
-      // --- Fallback if only one bow is available ---
-      else if (!crossbowInfo) mainhand = RANGER_INV_ITEMS.fireBow;
-      else if (!fireBowInfo) mainhand = RANGER_INV_ITEMS.crossBow;
-      else mainhand = "bow";
     }
 
   return {
