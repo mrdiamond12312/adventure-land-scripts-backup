@@ -357,16 +357,14 @@ function calculateRangerItems(target) {
       // Sort by smallest upgrade first (asc)
       rangedWeapons.sort((lhs, rhs) => lhs.attackDelta - rhs.attackDelta);
 
-      const winningWeapon = rangedWeapons.find((weapon) =>
+      const oneShotWeapon = rangedWeapons.find((weapon) =>
         canOneShotWithWeapon(weapon.info, targets),
       );
 
-      if (winningWeapon) {
-        mainhand = winningWeapon.name;
+      if (oneShotWeapon) {
+        mainhand = oneShotWeapon.name;
       } else {
-        // fallback: strongest ranged weapon
-        const strongest = rangedWeapons.at(-1);
-        mainhand = strongest?.name ?? character.slots.mainhand?.name ?? "bow";
+        mainhand = RANGER_INV_ITEMS.fireBow;
       }
     }
 
