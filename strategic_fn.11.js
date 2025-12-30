@@ -968,7 +968,14 @@ async function useTemporalSurge() {
   const temporalsurgeRange = G.skills["temporalsurge"].range;
 
   const isSpawnInRange = (boundary) => {
-    const [x1, y1, x2, y2] = boundary;
+    let map, x1, y1, x2, y2;
+
+    if (typeof boundary[0] === "string") {
+      [map, x1, y1, x2, y2] = boundary;
+      if (map !== currentMap) return false;
+    } else {
+      [x1, y1, x2, y2] = boundary;
+    }
 
     return (
       distance(character, {
@@ -981,15 +988,13 @@ async function useTemporalSurge() {
     );
   };
 
-  const nearbySpawn = parent.G.maps[currentMap].monsters.filter(
-    (spawn) => {
-      if (spawn.boundaries) {
-        return spawn.boundaries.some((boundary) => isSpawnInRange(boundary));
-      } else {
-        return isSpawnInRange(spawn.boundary);
-      }
-    },
-  );
+  const nearbySpawn = parent.G.maps[currentMap].monsters.filter((spawn) => {
+    if (spawn.boundaries) {
+      return spawn.boundaries.some((boundary) => isSpawnInRange(boundary));
+    } else {
+      return isSpawnInRange(spawn.boundary);
+    }
+  });
 
   const nearbySpawnWithSpawnMechanic = nearbySpawn.filter(
     (spawn) => G.monsters[spawn.type].spawns,
