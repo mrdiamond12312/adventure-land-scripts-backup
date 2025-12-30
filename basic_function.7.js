@@ -632,29 +632,35 @@ async function buff() {
         character.hp < character.max_hp - 500 &&
         !is_on_cooldown("use_hp")
       ) {
-        await withTimeout(use_skill("use_hp"), 2000);
+        await withTimeout(use_skill("use_hp"), 500);
         adjustPotionsCooldown();
       } else if (
         character.hp < character.max_hp - 50 &&
         !is_on_cooldown("regen_hp")
       ) {
-        await withTimeout(use_skill("regen_hp"), 2000);
+        await withTimeout(use_skill("regen_hp"), 500);
         adjustPotionsCooldown();
       }
     } else {
       if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
-        await withTimeout(use_skill("use_mp"), 2000);
+        await withTimeout(use_skill("use_mp"), 500);
         adjustPotionsCooldown();
       } else if (
         character.mp < character.max_mp - 100 &&
         !is_on_cooldown("regen_mp")
       ) {
-        await withTimeout(use_skill("regen_mp"), 2000);
+        await withTimeout(use_skill("regen_mp"), 500);
         adjustPotionsCooldown();
       }
     }
   } catch (e) {}
-  setTimeout(async () => buff(), Math.max(ms_to_next_skill("use_mp"), 5));
+  setTimeout(
+    async () => buff(),
+    Math.min(
+      Math.max(ms_to_next_skill("use_mp"), 5),
+      Math.max(ms_to_next_skill("use_hp"), 5),
+    ),
+  );
 }
 buff();
 
