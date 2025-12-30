@@ -981,7 +981,7 @@ async function useTemporalSurge() {
     );
   };
 
-  const nearbySpawn = Object.values(parent.G.maps[currentMap].spawns).filter(
+  const nearbySpawn = parent.G.maps[currentMap].monsters.filter(
     (spawn) => {
       if (spawn.boundaries) {
         return spawn.boundaries.some((boundary) => isSpawnInRange(boundary));
