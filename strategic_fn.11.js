@@ -978,18 +978,6 @@ async function useTemporalSurge() {
       [x1, y1, x2, y2] = boundary;
     }
 
-    console.log(
-      "Distance with spawn boundary:",
-      { x1, y1, x2, y2 },
-      distance(character, {
-        map: currentMap,
-        x: (x1 + x2) / 2,
-        y: (y1 + y2) / 2,
-        awidth: Math.abs(x2 - x1),
-        aheight: Math.abs(y2 - y1),
-      }),
-    );
-
     return (
       distance(character, {
         map: currentMap,
@@ -1016,7 +1004,6 @@ async function useTemporalSurge() {
   );
 
   const promises = [];
-  console.log(nearbySpawn.length, nearbySpawnWithSpawnMechanic.length);
   if (nearbySpawn.length && nearbySpawnWithSpawnMechanic.length === 0) {
     if (character.slots.orb?.name !== "orboftemporal") {
       promises.push(equipBatch({ orb: "orboftemporal" }, true));

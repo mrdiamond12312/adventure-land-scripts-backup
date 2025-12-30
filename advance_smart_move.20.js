@@ -371,7 +371,7 @@ async function smartMove(
             `Expected map ${segment.map}, currently on ${character.map}`,
           );
         }
-        console.log(await move(segment.x, segment.y));
+        await move(segment.x, segment.y);
         continue;
       }
 

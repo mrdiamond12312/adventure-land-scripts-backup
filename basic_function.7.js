@@ -1908,14 +1908,14 @@ function attackErrorHandler(error) {
 
       const newX = currentX + 0.4 * (targetX - currentX);
       const newY = currentY + 0.4 * (targetY - currentY);
-      console.log(
+      console.warn(
         `Too far, ${Math.round(error.distance)} distance / ${
           character.range + character.xrange
         } range`,
       );
       move(newX, newY);
     }
-  } else console.log("Error while attacking:", error);
+  } else console.warn("Error while attacking:", error);
 }
 
 setInterval(() => parent.socket.emit("send_updates", {}), 30000);
