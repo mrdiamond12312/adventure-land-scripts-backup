@@ -1469,7 +1469,7 @@ const shouldDeployRogue = () => {
 
 const DYNAMIC_PARTY_PRESETS = {
   snowman: () => {
-    RANGER = RANGER2;
+    RANGER = RANGER1;
     HEALER = RANGER;
     return [WARRIOR, RANGER, MAGE];
   },
