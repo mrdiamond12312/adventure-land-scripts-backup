@@ -50,6 +50,14 @@ function getMobDefense(mob) {
   return 0;
 }
 
+function rawAttackMultiplier() {
+  const mainStat = G.classes[character.ctype].main_stat;
+
+  if (character.ctype === "paladin")
+    return character.str / 20 + character.int / 40;
+  else return mainStat / 20;
+}
+
 function canOneShotWithWeapon(weaponInfo, targets) {
   const classData = G.classes[character.ctype];
   const damageType = classData.damage_type;
@@ -59,7 +67,8 @@ function canOneShotWithWeapon(weaponInfo, targets) {
     : { attack: 0, name: null, wtype: null };
 
   const effectiveAttack =
-    character.attack + (weaponInfo.attack - currentInfo.attack);
+    character.attack +
+    (weaponInfo.attack - currentInfo.attack) * rawAttackMultiplier();
 
   let effectivePiercing =
     damageType === "physical" ? character.apiercing : character.rpiercing;
@@ -329,6 +338,21 @@ function calculateRangerItems(target) {
           };
         })
         .filter(Boolean);
+
+      if (current) {
+        const info = item_info(current);
+        if (
+          ["bow", "crossbow"].includes(info.wtype) &&
+          current.name !== "cupid"
+        ) {
+          rangedWeapons.push({
+            slot: "mainhand",
+            name: current.name,
+            info,
+            attackDelta: 0,
+          });
+        }
+      }
 
       // Sort by smallest upgrade first (asc)
       rangedWeapons.sort((lhs, rhs) => lhs.attackDelta - rhs.attackDelta);
