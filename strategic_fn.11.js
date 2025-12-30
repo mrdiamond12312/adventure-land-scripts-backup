@@ -355,7 +355,12 @@ function calculateRangerItems(target) {
       }
 
       // Sort by smallest upgrade first (asc)
-      rangedWeapons.sort((lhs, rhs) => lhs.attackDelta - rhs.attackDelta);
+      rangedWeapons.sort((lhs, rhs) => {
+        if (lhs.info.wtype !== rhs.info.wtype) {
+          return lhs.info.wtype === "crossbow" ? 1 : -1;
+        }
+        return lhs.attackDelta - rhs.attackDelta;
+      });
 
       const oneShotWeapon = rangedWeapons.find((weapon) =>
         canOneShotWithWeapon(weapon.info, targets),
