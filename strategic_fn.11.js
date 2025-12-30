@@ -952,6 +952,7 @@ function shouldAttack(target = get_target()) {
 // New Temporal Surge Logic
 // New Temporal Surge Logic
 async function useTemporalSurge() {
+  if (isAdvanceSmartMoving || smart.moving) return false;
   if (
     is_on_cooldown("temporalsurge") ||
     character.mp < G.skills["temporalsurge"].mp + 400
