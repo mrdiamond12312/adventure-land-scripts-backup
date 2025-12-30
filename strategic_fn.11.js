@@ -1010,6 +1010,6 @@ async function useTemporalSurge() {
 }
 
 // Surge loop
-setInterval(() => {
-  useTemporalSurge();
+setInterval(async () => {
+  await useTemporalSurge();
 }, 1000);
