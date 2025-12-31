@@ -641,10 +641,11 @@ function calculateDamage(target, characterEntity, recursion = true) {
                 : 0),
           ) *
           target.frequency +
-        (target.dreturn && recursion
-          ? characterEntity.range < 100
+        (target.reflection && recursion
+          ? characterEntity.range > 100 &&
+            G.classes[characterEntity.ctype].damage_type === "magical"
             ? (calculateDamage(characterEntity, target, false) *
-                (target.dreturn ?? 0)) /
+                (target.reflection ?? 0)) /
               100
             : 0
           : 0)
@@ -664,7 +665,7 @@ function calculateDamage(target, characterEntity, recursion = true) {
           ) *
           target.frequency +
         (target.dreturn && recursion
-          ? characterEntity.range < 100
+          ? characterEntity.range < 100 && G.classes[characterEntity.ctype].damage_type === "physical"
             ? (calculateDamage(characterEntity, target, false) *
                 (target.dreturn ?? 0)) /
               100
@@ -738,8 +739,8 @@ function avgDmgTaken(characterEntity, dmgType = null) {
   );
 }
 
-function avgPartyDmgTaken(partyMems, dmgType = null) {
-  return partyMems.reduce(
+function avgPartyDmgTaken(partyList = partyMems, dmgType = null) {
+  return partyList.reduce(
     (accumulator, current) =>
       accumulator + avgDmgTaken(get_player(current), dmgType),
     0,

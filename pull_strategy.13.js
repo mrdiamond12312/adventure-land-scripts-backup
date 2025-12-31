@@ -188,26 +188,30 @@ async function usePullStrategies(target) {
         partyDmgRecieved < healReceivableAmount &&
         !havePulledEnoughMobs &&
         character.mp > G.skills["taunt"].mp &&
-        !is_on_cooldown("taunt") && isAssignedAsTanker()
+        !is_on_cooldown("taunt") &&
+        isAssignedAsTanker()
       ) {
-        const mobToPull = mobsList.find(
-          (mob) =>
-            calculateDamage(mob, character) < 4000 &&
-            is_in_range(mob, "taunt") &&
-            (!mob.target ||
-              partyMems
-                .filter((id) => id !== character.name)
-                .includes(mob.target)) &&
-            (mob.damage_type === "physical"
-              ? physicalMobsTargetingSelf.length < character.courage
-              : mob.damage_type === "magical"
-              ? magicalMobsTargetingSelf.length < character.mcourage
-              : pureMobsTargetingSelf.length < character.pcourage),
-        );
+        const mobToPull = mobsList
+          .sort((lhs, rhs) => rhs.attack * rhs.frequency - lhs.attack * lhs.frequency)
+          .find(
+            (mob) =>
+              calculateDamage(mob, character) + partyDmgRecieved <
+                healReceivableAmount &&
+              is_in_range(mob, "taunt") &&
+              (!mob.target ||
+                partyMems
+                  .filter((id) => id !== character.name)
+                  .includes(mob.target)) &&
+              (mob.damage_type === "physical"
+                ? physicalMobsTargetingSelf.length < character.courage
+                : mob.damage_type === "magical"
+                ? magicalMobsTargetingSelf.length < character.mcourage
+                : pureMobsTargetingSelf.length < character.pcourage),
+          );
 
         if (mobToPull)
           promises.push(
-            use_skill("taunt", parent.entities[mobToPull]).then(() =>
+            use_skill("taunt", mobToPull).then(() =>
               reduce_cooldown("taunt", character.ping * 0.95),
             ),
           );
