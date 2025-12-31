@@ -628,52 +628,55 @@ async function equipBatch(suggestedItems, forced = false) {
 }
 
 // Utilities
-function calculateDamage(target, characterEntity, recursion = true) {
-  if (!target) return 0;
-  switch (target?.damage_type) {
+function calculateDamage(fromEntity, toEntity, recursion = true) {
+  if (!fromEntity) return 0;
+  switch (fromEntity?.damage_type) {
     case "magical":
       return (
-        target.attack *
+        fromEntity.attack *
           dps_multiplier(
-            characterEntity.resistance -
-              (target.type === "monster"
-                ? G.monsters[target.mtype].rpiercing ?? 0
+            toEntity.resistance -
+              (fromEntity.type === "monster"
+                ? G.monsters[fromEntity.mtype].rpiercing ?? 0
                 : 0),
           ) *
-          target.frequency +
-        (target.reflection && recursion
-          ? characterEntity.range > 100 &&
-            G.classes[characterEntity.ctype].damage_type === "magical"
-            ? (calculateDamage(characterEntity, target, false) *
-                (target.reflection ?? 0)) /
+          fromEntity.frequency +
+        (fromEntity.reflection && recursion
+          ? toEntity.range > 100 &&
+            (toEntity.type === "monster"
+              ? G.monsters[toEntity.mtype].damage_type
+              : G.classes[toEntity.ctype].damage_type) === "magical"
+            ? (calculateDamage(toEntity, fromEntity, false) *
+                (fromEntity.reflection ?? 0)) /
               100
             : 0
           : 0)
       );
     case "physical":
       return (
-        target.attack *
+        fromEntity.attack *
           dps_multiplier(
-            characterEntity.armor -
-              (characterEntity.s["hardshell"]
-                ? G.conditions.hardshell.armor
-                : 0) -
-              (target.type === "monster"
-                ? G.monsters[target.mtype].apiercing ?? 0
+            toEntity.armor -
+              (toEntity.s["hardshell"] ? G.conditions.hardshell.armor : 0) -
+              (fromEntity.type === "monster"
+                ? G.monsters[fromEntity.mtype].apiercing ?? 0
                 : 0) *
                 2,
           ) *
-          target.frequency +
-        (target.dreturn && recursion
-          ? characterEntity.range < 100 && G.classes[characterEntity.ctype].damage_type === "physical"
-            ? (calculateDamage(characterEntity, target, false) *
-                (target.dreturn ?? 0)) /
+          fromEntity.frequency +
+        (fromEntity.dreturn && recursion
+          ? toEntity.range < 100 &&
+            (toEntity.type === "monster"
+              ? G.monsters[toEntity.mtype].damage_type
+              : G.classes[toEntity.ctype].damage_type) === "physical"
+            ? (calculateDamage(toEntity, fromEntity, false) *
+                (fromEntity.dreturn ?? 0)) /
               100
             : 0
           : 0)
       );
     default:
-      return target.attack * target.frequency;
+      return fromEntity.attack * fromEntity.frequency;
   }
 }
 
