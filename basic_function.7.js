@@ -821,15 +821,14 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   if (
     character.ctype === "warrior" &&
-    ((distance(character, target) > character.range * 0.5 &&
-      distance(character, target) <
-        character.range * rangeRate + character.xrange * 0.25) ||
-      target["1hp"])
+    distance(character, target) > character.range * 0.5 &&
+    distance(character, target) <
+      character.range * rangeRate + character.xrange * 0.25
   ) {
     const allEntities = Object.values(parent.entities);
     const noAggro = allEntities
       .filter((entity) => entity.type === "monster")
-      .every((mob) => mob.target !== character.name);
+      .every((mob) => mob.target !== character.name || mob.);
     const noNearbyPlayers = allEntities
       .filter((entity) => entity.type === "character" && !entity.moving)
       .every((char) => distance(character, char) >= 8);
