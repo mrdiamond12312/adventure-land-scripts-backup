@@ -157,6 +157,27 @@ function shouldWearExpGear() {
   );
 }
 
+// Ping compensation for normal attack
+function attackPingCompensate(
+  startTime,
+  attackFrequencyBeforeComponsate = character.frequency,
+) {
+  const elapsed = Date.now() - startTime;
+  const remaining = ms_to_next_skill("attack");
+
+  // compensate RTT
+  const effectiveRemaining = remaining + elapsed + Math.min(...parent.pings);
+
+  const expected = 1000 / attackFrequencyBeforeComponsate;
+
+  console.log(effectiveRemaining, expected);
+
+  if (effectiveRemaining > expected) {
+    const diff = effectiveRemaining - expected;
+    reduce_cooldown("attack", diff);
+  }
+}
+
 // Class Items logic
 function calculateMageItems() {
   const currentTarget = get_target();
@@ -989,7 +1010,6 @@ async function warriorStomp() {
 
   isStomping = true;
   const promises = [];
-
   const warriorItems = calculateWarriorItems();
   promises.push(
     equipBatch({ mainhand: "basher", offhand: undefined }, true),

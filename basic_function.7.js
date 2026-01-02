@@ -821,9 +821,10 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   if (
     character.ctype === "warrior" &&
-    distance(character, target) > character.range * 0.5 &&
-    distance(character, target) <
-      character.range * rangeRate + character.xrange * 0.25
+    ((distance(character, target) > character.range * 0.5 &&
+      distance(character, target) <
+        character.range * rangeRate + character.xrange * 0.25) ||
+      target["1hp"])
   ) {
     const allEntities = Object.values(parent.entities);
     const noAggro = allEntities
@@ -1129,14 +1130,21 @@ async function midasLooting(forced = false) {
       !MIDAS_CHARACTER.includes(character.name) &&
       partyMidasUsers.length
     ) {
+      const currentTarget = get_target();
+      let modifier = 1;
+
+      if (currentTarget && currentTarget.type === "monster") {
+        modifier = Math.max(5000 / currentTarget.hp, 1);
+      }
+
       if (
-        chests.length >= LOOTING_LIMIT &&
+        chests.length >= LOOTING_LIMIT * modifier &&
         (smart.moving || isAdvanceSmartMoving || forced)
       ) {
         isLooting = true;
         shouldReset = true;
 
-        let breakFlag = LOOTING_LIMIT * 1.5;
+        let breakFlag = LOOTING_LIMIT * 1.5 * modifier;
         for (const chest of chests) {
           if (breakFlag-- <= 0) break;
 
