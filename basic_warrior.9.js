@@ -124,7 +124,6 @@ async function fight(target) {
         })
         .catch((e) => attackErrorHandler(e)),
     );
-    reduce_cooldown("attack", -1000 / character.frequency);
 
     // Offhand swap logic: Use Candy Canes for farming
     const shouldUseCandyCanes =

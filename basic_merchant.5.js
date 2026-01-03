@@ -562,6 +562,3 @@ if (parent.caracAL) {
 //     }
 //   }
 // }, 2000);
-
-// Learn Javascript: https://www.codecademy.com/learn/introduction-to-javascript
-// Write your own CODE: https://github.com/kaansoral/adventureland

@@ -23,7 +23,7 @@ const KEEP_THRESHOLD = {
   // Class based
   weapon: 2,
   orb: 2,
-  shield: 3, // warrior, 0 if unneccessary
+  shield: 2, // warrior, 0 if unneccessary
   source: 2, // priest and mage
   staff: 2,
 
@@ -177,7 +177,7 @@ function retrievedBankItemToUpgrade() {
   if (!desiredItemId) return;
 
   RETRIEVE_HISTORY.push(desiredItemId);
-  if (RETRIEVE_HISTORY.length >= Object.keys(ITEMS_HIGHEST_LEVEL).length / 2) {
+  if (RETRIEVE_HISTORY.length >= Object.keys(ITEMS_HIGHEST_LEVEL).length - 1) {
     RETRIEVE_HISTORY.shift();
   }
 
@@ -400,7 +400,7 @@ async function upgradeInv() {
       if (
         character.mp > 200 &&
         !is_on_cooldown("massproductionpp") &&
-        character.items[i]?.level >= 3 &&
+        character.items[i]?.level >= 1 &&
         !character.s.massproductionpp
       ) {
         if (character.mp < 1000 && locate_item("mpot1") === -1) {
