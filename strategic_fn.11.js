@@ -205,7 +205,7 @@ function calculateMageItems() {
         ? "pinkie"
         : currentStrategy === usePullStrategies
         ? shouldUseBlaster
-          ? "sparkstaff"
+          ? "gstaff" // or "sparkstaff"
           : "firestaff"
         : "firestaff",
     offhand:
