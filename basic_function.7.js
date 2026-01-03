@@ -69,13 +69,13 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = -289;
 // var mapY = -188;
 
-// var map = "winterland";
-// var mapX = 423;
-// var mapY = -2614;
+var map = "winterland";
+var mapX = 423;
+var mapY = -2614;
 
-var map = "desertland";
-var mapX = 223;
-var mapY = -708;
+// var map = "desertland";
+// var mapX = 223;
+// var mapY = -708;
 
 // var map = "tunnel";
 // var mapX = 0;
@@ -103,8 +103,8 @@ var mapY = -708;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-// var mobsToFarm = ["phoenix", "stompy", "wolf"];
-var mobsToFarm = ["fireroamer"];
+var mobsToFarm = ["grinch", "stompy", "wolf"];
+// var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 
 // var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
@@ -173,7 +173,7 @@ function filterCompoundableAndStackable() {
     (i) =>
       inv[i] &&
       (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name),
+      !["hpot1", "mpot1"].includes(inv[i].name)
   );
   return res;
 }
@@ -233,7 +233,7 @@ const BUYABLE = [
   "coat",
   "blade",
   "claw",
-  "staff",
+  // "staff",
   "bow",
   "shield",
   "wand",
@@ -243,7 +243,7 @@ const BUYABLE = [
 
 var IGNORE = [
   "x0",
-  "staff",
+  // "staff",
   "x1",
   "x2",
   "x3",
@@ -414,9 +414,9 @@ const SALE_ABLE = [
   // "eslippers",
   // Sell and replace by crypts's drops
   "intearring",
-  "strearring",
-  "dexring",
-  "intring",
+  // "strearring",
+  // "dexring",
+  // "intring",
   "dexamulet",
   "stramulet",
   "dexbelt",
@@ -534,7 +534,7 @@ function getMonstersOnDeclares() {
 
 async function withTimeout(
   promise,
-  timeoutInterval = Math.max(...parent.pings),
+  timeoutInterval = Math.max(...parent.pings)
 ) {
   return Promise.race([
     promise,
@@ -603,10 +603,10 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
-            (entity.target === HEALER || entity.target === MAGE),
+            (entity.target === HEALER || entity.target === MAGE)
         )
         .sort(
-          (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
+          (lhs, rhs) => distance(rhs, character) - distance(lhs, character)
         );
       if (
         mobsTargetingNonTanker.length &&
@@ -623,7 +623,7 @@ function getTarget() {
         (mob) =>
           mob.type === "monster" &&
           [...partyMems, partyMerchant].includes(mob.target) &&
-          is_in_range(mob, "attack"),
+          is_in_range(mob, "attack")
       );
       if (leader)
         target =
@@ -645,16 +645,16 @@ function getTarget() {
         !isAdvanceSmartMoving &&
         Math.sqrt(
           (character.x - leader.x) * (character.x - leader.x) +
-            (character.y - leader.y) * (character.y - leader.y),
+            (character.y - leader.y) * (character.y - leader.y)
         ) > spacial &&
         can_move_to(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         )
       )
         move(
           character.x + (leader.x - character.x) / 2,
-          character.y + (leader.y - character.y) / 2,
+          character.y + (leader.y - character.y) / 2
         );
       return;
     }
@@ -669,8 +669,8 @@ function getLoopInterval() {
     (breakpoint) =>
       Math.max(
         (1 / character.frequency) * 1000,
-        character.s.penalty_cd?.ms ?? 0,
-      ) / breakpoint,
+        character.s.penalty_cd?.ms ?? 0
+      ) / breakpoint
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
@@ -820,7 +820,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
           //   target ? get_height(target) ?? 0 : 0
           // ))
           extraRangeByMobHitbox +
-          extraRangeBySelfHitbox),
+          extraRangeBySelfHitbox)
     ) *
     2;
   return setTimeout(hitAndRun, loopInterval);
@@ -851,7 +851,7 @@ function getPlayersToHeal() {
         (player.max_hp >
           minimumHealingModifier * (character.heal ?? character.attack) +
             player.hp ||
-          player.hp < player.max_hp * 0.8),
+          player.hp < player.max_hp * 0.8)
     )
     .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
 
@@ -867,7 +867,7 @@ function getPlayersToHeal() {
               minimumHealingModifier * (character.heal ?? character.attack) +
                 entity.hp ||
               entity.hp < 0.8 * entity.max_hp)
-          : !entity.s.healed && entity.hp < 7000),
+          : !entity.s.healed && entity.hp < 7000)
     )
     .sort((lhs, rhs) => {
       if (lhs.mtype === "ghost" && rhs.mtype !== "ghost") return 9999;
@@ -1047,7 +1047,7 @@ async function cupidHeal() {
         entity.hp <
           entity.max_hp -
             character.attack *
-              dps_multiplier(entity.armor - (character.apiercing ?? 0)),
+              dps_multiplier(entity.armor - (character.apiercing ?? 0))
     )
     .sort((lhs, rhs) => {
       if ([...partyMems, partyMerchant].includes(lhs.name)) return -1;
@@ -1062,7 +1062,7 @@ async function cupidHeal() {
     promises.push(
       equipBatch({
         mainhand: "cupid",
-      }),
+      })
     );
 
     await Promise.all(promises);
@@ -1079,10 +1079,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 5)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("5shot", lowHealthPlayers.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -1097,10 +1097,10 @@ async function cupidHeal() {
         `Healing ${lowHealthPlayers
           .slice(0, 3)
           .map((player) => player.name)
-          .join(", ")}`,
+          .join(", ")}`
       );
       use_skill("3shot", lowHealthPlayers.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     } else if (
@@ -1114,7 +1114,7 @@ async function cupidHeal() {
       set_message("Single Cupid");
       log(`Healing ${lowHealthPlayers[0].name}`);
       attack(lowHealthPlayers[0]).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
+        reduce_cooldown("attack", Math.min(...parent.pings))
       );
       reduce_cooldown("attack", -(1 / character.frequency) * 1000);
     }
@@ -1204,7 +1204,7 @@ setInterval(async function () {
         )
           return;
         await send_item(partyMerchant, index, 1000);
-      }),
+      })
     );
   }
 
@@ -1263,66 +1263,66 @@ async function getServerPlayers() {
 }
 
 // Party Setups
-setInterval(async function () {
-  //// Deploy characters which arent active
-  const loadedCharacters = get_active_characters();
-  const serverCharacters = await getServerPlayers();
-  const allCharacters = [...partyMems, partyMerchant];
+// setInterval(async function () {
+//   //// Deploy characters which arent active
+//   const loadedCharacters = get_active_characters();
+//   const serverCharacters = await getServerPlayers();
+//   const allCharacters = [...partyMems, partyMerchant];
 
-  if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
-    for (const [index, id] of allCharacters.entries()) {
-      if (
-        parent.caracAL &&
-        !parent.caracAL.siblings.find((sibling) => sibling === id)
-      ) {
-        parent.caracAL.deploy(id, null, caracALPartyCodeSlot[index]);
-      }
-    }
-  } else if (
-    !character.controller &&
-    allCharacters.filter((characterId) => characterId !== character.name)
-      .length !== loadedCharacters.length
-  ) {
-    for (const [index, id] of allCharacters.entries()) {
-      if (!loadedCharacters[id]) {
-        start_character(id, partyCodeSlot[index]);
-      }
-    }
-    // allCharacters.forEach((characterId, index) => {
-    //   if (!loadedCharacters[characterId]) {
-    //     start_character(characterId, partyCodeSlot[index]);
-    //   }
-    // });
-  }
-  const partyWhitelistRegex = [/^earth/];
-  const whitelistPartyMembers = serverCharacters.filter(
-    (char) =>
-      !partyMems.includes(char.name) &&
-      partyWhitelistRegex.some((regex) => regex.test(char.party)),
-  );
-  const hasWhitelistedMember = parent.party_list.some((member) =>
-    whitelistPartyMembers.some((whitelisted) => whitelisted.name === member),
-  );
+//   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
+//     for (const [index, id] of allCharacters.entries()) {
+//       if (
+//         parent.caracAL &&
+//         !parent.caracAL.siblings.find((sibling) => sibling === id)
+//       ) {
+//         parent.caracAL.deploy(id, null, caracALPartyCodeSlot[index]);
+//       }
+//     }
+//   } else if (
+//     !character.controller &&
+//     allCharacters.filter((characterId) => characterId !== character.name)
+//       .length !== loadedCharacters.length
+//   ) {
+//     for (const [index, id] of allCharacters.entries()) {
+//       if (!loadedCharacters[id]) {
+//         start_character(id, partyCodeSlot[index]);
+//       }
+//     }
+//     // allCharacters.forEach((characterId, index) => {
+//     //   if (!loadedCharacters[characterId]) {
+//     //     start_character(characterId, partyCodeSlot[index]);
+//     //   }
+//     // });
+//   }
+//   const partyWhitelistRegex = [/^earth/];
+//   const whitelistPartyMembers = serverCharacters.filter(
+//     (char) =>
+//       !partyMems.includes(char.name) &&
+//       partyWhitelistRegex.some((regex) => regex.test(char.party))
+//   );
+//   const hasWhitelistedMember = parent.party_list.some((member) =>
+//     whitelistPartyMembers.some((whitelisted) => whitelisted.name === member)
+//   );
 
-  if (
-    !isMerchant() &&
-    whitelistPartyMembers.length &&
-    whitelistPartyMembers.length < 6 &&
-    (!parent.party_list.length || !hasWhitelistedMember)
-  ) {
-    send_party_request(whitelistPartyMembers[0].name);
-  }
+//   if (
+//     !isMerchant() &&
+//     whitelistPartyMembers.length &&
+//     whitelistPartyMembers.length < 6 &&
+//     (!parent.party_list.length || !hasWhitelistedMember)
+//   ) {
+//     send_party_request(whitelistPartyMembers[0].name);
+//   }
 
-  if (partyMems.length !== parent.party_list.length) {
-    if (character.name === partyMems[0]) {
-      partyMems.forEach((member) => {
-        send_party_invite(member);
-      });
-    }
-  }
+//   if (partyMems.length !== parent.party_list.length) {
+//     if (character.name === partyMems[0]) {
+//       partyMems.forEach((member) => {
+//         send_party_invite(member);
+//       });
+//     }
+//   }
 
-  leaveJail();
-}, 10000);
+//   leaveJail();
+// }, 10000);
 
 //// Events listeners
 // Party Events
@@ -1439,7 +1439,7 @@ async function changeToDailyEventTargets() {
       .sort(
         (lhs, rhs) =>
           lhs.hp / parent.G.monsters[lhs.type].hp -
-          rhs.hp / parent.G.monsters[rhs.type].hp,
+          rhs.hp / parent.G.monsters[rhs.type].hp
       )
       .shift();
 
@@ -1472,7 +1472,7 @@ async function changeToDailyEventTargets() {
               : 1
             : lhs.hp === rhs.hp
             ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp,
+            : lhs.hp - rhs.hp
         )
         .pop();
 
@@ -1597,7 +1597,7 @@ async function changeToDailyEventTargets() {
 
       const currentCharacterTarget = {
         priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype,
+          (element) => element === currentCharacter.ctype
         ),
         entity: currentCharacter,
         sqrDistance:

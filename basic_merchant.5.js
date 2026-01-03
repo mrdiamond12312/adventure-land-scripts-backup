@@ -411,8 +411,8 @@ setInterval(async function () {
     craft("xbox"),
     craft("basketofeggs"),
     craft("orba", 1, { map: "main", x: -152, y: -137 }),
-    craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
-    craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
+    // craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
+    // craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
     // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
     craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
     !isSortingInventory &&
@@ -481,7 +481,6 @@ function handle_death() {
 
 // Handler to buy from Ponty
 const ITEM_NEEDED = [
-  "strring",
   "dexearring",
   "bataxe",
   "ololipop",
@@ -490,7 +489,6 @@ const ITEM_NEEDED = [
   "firestaff",
   "firestars",
   "jacko",
-  "intamulet",
 ];
 
 function secondhandsHandler(events) {
@@ -526,20 +524,18 @@ if (parent.caracAL) {
     "adventure-land-scripts-backup/merchant_service.19.js",
   ]);
 } else load_code(19);
-// setInterval(() => {
-//   if (
-//     !isInvFull(5) &&
-//     character.map === "main" &&
-//     !(
-//       (ITEMS_HIGHEST_LEVEL.staff?.quantity ?? 0) > 3 &&
-//       (ITEMS_HIGHEST_LEVEL.staff?.level ?? 0) > 7
-//     )
-//   ) {
-//     for (let i = 0; i < 42 - character.items.filter((i) => i).length - 5; i++) {
-//       buy("staff");
-//     }
-//   }
-// }, 2000);
 
-// Learn Javascript: https://www.codecademy.com/learn/introduction-to-javascript
-// Write your own CODE: https://github.com/kaansoral/adventureland
+setInterval(() => {
+  if (
+    !isInvFull(5) &&
+    character.map === "main" &&
+    !(
+      (ITEMS_HIGHEST_LEVEL.staff?.quantity ?? 0) > 3 &&
+      (ITEMS_HIGHEST_LEVEL.staff?.level ?? 0) > 7
+    )
+  ) {
+    for (let i = 0; i < 42 - character.items.filter((i) => i).length - 5; i++) {
+      buy("staff");
+    }
+  }
+}, 2000);
