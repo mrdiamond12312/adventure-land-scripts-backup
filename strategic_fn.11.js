@@ -158,23 +158,15 @@ function shouldWearExpGear() {
 }
 
 // Ping compensation for normal attack
-function attackPingCompensate(
-  startTime,
-  attackFrequencyBeforeComponsate = character.frequency,
+function attackSpeedCompensate(
+  attackFrequencyBeforeComponsate,
+  attackFrequencyAfterComponsate = character.frequency,
 ) {
-  const elapsed = Date.now() - startTime;
-  const remaining = ms_to_next_skill("attack");
-
-  // compensate RTT
-  const effectiveRemaining = remaining + elapsed + Math.min(...parent.pings);
-
-  const expected = 1000 / attackFrequencyBeforeComponsate;
-
-  console.log(effectiveRemaining, expected);
-
-  if (effectiveRemaining > expected) {
-    const diff = effectiveRemaining - expected;
-    reduce_cooldown("attack", diff);
+  if (attackFrequencyBeforeComponsate > attackFrequencyAfterComponsate) {
+    const compensateMs =
+      1000 / attackFrequencyAfterComponsate -
+      1000 / attackFrequencyBeforeComponsate;
+    reduce_cooldown("attack", compensateMs);
   }
 }
 
@@ -597,7 +589,7 @@ async function equipBatch(suggestedItems, forced = false) {
   const promises = [];
   const currentBooster = findInvBooster();
 
-  if ((!isLooting && currentBooster) || forced) {
+  if ((!isLooting || forced) && currentBooster) {
     if (suggestedItems.booster && currentBooster !== suggestedItems.booster) {
       promises.push(shift(locate_item(currentBooster), suggestedItems.booster));
       delete suggestedItems.booster;

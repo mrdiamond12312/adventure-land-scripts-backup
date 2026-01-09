@@ -72,10 +72,7 @@ async function fight(target) {
 
   // --- Energize Logic ---
   const canEnergize = !is_on_cooldown("energize");
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-  const shouldEnergizeSelf =
-    ms_to_next_skill("attack") < 300 && !character.s.penalty_cd;
+  const isAttackReady = ms_to_next_skill("attack") === 0;
   const isTargetInAttackRange =
     distance(target, character) <= character.range + character.xrange;
   if (canEnergize) {
@@ -91,7 +88,7 @@ async function fight(target) {
 
     if (shouldEnergizeBuffee) {
       energizeTarget = buffee;
-    } else if (shouldEnergizeSelf && isTargetInAttackRange) {
+    } else if (isAttackReady && isTargetInAttackRange) {
       energizeTarget = character;
     }
 

@@ -85,7 +85,7 @@ async function fight(target) {
 
   const weakMobs = potentialTargets.filter(isWeak); // --- Target Acquisition ---
 
-  if (currentStrategy === usePullStrategies && potentialTargets.length) {
+  if (potentialTargets.length) {
     target = potentialTargets[0];
     change_target(target);
   } // Reacquire target if feared

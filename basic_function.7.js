@@ -757,11 +757,7 @@ function getTarget() {
 const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
-    (breakpoint) =>
-      Math.max(
-        (1 / character.frequency) * 1000,
-        character.s.penalty_cd?.ms ?? 0,
-      ) / breakpoint,
+    (breakpoint) => Math.max((1 / character.frequency) * 1000) / breakpoint,
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
@@ -828,7 +824,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     const allEntities = Object.values(parent.entities);
     const noAggro = allEntities
       .filter((entity) => entity.type === "monster")
-      .every((mob) => mob.target !== character.name || mob['1hp']);
+      .every((mob) => mob.target !== character.name || mob["1hp"]);
     const noNearbyPlayers = allEntities
       .filter((entity) => entity.type === "character" && !entity.moving)
       .every((char) => distance(character, char) >= 8);
@@ -910,12 +906,12 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
       flipRotation *= -1;
       flipRotationCooldown = 6;
     }
-    for (let i = 1; i <= 16; i++) {
-      const adjustedAngle = angle + (flipRotation * Math.PI) / (16 / i);
+    for (let i = 1; i <= 48; i++) {
+      const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
       const alt_x =
-        target.x + (rangeRadius + character.xrange) * Math.cos(adjustedAngle);
+        target.x + (rangeRadius + extendedRadius) * Math.cos(adjustedAngle);
       const alt_y =
-        target.y + (rangeRadius + character.xrange) * Math.sin(adjustedAngle);
+        target.y + (rangeRadius + extendedRadius) * Math.sin(adjustedAngle);
 
       if (can_move_to(alt_x, alt_y)) {
         angle = adjustedAngle;
@@ -1148,8 +1144,7 @@ async function midasLooting(forced = false) {
           if (breakFlag-- <= 0) break;
 
           if (
-            partyMidasUsers.every((player) => distance(chest, player) > 800) ||
-            300000 > mssince(chest.last_loot)
+            partyMidasUsers.every((player) => distance(chest, player) > 800) 
           ) {
             promises.push(loot(chest.id));
           }
@@ -1913,9 +1908,12 @@ function on_magiport(name) {
 
 function attackErrorHandler(error) {
   if (error.failed) {
-    if (error.response === "cooldown")
-      reduce_cooldown("attack", -error.ms + Math.min(...parent.pings) / 2);
-    else if (
+    if (error.response === "cooldown") {
+      reduce_cooldown(
+        "attack",
+        -error.ms + Math.min(...parent.pings) / 2 + ms_to_next_skill("attack"),
+      );
+    } else if (
       error.reason === "too_far" &&
       character.cc < 125 &&
       !character.moving

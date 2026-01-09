@@ -103,24 +103,20 @@ async function fight(target) {
   const promisesToAwait = [];
 
   // --- Attack & Warcry Logic ---
-  const isAttackReady = ms_to_next_skill("attack") === 0;
-  //  && !character.s.penalty_cd;
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
   if (isAttackReady && inRange(target) && shouldAttack()) {
     set_message("Attacking");
     const attackFrequencyBeforeComponsate = character.frequency;
-    const attackStartTime = Date.now();
 
     // Main attack execution
     promisesToAwait.push(
       currentStrategy(target),
       attack(target)
         .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeComponsate);
           reduceCd("attack");
-          attackPingCompensate(
-            attackStartTime,
-            attackFrequencyBeforeComponsate,
-          );
         })
         .catch((e) => attackErrorHandler(e)),
     );
@@ -130,16 +126,14 @@ async function fight(target) {
       character.ping < 1000 &&
       !character.s.sugarrush &&
       !isEquipingItems &&
-      (((character.slots.offhand?.name === "fireblade" ||
+      (character.slots.offhand?.name === "fireblade" ||
         character.slots.mainhand?.name === "fireblade") &&
-        character.slots.offhand?.name !== "mshield") ||
-        character.slots.mainhand?.name === "rapier") &&
+      character.slots.offhand?.name !== "mshield" &&
       character.cc < 100;
 
     if (shouldUseCandyCanes) {
       const candycane1 = findMaxLevelItem("candycanesword");
       const candycane2 = findMaxLevelItem("candycanesword", 1);
-      const unEquipCandyCane2 = character.slots.mainhand?.name === "rapier";
 
       if (candycane1 !== -1 && candycane2 !== -1) {
         isEquipingItems = true;
@@ -155,30 +149,22 @@ async function fight(target) {
               slot: "offhand",
             },
           ]),
-          // Promise.all([
-          //   equip(candycane1, "mainhand"),
-          //   equip(candycane2, "offhand"),
-          // ]),
 
           // Delayed re-equip
           new Promise((resolve) => {
             setTimeout(() => {
-              if (unEquipCandyCane2) {
-                resolve(Promise.all([unequip("offhand"), equip(candycane1)]));
-              } else {
-                resolve(
-                  equip_batch([
-                    {
-                      num: candycane1,
-                      slot: "mainhand",
-                    },
-                    {
-                      num: candycane2,
-                      slot: "offhand",
-                    },
-                  ]),
-                );
-              }
+              resolve(
+                equip_batch([
+                  {
+                    num: candycane1,
+                    slot: "mainhand",
+                  },
+                  {
+                    num: candycane2,
+                    slot: "offhand",
+                  },
+                ]),
+              );
             }, 150);
           }),
         ]).finally(() => {
@@ -306,7 +292,7 @@ async function cleaveLoop() {
   try {
     const shouldCleave =
       smart.moving ||
-      ms_to_next_skill("attack") > 360 ||
+      ms_to_next_skill("attack") > 0 ||
       distance(character, get_targeted_monster()) >
         character.range + character.xrange * 1.1;
 
