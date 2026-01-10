@@ -61,8 +61,13 @@ async function fight(target) {
           .filter(
             (mob) => !mob.s.poisoned && prioritizedNames().includes(mob.target),
           )
-          .sort((lhs, rhs) => rhs.attack - lhs.attack)
-          .pop() ?? target
+          .sort((lhs, rhs) => {
+            if (rhs.attack === lhs.attack) {
+              return rhs.hp - lhs.hp;
+            }
+            return rhs.attack - lhs.attack;
+          })
+          .shift() ?? target
       : target;
 
   target = targetToTaunt ?? targetToAttack ?? target;

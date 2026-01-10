@@ -36,7 +36,7 @@ const tryMultiShot = async (skill, entityList) => {
 };
 
 async function fight(target) {
-  if (ms_to_next_skill("attack") > 0) return;
+  if (ms_to_next_skill("attack") > 0 || character.s.penalty_cd) return;
 
   const canMultiShot = !character.fear;
   const inRange = (entity) => distance(entity, character) < nearRange;
@@ -185,7 +185,7 @@ async function fight(target) {
 
 // --- Cupid Heal Logic (Refactored) ---
 async function cupidHeal(playersToHeal) {
-  const isAttackOnCD = ms_to_next_skill("attack") > 0;
+  const isAttackOnCD = ms_to_next_skill("attack") > 0 || character.s.penalty_cd;
   const hasCupid =
     locate_item("cupid") !== -1 || character.slots.mainhand?.name === "cupid";
   if (isAttackOnCD || !hasCupid) return;
