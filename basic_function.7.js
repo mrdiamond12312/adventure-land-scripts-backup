@@ -804,7 +804,7 @@ function extraDistanceWithinHitbox(target) {
   return Math.min(get_height(target) / 2, get_width(target) / 2) / 2;
 }
 
-var lastKitingTarget = undefined;
+var lastKitingTargetId = undefined;
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   const loopInterval = Math.max(200, getLoopInterval());
 
@@ -812,6 +812,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
   if (!target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
+    lastKitingTargetId = undefined;
     return setTimeout(hitAndRun, loopInterval);
   }
 
@@ -839,8 +840,12 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   // Reset angle when switching or losing target
   const targetChanged =
-    !lastKitingTarget || distance(lastKitingTarget, target) > 30;
+    !lastKitingTargetId ||
+    (lastKitingTargetId !== target.id &&
+      distance(parent.entities[lastKitingTargetId], target) > 30);
   if (targetChanged) angle = undefined;
+
+  lastKitingTargetId = target.id;
 
   // --- 2. Initialize angle if needed ---
   if (!angle) {
@@ -928,7 +933,6 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   // --- 8. Execute movement or retry later ---
   if (destinationX && destinationY) {
     move(destinationX, destinationY);
-    lastKitingTarget = target;
   } else {
     return setTimeout(hitAndRun, loopInterval);
   }
@@ -1144,7 +1148,7 @@ async function midasLooting(forced = false) {
           if (breakFlag-- <= 0) break;
 
           if (
-            partyMidasUsers.every((player) => distance(chest, player) > 800) 
+            partyMidasUsers.every((player) => distance(chest, player) > 800)
           ) {
             promises.push(loot(chest.id));
           }
