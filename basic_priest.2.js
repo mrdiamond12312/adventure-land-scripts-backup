@@ -29,15 +29,15 @@ async function fight(target) {
   const characterBufferedRange = character.range + character.xrange;
   const mobsInRange = Object.values(parent.entities)
     .filter(
-      (mob) =>
-        mob.type === "monster" &&
-        !mob.dead &&
-        distance(character, mob) <= characterBufferedRange,
+      (entity) =>
+        entity.type === "monster" &&
+        !entity.dead &&
+        distance(character, entity) <= characterBufferedRange,
     )
-    .map((mob) => {
-      mob.cluster_count = numberOfMonsterAroundTarget(mob, 17);
-      return mob;
-    });
+    .map((mob) => ({
+      ...mob,
+      cluster_count: numberOfMonsterAroundTarget(mob, 17),
+    }));
 
   // Target Selection (Taunt & Debuff Logic)
   const targetToTaunt =
@@ -56,7 +56,9 @@ async function fight(target) {
       : null;
 
   const targetToAttack =
-    character.slots.orb?.name === "test_orb" && !target.cooperative
+    (character.slots.orb?.name === "test_orb" ||
+      character.slots.mainhand?.name === "oozingterror") &&
+    !target?.cooperative
       ? mobsInRange
           .filter(
             (mob) => !mob.s.poisoned && prioritizedNames().includes(mob.target),
@@ -70,7 +72,7 @@ async function fight(target) {
           .shift() ?? target
       : target;
 
-  target = targetToTaunt ?? targetToAttack ?? target;
+  target = targetToTaunt ?? targetToAttack;
   if (target) change_target(target);
 
   // Early Exit
@@ -148,7 +150,7 @@ async function priestBuff() {
       if (
         !smart.moving &&
         dist >= bufferedRange &&
-        prioritizedBuffeesNames().includes(buffee.name)
+        prioritizedBuffeesNames.includes(buffee.name)
       ) {
         promises.push(
           move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
@@ -170,8 +172,8 @@ async function priestBuff() {
 
   // Party Heal Logic
   const allies = (parent.party_list || [])
-    .map((n) => get_entity(n))
-    .filter((v) => v);
+    .map((name) => get_entity(name))
+    .filter((entity) => entity);
   const modInjuredThreshold = character.level * 20;
 
   if (!is_on_cooldown("partyheal") && character.mp > 1000 && allies.length) {
@@ -193,10 +195,10 @@ async function priestBuff() {
 
   // Absorb Skill Logic
   const vulnerableMems = partyMems.filter(
-    (m) => m !== character.name && m !== TANKER,
+    (memberId) => memberId !== character.name && memberId !== TANKER,
   );
-  for (const mName of vulnerableMems) {
-    const member = get_entity(mName);
+  for (const memberId of vulnerableMems) {
+    const member = get_entity(memberId);
     if (
       member &&
       !is_on_cooldown("absorb") &&
@@ -204,11 +206,11 @@ async function priestBuff() {
       character.mp >= G.skills["absorb"].mp
     ) {
       const hasAggro = Object.values(parent.entities).some(
-        (e) => e.target === mName,
+        (e) => e.target === memberId,
       );
       if (hasAggro) {
         use_skill("absorb", member);
-        set_message(`Absorb ${mName}`);
+        set_message(`Absorb ${memberId}`);
         break;
       }
     }
