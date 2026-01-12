@@ -175,7 +175,7 @@ function item_info(item) {
   const baseInfo = parent.G.items[item.name];
   if (!baseInfo) return undefined;
   const itemProperties = calculate_item_properties(item);
-  return [...baseInfo, ...itemProperties];
+  return {...baseInfo, ...itemProperties};
 }
 
 function isInvFull(slots = 1) {
