@@ -1756,10 +1756,6 @@ async function changeToDailyEventTargets() {
     let targetCrab;
     if (character.ctype === "warrior") {
       targetCrab = crabxxInstance?.target ? crabxxInstance : crabxInstance;
-
-      if (targetCrab && targetCrab.moving) {
-        rangeRate = 0.05;
-      }
     } else {
       targetCrab =
         crabxInstance || (crabxxInstance?.target ? crabxxInstance : undefined);
