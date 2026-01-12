@@ -174,20 +174,8 @@ function item_info(item) {
 
   const baseInfo = parent.G.items[item.name];
   if (!baseInfo) return undefined;
-
-  // Clone to avoid mutating global data
-  const itemInfo = JSON.parse(JSON.stringify(baseInfo));
-  const levelBonuses = itemInfo.upgrade ?? itemInfo.compound ?? undefined;
-
-  if (item.level && levelBonuses) {
-    for (const [key, value] of Object.entries(levelBonuses)) {
-      if (typeof value === "number") {
-        itemInfo[key] = (itemInfo[key] ?? 0) + value * item.level;
-      }
-    }
-  }
-
-  return itemInfo;
+  const itemProperties = calculate_item_properties(item);
+  return [...baseInfo, ...itemProperties];
 }
 
 function isInvFull(slots = 1) {
