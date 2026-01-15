@@ -107,13 +107,13 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = -289;
 // var mapY = -188;
 
-var map = "winterland";
-var mapX = 423;
-var mapY = -2614;
+// var map = "winterland";
+// var mapX = 423;
+// var mapY = -2614;
 
-// var map = "desertland";
-// var mapX = 223;
-// var mapY = -708;
+var map = "desertland";
+var mapX = 223;
+var mapY = -708;
 
 // var map = "tunnel";
 // var mapX = 0;
@@ -145,8 +145,8 @@ var mapY = -2614;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-var mobsToFarm = ["phoenix", "stompy", "wolf"];
-// var mobsToFarm = ["fireroamer"];
+// var mobsToFarm = ["phoenix", "stompy", "wolf"];
+var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 
 // var mobsToFarm = ["phoenix", "xscorpion", "minimush"];

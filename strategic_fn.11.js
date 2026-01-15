@@ -651,7 +651,7 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
             toEntity.resistance -
               (fromEntity.type === "monster"
                 ? G.monsters[fromEntity.mtype].rpiercing ?? 0
-                : 0),
+                : 0) * 2,
           ) *
           fromEntity.frequency +
         (fromEntity.reflection && recursion
