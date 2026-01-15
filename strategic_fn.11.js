@@ -740,7 +740,7 @@ function avgDmgTaken(characterEntity, dmgType = null) {
               (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
           : highestBurningMob.damage_type === "magical"
           ? characterEntity.resistance -
-            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0)
+            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
           : 1,
       ) *
       ((100 - fireResist) / 100) *
@@ -1051,7 +1051,8 @@ async function useTemporalSurge() {
   if (isAdvanceSmartMoving || smart.moving) return false;
   if (
     is_on_cooldown("temporalsurge") ||
-    character.mp < G.skills["temporalsurge"].mp + 400
+    character.mp < G.skills["temporalsurge"].mp + 400 ||
+    (isAssignedAsTanker() && character.s.burned)
   )
     return false;
 
