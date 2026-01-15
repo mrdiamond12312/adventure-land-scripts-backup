@@ -418,9 +418,12 @@ function calculatePriestItems(target) {
     mainhand:
       target &&
       target.type !== "monster" &&
-      !["firestaff", "oozingterror", "pmace", "lmace"].includes(
-        character.slots.mainhand?.name,
-      )
+      ![
+        "firestaff",
+        "oozingterror",
+        "pmace",
+        ...(!character.s.burned ? ["lmace"] : []),
+      ].includes(character.slots.mainhand?.name)
         ? "oozingterror"
         : // : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
         //     get_targeted_monster()?.mtype,
@@ -651,7 +654,8 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
             toEntity.resistance -
               (fromEntity.type === "monster"
                 ? G.monsters[fromEntity.mtype].rpiercing ?? 0
-                : 0) * 2,
+                : 0) *
+                2,
           ) *
           fromEntity.frequency +
         (fromEntity.reflection && recursion
