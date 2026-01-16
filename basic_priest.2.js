@@ -81,7 +81,7 @@ async function fight(target) {
   const promisesToAwait = [];
 
   // Curse Logic
-  const canCurse = !is_on_cooldown("curse") && character.mp > 1100;
+  const canCurse = !is_on_cooldown("curse") && character.mp > 1600;
   const targetToCurse =
     mobsInRange
       .filter(
@@ -176,7 +176,11 @@ async function priestBuff() {
     .filter((entity) => entity);
   const modInjuredThreshold = character.level * 20;
 
-  if (!is_on_cooldown("partyheal") && character.mp > 1000 && allies.length) {
+  if (
+    !is_on_cooldown("partyheal") &&
+    character.mp > G.skills["partyheal"].mp + 400 &&
+    allies.length
+  ) {
     const shouldPartyHeal =
       allies.some(
         (lhs) =>
@@ -203,7 +207,7 @@ async function priestBuff() {
       member &&
       !is_on_cooldown("absorb") &&
       is_in_range(member, "absorb") &&
-      character.mp >= G.skills["absorb"].mp
+      character.mp >= G.skills["absorb"].mp + 200
     ) {
       const hasAggro = Object.values(parent.entities).some(
         (e) => e.target === memberId,
