@@ -201,8 +201,10 @@ async function cupidHeal(playersToHeal) {
 
   if (lowHealthPlayersInRange.length > 0) {
     // Equipping Cupid first
-    if (character.slots.mainhand?.name !== "cupid")
-      promisesToAwait.push(equip(findMaxLevelItem("cupid")));
+    if (character.slots.mainhand?.name !== "cupid") {
+      const rangerItems = calculateRangerItems(lowHealthPlayersInRange);
+      promisesToAwait.push(equipBatch({ ...rangerItems, mainhand: "cupid" }));
+    }
 
     // Determine the best shot for healing
     const mpCost = G.skills["huntersmark"].mp;
