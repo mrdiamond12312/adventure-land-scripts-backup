@@ -106,7 +106,7 @@ async function fuaLoop() {
     if (
       playersNearbyWithoutRogueSpeed.length &&
       ms_to_next_skill("rspeed") === 0 &&
-      character.mp > G.skills["rspeed"].mp
+      character.mp > G.skills["rspeed"].mp + 1000
     ) {
       use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift());
     }
@@ -114,7 +114,7 @@ async function fuaLoop() {
     if (
       distance(character, currentTarget) < character.range + character.xrange &&
       ms_to_next_skill("quickstab") === 0 &&
-      character.mp > parent.G.skills["rspeed"].mp * 2
+      character.mp > parent.G.skills["rspeed"].mp * 2 + 1000
     ) {
       const currentMainhand = item_info(character.slots.mainhand);
       const skillToBeUsed =
