@@ -119,9 +119,9 @@ var mapY = -2614;
 // var mapX = 0;
 // var mapY = -775;
 
-var map = "halloween";
-var mapX = -219;
-var mapY = 681;
+// var map = "halloween";
+// var mapX = -219;
+// var mapY = 681;
 
 // var map = "main";
 // var mapX = 676;
@@ -145,11 +145,11 @@ var mapY = 681;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-// var mobsToFarm = ["phoenix", "stompy", "wolf"];
+var mobsToFarm = ["phoenix", "stompy", "wolf"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 
-var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
+// var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
 
 // var mobsToFarm = ["phoenix", "croc", "armadillo"];
 // var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
