@@ -4,7 +4,7 @@ const ignoreServer = [];
 
 const HOME_SERVER = {
   serverRegion: "US",
-  serverIdentifier: "III",
+  serverIdentifier: "II",
 };
 
 const tankableBoss = ["snowman", "pinkgoo"];
