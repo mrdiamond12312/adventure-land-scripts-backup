@@ -129,21 +129,22 @@ async function fight(target) {
   if (is5ShotReady) {
     const mobsTo5Shot = weakMobs.slice(0, 5);
     promisesToAwait.push(currentStrategy(mobsTo5Shot));
-    if (notCupid) promisesToAwait.push(tryMultiShot("5shot", mobsTo5Shot));
+    // if (notCupid)
+    promisesToAwait.push(tryMultiShot("5shot", mobsTo5Shot));
   } else if (is3ShotReady) {
     const mobsTo3Shot = potentialTargets.slice(0, 3);
     promisesToAwait.push(currentStrategy(mobsTo3Shot));
-    if (notCupid)
-      promisesToAwait.push(tryMultiShot("3shot", potentialTargets.slice(0, 3)));
+    // if (notCupid)
+    promisesToAwait.push(tryMultiShot("3shot", potentialTargets.slice(0, 3)));
   } else if (target && distance(target, character) < nearRange) {
     set_message("Shooting");
     promisesToAwait.push(currentStrategy(target));
-    if (notCupid)
-      promisesToAwait.push(
-        attack(target)
-          .then(() => reduceCd("attack"))
-          .catch((e) => attackErrorHandler(e)),
-      );
+    // if (notCupid)
+    promisesToAwait.push(
+      use_skill("attack", target)
+        .then(() => reduceCd("attack"))
+        .catch((e) => attackErrorHandler(e)),
+    );
   }
 
   // --- Supershot ---
@@ -177,7 +178,7 @@ async function fight(target) {
 
   // --- Await and Error Handling ---
   try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1500);
+    await withTimeout(Promise.all(promisesToAwait), 1500);
   } catch (e) {
     console.log(e);
   }
@@ -238,7 +239,7 @@ async function cupidHeal(playersToHeal) {
       // Multi-shot healing
       set_message(`${skillName} Cupid`);
       const targets = lowHealthPlayersInRange.slice(0, sliceAmount);
-      log(`Healing ${targets.map((player) => player.name).join(", ")}`);
+      console.log(`Healing ${targets.map((player) => player.name).join(", ")}`);
       promisesToAwait.push(tryMultiShot(skillName, targets));
     } else if (healingTarget) {
       // Single shot healing
@@ -253,7 +254,7 @@ async function cupidHeal(playersToHeal) {
   }
 
   try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
+    await withTimeout(Promise.all(promisesToAwait), 1000);
   } catch (e) {
     attackErrorHandler(e);
     console.error("Error while Cupiding!", e);
