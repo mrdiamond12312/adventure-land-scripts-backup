@@ -14,7 +14,7 @@ if (parent.caracAL) {
 }
 
 // Kiting (unchanged)
-var originRangeRate = 0.65;
+var originRangeRate = 0.35;
 rangeRate = originRangeRate;
 
 // --- Helper Functions ---

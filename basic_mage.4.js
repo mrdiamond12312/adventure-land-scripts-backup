@@ -15,7 +15,7 @@ if (parent.caracAL) {
 }
 
 // Kiting
-var originRangeRate = 0.75;
+var originRangeRate = 0.4;
 rangeRate = originRangeRate;
 const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 4);
 
