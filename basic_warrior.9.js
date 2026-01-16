@@ -296,7 +296,7 @@ async function cleaveLoop() {
       distance(character, get_targeted_monster()) >
         character.range + character.xrange * 1.1;
 
-    if (shouldCleave) {
+    if (shouldCleave && character.mp > 1720) {
       await withTimeout(
         warriorCleave(
           currentStrategy === usePullStrategies ? "pull" : "normal",

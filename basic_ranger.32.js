@@ -102,7 +102,7 @@ async function fight(target) {
   const canHuntersMark =
     target &&
     !target.s?.marked &&
-    character.mp > 300 &&
+    character.mp > 300 + 1000 &&
     !is_on_cooldown("huntersmark") &&
     target.hp > 3000;
   if (canHuntersMark) {
@@ -117,13 +117,13 @@ async function fight(target) {
     character.level >= G.skills["5shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp &&
+    character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 1000 &&
     weakMobs.length >= 4;
   const is3ShotReady =
     character.level >= G.skills["3shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp &&
+    character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 1000 &&
     potentialTargets.length >= 2;
 
   if (is5ShotReady) {
@@ -148,7 +148,7 @@ async function fight(target) {
   }
 
   // --- Supershot ---
-  const canSuperShot = character.mp > 400 && !is_on_cooldown("supershot");
+  const canSuperShot = character.mp > 400 + 1000 && !is_on_cooldown("supershot");
 
   if (canSuperShot) {
     const coopTarget = target?.cooperative
