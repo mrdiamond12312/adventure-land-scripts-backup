@@ -1511,10 +1511,11 @@ const DYNAMIC_PARTY_PRESETS = {
   },
   default: () => {
     const globalParty = get("currentParty");
+    const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
 
     if (
       globalParty &&
-      globalParty.includes("CrownPriest") &&
+      globalParty.some((id) => knownTankers.includes(id)) &&
       !serverCurrentlyHasLiveEvent()
     ) {
       setRogueSpeedLastDeployment();
