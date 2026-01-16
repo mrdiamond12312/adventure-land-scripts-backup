@@ -1097,12 +1097,15 @@ async function useTemporalSurge() {
     }
   });
 
-  const nearbySpawnWithSpawnMechanic = nearbySpawn.filter(
-    (spawn) => G.monsters[spawn.type].spawns,
-  );
+  // const nearbySpawnWithSpawnMechanic = nearbySpawn.filter(
+  //   (spawn) => G.monsters[spawn.type].spawns,
+  // );
 
   const promises = [];
-  if (nearbySpawn.length && nearbySpawnWithSpawnMechanic.length === 0) {
+  if (
+    nearbySpawn.length
+    // && nearbySpawnWithSpawnMechanic.length === 0
+  ) {
     if (character.slots.orb?.name !== "orboftemporal") {
       promises.push(equipBatch({ orb: "orboftemporal" }, true));
     }
