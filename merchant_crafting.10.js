@@ -177,7 +177,7 @@ function retrievedBankItemToUpgrade() {
   if (!desiredItemId) return;
 
   RETRIEVE_HISTORY.push(desiredItemId);
-  if (RETRIEVE_HISTORY.length >= Object.keys(ITEMS_HIGHEST_LEVEL).length - 1) {
+  if (RETRIEVE_HISTORY.length >= Object.keys(ITEMS_HIGHEST_LEVEL).length / 2) {
     RETRIEVE_HISTORY.shift();
   }
 
