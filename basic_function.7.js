@@ -1220,11 +1220,18 @@ setInterval(async function () {
     smartmoveDebug = true;
     log("Debug being stuck while kiting");
     if (parent.caracAL) {
-      await smartMove({
-        map: character.map,
-        x: currentTarget.going_x,
-        y: currentTarget.going_y,
-      });
+      if (can_move_to(currentTarget.x, currentTarget.y))
+        await smartMove({
+          map: character.map,
+          x: (character.x + currentTarget.x) / 2,
+          y: (character.y + currentTarget.y) / 2,
+        });
+      else
+        await smartMove({
+          map: character.map,
+          x: currentTarget.x,
+          y: currentTarget.y,
+        });
     } else {
       if (can_move_to(currentTarget.x, currentTarget.y))
         await move(currentTarget.x, currentTarget.y);
