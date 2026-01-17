@@ -798,6 +798,12 @@ function extraDistanceWithinHitbox(target) {
 
 var lastKitingTargetId = undefined;
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
+  // Debug: Fixed width and height of target
+  if (target) {
+    target.awidth = 24;
+    target.aheight = 24;
+  }
+
   const loopInterval = Math.max(200, getLoopInterval());
 
   // --- 1. Early exits and sanity checks ---
@@ -1201,17 +1207,13 @@ setInterval(async function () {
 
   // Fix a bug where character is stuck to corner
   const currentTarget =
-    get_targeted_monster() ??
-    getTarget() ??
-    get_nearest_monster({ target: TANKER });
+    get_target() ?? getTarget() ?? get_nearest_monster({ target: TANKER });
 
   if (
     currentTarget &&
+    currentTarget.type === "monster" &&
     distance(currentTarget, character) >
-      character.range +
-        character.xrange * 0.9 +
-        extraDistanceWithinHitbox(currentTarget) +
-        extraDistanceWithinHitbox(character) &&
+      character.range + character.xrange * 0.9 &&
     !smart.moving &&
     !isAdvanceSmartMoving
   ) {
@@ -1220,8 +1222,8 @@ setInterval(async function () {
     if (parent.caracAL) {
       await smartMove({
         map: character.map,
-        x: currentTarget.x,
-        y: currentTarget.y,
+        x: currentTarget.going_x,
+        y: currentTarget.going_y,
       });
     } else {
       if (can_move_to(currentTarget.x, currentTarget.y))
