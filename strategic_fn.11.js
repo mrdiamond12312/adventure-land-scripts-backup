@@ -141,7 +141,7 @@ function shouldWearLuckGear() {
       !mob.dead &&
       mob.hp > 0 &&
       (mob.target === character.name || mob.cooperative) &&
-      mob.hp <= Math.min(mob.max_hp * 0.15, 300000),
+      (mob.hp <= Math.min(mob.max_hp * 0.15, 300000) || mob.max_hp < calculateDamage(character, mob, false) * 2),
   );
 }
 
@@ -153,7 +153,7 @@ function shouldWearExpGear() {
       !mob.dead &&
       mob.hp > 0 &&
       (parent.party_list.includes(mob.target) || mob.cooperative) &&
-      mob.hp <= Math.min(mob.max_hp * 0.1, 300000),
+      mob.hp <= Math.min(mob.max_hp * 0.1, 300000) && mob.max_hp > calculateDamage(character, mob, false) * 2,
   );
 }
 
