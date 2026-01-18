@@ -953,15 +953,10 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   const radiusTotal = rangeRadius + extendedRadius;
-
-  // Calculate the actual distance we moved (chord length)
-  const actualDx = moveX - character.real_x;
-  const actualDy = moveY - character.real_y;
-  const chordLength = Math.sqrt(actualDx * actualDx + actualDy * actualDy);
-
-  // Convert chord length to angle: angle = 2 * asin(chord / (2 * radius))
   const rotationStep =
-    flipRotation * 2 * Math.asin(Math.min(1, chordLength / (2 * radiusTotal)));
+    flipRotation *
+    Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
+    2;
 
   angle += rotationStep;
 
