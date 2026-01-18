@@ -821,7 +821,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   if (
     character.ctype === "warrior" &&
     distance(character, target) > character.range * 0.35 &&
-    distance(character, target) 
+    distance(character, target) <
       character.range * rangeRate + character.xrange * 0.25
   ) {
     const allEntities = Object.values(parent.entities);
@@ -886,13 +886,14 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   // Calculate rotation step - use actual distance that will be moved
   const maxStep = ((character.speed * loopInterval) / 1000) * 0.9;
-  
+
   // Better rotation calculation: arc_length / radius, with minimum step
   // This ensures smooth rotation even at large radii
   const baseRotationStep = maxStep / radiusTotal;
   const minRotationStep = Math.PI / 32; // Minimum ~5.6 degrees per step
-  const rotationStep = flipRotation * Math.max(baseRotationStep, minRotationStep);
-  
+  const rotationStep =
+    flipRotation * Math.max(baseRotationStep, minRotationStep);
+
   angle += rotationStep;
 
   const cosAngle = Math.cos(angle);
@@ -905,7 +906,8 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   // Smooth micro-rotation when close to target
   if (flipCooldown > 9) {
     const closeToTarget =
-      distance(character, target) <= (character.range + character.xrange) * 0.1 * rangeRateFn;
+      distance(character, target) <=
+      (character.range + character.xrange) * 0.1 * rangeRateFn;
 
     if (closeToTarget) {
       angle += (flipRotation * Math.PI) / 16;
