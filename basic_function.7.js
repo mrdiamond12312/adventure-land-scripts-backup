@@ -820,8 +820,8 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   if (
     character.ctype === "warrior" &&
-    distance(character, target) > character.range * 0.35 &&
-    distance(character, target) <
+    distance(character, target) < character.range * 0.35 &&
+    distance(character, target) >
       character.range * rangeRate + character.xrange * 0.25
   ) {
     const allEntities = Object.values(parent.entities);
@@ -870,7 +870,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   for (let i = 1; i < movementHistory.length; i++) {
     const dx = movementHistory[i].x - movementHistory[i - 1].x;
     const dy = movementHistory[i].y - movementHistory[i - 1].y;
-    totalMovement += Math.hypot(dx, dy);
+    totalMovement += Math.sqrt(dx * dx + dy * dy);
   }
 
   const averageMovement = totalMovement / movementHistory.length;
@@ -885,10 +885,11 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   const rangeRadius = character.range * rangeRateFn;
   const extendedRadius = character.xrange;
+  const radiusTotal = rangeRadius + extendedRadius;
 
   // Desired destination based on current orbit angle
-  let newX = target.x + (rangeRadius + extendedRadius) * cosAngle;
-  let newY = target.y + (rangeRadius + extendedRadius) * sinAngle;
+  let newX = target.x + radiusTotal * cosAngle;
+  let newY = target.y + radiusTotal * sinAngle;
 
   // Smooth micro-rotation when close to target
   if (flipCooldown > 9) {
@@ -919,10 +920,8 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     for (let i = 1; i <= 48; i++) {
       const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
 
-      const altX =
-        target.x + (rangeRadius + extendedRadius) * Math.cos(adjustedAngle);
-      const altY =
-        target.y + (rangeRadius + extendedRadius) * Math.sin(adjustedAngle);
+      const altX = target.x + radiusTotal * Math.cos(adjustedAngle);
+      const altY = target.y + radiusTotal * Math.sin(adjustedAngle);
 
       if (can_move_to(altX, altY)) {
         angle = adjustedAngle;
@@ -936,13 +935,13 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     destinationY = newY;
   }
 
-  // Trim & execute movement or retry later
+  // Trim & execute movement
   if (destinationX && destinationY) {
     const maxStep = ((character.speed * loopInterval) / 1000) * 0.9;
 
     const dx = destinationX - character.real_x;
     const dy = destinationY - character.real_y;
-    const distanceToMove = Math.hypot(dx, dy);
+    const distanceToMove = Math.sqrt(dx * dx + dy * dy);
 
     if (distanceToMove > maxStep) {
       const scale = maxStep / distanceToMove;
@@ -951,24 +950,30 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     }
 
     move(destinationX, destinationY);
+
+    // Calculate angle increment based on ACTUAL movement distance
+    const actualDx = destinationX - character.real_x;
+    const actualDy = destinationY - character.real_y;
+    const actualDistanceMoved = Math.sqrt(
+      actualDx * actualDx + actualDy * actualDy,
+    );
+
+    // Arc length formula: angle = arcLength / radius
+    // We use asin for small angles: angle ≈ 2 * asin(chord/2 / radius)
+    const rotationStep =
+      flipRotation *
+      Math.asin(Math.min(1, actualDistanceMoved / 2 / radiusTotal)) *
+      2;
+
+    angle += rotationStep;
   } else {
     return setTimeout(hitAndRun, loopInterval);
   }
 
-  // --- 9. Advance orbit angle for next iteration ---
-  const radiusTotal = rangeRadius + extendedRadius;
-
-  const rotationStep =
-    flipRotation *
-    Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
-    2;
-
-  angle += rotationStep;
-
-  const moveTime =
-    (distance(character, { x: destinationX, y: destinationY }) /
-      character.speed) *
-    1000;
+  const dx = destinationX - character.real_x;
+  const dy = destinationY - character.real_y;
+  const moveDistance = Math.sqrt(dx * dx + dy * dy);
+  const moveTime = (moveDistance / character.speed) * 1000;
 
   setTimeout(hitAndRun, Math.max(moveTime, 200));
 }
