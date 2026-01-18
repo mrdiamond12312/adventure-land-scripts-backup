@@ -938,16 +938,13 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     const dy = destinationY - character.real_y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
-    let moveX = destinationX;
-    let moveY = destinationY;
-
     if (dist > maxStep) {
       const scale = maxStep / dist;
-      moveX = character.real_x + dx * scale;
-      moveY = character.real_y + dy * scale;
+      destinationX = character.real_x + dx * scale;
+      destinationY = character.real_y + dy * scale;
     }
 
-    move(moveX, moveY);
+    move(destinationX, destinationY);
   } else {
     return setTimeout(hitAndRun, loopInterval);
   }
