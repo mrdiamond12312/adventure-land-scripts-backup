@@ -125,7 +125,6 @@ async function fight(target) {
     const shouldUseCandyCanes =
       character.ping < 1000 &&
       !character.s.sugarrush &&
-      !isEquipingItems &&
       (character.slots.offhand?.name === "fireblade" ||
         character.slots.mainhand?.name === "fireblade") &&
       character.slots.offhand?.name !== "mshield" &&
