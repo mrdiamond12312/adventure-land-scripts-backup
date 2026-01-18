@@ -821,7 +821,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   if (
     character.ctype === "warrior" &&
     distance(character, target) > character.range * 0.35 &&
-    distance(character, target) <
+    distance(character, target) 
       character.range * rangeRate + character.xrange * 0.25
   ) {
     const allEntities = Object.values(parent.entities);
@@ -859,9 +859,6 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     angle = Math.atan2(dy, dx);
   }
 
-  const cosAngle = Math.cos(angle);
-  const sinAngle = Math.sin(angle);
-
   // Track recent movement to detect being stuck
   movementHistory.push({ x: character.real_x, y: character.real_y });
   if (movementHistory.length > 5) movementHistory.shift();
@@ -887,6 +884,20 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   const extendedRadius = character.xrange;
   const radiusTotal = rangeRadius + extendedRadius;
 
+  // Calculate rotation step - use actual distance that will be moved
+  const maxStep = ((character.speed * loopInterval) / 1000) * 0.9;
+  
+  // Better rotation calculation: arc_length / radius, with minimum step
+  // This ensures smooth rotation even at large radii
+  const baseRotationStep = maxStep / radiusTotal;
+  const minRotationStep = Math.PI / 32; // Minimum ~5.6 degrees per step
+  const rotationStep = flipRotation * Math.max(baseRotationStep, minRotationStep);
+  
+  angle += rotationStep;
+
+  const cosAngle = Math.cos(angle);
+  const sinAngle = Math.sin(angle);
+
   // Desired destination based on current orbit angle
   let newX = target.x + radiusTotal * cosAngle;
   let newY = target.y + radiusTotal * sinAngle;
@@ -894,8 +905,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   // Smooth micro-rotation when close to target
   if (flipCooldown > 9) {
     const closeToTarget =
-      distance(character, target) <=
-      (character.range + character.xrange) * 0.1 * rangeRateFn;
+      distance(character, target) <= (character.range + character.xrange) * 0.1 * rangeRateFn;
 
     if (closeToTarget) {
       angle += (flipRotation * Math.PI) / 16;
@@ -937,8 +947,6 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   // Trim & execute movement
   if (destinationX && destinationY) {
-    const maxStep = ((character.speed * loopInterval) / 1000) * 0.9;
-
     const dx = destinationX - character.real_x;
     const dy = destinationY - character.real_y;
     const distanceToMove = Math.sqrt(dx * dx + dy * dy);
@@ -950,22 +958,6 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     }
 
     move(destinationX, destinationY);
-
-    // Calculate angle increment based on ACTUAL movement distance
-    const actualDx = destinationX - character.real_x;
-    const actualDy = destinationY - character.real_y;
-    const actualDistanceMoved = Math.sqrt(
-      actualDx * actualDx + actualDy * actualDy,
-    );
-
-    // Arc length formula: angle = arcLength / radius
-    // We use asin for small angles: angle ≈ 2 * asin(chord/2 / radius)
-    const rotationStep =
-      flipRotation *
-      Math.asin(Math.min(1, actualDistanceMoved / 2 / radiusTotal)) *
-      2;
-
-    angle += rotationStep;
   } else {
     return setTimeout(hitAndRun, loopInterval);
   }
