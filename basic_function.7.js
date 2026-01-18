@@ -1731,8 +1731,6 @@ async function changeToDailyEventTargets() {
     parent.S.crabxx?.target &&
     !partyMems.includes(parent.S.crabxx.target)
   ) {
-    if (character.range > 100) rangeRate = 0.3;
-
     const findBestCrabx = () =>
       Object.values(parent.entities)
         .filter((m) => m.mtype === "crabx")
