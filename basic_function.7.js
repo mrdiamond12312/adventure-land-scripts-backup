@@ -820,8 +820,8 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   if (
     character.ctype === "warrior" &&
-    distance(character, target) < character.range * 0.35 &&
-    distance(character, target) >
+    distance(character, target) > character.range * 0.35 &&
+    distance(character, target) <
       character.range * rangeRate + character.xrange * 0.25
   ) {
     const allEntities = Object.values(parent.entities);
