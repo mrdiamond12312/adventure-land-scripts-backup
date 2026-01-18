@@ -796,8 +796,7 @@ function extraDistanceWithinHitbox(target) {
   return Math.min(get_height(target) / 2, get_width(target) / 2) / 2;
 }
 
-let lastKitingTargetId = undefined;
-
+var lastKitingTargetId = undefined;
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   // Debug: Fixed width and height of target
   if (target) {
@@ -809,9 +808,8 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   const loopInterval = Math.max(200, getLoopInterval());
 
-  // Early exits and sanity checks
+  // --- 1. Early exits and sanity checks ---
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
-
   if (!target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
     lastKitingTargetId = undefined;
@@ -825,11 +823,9 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
       character.range * rangeRate + character.xrange * 0.25
   ) {
     const allEntities = Object.values(parent.entities);
-
     const noAggro = allEntities
       .filter((entity) => entity.type === "monster")
       .every((mob) => mob.target !== character.name || mob["1hp"]);
-
     const noNearbyPlayers = allEntities
       .filter((entity) => entity.type === "character" && !entity.moving)
       .every((char) => distance(character, char) >= 8);
@@ -847,19 +843,21 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     !lastKitingTargetId ||
     (lastKitingTargetId !== target.id &&
       distance(parent.entities[lastKitingTargetId], target) > 30);
-
   if (targetChanged) angle = undefined;
 
   lastKitingTargetId = target.id;
 
-  // Initialize angle if needed
+  // --- 2. Initialize angle if needed ---
   if (!angle) {
     const dx = character.real_x - target.real_x;
     const dy = character.real_y - target.real_y;
     angle = Math.atan2(dy, dx);
   }
 
-  // Track recent movement to detect being stuck
+  const cosA = Math.cos(angle);
+  const sinA = Math.sin(angle);
+
+  // --- 3. Track recent movement to detect being stuck ---
   movementHistory.push({ x: character.real_x, y: character.real_y });
   if (movementHistory.length > 5) movementHistory.shift();
 
@@ -871,46 +869,31 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   const averageMovement = totalMovement / movementHistory.length;
-
   if (averageMovement < stuckThreshold) {
     if (flipRotationCooldown <= 0) {
       flipRotation *= -1;
       flipRotationCooldown = 4;
-      angle += (flipRotation * Math.PI) / 2;
+      angle += (flipRotation * Math.PI) / 2; // turn 90°
     }
   }
 
+  // const totalExtraRange = extraRangeTarget + extraRangeSelf;
   const rangeRadius = character.range * rangeRateFn;
   const extendedRadius = character.xrange;
-  const radiusTotal = rangeRadius + extendedRadius;
+  // + totalExtraRange;
 
-  // Calculate rotation step - use actual distance that will be moved
-  const maxStep = ((character.speed * loopInterval) / 1000) * 0.9;
+  // --- 5. Desired destination based on current orbit angle ---
+  let new_x = target.x + (rangeRadius + extendedRadius) * cosA;
+  let new_y = target.y + (rangeRadius + extendedRadius) * sinA;
 
-  // Better rotation calculation: arc_length / radius, with minimum step
-  // This ensures smooth rotation even at large radii
-  const baseRotationStep = maxStep / radiusTotal;
-  const minRotationStep = Math.PI / 32; // Minimum ~5.6 degrees per step
-  const rotationStep =
-    flipRotation * Math.max(baseRotationStep, minRotationStep);
-
-  angle += rotationStep;
-
-  const cosAngle = Math.cos(angle);
-  const sinAngle = Math.sin(angle);
-
-  // Desired destination based on current orbit angle
-  let newX = target.x + radiusTotal * cosAngle;
-  let newY = target.y + radiusTotal * sinAngle;
-
-  // Smooth micro-rotation when close to target
+  // --- 6. Smooth micro-rotation when close to target ---
   if (flipCooldown > 9) {
     const closeToTarget =
       distance(character, target) <=
       (character.range + character.xrange) * 0.1 * rangeRateFn;
 
     if (closeToTarget) {
-      angle += (flipRotation * Math.PI) / 16;
+      angle += (flipRotation * Math.PI) / 16; // subtle orbit shift
     }
 
     flipCooldown = 0;
@@ -919,65 +902,84 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   flipCooldown++;
   flipRotationCooldown--;
 
-  // Collision handling and alternative movement path
-  let destinationX;
-  let destinationY;
+  // --- 7. Collision handling and alternative movement path ---
+  let destinationX, destinationY;
 
-  if (!can_move_to(newX, newY)) {
+  if (!can_move_to(new_x, new_y)) {
+    // Try small angular adjustments in the current flip direction
     if (flipRotationCooldown < 0) {
       flipRotation *= -1;
       flipRotationCooldown = 6;
     }
-
     for (let i = 1; i <= 48; i++) {
       const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
+      const alt_x =
+        target.x + (rangeRadius + extendedRadius) * Math.cos(adjustedAngle);
+      const alt_y =
+        target.y + (rangeRadius + extendedRadius) * Math.sin(adjustedAngle);
 
-      const altX = target.x + radiusTotal * Math.cos(adjustedAngle);
-      const altY = target.y + radiusTotal * Math.sin(adjustedAngle);
-
-      if (can_move_to(altX, altY)) {
+      if (can_move_to(alt_x, alt_y)) {
         angle = adjustedAngle;
-        destinationX = altX;
-        destinationY = altY;
+        destinationX = alt_x;
+        destinationY = alt_y;
         break;
       }
     }
   } else {
-    destinationX = newX;
-    destinationY = newY;
+    destinationX = new_x;
+    destinationY = new_y;
   }
 
-  // Trim & execute movement
+  // --- 8. Execute movement or retry later ---
   if (destinationX && destinationY) {
+    const maxStep = (character.speed * loopInterval) / 1000;
+
     const dx = destinationX - character.real_x;
     const dy = destinationY - character.real_y;
-    const distanceToMove = Math.sqrt(dx * dx + dy * dy);
+    const dist = Math.sqrt(dx * dx + dy * dy);
 
-    if (distanceToMove > maxStep) {
-      const scale = maxStep / distanceToMove;
-      destinationX = character.real_x + dx * scale;
-      destinationY = character.real_y + dy * scale;
+    let moveX = destinationX;
+    let moveY = destinationY;
+
+    if (dist > maxStep) {
+      const scale = maxStep / dist;
+      moveX = character.real_x + dx * scale;
+      moveY = character.real_y + dy * scale;
     }
 
-    move(destinationX, destinationY);
+    move(moveX, moveY);
   } else {
     return setTimeout(hitAndRun, loopInterval);
   }
 
-  const dx = destinationX - character.real_x;
-  const dy = destinationY - character.real_y;
-  const moveDistance = Math.sqrt(dx * dx + dy * dy);
-  const moveTime = (moveDistance / character.speed) * 1000;
+  const radiusTotal = rangeRadius + extendedRadius;
+
+  // Calculate the actual distance we moved (chord length)
+  const actualDx = moveX - character.real_x;
+  const actualDy = moveY - character.real_y;
+  const chordLength = Math.sqrt(actualDx * actualDx + actualDy * actualDy);
+
+  // Convert chord length to angle: angle = 2 * asin(chord / (2 * radius))
+  const rotationStep =
+    flipRotation * 2 * Math.asin(Math.min(1, chordLength / (2 * radiusTotal)));
+
+  angle += rotationStep;
+
+  const moveTime =
+    (distance(character, { x: destinationX, y: destinationY }) /
+      character.speed) *
+    1000;
 
   setTimeout(hitAndRun, Math.max(moveTime, 200));
 }
 hitAndRun();
 
+const HEAL_IGNORE = ["Geoffriel"];
+
 function prioritizedNames() {
   return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
 }
 
-const HEAL_IGNORE = ["Geoffriel"];
 function getPlayersToHeal() {
   const minHealMod = 0.9;
   const healThreshold = character.ctype === "priest" ? 0.8 : 0.65;
@@ -1725,6 +1727,8 @@ async function changeToDailyEventTargets() {
     parent.S.crabxx?.target &&
     !partyMems.includes(parent.S.crabxx.target)
   ) {
+    if (character.range > 100) rangeRate = 0.3;
+
     const findBestCrabx = () =>
       Object.values(parent.entities)
         .filter((m) => m.mtype === "crabx")
