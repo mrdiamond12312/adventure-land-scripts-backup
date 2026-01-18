@@ -799,7 +799,6 @@ function extraDistanceWithinHitbox(target) {
 let lastKitingTargetId = undefined;
 
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
-  // Debug: Fixed width and height of target
   if (target) {
     target.awidth = 24;
     target.aheight = 24;
@@ -809,7 +808,6 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   const loopInterval = Math.max(200, getLoopInterval());
 
-  // Early exits and sanity checks
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
 
   if (!target || smart.moving || isAdvanceSmartMoving) {
@@ -827,11 +825,11 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     const allEntities = Object.values(parent.entities);
 
     const noAggro = allEntities
-      .filter((entity) => entity.type === "monster")
+      .filter((e) => e.type === "monster")
       .every((mob) => mob.target !== character.name || mob["1hp"]);
 
     const noNearbyPlayers = allEntities
-      .filter((entity) => entity.type === "character" && !entity.moving)
+      .filter((e) => e.type === "character" && !e.moving)
       .every((char) => distance(character, char) >= 8);
 
     if (noAggro && noNearbyPlayers) {
@@ -842,27 +840,20 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     }
   }
 
-  // Reset angle when switching or losing target
   const targetChanged =
     !lastKitingTargetId ||
     (lastKitingTargetId !== target.id &&
       distance(parent.entities[lastKitingTargetId], target) > 30);
 
   if (targetChanged) angle = undefined;
-
   lastKitingTargetId = target.id;
 
-  // Initialize angle if needed
-  if (!angle) {
+  if (angle === undefined) {
     const dx = character.real_x - target.real_x;
     const dy = character.real_y - target.real_y;
     angle = Math.atan2(dy, dx);
   }
 
-  const cosAngle = Math.cos(angle);
-  const sinAngle = Math.sin(angle);
-
-  // Track recent movement to detect being stuck
   movementHistory.push({ x: character.real_x, y: character.real_y });
   if (movementHistory.length > 5) movementHistory.shift();
 
@@ -875,103 +866,47 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   const averageMovement = totalMovement / movementHistory.length;
 
-  if (averageMovement < stuckThreshold) {
-    if (flipRotationCooldown <= 0) {
-      flipRotation *= -1;
-      flipRotationCooldown = 4;
-      angle += (flipRotation * Math.PI) / 2;
-    }
+  if (averageMovement < stuckThreshold && flipRotationCooldown <= 0) {
+    flipRotation *= -1;
+    flipRotationCooldown = 4;
+    angle += (flipRotation * Math.PI) / 2;
   }
+
+  flipRotationCooldown--;
 
   const rangeRadius = character.range * rangeRateFn;
   const extendedRadius = character.xrange;
-
-  // Desired destination based on current orbit angle
-  let newX = target.x + (rangeRadius + extendedRadius) * cosAngle;
-  let newY = target.y + (rangeRadius + extendedRadius) * sinAngle;
-
-  // Smooth micro-rotation when close to target
-  if (flipCooldown > 9) {
-    const closeToTarget =
-      distance(character, target) <=
-      (character.range + character.xrange) * 0.1 * rangeRateFn;
-
-    if (closeToTarget) {
-      angle += (flipRotation * Math.PI) / 16;
-    }
-
-    flipCooldown = 0;
-  }
-
-  flipCooldown++;
-  flipRotationCooldown--;
-
-  // Collision handling and alternative movement path
-  let destinationX;
-  let destinationY;
-
-  if (!can_move_to(newX, newY)) {
-    if (flipRotationCooldown < 0) {
-      flipRotation *= -1;
-      flipRotationCooldown = 6;
-    }
-
-    for (let i = 1; i <= 48; i++) {
-      const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
-
-      const altX =
-        target.x + (rangeRadius + extendedRadius) * Math.cos(adjustedAngle);
-      const altY =
-        target.y + (rangeRadius + extendedRadius) * Math.sin(adjustedAngle);
-
-      if (can_move_to(altX, altY)) {
-        angle = adjustedAngle;
-        destinationX = altX;
-        destinationY = altY;
-        break;
-      }
-    }
-  } else {
-    destinationX = newX;
-    destinationY = newY;
-  }
-
-  // Trim & execute movement or retry later
-  if (destinationX && destinationY) {
-    const maxStep = ((character.speed * loopInterval) / 1000) * 0.9;
-
-    const dx = destinationX - character.real_x;
-    const dy = destinationY - character.real_y;
-    const distanceToMove = Math.hypot(dx, dy);
-
-    if (distanceToMove > maxStep) {
-      const scale = maxStep / distanceToMove;
-      destinationX = character.real_x + dx * scale;
-      destinationY = character.real_y + dy * scale;
-    }
-
-    move(destinationX, destinationY);
-  } else {
-    return setTimeout(hitAndRun, loopInterval);
-  }
-
-  // --- 9. Advance orbit angle for next iteration ---
   const radiusTotal = rangeRadius + extendedRadius;
 
-  const rotationStep =
-    flipRotation *
-    Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
-    2;
+  const leadTime = 120;
+  const centerX = target.real_x + (target.vx || 0) * leadTime;
+  const centerY = target.real_y + (target.vy || 0) * leadTime;
 
-  angle += rotationStep;
+  const maxStep = ((character.speed * loopInterval) / 1000) * 0.9;
 
-  const moveTime =
-    (distance(character, { x: destinationX, y: destinationY }) /
-      character.speed) *
-    1000;
+  let angleStep = flipRotation * (maxStep / radiusTotal);
 
-  setTimeout(hitAndRun, Math.max(moveTime, 200));
+  const maxRotation = Math.PI / 20;
+  angleStep = Math.max(-maxRotation, Math.min(angleStep, maxRotation));
+
+  angle += angleStep;
+
+  let destinationX = centerX + radiusTotal * Math.cos(angle);
+  let destinationY = centerY + radiusTotal * Math.sin(angle);
+
+  if (!can_move_to(destinationX, destinationY)) {
+    angle += (flipRotation * Math.PI) / 32;
+    destinationX = centerX + radiusTotal * Math.cos(angle);
+    destinationY = centerY + radiusTotal * Math.sin(angle);
+  }
+
+  if (can_move_to(destinationX, destinationY)) {
+    move(destinationX, destinationY);
+  }
+
+  setTimeout(hitAndRun, loopInterval);
 }
+
 hitAndRun();
 
 function prioritizedNames() {
