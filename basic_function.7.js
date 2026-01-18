@@ -857,53 +857,58 @@ async function hitAndRun(
   }
   if (flipRotationCooldown > 0) flipRotationCooldown--;
 
-  // 6. Spiral Orbit Calculation
+  // 6. Calculate Movement Components
   const maxStep = ((character.speed * loopInterval) / 1000) * 0.9;
+  
+  // How far off are we from the ideal radius?
+  const distError = currentDist - radiusTotal;
+  
+  // Split maxStep into tangential (orbit) and radial (correction) components
+  // When far from ideal radius, prioritize getting to correct distance
+  // When close, prioritize orbiting
+  const radialPortion = Math.min(Math.abs(distError) / radiusTotal, 0.5); // 0 to 0.5
+  const tangentialSpeed = maxStep * (1 - radialPortion);
+  const radialSpeed = maxStep * radialPortion;
+  
+  // Tangential: movement around the circle
+  const angleStep = (tangentialSpeed / Math.max(1, currentDist)) * flipRotation;
+  const newAngle = currentAngle + angleStep;
+  
+  // Radial: movement toward/away from ideal radius
+  const targetDist = currentDist - Math.sign(distError) * radialSpeed;
+  
+  // Calculate final destination
+  let destX = centerX + targetDist * Math.cos(newAngle);
+  let destY = centerY + targetDist * Math.sin(newAngle);
 
-  // Radial correction: stronger when far from optimal radius
-  const distDiff = currentDist - radiusTotal;
-  const radialAlpha = Math.asin(
-    Math.max(-1, Math.min(1, distDiff / Math.max(1, currentDist))),
-  );
-
-  // Angle step for circular motion
-  const angleStep = (maxStep / Math.max(1, currentDist)) * flipRotation;
-
-  // Combined movement angle with stronger radial damping
-  const moveAngle = currentAngle + angleStep - radialAlpha * 0.8;
-
-  // Calculate ideal destination
-  let destX = centerX + radiusTotal * Math.cos(moveAngle);
-  let destY = centerY + radiusTotal * Math.sin(moveAngle);
-
-  // CLAMP movement to maxStep to avoid overshooting
+  // 7. Clamp total movement to maxStep (prevents overshooting)
   const moveDistX = destX - character.real_x;
   const moveDistY = destY - character.real_y;
-  const moveDist = Math.sqrt(moveDistX * moveDistX + moveDistY * moveDistY);
+  const totalMoveDist = Math.sqrt(moveDistX * moveDistX + moveDistY * moveDistY);
 
-  if (moveDist > maxStep) {
-    // Scale down movement to maxStep
-    const scale = maxStep / moveDist;
+  if (totalMoveDist > maxStep) {
+    const scale = maxStep / totalMoveDist;
     destX = character.real_x + moveDistX * scale;
     destY = character.real_y + moveDistY * scale;
   }
 
-  // 7. Collision & Execution
+  // 8. Collision & Execution
   if (!can_move_to(destX, destY)) {
-    const altAngle = currentAngle - angleStep;
-    const altX = centerX + radiusTotal * Math.cos(altAngle);
-    const altY = centerY + radiusTotal * Math.sin(altAngle);
+    // Try opposite rotation
+    const altAngleStep = -angleStep;
+    const altAngle = currentAngle + altAngleStep;
+    const altX = centerX + targetDist * Math.cos(altAngle);
+    const altY = centerY + targetDist * Math.sin(altAngle);
 
     if (can_move_to(altX, altY)) {
       move(altX, altY);
     } else {
-      // Fallback: try moving directly toward/away from target
-      const fallbackDist =
-        currentDist > radiusTotal ? radiusTotal - 10 : radiusTotal + 10;
-      const fallbackX = centerX + fallbackDist * Math.cos(currentAngle);
-      const fallbackY = centerY + fallbackDist * Math.sin(currentAngle);
-      if (can_move_to(fallbackX, fallbackY)) {
-        move(fallbackX, fallbackY);
+      // If both blocked, just try to fix radius without orbiting
+      const radialOnlyX = centerX + (currentDist - Math.sign(distError) * maxStep * 0.5) * Math.cos(currentAngle);
+      const radialOnlyY = centerY + (currentDist - Math.sign(distError) * maxStep * 0.5) * Math.sin(currentAngle);
+      
+      if (can_move_to(radialOnlyX, radialOnlyY)) {
+        move(radialOnlyX, radialOnlyY);
       }
     }
   } else {
