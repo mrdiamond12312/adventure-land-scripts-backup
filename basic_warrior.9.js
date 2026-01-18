@@ -124,6 +124,7 @@ async function fight(target) {
     // Offhand swap logic: Use Candy Canes for farming
     const shouldUseCandyCanes =
       character.ping < 1000 &&
+      !isCleaving &&
       !character.s.sugarrush &&
       (character.slots.offhand?.name === "fireblade" ||
         character.slots.mainhand?.name === "fireblade") &&
