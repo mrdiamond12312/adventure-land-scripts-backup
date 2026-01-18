@@ -798,115 +798,120 @@ function extraDistanceWithinHitbox(target) {
 
 let lastKitingTargetId = undefined;
 
-async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
-  if (target) {
-    target.awidth = 24;
-    target.aheight = 24;
-    target.width = 24;
-    target.height = 24;
-  }
-
+async function hitAndRun(
+  target = get_target(),
+  rangeRateFn = typeof rangeRate === "function" ? rangeRate() : 0.85,
+) {
   const loopInterval = Math.max(200, getLoopInterval());
 
+  // 1. Basic Constraints & State Resets
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
 
-  if (!target || smart.moving || isAdvanceSmartMoving) {
+  if (
+    !target ||
+    smart.moving ||
+    (typeof isAdvanceSmartMoving !== "undefined" && isAdvanceSmartMoving)
+  ) {
     angle = undefined;
     lastKitingTargetId = undefined;
     return setTimeout(hitAndRun, loopInterval);
   }
 
-  if (
-    character.ctype === "warrior" &&
-    distance(character, target) > character.range * 0.35 &&
-    distance(character, target) <
-      character.range * rangeRate + character.xrange * 0.25
-  ) {
-    const allEntities = Object.values(parent.entities);
-
-    const noAggro = allEntities
-      .filter((e) => e.type === "monster")
-      .every((mob) => mob.target !== character.name || mob["1hp"]);
-
-    const noNearbyPlayers = allEntities
-      .filter((e) => e.type === "character" && !e.moving)
-      .every((char) => distance(character, char) >= 8);
-
-    if (noAggro && noNearbyPlayers) {
-      const dx = character.real_x - target.real_x;
-      const dy = character.real_y - target.real_y;
-      angle = Math.atan2(dy, dx);
-      return setTimeout(hitAndRun, loopInterval);
-    }
+  // 2. Target Transition Logic
+  if (lastKitingTargetId !== target.id) {
+    angle = undefined;
+    lastKitingTargetId = target.id;
   }
 
-  const targetChanged =
-    !lastKitingTargetId ||
-    (lastKitingTargetId !== target.id &&
-      distance(parent.entities[lastKitingTargetId], target) > 30);
-
-  if (targetChanged) angle = undefined;
-  lastKitingTargetId = target.id;
-
-  if (angle === undefined) {
-    const dx = character.real_x - target.real_x;
-    const dy = character.real_y - target.real_y;
-    angle = Math.atan2(dy, dx);
-  }
-
-  movementHistory.push({ x: character.real_x, y: character.real_y });
-  if (movementHistory.length > 5) movementHistory.shift();
-
-  let totalMovement = 0;
-  for (let i = 1; i < movementHistory.length; i++) {
-    const dx = movementHistory[i].x - movementHistory[i - 1].x;
-    const dy = movementHistory[i].y - movementHistory[i - 1].y;
-    totalMovement += Math.hypot(dx, dy);
-  }
-
-  const averageMovement = totalMovement / movementHistory.length;
-
-  if (averageMovement < stuckThreshold && flipRotationCooldown <= 0) {
-    flipRotation *= -1;
-    flipRotationCooldown = 4;
-    angle += (flipRotation * Math.PI) / 2;
-  }
-
-  flipRotationCooldown--;
-
+  // 3. Distance & Radius Calculation
   const rangeRadius = character.range * rangeRateFn;
-  const extendedRadius = character.xrange;
+  const extendedRadius = character.xrange || 0;
   const radiusTotal = rangeRadius + extendedRadius;
 
-  const leadTime = 120;
-  const centerX = target.real_x + (target.vx || 0) * leadTime;
-  const centerY = target.real_y + (target.vy || 0) * leadTime;
+  // 4. Position Prediction
+  const leadTime = 150;
+  const centerX = target.real_x + (target.vx || 0) * (leadTime / 1000) * 10;
+  const centerY = target.real_y + (target.vy || 0) * (leadTime / 1000) * 10;
 
+  const currentDist = distance(character, { x: centerX, y: centerY });
+  const currentAngle = Math.atan2(
+    character.real_y - centerY,
+    character.real_x - centerX,
+  );
+
+  // 5. Stuck Detection
+  movementHistory.push({ x: character.real_x, y: character.real_y });
+  if (movementHistory.length > 6) movementHistory.shift();
+
+  if (movementHistory.length >= 2) {
+    let totalMovement = 0;
+    for (let i = 1; i < movementHistory.length; i++) {
+      totalMovement += distance(movementHistory[i], movementHistory[i - 1]);
+    }
+    const averageMovement = totalMovement / movementHistory.length;
+
+    if (averageMovement < stuckThreshold && flipRotationCooldown <= 0) {
+      flipRotation *= -1;
+      flipRotationCooldown = 8;
+    }
+  }
+  if (flipRotationCooldown > 0) flipRotationCooldown--;
+
+  // 6. Spiral Orbit Calculation
   const maxStep = ((character.speed * loopInterval) / 1000) * 0.9;
 
-  let angleStep = flipRotation * (maxStep / radiusTotal);
+  // Radial correction: stronger when far from optimal radius
+  const distDiff = currentDist - radiusTotal;
+  const radialAlpha = Math.asin(
+    Math.max(-1, Math.min(1, distDiff / Math.max(1, currentDist))),
+  );
 
-  const maxRotation = Math.PI / 20;
-  angleStep = Math.max(-maxRotation, Math.min(angleStep, maxRotation));
+  // Angle step for circular motion
+  const angleStep = (maxStep / Math.max(1, currentDist)) * flipRotation;
 
-  angle += angleStep;
+  // Combined movement angle with stronger radial damping
+  const moveAngle = currentAngle + angleStep - radialAlpha * 0.8;
 
-  let destinationX = centerX + radiusTotal * Math.cos(angle);
-  let destinationY = centerY + radiusTotal * Math.sin(angle);
+  // Calculate ideal destination
+  let destX = centerX + radiusTotal * Math.cos(moveAngle);
+  let destY = centerY + radiusTotal * Math.sin(moveAngle);
 
-  if (!can_move_to(destinationX, destinationY)) {
-    angle += (flipRotation * Math.PI) / 32;
-    destinationX = centerX + radiusTotal * Math.cos(angle);
-    destinationY = centerY + radiusTotal * Math.sin(angle);
+  // CLAMP movement to maxStep to avoid overshooting
+  const moveDistX = destX - character.real_x;
+  const moveDistY = destY - character.real_y;
+  const moveDist = Math.sqrt(moveDistX * moveDistX + moveDistY * moveDistY);
+
+  if (moveDist > maxStep) {
+    // Scale down movement to maxStep
+    const scale = maxStep / moveDist;
+    destX = character.real_x + moveDistX * scale;
+    destY = character.real_y + moveDistY * scale;
   }
 
-  if (can_move_to(destinationX, destinationY)) {
-    move(destinationX, destinationY);
+  // 7. Collision & Execution
+  if (!can_move_to(destX, destY)) {
+    const altAngle = currentAngle - angleStep;
+    const altX = centerX + radiusTotal * Math.cos(altAngle);
+    const altY = centerY + radiusTotal * Math.sin(altAngle);
+
+    if (can_move_to(altX, altY)) {
+      move(altX, altY);
+    } else {
+      // Fallback: try moving directly toward/away from target
+      const fallbackDist =
+        currentDist > radiusTotal ? radiusTotal - 10 : radiusTotal + 10;
+      const fallbackX = centerX + fallbackDist * Math.cos(currentAngle);
+      const fallbackY = centerY + fallbackDist * Math.sin(currentAngle);
+      if (can_move_to(fallbackX, fallbackY)) {
+        move(fallbackX, fallbackY);
+      }
+    }
+  } else {
+    move(destX, destY);
   }
 
   setTimeout(hitAndRun, loopInterval);
 }
-
 hitAndRun();
 
 function prioritizedNames() {
