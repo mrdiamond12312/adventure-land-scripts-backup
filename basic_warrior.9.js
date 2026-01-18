@@ -108,7 +108,6 @@ async function fight(target) {
 
   if (isAttackReady && inRange(target) && shouldAttack()) {
     set_message("Attacking");
-    const attackFrequencyBeforeComponsate = character.frequency;
 
     // Main attack execution
     promisesToAwait.push(
@@ -137,41 +136,34 @@ async function fight(target) {
 
       if (candycane1 !== -1 && candycane2 !== -1) {
         isEquipingItems = true;
-        const equipPromise = Promise.all([
-          // Immediate equip
-          equip_batch([
-            {
-              num: candycane1,
-              slot: "mainhand",
-            },
-            {
-              num: candycane2,
-              slot: "offhand",
-            },
-          ]),
+        const candySwap = equipBatch(
+          {
+            mainhand: "candycanesword",
+            offhand: "candycanesword",
+          },
+          true,
+        );
 
-          // Delayed re-equip
-          new Promise((resolve) => {
-            setTimeout(() => {
-              resolve(
-                equip_batch([
-                  {
-                    num: candycane1,
-                    slot: "mainhand",
-                  },
-                  {
-                    num: candycane2,
-                    slot: "offhand",
-                  },
-                ]),
-              );
-            }, 150);
-          }),
-        ]).finally(() => {
-          isEquipingItems = false;
-        });
+        const backSwap =
+          character.ping < 150
+            ? candySwap.then(() => equipBatch(calculateWarriorItems(), true))
+            : new Promise((resolve) => {
+                setTimeout(() => {
+                  resolve(
+                    equip_batch([
+                      { num: candycane1, slot: "mainhand" },
+                      { num: candycane2, slot: "offhand" },
+                    ]),
+                  );
+                }, 150);
+              });
 
-        promisesToAwait.push(equipPromise);
+        const fireGlitchSwap = Promise.all([candySwap, backSwap]).finally(
+          () => {
+            isEquipingItems = false;
+          },
+        );
+        promisesToAwait.push(fireGlitchSwap);
       }
     }
 
