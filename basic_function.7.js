@@ -932,7 +932,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   // --- 8. Execute movement or retry later ---
   if (destinationX && destinationY) {
-    const maxStep = (character.speed * loopInterval) / 1000;
+    const maxStep = (character.speed * loopInterval * 1.5) / 1000;
 
     const dx = destinationX - character.real_x;
     const dy = destinationY - character.real_y;
