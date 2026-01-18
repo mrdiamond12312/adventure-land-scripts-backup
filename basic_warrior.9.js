@@ -115,7 +115,7 @@ async function fight(target) {
       currentStrategy(target),
       attack(target)
         .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeComponsate);
+          // attackSpeedCompensate(attackFrequencyBeforeComponsate);
           reduceCd("attack");
         })
         .catch((e) => attackErrorHandler(e)),
