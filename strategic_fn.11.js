@@ -133,10 +133,12 @@ function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   );
 }
 
+const EQUIP_IGNORE_MOBS = ["nerfedmummy"];
 function shouldWearLuckGear() {
   return Object.values(parent.entities).some(
     (mob) =>
       mob.type === "monster" &&
+      !EQUIP_IGNORE_MOBS.includes(mob.mtype) &&
       !mob.rip &&
       !mob.dead &&
       mob.hp > 0 &&
@@ -150,6 +152,7 @@ function shouldWearExpGear() {
   return Object.values(parent.entities).some(
     (mob) =>
       mob.type === "monster" &&
+      !EQUIP_IGNORE_MOBS.includes(mob.mtype) &&
       !mob.rip &&
       !mob.dead &&
       mob.hp > 0 &&
@@ -1099,15 +1102,12 @@ async function useTemporalSurge() {
     }
   });
 
-  // const nearbySpawnWithSpawnMechanic = nearbySpawn.filter(
-  //   (spawn) => G.monsters[spawn.type].spawns,
-  // );
+  const nearbySpawnWithSpawnMechanic = nearbySpawn.filter(
+    (spawn) => G.monsters[spawn.type].spawns,
+  );
 
   const promises = [];
-  if (
-    nearbySpawn.length
-    // && nearbySpawnWithSpawnMechanic.length === 0
-  ) {
+  if (nearbySpawn.length && nearbySpawnWithSpawnMechanic.length === 0) {
     if (character.slots.orb?.name !== "orboftemporal") {
       promises.push(equipBatch({ orb: "orboftemporal" }, true));
     }
