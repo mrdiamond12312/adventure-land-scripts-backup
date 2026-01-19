@@ -136,34 +136,29 @@ async function fight(target) {
 
       if (candycane1 !== -1 && candycane2 !== -1) {
         isEquipingItems = true;
-        const candySwap = equipBatch(
-          {
-            mainhand: "candycanesword",
-            offhand: "candycanesword",
-          },
-          true,
-        );
+        const equipPromise = Promise.all([
+          // Immediate equip
+          Promise.all([
+            equip(candycane1, "mainhand"),
+            equip(candycane2, "offhand"),
+          ]),
 
-        const backSwap =
-          character.ping < 300
-            ? candySwap.then(() => equipBatch(calculateWarriorItems(), true))
-            : new Promise((resolve) => {
-                setTimeout(() => {
-                  resolve(
-                    equip_batch([
-                      { num: candycane1, slot: "mainhand" },
-                      { num: candycane2, slot: "offhand" },
-                    ]),
-                  );
-                }, 150);
-              });
+          // Delayed re-equip
+          new Promise((resolve) => {
+            setTimeout(() => {
+              resolve(
+                Promise.all([
+                  equip(candycane1, "mainhand"),
+                  equip(candycane2, "offhand"),
+                ]),
+              );
+            }, 150);
+          }),
+        ]).finally(() => {
+          isEquipingItems = false;
+        });
 
-        const fireGlitchSwap = Promise.all([candySwap, backSwap]).finally(
-          () => {
-            isEquipingItems = false;
-          },
-        );
-        promisesToAwait.push(fireGlitchSwap);
+        promisesToAwait.push(equipPromise);
       }
     }
 
