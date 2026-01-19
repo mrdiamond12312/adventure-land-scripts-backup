@@ -145,7 +145,7 @@ async function fight(target) {
         );
 
         const backSwap =
-          character.ping < 150
+          character.ping < 300
             ? candySwap.then(() => equipBatch(calculateWarriorItems(), true))
             : new Promise((resolve) => {
                 setTimeout(() => {
