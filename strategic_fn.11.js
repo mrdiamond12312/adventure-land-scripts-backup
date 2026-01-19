@@ -601,11 +601,7 @@ async function equipBatch(suggestedItems, forced = false) {
     if (suggestedItems.booster && currentBooster !== suggestedItems.booster) {
       promises.push(shift(locate_item(currentBooster), suggestedItems.booster));
       delete suggestedItems.booster;
-    } else if (
-      currentBooster !== "luckbooster" &&
-      (get_target()?.cooperative ||
-        (isAssignedAsTanker() && avgDmgTaken(character) > 300))
-    ) {
+    } else if (currentBooster !== "luckbooster" && shouldWearLuckGear()) {
       promises.push(shift(locate_item(currentBooster), "luckbooster"));
     } else if (currentBooster !== "xpbooster") {
       promises.push(shift(locate_item(currentBooster), "xpbooster"));
