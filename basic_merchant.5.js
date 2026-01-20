@@ -319,8 +319,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     isInvFull(4) ||
     smart.moving ||
     isAdvanceSmartMoving ||
-    (!is_on_cooldown("fishing") && locate_item("rod") !== -1) ||
-    (!is_on_cooldown("mining") && locate_item("pickaxe") !== -1) ||
     character.c.mining ||
     character.c.fishing ||
     !craftQuantity
@@ -403,35 +401,13 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   }
 }
 
-var isLuringMobs = false;
-async function lureMechaGnome() {
-  if (isLuringMobs) return; // optional guard
-
-  isLuringMobs = true;
-  try {
-    close_stand();
-    await smartMove({ map: "cyberland" });
-
-    parent.socket.emit("eval", {
-      command: "mooooooh",
-    });
-
-    await sleep(character.ping);
-    advanceSmartMove(get("mageLocation"), { useScare: false });
-  } catch (e) {
-    console.error(e);
-  } finally {
-    isLuringMobs = false;
-  }
-}
-
 setInterval(async function () {
   loot();
   if (character.rip) {
     respawn();
     return;
   }
-  
+
   if (!isLuringMobs) scareAwayMobs();
 
   await sortInv();
@@ -484,7 +460,7 @@ setInterval(async function () {
     !isAdvanceSmartMoving &&
     !character.c.mining &&
     !character.c.fishing &&
-    !character.q.exchanging
+    !character.q.exchanging 
   )
     await moveHome();
 

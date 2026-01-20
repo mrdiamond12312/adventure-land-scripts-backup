@@ -14,7 +14,6 @@ character.on("cm", async function ({ name, message }) {
   } else return;
 
   equipBroom();
-  // const sender = get_characters().find(character => character.name === name);
 
   switch (message.msg) {
     case "inv_full":
@@ -152,4 +151,61 @@ async function openCryptInstance() {
 
   onDuty = false;
   return;
+}
+
+var isLuringMobs = false;
+const trustedPartners = ["earthPriest", "earthWar"];
+
+async function lureMechaGnome() {
+  if (isLuringMobs || onDuty) {
+    return setTimeout(lureMechaGnome, 50);
+  }
+
+  if (
+    !parent.party_list ||
+    (!trustedPartners.some((name) => parent.party_list.includes(name)) &&
+      !parent.party_list.includes(PRIEST))
+  ) {
+    return setTimeout(lureMechaGnome, 50);
+  }
+
+  // Global flags to prevent other tasks from interrupting
+  onDuty = true;
+  isLuringMobs = true; // Prevent scareAwayMobs
+
+  let success = false;
+
+  try {
+    close_stand();
+    await smartMove({ map: "cyberland" });
+    await sleep(character.ping);
+
+    if (!get_nearest_monster({ type: "mechagnome" })) {
+      throw new Error("No mechagnome found");
+    }
+
+    parent.socket.emit("eval", { command: "mooooooh" });
+
+    const mageResponse = await waitUntil(() => {
+      const mageInfo = get("mageLocation");
+      if (!mageInfo) return false;
+      return (
+        mageInfo.mp >= G.skills["magiport"].mp + 100 &&
+        Date.now() - mageInfo.time < 15_000
+      );
+    }, 10_000);
+
+    if (!mageResponse) {
+      throw new Error("Mage did not have mana / not online");
+    }
+
+    advanceSmartMove(get("mageLocation"), { useScare: false });
+    success = true;
+  } catch (e) {
+    console.error(e);
+  } finally {
+    isLuringMobs = false;
+    onDuty = false;
+    setTimeout(lureMechaGnome, success ? 4 * 60 * 1000 : 50);
+  }
 }

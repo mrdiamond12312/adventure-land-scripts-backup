@@ -508,12 +508,6 @@ setInterval(async () => {
     retrieveMaxItemsLevel();
     await retrievedBankItemToUpgrade();
 
-    if (parent.S.egghunt) {
-      for (let index = 0; index < 9; index++) {
-        retrieveBankItem(`egg${index}`);
-      }
-    }
-
     retrieveBankItem("gemfragment");
 
     onDuty = false;

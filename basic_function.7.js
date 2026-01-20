@@ -604,6 +604,15 @@ async function withTimeout(
   ]);
 }
 
+async function waitUntil(fn, timeout = 10_000, interval = character.ping) {
+  const start = Date.now();
+  while (!fn()) {
+    if (Date.now() - start > timeout) return false;
+    await sleep(interval);
+  }
+  return true;
+}
+
 async function buff() {
   try {
     if (Object.keys(character.c).length) {
@@ -1392,7 +1401,7 @@ setTimeout(deployCharacters, 5000);
 setInterval(deployCharacters, 30000);
 
 setInterval(async () => {
-  if (isMerchant()) return;
+  // if (isMerchant()) return;
 
   const serverCharacters = await getServerPlayers();
   const partyWhitelistRegex = [/^earth/];
@@ -1417,12 +1426,9 @@ setInterval(async () => {
     );
   }
 
-  if (Math.min(...parent.pings) > 1000) {
-    if (character.ctype === "merchant") disconnect();
-    else {
-      if (parent.caracAL) parent.caracAL.shutdown();
-      else disconnect();
-    }
+  if (Math.min(...parent.pings) > 1000 && character.ctype !== "merchant") {
+    if (parent.caracAL) parent.caracAL.shutdown();
+    else disconnect();
   }
 
   if (partyMems.some((id) => !parent.party_list.includes(id))) {
