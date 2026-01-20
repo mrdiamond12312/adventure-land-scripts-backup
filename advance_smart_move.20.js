@@ -457,7 +457,12 @@ function resetSmartMove() {
   smart.try_exact_spot = true;
 }
 
-async function advanceSmartMove(props) {
+async function advanceSmartMove(
+  props,
+  options = {
+    useScare: true,
+  },
+) {
   if (
     !smart.moving &&
     !character.c &&
@@ -468,11 +473,14 @@ async function advanceSmartMove(props) {
     equip(findMaxLevelItem("broom"));
   }
 
-  const scareInterval = setInterval(() => {
-    scareAwayMobs();
-  }, 1000);
+  let scareInterval = undefined;
 
-  setTimeout(() => clearInterval(scareInterval), 300000);
+  if (options.useScare) {
+    scareInterval = setInterval(() => {
+      scareAwayMobs();
+    }, 1000);
+    setTimeout(() => clearInterval(scareInterval), 300000);
+  }
 
   try {
     // useNearbySmartMove();
