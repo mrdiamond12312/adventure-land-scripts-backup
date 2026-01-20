@@ -460,7 +460,7 @@ setInterval(async function () {
     !isAdvanceSmartMoving &&
     !character.c.mining &&
     !character.c.fishing &&
-    !character.q.exchanging 
+    !character.q.exchanging
   )
     await moveHome();
 
@@ -542,9 +542,11 @@ setInterval(() => {
 }, 12000);
 
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/merchant_service.19.js",
-  ]);
+  parent.caracAL
+    .load_scripts(["adventure-land-scripts-backup/merchant_service.19.js"])
+    .then(() => {
+      lureMechaGnome();
+    });
 } else load_code(19);
 // setInterval(() => {
 //   if (

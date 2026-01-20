@@ -209,3 +209,7 @@ async function lureMechaGnome() {
     setTimeout(lureMechaGnome, success ? 4 * 60 * 1000 : 50);
   }
 }
+
+if (!parent.caracAL) {
+  lureMechaGnome();
+}

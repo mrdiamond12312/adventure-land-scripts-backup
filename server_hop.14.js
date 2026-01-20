@@ -29,6 +29,8 @@ const currentServer = `${server.region}${server.id}`;
 const getHomeServer = () =>
   `${HOME_SERVER.serverRegion}${HOME_SERVER.serverIdentifier}`;
 
+const isAtHomeServer = () => currentServer === getHomeServer();
+
 async function hopToServer(serverRegion, serverIdentifier) {
   if (parent.caracAL) {
     parent.caracAL.siblings.forEach((id) => send_cm(id, "loot-before-hopping"));
@@ -147,7 +149,7 @@ setInterval(async () => {
       return true;
     }
 
-    if (currentServer !== getHomeServer()) {
+    if (!isAtHomeServer()) {
       log("Hopping back home server!");
       set("currentParty", undefined);
       await hopToServer(HOME_SERVER.serverRegion, HOME_SERVER.serverIdentifier);
