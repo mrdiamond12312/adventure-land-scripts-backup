@@ -173,6 +173,7 @@ async function mainLoop() {
         map: character.map,
         x: character.x,
         y: character.y,
+        time: Date.now(),
       });
     }
 
