@@ -476,6 +476,7 @@ async function advanceSmartMove(
   let scareInterval = undefined;
 
   if (options.useScare) {
+    await scareAwayMobs();
     scareInterval = setInterval(() => {
       scareAwayMobs();
     }, 1000);
@@ -484,7 +485,6 @@ async function advanceSmartMove(
 
   try {
     // useNearbySmartMove();
-    await scareAwayMobs();
 
     if (isAdvanceSmartMoving) {
       resetSmartMove();
