@@ -199,7 +199,7 @@ async function lureMechaGnome() {
       throw new Error("Mage did not have mana / not online");
     }
 
-    advanceSmartMove(get("mageLocation"), { useScare: false });
+    await advanceSmartMove(get("mageLocation"), { useScare: false });
     success = true;
   } catch (e) {
     console.error(e);
