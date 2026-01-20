@@ -482,7 +482,7 @@ setInterval(async () => {
   ) {
     onDuty = true;
     close_stand();
-    await smart_move(bankPosition);
+    await smartMove(bankPosition);
     BANK_CACHE = character.bank;
     const promises = [];
     character.items.forEach((item, index) => {
