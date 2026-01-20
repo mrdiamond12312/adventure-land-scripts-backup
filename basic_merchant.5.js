@@ -4,12 +4,19 @@
 // Just set attack_mode to true and ENGAGE!
 
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/merchant_crafting.10.js",
-  ]);
+  parent.caracAL
+    .load_scripts([
+      "adventure-land-scripts-backup/merchant_crafting.10.js",
+      "adventure-land-scripts-backup/merchant_service.19.js",
+    ])
+    .then(() => {
+      lureMechaGnome();
+    });
 } else {
   load_code(10);
+  load_code(19);
 }
+
 // Global Vars
 var onDuty = false;
 var isExeing = false;
@@ -541,13 +548,6 @@ setInterval(() => {
   parent.socket.emit("secondhands");
 }, 12000);
 
-if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts(["adventure-land-scripts-backup/merchant_service.19.js"])
-    .then(() => {
-      lureMechaGnome();
-    });
-} else load_code(19);
 // setInterval(() => {
 //   if (
 //     !isInvFull(5) &&
