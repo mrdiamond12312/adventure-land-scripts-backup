@@ -1463,7 +1463,7 @@ const PARTICIPATABLE_EVENTS = [
   "wabbit",
   "snowman",
   "pinkgoo",
-  "goobrawl",
+  // "goobrawl", // commented out to allow rspeed rogue deployments and merch's gnomes luring during goobrawl
   "abtesting",
 ];
 

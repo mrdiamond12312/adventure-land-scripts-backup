@@ -157,11 +157,10 @@ var isLuringMobs = false;
 const trustedPartners = ["earthPriest", "earthWar"];
 
 async function lureMechaGnome() {
-  if (isLuringMobs || onDuty) {
-    return setTimeout(lureMechaGnome, 500);
-  }
-
   if (
+    isLuringMobs ||
+    onDuty ||
+    serverCurrentlyHasLiveEvent() ||
     !parent.party_list ||
     (!trustedPartners.some((name) => parent.party_list.includes(name)) &&
       !parent.party_list.includes(PRIEST))
@@ -185,9 +184,9 @@ async function lureMechaGnome() {
         entity && entity.type === "monster" && entity.mtype === "mechagnome",
     );
     if (!gnomesNearby.length) {
-      nextDelay = 45000;
+      nextDelay = 45_000;
       throw new Error("No mechagnome found");
-    } else nextDelay = 150000;
+    } else nextDelay = 150_000;
 
     const mageResponse = await waitUntil(() => {
       const mageInfo = get("mageLocation");
@@ -199,7 +198,7 @@ async function lureMechaGnome() {
     }, 10_000);
 
     if (!mageResponse) {
-      nextDelay = 15000;
+      nextDelay = 15_000;
       throw new Error("Mage did not have mana / not online");
     }
 
