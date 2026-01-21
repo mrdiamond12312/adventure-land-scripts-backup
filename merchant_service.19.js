@@ -158,7 +158,7 @@ const trustedPartners = ["earthPriest", "earthWar"];
 
 async function lureMechaGnome() {
   if (isLuringMobs || onDuty) {
-    return setTimeout(lureMechaGnome, 50);
+    return setTimeout(lureMechaGnome, 500);
   }
 
   if (
@@ -166,25 +166,28 @@ async function lureMechaGnome() {
     (!trustedPartners.some((name) => parent.party_list.includes(name)) &&
       !parent.party_list.includes(PRIEST))
   ) {
-    return setTimeout(lureMechaGnome, 50);
+    return setTimeout(lureMechaGnome, 500);
   }
 
   // Global flags to prevent other tasks from interrupting
   onDuty = true;
   isLuringMobs = true; // Prevent scareAwayMobs
 
-  let success = false;
+  let nextDelay = 500;
 
   try {
     close_stand();
     await smartMove({ map: "cyberland" });
     await sleep(character.ping);
 
-    if (!get_nearest_monster({ type: "mechagnome" })) {
+    const gnomesNearby = Object.values(parent.entities).filter(
+      (entity) =>
+        entity && entity.type === "monster" && entity.mtype === "mechagnome",
+    );
+    if (!gnomesNearby.length) {
+      nextDelay = 45000;
       throw new Error("No mechagnome found");
-    }
-
-    parent.socket.emit("eval", { command: "mooooooh" });
+    } else nextDelay = 150000;
 
     const mageResponse = await waitUntil(() => {
       const mageInfo = get("mageLocation");
@@ -196,17 +199,18 @@ async function lureMechaGnome() {
     }, 10_000);
 
     if (!mageResponse) {
+      nextDelay = 15000;
       throw new Error("Mage did not have mana / not online");
     }
 
+    parent.socket.emit("eval", { command: "mooooooh" });
     await advanceSmartMove(get("mageLocation"), { useScare: false });
-    success = true;
   } catch (e) {
     console.error(e);
   } finally {
     isLuringMobs = false;
     onDuty = false;
-    setTimeout(lureMechaGnome, success ? 4 * 60 * 1000 : 50);
+    setTimeout(lureMechaGnome, nextDelay);
   }
 }
 
