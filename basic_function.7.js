@@ -1826,8 +1826,8 @@ async function changeToDailyEventTargets() {
         rangeRate = 0.2;
         return frankyInstance;
       } else {
-        change_target();
-        await advanceSmartMove({ map: "level2w", x: -530, y: -173 });
+        scareAwayMobs();
+        return frankyInstance;
       }
   }
 
@@ -1943,8 +1943,8 @@ function attackErrorHandler(error) {
       const currentY = character.y;
 
       const target = get_target();
-      const targetX = target.going_x ?? target.x;
-      const targetY = target.going_y ?? target.y;
+      const targetX = target.real_x ?? target.x;
+      const targetY = target.real_y ?? target.y;
 
       const newX = currentX + 0.4 * (targetX - currentX);
       const newY = currentY + 0.4 * (targetY - currentY);
