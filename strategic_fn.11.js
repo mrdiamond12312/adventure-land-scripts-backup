@@ -353,6 +353,7 @@ function calculateRangerItems(target) {
             name: item.name,
             info,
             attackDelta: info.attack - currentInfo.attack,
+            rangeDelta: info.range - (currentInfo.range || 0),
           };
         })
         .filter(Boolean);
@@ -368,16 +369,19 @@ function calculateRangerItems(target) {
             name: current.name,
             info,
             attackDelta: 0,
+            rangeDelta: 0,
           });
         }
       }
 
-      // Sort by smallest upgrade first (asc)
       rangedWeapons.sort((lhs, rhs) => {
         if (lhs.info.wtype !== rhs.info.wtype) {
           return lhs.info.wtype === "crossbow" ? 1 : -1;
         }
-        return lhs.attackDelta - rhs.attackDelta;
+
+        return (
+          rhs.rangeDelta - lhs.rangeDelta || lhs.attackDelta - rhs.attackDelta
+        );
       });
 
       const oneShotWeapon = rangedWeapons.find((weapon) =>
