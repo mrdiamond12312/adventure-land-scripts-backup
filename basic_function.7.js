@@ -1408,6 +1408,7 @@ setInterval(async () => {
   const whitelistPartyMembers = serverCharacters.filter(
     (char) =>
       !partyMems.includes(char.name) &&
+      char.type !== "merchant" &&
       partyWhitelistRegex.some((regex) => regex.test(char.party)),
   );
   const hasWhitelistedMember = parent.party_list.some((member) =>
@@ -1463,7 +1464,7 @@ const PARTICIPATABLE_EVENTS = [
   "wabbit",
   "snowman",
   "pinkgoo",
-  // "goobrawl", // commented out to allow rspeed rogue deployments and merch's gnomes luring during goobrawl
+  "goobrawl",
   "abtesting",
 ];
 
