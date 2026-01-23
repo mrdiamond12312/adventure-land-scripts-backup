@@ -636,7 +636,7 @@ async function equipBatch(suggestedItems, forced = false) {
     })
     .filter((equipInfo) => equipInfo.num >= 0);
   if (itemSlots.length)
-    if (itemSlots.length <= 2 && !character.s.penalty_cd)
+    if (itemSlots.length <= 1)
       for (const item of itemSlots) promises.push(equip(item.num, item.slot));
     else promises.push(equip_batch(itemSlots));
   return Promise.all(promises).finally(() => {
