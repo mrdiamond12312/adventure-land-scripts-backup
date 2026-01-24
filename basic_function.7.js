@@ -1236,7 +1236,7 @@ setInterval(async function () {
     currentTarget.type === "monster" &&
     distance(currentTarget, character) >
       character.range + character.xrange * 0.9 &&
-    !smart.moving &&
+    !smart.moving && !character.moving &&
     !isAdvanceSmartMoving
   ) {
     smartmoveDebug = true;
@@ -1245,14 +1245,14 @@ setInterval(async function () {
       if (can_move_to(currentTarget.x, currentTarget.y))
         await smartMove({
           map: character.map,
-          x: (character.x + currentTarget.x) / 2,
-          y: (character.y + currentTarget.y) / 2,
+          x: (character.x + currentTarget.real_x) / 2,
+          y: (character.y + currentTarget.real_y) / 2,
         });
       else
         await smartMove({
           map: character.map,
-          x: currentTarget.x,
-          y: currentTarget.y,
+          x: currentTarget.real_x,
+          y: currentTarget.real_y,
         });
     } else {
       if (can_move_to(currentTarget.x, currentTarget.y))
@@ -1260,8 +1260,8 @@ setInterval(async function () {
       else
         await advanceSmartMove({
           map: character.map,
-          x: currentTarget.x,
-          y: currentTarget.y,
+          x: currentTarget.real_x,
+          y: currentTarget.real_y,
         });
     }
 
