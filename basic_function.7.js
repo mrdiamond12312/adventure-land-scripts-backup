@@ -816,6 +816,10 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   const loopInterval = Math.max(200, getLoopInterval());
+  // const totalExtraRange = extraRangeTarget + extraRangeSelf;
+  const rangeRadius = character.range * rangeRateFn;
+  const extendedRadius = character.xrange;
+  // + totalExtraRange;
 
   // --- 1. Early exits and sanity checks ---
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
@@ -828,8 +832,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   if (
     character.ctype === "warrior" &&
     distance(character, target) > character.range * 0.35 &&
-    distance(character, target) <
-      character.range * rangeRate + character.xrange * 0.25
+    distance(character, target) < rangeRadius + extendedRadius
   ) {
     const allEntities = Object.values(parent.entities);
     const noAggro = allEntities
@@ -885,11 +888,6 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
       angle += (flipRotation * Math.PI) / 2; // turn 90°
     }
   }
-
-  // const totalExtraRange = extraRangeTarget + extraRangeSelf;
-  const rangeRadius = character.range * rangeRateFn;
-  const extendedRadius = character.xrange;
-  // + totalExtraRange;
 
   // --- 5. Desired destination based on current orbit angle ---
   let new_x = target.x + (rangeRadius + extendedRadius) * cosA;
@@ -1236,24 +1234,18 @@ setInterval(async function () {
     currentTarget.type === "monster" &&
     distance(currentTarget, character) >
       character.range + character.xrange * 0.9 &&
-    !smart.moving && !character.moving &&
+    !smart.moving &&
+    !character.moving &&
     !isAdvanceSmartMoving
   ) {
     smartmoveDebug = true;
     log("Debug being stuck while kiting");
     if (parent.caracAL) {
-      if (can_move_to(currentTarget.x, currentTarget.y))
-        await smartMove({
-          map: character.map,
-          x: (character.x + currentTarget.real_x) / 2,
-          y: (character.y + currentTarget.real_y) / 2,
-        });
-      else
-        await smartMove({
-          map: character.map,
-          x: currentTarget.real_x,
-          y: currentTarget.real_y,
-        });
+      await smartMove({
+        map: character.map,
+        x: currentTarget.real_x,
+        y: currentTarget.real_y,
+      });
     } else {
       if (can_move_to(currentTarget.x, currentTarget.y))
         await move(currentTarget.x, currentTarget.y);
