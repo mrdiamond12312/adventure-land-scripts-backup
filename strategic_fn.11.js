@@ -428,19 +428,19 @@ function calculatePriestItems(target) {
       target &&
       target.type !== "monster" &&
       ![
-        "firestaff",
-        "oozingterror",
-        "pmace",
+        // "firestaff", // only enable these when oozingterror is main designated weapon (currently: harbringer)
+        // "oozingterror",
+        // "pmace",
         ...(!character.s.burned ? ["lmace"] : []),
       ].includes(character.slots.mainhand?.name)
-        ? "oozingterror"
+        ? "harbringer"
         : // : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
         //     get_targeted_monster()?.mtype,
         //   )
         // ? "pinkie"
         character.map === "crypt"
         ? currentTarget && currentTarget.s["frozen"]
-          ? "oozingterror"
+          ? "harbringer"
           : "froststaff"
         : feelingLucky
         ? "lmace"
@@ -449,7 +449,7 @@ function calculatePriestItems(target) {
             currentTarget["1hp"] ||
             currentTarget["avoidance"] > 90)
         ? "firestaff"
-        : "oozingterror",
+        : "harbringer",
     offhand:
       character.map === "crypt"
         ? "wbook1"
