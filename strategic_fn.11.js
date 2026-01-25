@@ -639,6 +639,19 @@ async function equipBatch(suggestedItems, forced = false) {
       return { slot, num };
     })
     .filter((equipInfo) => equipInfo.num >= 0);
+
+  // Slice items to fit with penalty_cd & frequency
+  const msToNextAttack = ms_to_next_skill("attack");
+  const timeToNextAttack =
+    msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
+  const maxItemsToEquip = Math.max(
+    0,
+    Math.floor((timeToNextAttack - (character.s.penalty_cd?.ms ?? 0)) / 120),
+  );
+  if (itemSlots.length > maxItemsToEquip && !forced) {
+    itemSlots.splice(maxItemsToEquip);
+  }
+
   if (itemSlots.length)
     if (itemSlots.length <= 1)
       for (const item of itemSlots) promises.push(equip(item.num, item.slot));
