@@ -179,7 +179,7 @@ async function fight(target) {
   try {
     await withTimeout(Promise.all(promisesToAwait), 1500);
   } catch (e) {
-    console.log(e);
+    console.warn(e);
   }
 }
 
@@ -255,7 +255,7 @@ async function cupidHeal(playersToHeal) {
   try {
     await withTimeout(Promise.all(promisesToAwait), 1000);
   } catch (e) {
-    console.error("Error while Cupiding!", e);
+    console.warn("Error while Cupiding!", e);
   }
 }
 
