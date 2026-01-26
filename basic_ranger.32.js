@@ -255,7 +255,6 @@ async function cupidHeal(playersToHeal) {
   try {
     await withTimeout(Promise.all(promisesToAwait), 1000);
   } catch (e) {
-    attackErrorHandler(e);
     console.error("Error while Cupiding!", e);
   }
 }
