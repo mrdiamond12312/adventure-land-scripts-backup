@@ -192,7 +192,10 @@ async function usePullStrategies(target) {
         isAssignedAsTanker()
       ) {
         const mobToPull = mobsList
-          .sort((lhs, rhs) => rhs.attack * rhs.frequency - lhs.attack * lhs.frequency)
+          .sort(
+            (lhs, rhs) =>
+              rhs.attack * rhs.frequency - lhs.attack * lhs.frequency,
+          )
           .find(
             (mob) =>
               calculateDamage(mob, character) + partyDmgRecieved <
@@ -231,7 +234,10 @@ async function usePullStrategies(target) {
       break;
 
     case "ranger":
-      const suggestedRangerItems = calculateRangerItems(target);
+      const suggestedRangerItems = calculateRangerItems(
+        target,
+        character.slots.mainhand?.name === "cupid",
+      );
 
       if (
         Object.keys(suggestedRangerItems).some(

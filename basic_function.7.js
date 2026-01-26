@@ -1940,8 +1940,8 @@ function attackErrorHandler(error) {
   if (error.failed) {
     if (error.response === "cooldown" && error.place) {
       reduce_cooldown(error.place, -error.ms + Math.min(...parent.pings) / 2);
-    } else if (error.reason === "too_far" && error.place) {
-      if (character.cc < 125 && !character.moving && error.place === "attack") {
+    } else if (error.reason === "too_far") {
+      if (character.cc < 125 && !character.moving) {
         const currentX = character.x;
         const currentY = character.y;
 
