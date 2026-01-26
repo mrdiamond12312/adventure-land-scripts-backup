@@ -31,8 +31,7 @@ const tryMultiShot = async (skill, entityList) => {
   if (entityList.length === 0) return false;
   set_message(`${skill} Shooting`);
   return use_skill(skill, entityList)
-    .then(() => reduceCd("attack")) // Use reduceCd for the skill (was incorrectly hardcoded to "attack")
-    .catch((e) => attackErrorHandler(e));
+    .then(() => reduceCd("attack")) // Use reduceCd for the skill (was incorrectly hardcoded to "attack");
 };
 
 async function fight(target) {
