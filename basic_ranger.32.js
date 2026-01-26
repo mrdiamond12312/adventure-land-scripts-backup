@@ -31,7 +31,8 @@ const tryMultiShot = async (skill, entityList) => {
   if (entityList.length === 0) return false;
   set_message(`${skill} Shooting`);
   return use_skill(skill, entityList)
-    .then(() => reduceCd("attack")) // Use reduceCd for the skill (was incorrectly hardcoded to "attack");
+    .then(() => reduceCd("attack")) // Use reduceCd for the skill (was incorrectly hardcoded to "attack")
+    .catch((e) => attackErrorHandler(e));
 };
 
 async function fight(target) {
@@ -147,7 +148,8 @@ async function fight(target) {
   }
 
   // --- Supershot ---
-  const canSuperShot = character.mp > 400 + 1000 && !is_on_cooldown("supershot");
+  const canSuperShot =
+    character.mp > 400 + 1000 && !is_on_cooldown("supershot");
 
   if (canSuperShot) {
     const coopTarget = target?.cooperative
@@ -179,7 +181,7 @@ async function fight(target) {
   try {
     await withTimeout(Promise.all(promisesToAwait), 1500);
   } catch (e) {
-    console.warn(e);
+    console.log(e);
   }
 }
 
@@ -255,7 +257,8 @@ async function cupidHeal(playersToHeal) {
   try {
     await withTimeout(Promise.all(promisesToAwait), 1000);
   } catch (e) {
-    console.warn("Error while Cupiding!", e);
+    attackErrorHandler(e);
+    console.error("Error while Cupiding!", e);
   }
 }
 

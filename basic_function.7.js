@@ -763,7 +763,7 @@ function getLoopInterval() {
   const frequencyInterval = (1 / character.frequency) * 1000;
 
   return ms_to_next_skill("attack") <= dynamicInterval
-    ? Math.max(ms_to_next_skill("attack"), 25)
+    ? Math.max(ms_to_next_skill("attack"), 1)
     : dynamicInterval ?? frequencyInterval;
 }
 
@@ -1931,10 +1931,10 @@ function on_magiport(name) {
 
 function attackErrorHandler(error) {
   if (error.failed) {
-    if (error.response === "cooldown") {
+    if (error.response === "cooldown" && error.place) {
       reduce_cooldown(
-        "attack",
-        -error.ms + Math.min(...parent.pings) / 2 + ms_to_next_skill("attack"),
+        error.place,
+        -error.ms + Math.min(...parent.pings) / 2 ,
       );
     } else if (
       error.reason === "too_far" &&
