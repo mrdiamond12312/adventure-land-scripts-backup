@@ -1038,10 +1038,17 @@ function getPlayersToHeal() {
 }
 
 function getLowestMana() {
-  const allies = parent.party_list.map((name) => get_entity(name));
-  allies.filter((entity) => entity);
-  allies.sort((lhs, rhs) => lhs.mp / lhs.max_mp - rhs.mp / rhs.max_mp);
-  return allies[0] || character;
+  const allies = parent.party_list
+    .filter((name) => name !== character.name)
+    .map((name) => get_player(name))
+    .filter(
+      (entity) =>
+        entity &&
+        partyMems.includes(entity.name) &&
+        !["mage", "priest"].includes(entity.ctype),
+    )
+    .sort((lhs, rhs) => lhs.mp / lhs.max_mp - rhs.mp / rhs.max_mp);
+  return allies.shift();
 }
 
 //// RESPAWN
@@ -1932,10 +1939,7 @@ function on_magiport(name) {
 function attackErrorHandler(error) {
   if (error.failed) {
     if (error.response === "cooldown" && error.place) {
-      reduce_cooldown(
-        error.place,
-        -error.ms + Math.min(...parent.pings) / 2 ,
-      );
+      reduce_cooldown(error.place, -error.ms + Math.min(...parent.pings) / 2);
     } else if (
       error.reason === "too_far" &&
       character.cc < 125 &&
