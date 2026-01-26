@@ -1940,26 +1940,28 @@ function attackErrorHandler(error) {
   if (error.failed) {
     if (error.response === "cooldown" && error.place) {
       reduce_cooldown(error.place, -error.ms + Math.min(...parent.pings) / 2);
-    } else if (
-      error.reason === "too_far" &&
-      character.cc < 125 &&
-      !character.moving
-    ) {
-      const currentX = character.x;
-      const currentY = character.y;
+    } else if (error.reason === "too_far" && error.place) {
+      if (character.cc < 125 && !character.moving && error.place === "attack") {
+        const currentX = character.x;
+        const currentY = character.y;
 
-      const target = get_target();
-      const targetX = target.real_x ?? target.x;
-      const targetY = target.real_y ?? target.y;
+        const target = get_target();
+        const targetX = target.real_x ?? target.x;
+        const targetY = target.real_y ?? target.y;
 
-      const newX = currentX + 0.4 * (targetX - currentX);
-      const newY = currentY + 0.4 * (targetY - currentY);
+        const newX = currentX + 0.4 * (targetX - currentX);
+        const newY = currentY + 0.4 * (targetY - currentY);
+        move(newX, newY);
+      }
+
       console.warn(
-        `Too far, ${Math.round(error.distance)} distance / ${
-          character.range + character.xrange
-        } range`,
+        `Too far to use '${error.place}'` +
+          (error.place === "attack"
+            ? `, ${Math.round(error.distance)} distance / ${
+                character.range + character.xrange
+              } range`
+            : ""),
       );
-      move(newX, newY);
     }
   } else console.warn("Error while attacking:", error);
 }

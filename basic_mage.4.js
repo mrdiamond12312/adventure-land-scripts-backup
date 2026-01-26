@@ -72,7 +72,8 @@ async function fight(target) {
 
   // --- Energize Logic ---
   const canEnergize = !is_on_cooldown("energize");
-  const isAttackReady = ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
   const isTargetInAttackRange =
     distance(target, character) <= character.range + character.xrange;
   if (canEnergize) {
@@ -98,7 +99,9 @@ async function fight(target) {
           "energize",
           energizeTarget,
           Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
-        ).then(() => reduceCd("energize")),
+        )
+          .then(() => reduceCd("energize"))
+          .catch((e) => attackErrorHandler(e)),
       );
     }
   }
@@ -126,10 +129,10 @@ async function fight(target) {
 
   // --- Reflection Logic ---
   const isMagicalTarget = target["damage_type"] === "magical";
-  const canReflect = !is_on_cooldown("reflection") && character.mp > 1000;
+  const canUseReflection = !is_on_cooldown("reflection") && character.mp > 1000;
   const targetAggroesParty = partyMems.includes(target.target);
 
-  if (isMagicalTarget && canReflect && targetAggroesParty) {
+  if (isMagicalTarget && canUseReflection && targetAggroesParty) {
     use_skill("reflection", get_entity(target.target)).then(() =>
       reduceCd("reflection"),
     );
