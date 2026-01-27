@@ -437,7 +437,7 @@ setInterval(async function () {
       craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
       craft("wingedboots", character.esize - 8, { map: "main", x: -2, y: 295 }),
       craft("pouchbow", character.esize - 8, { map: "main", x: -2, y: 295 }),
-      // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
+      craft("firebow", character.esize - 6, { map: "main", x: -2, y: 295 }),
       !isSortingInventory &&
         Promise.all(
           Array.from({ length: 42 }, (_, i) => i)
