@@ -154,7 +154,8 @@ async function fight(target) {
           .then(() => reduceCd("attack"))
           .catch((e) => attackErrorHandler(e)),
       );
-    else // Base case for Cupid: both attack and currentStrategy
+    // Base case for Cupid: both attack and currentStrategy
+    else
       promisesToAwait.push(
         currentStrategy(target),
         use_skill("attack", target)
@@ -219,7 +220,7 @@ async function cupidHeal(playersToHeal) {
 
   if (lowHealthPlayersInRange.length > 0) {
     // Equipping Cupid first
-    if (character.slots.mainhand?.name !== "cupid" && isAttackOnCD) {
+    if (character.slots.mainhand?.name !== "cupid") {
       const rangerItems = calculateRangerItems(lowHealthPlayersInRange);
       promisesToAwait.push(equipBatch({ ...rangerItems, mainhand: "cupid" }));
     }
