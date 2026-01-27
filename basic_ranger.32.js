@@ -36,15 +36,14 @@ const tryMultiShot = async (skill, entityList) => {
 };
 
 async function fight(target) {
-  if (ms_to_next_skill("attack") > 0 || character.s.penalty_cd) return;
-
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
   const canMultiShot = !character.fear;
   const inRange = (entity) => distance(entity, character) < nearRange;
   const nearRange = character.range + character.xrange;
   const explosionRadius = character.explosion
     ? character.explosion / 3.6
     : BLAST_RADIUS;
-  const notCupid = character.slots.mainhand?.name !== "cupid";
   const entitiesInVision = Object.values(parent.entities);
   const promisesToAwait = []; // --- Target Selection & Optimization ---
 
@@ -128,23 +127,22 @@ async function fight(target) {
 
   if (is5ShotReady) {
     const mobsTo5Shot = weakMobs.slice(0, 5);
-    promisesToAwait.push(currentStrategy(mobsTo5Shot));
-    // if (notCupid)
-    promisesToAwait.push(tryMultiShot("5shot", mobsTo5Shot));
+    if (!isAttackReady) promisesToAwait.push(currentStrategy(mobsTo5Shot));
+    else promisesToAwait.push(tryMultiShot("5shot", mobsTo5Shot));
   } else if (is3ShotReady) {
     const mobsTo3Shot = potentialTargets.slice(0, 3);
-    promisesToAwait.push(currentStrategy(mobsTo3Shot));
-    // if (notCupid)
-    promisesToAwait.push(tryMultiShot("3shot", potentialTargets.slice(0, 3)));
+    if (!isAttackReady) promisesToAwait.push(currentStrategy(mobsTo3Shot));
+    else
+      promisesToAwait.push(tryMultiShot("3shot", potentialTargets.slice(0, 3)));
   } else if (target && distance(target, character) < nearRange) {
     set_message("Shooting");
-    promisesToAwait.push(currentStrategy(target));
-    // if (notCupid)
-    promisesToAwait.push(
-      use_skill("attack", target)
-        .then(() => reduceCd("attack"))
-        .catch((e) => attackErrorHandler(e)),
-    );
+    if (!isAttackReady) promisesToAwait.push(currentStrategy(target));
+    else
+      promisesToAwait.push(
+        use_skill("attack", target)
+          .then(() => reduceCd("attack"))
+          .catch((e) => attackErrorHandler(e)),
+      );
   }
 
   // --- Supershot ---
