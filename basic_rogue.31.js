@@ -22,6 +22,8 @@ rangeRate = originRangeRate;
 async function fight(target) {
   const inRange = (entity) =>
     distance(entity, character) < character.range + character.xrange;
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
   if (currentStrategy === usePullStrategies) {
     const allAggroedByParty = Object.values(parent.entities)
@@ -53,19 +55,16 @@ async function fight(target) {
 
   const promisesToAwait = [];
 
-  if (
-    ms_to_next_skill("attack") === 0 &&
-    !character.s.penalty_cd &&
-    inRange(target) &&
-    shouldAttack()
-  ) {
+  if (!isAttackReady && inRange(target) && shouldAttack())
+    promisesToAwait.push(currentStrategy(target));
+
+  if (isAttackReady && inRange(target) && shouldAttack()) {
     if (!ms_to_next_skill("invis")) {
       use_skill("invis").then(() =>
         reduce_cooldown("invis", Math.min(...parent.pings)),
       );
     }
     promisesToAwait.push(
-      currentStrategy(target),
       withTimeout(attack(target), 2500)
         .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
         .catch((e) => {
@@ -108,7 +107,9 @@ async function fuaLoop() {
       ms_to_next_skill("rspeed") === 0 &&
       character.mp > G.skills["rspeed"].mp
     ) {
-      use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift());
+      promisesToAwait.push(
+        use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift()),
+      );
     }
 
     if (
