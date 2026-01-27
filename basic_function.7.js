@@ -1955,12 +1955,12 @@ function attackErrorHandler(error) {
       }
 
       console.warn(
-        `Too far to use '${error.place}'` +
-          (error.place === "attack"
-            ? `, ${Math.round(error.distance)} distance / ${
-                character.range + character.xrange
-              } range`
-            : ""),
+        error,
+        error.distance
+          ? `| ${Math.round(error.distance)} distance / ${
+              character.range + character.xrange
+            } range`
+          : "",
       );
     }
   } else console.warn("Error while attacking:", error);
