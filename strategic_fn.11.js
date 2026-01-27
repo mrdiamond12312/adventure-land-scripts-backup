@@ -1,6 +1,6 @@
 const MAX_TARGET = 10;
 const BLAST_RADIUS = character.blast / 3.6 || 17;
-const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 3;
+const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
 const MAX_MOB_DPS = 1000;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
 const WATCHOUT_ABILITIES = ["burn"];
@@ -225,7 +225,7 @@ const STUN_FOCUS_LIST = ["crabxx", "grinch"];
 function calculateWarriorItems() {
   const currentTarget = get_target();
   const shouldUseBlaster =
-    numberOfMonsterAroundTarget(currentTarget) >= 2 && !currentTarget["1hp"];
+    numberOfMonsterAroundTarget(currentTarget) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON && !currentTarget["1hp"];
 
   const feelingLucky = shouldWearLuckGear();
   const feelingWise = shouldWearExpGear();
@@ -320,7 +320,7 @@ function calculateRangerItems(target) {
             numberOfMonsterAroundTarget(
               mob,
               character.explosion / 3.6 || BLAST_RADIUS,
-            )) > 1,
+            )) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
       )
     ) {
       mainhand = RANGER_INV_ITEMS.poucher;
