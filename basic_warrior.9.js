@@ -107,11 +107,14 @@ async function fight(target) {
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
   if (isAttackReady && inRange(target) && shouldAttack()) {
+    promisesToAwait.push(currentStrategy(target));
+  }
+
+  if (isAttackReady && inRange(target) && shouldAttack()) {
     set_message("Attacking");
 
     // Main attack execution
     promisesToAwait.push(
-      currentStrategy(target),
       attack(target)
         .then(() => {
           // attackSpeedCompensate(attackFrequencyBeforeComponsate);
@@ -269,7 +272,7 @@ async function fight(target) {
 
   // --- Await and Error Handling ---
   try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
+    await withTimeout(Promise.all(promisesToAwait), 1000);
   } catch (e) {
     console.error("Error while attacking", e);
   }
