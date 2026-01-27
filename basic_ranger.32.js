@@ -188,7 +188,7 @@ async function cupidHeal(playersToHeal) {
   const isAttackOnCD = ms_to_next_skill("attack") > 0 || character.s.penalty_cd;
   const hasCupid =
     locate_item("cupid") !== -1 || character.slots.mainhand?.name === "cupid";
-  if (isAttackOnCD || !hasCupid) return;
+  if (!hasCupid) return;
 
   const characterRange = character.range + character.xrange;
   const lowHealthPlayersInRange = playersToHeal.filter(
@@ -201,54 +201,58 @@ async function cupidHeal(playersToHeal) {
 
   if (lowHealthPlayersInRange.length > 0) {
     // Equipping Cupid first
-    if (character.slots.mainhand?.name !== "cupid") {
+    if (character.slots.mainhand?.name !== "cupid" && isAttackOnCD) {
       const rangerItems = calculateRangerItems(lowHealthPlayersInRange);
       promisesToAwait.push(equipBatch({ ...rangerItems, mainhand: "cupid" }));
     }
 
-    // Determine the best shot for healing
-    const mpCost = G.skills["huntersmark"].mp;
-    const is5ShotReady =
-      character.level >= G.skills["5shot"].level &&
-      lowHealthPlayersInRange.length >= 4 &&
-      character.mp > G.skills["5shot"].mp + mpCost &&
-      !character.fear;
-    const is3ShotReady =
-      character.level >= G.skills["3shot"].level &&
-      lowHealthPlayersInRange.length >= 2 &&
-      character.mp > G.skills["3shot"].mp + mpCost &&
-      !character.fear;
+    if (!isAttackOnCD) {
+      // Determine the best shot for healing
+      const mpCost = G.skills["huntersmark"].mp;
+      const is5ShotReady =
+        character.level >= G.skills["5shot"].level &&
+        lowHealthPlayersInRange.length >= 4 &&
+        character.mp > G.skills["5shot"].mp + mpCost &&
+        !character.fear;
+      const is3ShotReady =
+        character.level >= G.skills["3shot"].level &&
+        lowHealthPlayersInRange.length >= 2 &&
+        character.mp > G.skills["3shot"].mp + mpCost &&
+        !character.fear;
 
-    let healingTarget = null;
-    let skillName = "attack";
-    let sliceAmount = 1;
+      let healingTarget = null;
+      let skillName = "attack";
+      let sliceAmount = 1;
 
-    if (is5ShotReady) {
-      skillName = "5shot";
-      sliceAmount = 5;
-    } else if (is3ShotReady) {
-      skillName = "3shot";
-      sliceAmount = 3;
-    } else {
-      // Single shot fallback
-      healingTarget = lowHealthPlayersInRange[0];
-    }
+      if (is5ShotReady) {
+        skillName = "5shot";
+        sliceAmount = 5;
+      } else if (is3ShotReady) {
+        skillName = "3shot";
+        sliceAmount = 3;
+      } else {
+        // Single shot fallback
+        healingTarget = lowHealthPlayersInRange[0];
+      }
 
-    if (skillName !== "attack") {
-      // Multi-shot healing
-      set_message(`${skillName} Cupid`);
-      const targets = lowHealthPlayersInRange.slice(0, sliceAmount);
-      console.log(`Healing ${targets.map((player) => player.name).join(", ")}`);
-      promisesToAwait.push(tryMultiShot(skillName, targets));
-    } else if (healingTarget) {
-      // Single shot healing
-      set_message("Single Cupid");
-      log(`Healing ${healingTarget.name}`);
-      promisesToAwait.push(
-        use_skill("attack", healingTarget).then(
-          () => reduceCd("attack"), // Use reduceCd
-        ),
-      );
+      if (skillName !== "attack") {
+        // Multi-shot healing
+        set_message(`${skillName} Cupid`);
+        const targets = lowHealthPlayersInRange.slice(0, sliceAmount);
+        console.log(
+          `Healing ${targets.map((player) => player.name).join(", ")}`,
+        );
+        promisesToAwait.push(tryMultiShot(skillName, targets));
+      } else if (healingTarget) {
+        // Single shot healing
+        set_message("Single Cupid");
+        log(`Healing ${healingTarget.name}`);
+        promisesToAwait.push(
+          use_skill("attack", healingTarget).then(
+            () => reduceCd("attack"), // Use reduceCd
+          ),
+        );
+      }
     }
   }
 
@@ -258,6 +262,10 @@ async function cupidHeal(playersToHeal) {
     attackErrorHandler(e);
     console.error("Error while Cupiding!", e);
   }
+
+  // This value determines if
+  // the ranger is about to Cupid (by equipping)/is currently Cupiding
+  return promisesToAwait.length === 0;
 }
 
 async function mainLoop() {
@@ -277,7 +285,7 @@ async function mainLoop() {
 
     // 2. Cupid Healing
     const playersToHeal = getPlayersToHeal();
-    await cupidHeal(playersToHeal);
+    const isDeterminedToBeCupid = await cupidHeal(playersToHeal);
 
     // 3. Movement Control Check
     const isMovingControlled =
@@ -322,7 +330,7 @@ async function mainLoop() {
           y: mapY,
         });
       }
-    } else {
+    } else if (!isDeterminedToBeCupid) {
       // Target found, engage in combat
       await fight(target);
     }
