@@ -225,7 +225,8 @@ const STUN_FOCUS_LIST = ["crabxx", "grinch"];
 function calculateWarriorItems() {
   const currentTarget = get_target();
   const shouldUseBlaster =
-    numberOfMonsterAroundTarget(currentTarget) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON && !currentTarget["1hp"];
+    numberOfMonsterAroundTarget(currentTarget) >=
+      TARGET_TO_SWITCH_TO_BLASTER_WEAPON && !currentTarget["1hp"];
 
   const feelingLucky = shouldWearLuckGear();
   const feelingWise = shouldWearExpGear();
@@ -652,13 +653,18 @@ async function equipBatch(suggestedItems, forced = false) {
     itemSlots.splice(maxItemsToEquip);
   }
 
-  if (itemSlots.length)
+  if (itemSlots.length) {
     if (itemSlots.length <= 1)
       for (const item of itemSlots) promises.push(equip(item.num, item.slot));
     else promises.push(equip_batch(itemSlots));
-  return Promise.all(promises).finally(() => {
+    return Promise.all(promises).finally(() => {
+      isEquipingItems = false;
+    });
+  }
+  else {
     isEquipingItems = false;
-  });
+    return false;
+  }
 }
 
 // Utilities
