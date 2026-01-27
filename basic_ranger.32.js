@@ -265,7 +265,7 @@ async function cupidHeal(playersToHeal) {
 
   // This value determines if
   // the ranger is about to Cupid (by equipping)/is currently Cupiding
-  return promisesToAwait.length === 0;
+  return lowHealthPlayersInRange.length > 0;
 }
 
 async function mainLoop() {
