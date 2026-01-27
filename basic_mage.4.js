@@ -106,12 +106,14 @@ async function fight(target) {
     }
   }
 
-  // --- Attack Logic ---
+  if (!isAttackReady && isTargetInAttackRange && shouldAttack()) {
+    promisesToAwait.push(currentStrategy(target));
+  }
 
   if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
     set_message("Attacking");
     promisesToAwait.push(
-      currentStrategy(target), // Assumes currentStrategy includes moving/kiting logic
+      // currentStrategy(target),
       attack(target)
         .then(() => reduceCd("attack"))
         .catch((e) => {
