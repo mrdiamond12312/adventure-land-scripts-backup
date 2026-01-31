@@ -174,7 +174,6 @@ async function priestBuff() {
       if (dist < bufferedRange && isAttackReady) {
         set_message(`Heal ${buffee.name}`);
         promises.push(
-          currentStrategy(buffee),
           heal(buffee).then(() => reduceCd("attack")),
         );
         break;
