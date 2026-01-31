@@ -322,11 +322,9 @@ function chooseFireOrPouchForSplashing(targets) {
   };
   const currentBowExplosion = currentBow.explosion ?? 0;
 
-  console.warn(currentBowExplosion, currentBow?.name);
-
   const firebowSlot = findMaxLevelItem(RANGER_INV_ITEMS.fireBow);
   const fireInfo =
-    currentBow?.name === RANGER_INV_ITEMS.fireBow
+    currentBow?.id === RANGER_INV_ITEMS.fireBow
       ? currentBow
       : firebowSlot !== -1
       ? item_info(character.items[firebowSlot])
@@ -334,7 +332,7 @@ function chooseFireOrPouchForSplashing(targets) {
 
   const pouchbowSlot = findMaxLevelItem(RANGER_INV_ITEMS.poucher);
   const pouchInfo =
-    currentBow?.name === RANGER_INV_ITEMS.poucher
+    currentBow?.id === RANGER_INV_ITEMS.poucher
       ? currentBow
       : pouchbowSlot !== -1
       ? item_info(character.items[pouchbowSlot])
