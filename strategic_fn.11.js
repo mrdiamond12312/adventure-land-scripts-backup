@@ -312,7 +312,9 @@ function explosionScore(itemInfo, targets) {
       explosion / 3.6 || BLAST_RADIUS,
     );
 
-    return sum + attack + attack * explosion * Math.max(0, cluster - 1);
+    return (
+      sum + attack + ((attack * explosion) / 100) * Math.max(0, cluster - 1)
+    );
   }, 0);
 }
 
