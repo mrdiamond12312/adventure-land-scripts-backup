@@ -338,7 +338,6 @@ function chooseFireOrPouchForSplashing(targets) {
       ? item_info(character.items[pouchbowSlot])
       : undefined;
 
-  console.warn(fireInfo.explosion_delta, pouchInfo.explosion_delta);
   if (!pouchInfo) return RANGER_INV_ITEMS.fireBow;
   if (!fireInfo) return RANGER_INV_ITEMS.poucher;
 
@@ -352,6 +351,8 @@ function chooseFireOrPouchForSplashing(targets) {
 
   const fireScore = explosionScore(fireInfo, targets);
   const pouchScore = explosionScore(pouchInfo, targets);
+  console.warn(pouchInfo.explosion_delta, fireInfo.explosion_delta);
+  console.warn(`Pouch Score: ${pouchScore}, Fire Score: ${fireScore}`);
 
   return pouchScore > fireScore
     ? RANGER_INV_ITEMS.poucher
