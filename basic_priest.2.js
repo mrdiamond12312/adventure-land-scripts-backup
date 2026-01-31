@@ -154,6 +154,11 @@ async function priestBuff() {
       const bufferedRange = character.range + character.xrange * 0.9;
       const dist = distance(buffee, character);
 
+      if (!isAttackReady) {
+        promises.push(currentStrategy(buffee));
+        break;
+      }
+
       if (
         !smart.moving &&
         dist >= bufferedRange &&
@@ -164,11 +169,6 @@ async function priestBuff() {
         );
         set_message(`Moving to ${buffee.name}`);
         continue;
-      }
-
-      if (!isAttackReady) {
-        promises.push(currentStrategy(buffee));
-        break;
       }
 
       if (dist < bufferedRange && isAttackReady) {
@@ -231,7 +231,12 @@ async function priestBuff() {
       }
     }
   }
-  await withTimeout(Promise.allSettled(promises), 750);
+  try {
+    await withTimeout(Promise.allSettled(promises), 2500);
+  }
+  catch(e) {
+    console.error(e);
+  }
   return buffees.length > 0;
 }
 
