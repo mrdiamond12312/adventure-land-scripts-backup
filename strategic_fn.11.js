@@ -303,47 +303,54 @@ function explosionScore(itemInfo, targets) {
   if (!itemInfo || !targets?.length) return 0;
 
   const attack = itemInfo.attack || 0;
-  const explosion = (character.explosion ?? 0) + itemInfo.explosion_delta || 0;
+  const explosion =
+    (character.explosion ?? 0) + (itemInfo.explosion_delta ?? 0);
 
   return targets.reduce((sum, mob) => {
     const cluster =
       mob.cluster_count ??
       numberOfMonsterAroundTarget(mob, explosion / 3.6 || BLAST_RADIUS);
 
-    return sum + attack + attack * explosion * (cluster - 1);
+    return sum + attack + attack * explosion * Math.max(0, cluster - 1);
   }, 0);
 }
 
 function chooseFireOrPouchForSplashing(targets) {
-  const targetCount = estimateExplosionTargetCount(targets);
-
   const currentBow = {
-    ...item_info(character.slots.mainhand),
+    ...(item_info(character.slots.mainhand) ?? {}),
     explosion_delta: 0,
   };
+  const currentBowExplosion = currentBow.explosion ?? 0;
 
+  const firebowSlot = findMaxLevelItem(RANGER_INV_ITEMS.fireBow);
   const fireInfo =
     currentBow?.name === RANGER_INV_ITEMS.fireBow
       ? currentBow
-      : item_info(findMaxLevelItem(RANGER_INV_ITEMS.fireBow));
+      : firebowSlot !== -1
+      ? item_info(character.items[firebowSlot])
+      : undefined;
+
+  const pouchbowSlot = findMaxLevelItem(RANGER_INV_ITEMS.poucher);
   const pouchInfo =
     currentBow?.name === RANGER_INV_ITEMS.poucher
-      ? getBowInfo(RANGER_INV_ITEMS.poucher)
-      : item_info(findMaxLevelItem(RANGER_INV_ITEMS.poucher));
+      ? currentBow
+      : pouchbowSlot !== -1
+      ? item_info(character.items[pouchbowSlot])
+      : undefined;
 
   if (!pouchInfo) return RANGER_INV_ITEMS.fireBow;
   if (!fireInfo) return RANGER_INV_ITEMS.poucher;
 
-  if (!pouchInfo.explosion_delta) {
-    pouchInfo.explosion_delta = pouchInfo.explosion - currentBow.explosion;
+  if (pouchInfo.explosion_delta == null) {
+    pouchInfo.explosion_delta = pouchInfo.explosion - currentBowExplosion;
   }
 
-  if (!fireInfo.explosion_delta) {
-    fireInfo.explosion_delta = fireInfo.explosion - currentBow.explosion;
+  if (fireInfo.explosion_delta == null) {
+    fireInfo.explosion_delta = fireInfo.explosion - currentBowExplosion;
   }
 
-  const fireScore = explosionScore(fireInfo, targetCount);
-  const pouchScore = explosionScore(pouchInfo, targetCount);
+  const fireScore = explosionScore(fireInfo, targets);
+  const pouchScore = explosionScore(pouchInfo, targets);
 
   return pouchScore > fireScore
     ? RANGER_INV_ITEMS.poucher
