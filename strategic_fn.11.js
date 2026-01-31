@@ -307,9 +307,10 @@ function explosionScore(itemInfo, targets) {
     (character.explosion ?? 0) + (itemInfo.explosion_delta ?? 0);
 
   return targets.reduce((sum, mob) => {
-    const cluster =
-      mob.cluster_count ??
-      numberOfMonsterAroundTarget(mob, explosion / 3.6 || BLAST_RADIUS);
+    const cluster = numberOfMonsterAroundTarget(
+      mob,
+      explosion / 3.6 || BLAST_RADIUS,
+    );
 
     return sum + attack + attack * explosion * Math.max(0, cluster - 1);
   }, 0);
@@ -371,30 +372,25 @@ function calculateRangerItems(target) {
 
   const poucherAvailable = findMaxLevelItem(RANGER_INV_ITEMS.poucher) !== -1;
 
-  // --- Poucher priority for pull strategy ---
+  // Splashing equipment choice
   if (targets.length)
     if (
-      // (poucherAvailable || mainhand === RANGER_INV_ITEMS.poucher) &&
-      currentStrategy === usePullStrategies
-      // targets.some(
-      //   (mob) =>
-      //     (mob.cluster_count ??
-      //       numberOfMonsterAroundTarget(
-      //         mob,
-      //         character.explosion / 3.6 || BLAST_RADIUS,
-      //       )) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
-      // )
+      (poucherAvailable || mainhand === RANGER_INV_ITEMS.poucher) &&
+      currentStrategy === usePullStrategies &&
+      targets.some(
+        (mob) =>
+          (mob.cluster_count ??
+            numberOfMonsterAroundTarget(
+              mob,
+              character.explosion / 3.6 || BLAST_RADIUS,
+            )) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
+      )
     ) {
       mainhand = chooseFireOrPouchForSplashing(targets);
-    }
-    // --- Cooperative ---
-    else if (
-      someTargetCooperative
-      // || targets.every((mob) => mob.target)
-    ) {
+    } else if (someTargetCooperative) {
       mainhand = RANGER_INV_ITEMS.fireBow;
     }
-    // --- Calculate oneshot with crossbow ---
+    // Check for one-shot possibility with other bows
     else {
       const current = character.slots.mainhand;
       const currentInfo = current ? item_info(current) : { attack: 0 };
