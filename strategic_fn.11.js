@@ -68,7 +68,7 @@ function canOneShotWithWeapon(weaponInfo, targets) {
 
   const effectiveAttack =
     character.attack +
-    (weaponInfo.attack - currentInfo.attack) * rawAttackMultiplier();
+    (weaponInfo.attack - currentInfo.attack) * (rawAttackMultiplier() + 1);
 
   let effectivePiercing =
     damageType === "physical" ? character.apiercing : character.rpiercing;
@@ -298,6 +298,58 @@ const RANGER_INV_ITEMS = {
   fireBow: "firebow",
   crossBow: "crossbow",
 };
+
+function explosionScore(itemInfo, targets) {
+  if (!itemInfo || !targets?.length) return 0;
+
+  const attack = itemInfo.attack || 0;
+  const explosion = (character.explosion ?? 0) + itemInfo.explosion_delta || 0;
+
+  return targets.reduce((sum, mob) => {
+    const cluster =
+      mob.cluster_count ??
+      numberOfMonsterAroundTarget(mob, explosion / 3.6 || BLAST_RADIUS);
+
+    return sum + attack + attack * explosion * (cluster - 1);
+  }, 0);
+}
+
+function chooseFireOrPouchForSplashing(targets) {
+  const targetCount = estimateExplosionTargetCount(targets);
+
+  const currentBow = {
+    ...item_info(character.slots.mainhand),
+    explosion_delta: 0,
+  };
+
+  const fireInfo =
+    currentBow?.name === RANGER_INV_ITEMS.fireBow
+      ? currentBow
+      : item_info(findMaxLevelItem(RANGER_INV_ITEMS.fireBow));
+  const pouchInfo =
+    currentBow?.name === RANGER_INV_ITEMS.poucher
+      ? getBowInfo(RANGER_INV_ITEMS.poucher)
+      : item_info(findMaxLevelItem(RANGER_INV_ITEMS.poucher));
+
+  if (!pouchInfo) return RANGER_INV_ITEMS.fireBow;
+  if (!fireInfo) return RANGER_INV_ITEMS.poucher;
+
+  if (!pouchInfo.explosion_delta) {
+    pouchInfo.explosion_delta = pouchInfo.explosion - currentBow.explosion;
+  }
+
+  if (!fireInfo.explosion_delta) {
+    fireInfo.explosion_delta = fireInfo.explosion - currentBow.explosion;
+  }
+
+  const fireScore = explosionScore(fireInfo, targetCount);
+  const pouchScore = explosionScore(pouchInfo, targetCount);
+
+  return pouchScore > fireScore
+    ? RANGER_INV_ITEMS.poucher
+    : RANGER_INV_ITEMS.fireBow;
+}
+
 function calculateRangerItems(target) {
   // Sanitize input
   const targets = !target ? [] : Array.isArray(target) ? target : [target];
@@ -313,18 +365,18 @@ function calculateRangerItems(target) {
   // --- Poucher priority for pull strategy ---
   if (targets.length)
     if (
-      (poucherAvailable || mainhand === RANGER_INV_ITEMS.poucher) &&
-      currentStrategy === usePullStrategies &&
-      targets.some(
-        (mob) =>
-          (mob.cluster_count ??
-            numberOfMonsterAroundTarget(
-              mob,
-              character.explosion / 3.6 || BLAST_RADIUS,
-            )) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
-      )
+      // (poucherAvailable || mainhand === RANGER_INV_ITEMS.poucher) &&
+      currentStrategy === usePullStrategies
+      // targets.some(
+      //   (mob) =>
+      //     (mob.cluster_count ??
+      //       numberOfMonsterAroundTarget(
+      //         mob,
+      //         character.explosion / 3.6 || BLAST_RADIUS,
+      //       )) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
+      // )
     ) {
-      mainhand = RANGER_INV_ITEMS.poucher;
+      mainhand = chooseFireOrPouchForSplashing(targets);
     }
     // --- Cooperative ---
     else if (
@@ -660,8 +712,7 @@ async function equipBatch(suggestedItems, forced = false) {
     return Promise.all(promises).finally(() => {
       isEquipingItems = false;
     });
-  }
-  else {
+  } else {
     isEquipingItems = false;
     return false;
   }
