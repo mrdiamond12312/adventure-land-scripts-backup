@@ -24,7 +24,7 @@ const reduceCd = (skillName) =>
 
 // Combat Logic
 
-async function fight(target) {
+async function fight(target, isDeterminedToHeal = false) {
   const partyDmgRecieved = avgPartyDmgTaken(partyMems);
   const characterBufferedRange = character.range + character.xrange;
   const mobsInRange = Object.values(parent.entities)
@@ -112,19 +112,24 @@ async function fight(target) {
   }
 
   // Attack Logic
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-  const isTargetInAttackRange =
-    distance(target, character) <= characterBufferedRange;
+  if (!isDeterminedToHeal) {
+    const isAttackReady =
+      ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+    const isTargetInAttackRange =
+      distance(target, character) <= characterBufferedRange;
 
-  if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
-    set_message("Attacking");
-    promisesToAwait.push(
-      currentStrategy(target),
-      attack(target)
-        .then(() => reduceCd("attack"))
-        .catch((e) => attackErrorHandler(e)),
-    );
+    if (!isAttackReady && isTargetInAttackRange && shouldAttack()) {
+      promisesToAwait.push(currentStrategy(target));
+    }
+
+    if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
+      set_message("Attacking");
+      promisesToAwait.push(
+        attack(target)
+          .then(() => reduceCd("attack"))
+          .catch((e) => attackErrorHandler(e)),
+      );
+    }
   }
 
   // Await All Actions
@@ -139,10 +144,12 @@ async function priestBuff() {
   const promises = [];
 
   // Heal Logic
-  if (ms_to_next_skill("attack") === 0 && !character.s.penalty_cd) {
-    const buffees = getPlayersToHeal();
-    const prioritizedBuffeesNames = prioritizedNames();
+  const buffees = getPlayersToHeal();
+  const prioritizedBuffeesNames = prioritizedNames();
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
+  if (buffees.length !== 0) {
     for (const buffee of buffees) {
       const bufferedRange = character.range + character.xrange * 0.9;
       const dist = distance(buffee, character);
@@ -159,7 +166,12 @@ async function priestBuff() {
         continue;
       }
 
-      if (dist < bufferedRange) {
+      if (!isAttackReady) {
+        promises.push(currentStrategy(buffee));
+        break;
+      }
+
+      if (dist < bufferedRange && isAttackReady) {
         set_message(`Heal ${buffee.name}`);
         promises.push(
           currentStrategy(buffee),
@@ -219,8 +231,8 @@ async function priestBuff() {
       }
     }
   }
-
-  return withTimeout(Promise.allSettled(promises), 750);
+  await withTimeout(Promise.allSettled(promises), 750);
+  return buffees.length > 0;
 }
 
 // Specialized Loops
@@ -299,7 +311,7 @@ async function mainLoop() {
       }
     }
 
-    await priestBuff();
+    const isDeterminedToHeal = await priestBuff();
 
     const isMovingControlled =
       (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
@@ -331,7 +343,7 @@ async function mainLoop() {
         advanceSmartMove({ map, x: mapX, y: mapY });
       }
     } else {
-      await fight(target);
+      await fight(target, isDeterminedToHeal);
     }
   } catch (e) {
     if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
