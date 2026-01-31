@@ -349,6 +349,8 @@ function chooseFireOrPouchForSplashing(targets) {
     fireInfo.explosion_delta = fireInfo.explosion - currentBowExplosion;
   }
 
+  console.warn (fireInfo.explosion_delta, pouchInfo.explosion_delta);
+
   const fireScore = explosionScore(fireInfo, targets);
   const pouchScore = explosionScore(pouchInfo, targets);
 
