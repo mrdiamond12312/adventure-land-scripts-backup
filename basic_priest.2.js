@@ -233,9 +233,9 @@ async function priestBuff() {
   }
   try {
     await withTimeout(Promise.allSettled(promises), 2500);
-  }
-  catch(e) {
+  } catch (e) {
     console.error(e);
+    return false;
   }
   return buffees.length > 0;
 }
