@@ -322,6 +322,8 @@ function chooseFireOrPouchForSplashing(targets) {
   };
   const currentBowExplosion = currentBow.explosion ?? 0;
 
+  console.warn(currentBowExplosion, currentBow?.name);
+
   const firebowSlot = findMaxLevelItem(RANGER_INV_ITEMS.fireBow);
   const fireInfo =
     currentBow?.name === RANGER_INV_ITEMS.fireBow
@@ -338,6 +340,7 @@ function chooseFireOrPouchForSplashing(targets) {
       ? item_info(character.items[pouchbowSlot])
       : undefined;
 
+  console.warn(fireInfo.explosion_delta, pouchInfo.explosion_delta);
   if (!pouchInfo) return RANGER_INV_ITEMS.fireBow;
   if (!fireInfo) return RANGER_INV_ITEMS.poucher;
 
@@ -348,8 +351,6 @@ function chooseFireOrPouchForSplashing(targets) {
   if (fireInfo.explosion_delta == null) {
     fireInfo.explosion_delta = fireInfo.explosion - currentBowExplosion;
   }
-
-  console.warn (fireInfo.explosion_delta, pouchInfo.explosion_delta);
 
   const fireScore = explosionScore(fireInfo, targets);
   const pouchScore = explosionScore(pouchInfo, targets);
