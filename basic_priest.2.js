@@ -27,6 +27,7 @@ const reduceCd = (skillName) =>
 async function fight(target, isDeterminedToHeal = false) {
   const partyDmgRecieved = avgPartyDmgTaken(partyMems);
   const characterBufferedRange = character.range + character.xrange;
+  const prioritizedCharacter = prioritizedNames();
   const mobsInRange = Object.values(parent.entities)
     .filter(
       (entity) =>
@@ -61,7 +62,8 @@ async function fight(target, isDeterminedToHeal = false) {
     !target?.cooperative
       ? mobsInRange
           .filter(
-            (mob) => !mob.s.poisoned && prioritizedNames().includes(mob.target),
+            (mob) =>
+              !mob.s.poisoned && prioritizedCharacter.includes(mob.target),
           )
           .sort((lhs, rhs) => {
             if (rhs.attack === lhs.attack) {
@@ -85,7 +87,11 @@ async function fight(target, isDeterminedToHeal = false) {
   const targetToCurse =
     mobsInRange
       .filter(
-        (mob) => !mob.s.curse && is_in_range(mob, "curse") && mob.max_hp > 3000,
+        (mob) =>
+          !mob.s.curse &&
+          is_in_range(mob, "curse") &&
+          mob.max_hp > 3000 &&
+          prioritizedCharacter.includes(mob.target),
       )
       .sort((lhs, rhs) => {
         if (lhs.cooperative !== rhs.cooperative) {
