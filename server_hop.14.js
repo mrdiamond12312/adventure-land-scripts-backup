@@ -85,11 +85,22 @@ setInterval(async () => {
 
     const data = await response.json();
 
+    // Way around to add bosses that are flickering and bugged in the API
     if (parent.S.grinch?.live && data.constructor === Array) {
       data.push({
         ...parent.S.grinch,
         id: 1,
         type: "grinch",
+        serverIdentifier: server.id,
+        serverRegion: server.region,
+      });
+    }
+
+    if (parent.S.pinkgoo?.live && data.constructor === Array) {
+      data.push({
+        ...parent.S.pinkgoo,
+        id: 1,
+        type: "pinkgoo",
         serverIdentifier: server.id,
         serverRegion: server.region,
       });
