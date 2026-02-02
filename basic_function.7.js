@@ -1543,18 +1543,31 @@ const DYNAMIC_PARTY_PRESETS = {
   dragold: {
     USI: [WARRIOR, PRIEST, ROGUE],
     EUII: () => {
-      RANGER = RANGER1;
+      RANGER = RANGER2;
       HEALER = PRIEST;
       return [ROGUE, RANGER, PRIEST];
     },
     USII: () => {
-      RANGER = RANGER2;
+      RANGER = RANGER1;
       HEALER = PRIEST;
       return [WARRIOR, RANGER, PRIEST];
     },
     default: [WARRIOR, PRIEST, ROGUE],
   },
-  pinkgoo: "snowman",
+  pinkgoo: {
+    USI: [WARRIOR, MAGE, ROGUE],
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = RANGER;
+      return [ROGUE, RANGER, MAGE];
+    },
+    USII: () => {
+      RANGER = RANGER1;
+      HEALER = PRIEST;
+      return [MAGE, RANGER, PRIEST];
+    },
+    default: [WARRIOR, RANGER, MAGE],
+  },
   crabxx: () => {
     const isAggroed = !!parent.S.crabxx?.target;
     if (isAggroed) RANGER = RANGER1;
