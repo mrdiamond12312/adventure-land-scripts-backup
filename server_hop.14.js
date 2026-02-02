@@ -57,7 +57,9 @@ setInterval(async () => {
     Object.keys(bosses).some(
       (boss) =>
         parent.S[boss] &&
-        (parent.S[boss].target || bosses[boss].hoppable === 1) &&
+        (parent.S[boss].target ||
+          bosses[boss].hoppable === 1 ||
+          ["pinkgoo"].includes(bosses[boss].type)) &&
         parent.S[boss].hp <
           (bosses[boss]?.threshold ?? 0.93) * parent.S[boss].max_hp,
     ) ||
