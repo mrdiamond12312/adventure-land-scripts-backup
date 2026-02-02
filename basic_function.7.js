@@ -1519,12 +1519,12 @@ const DYNAMIC_PARTY_PRESETS = {
   mrgreen: {
     USI: [WARRIOR, PRIEST, ROGUE],
     EUII: () => {
-      RANGER = RANGER1;
+      RANGER = RANGER2;
       HEALER = RANGER;
       return [WARRIOR, RANGER, MAGE];
     },
     USII: () => {
-      RANGER = RANGER2;
+      RANGER = RANGER1;
       HEALER = RANGER;
       return [WARRIOR, RANGER, MAGE];
     },
@@ -1540,12 +1540,28 @@ const DYNAMIC_PARTY_PRESETS = {
     HEALER = PRIEST;
     return [PRIEST, ROGUE, MAGE];
   },
+  dragold: {
+    USI: [WARRIOR, PRIEST, ROGUE],
+    EUII: () => {
+      RANGER = RANGER1;
+      HEALER = PRIEST;
+      return [ROGUE, RANGER, PRIEST];
+    },
+    USII: () => {
+      RANGER = RANGER2;
+      HEALER = PRIEST;
+      return [WARRIOR, RANGER, PRIEST];
+    },
+    default: [WARRIOR, PRIEST, ROGUE],
+  },
+  pinkgoo: "snowman",
   crabxx: () => {
     const isAggroed = !!parent.S.crabxx?.target;
     if (isAggroed) RANGER = RANGER1;
     HEALER = isAggroed ? RANGER1 : PRIEST;
     return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
   },
+
   default: () => {
     const globalParty = get("currentParty");
     const knownTankers = ["CrownPriest", "earthPri", "earthWar"];

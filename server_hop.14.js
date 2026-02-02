@@ -16,7 +16,7 @@ const bosses = {
   mrpumpkin: { type: "mrpumpkin", threshold: 0.3, hoppable: 0.9999 },
   mrgreen: { type: "mrgreen", threshold: 0.3, hoppable: 0.9999 },
   crabxx: { type: "crabxx", threshold: 0.95, hoppable: 0.9999 },
-  dragold: { type: "dragold", threshold: 0.99, hoppable: 1 },
+  dragold: { type: "dragold", threshold: 0.5, hoppable: 1 },
 };
 const waitForEvent = ["wabbit"];
 

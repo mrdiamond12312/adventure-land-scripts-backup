@@ -173,9 +173,7 @@ async function priestBuff() {
 
       if (dist < bufferedRange && isAttackReady) {
         set_message(`Heal ${buffee.name}`);
-        promises.push(
-          heal(buffee).then(() => reduceCd("attack")),
-        );
+        promises.push(heal(buffee).then(() => reduceCd("attack")));
         break;
       }
     }
@@ -199,7 +197,7 @@ async function priestBuff() {
           (lhs.hp < lhs.max_hp - modInjuredThreshold &&
             !is_in_range(lhs, "heal")),
       ) ||
-      (allies.every((lhs) => lhs.hp < lhs.max_hp - modInjuredThreshold) &&
+      (allies.every((lhs) => lhs.hp < lhs.max_hp - modInjuredThreshold * 5) &&
         allies.length > 1);
 
     if (shouldPartyHeal) {
