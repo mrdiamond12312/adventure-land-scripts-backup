@@ -38,8 +38,8 @@ const bosses = {
 // Main fight function
 async function fight(target) {
   const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
-  const attackRange = character.range + character.xrange;
-  const inRange = (entity) => distance(entity, character) < attackRange;
+  const attackRange = character.range + character.xrange * 0.9;
+  const inRange = (entity, mult = 1) => distance(entity, character) < attackRange * mult;
 
   const haveIgnoreMobAroundTarget = (targetMob) => {
     return mobsListAroundTarget(targetMob, blastRadius).some((mob) =>
@@ -57,7 +57,7 @@ async function fight(target) {
           !MELEE_IGNORE_LIST.includes(entity.mtype) &&
           entity.target &&
           !haveFormidableMonsterAroundTarget(entity) &&
-          inRange(entity) &&
+          inRange(entity, 2) &&
           !haveIgnoreMobAroundTarget(entity)
         );
       })
@@ -141,18 +141,18 @@ async function fight(target) {
         isEquipingItems = true;
         const equipPromise = Promise.all([
           // Immediate equip
-          Promise.all([
-            equip(candycane1, "mainhand"),
-            equip(candycane2, "offhand"),
+          equip_batch([
+            { num: candycane1, slot: "mainhand" },
+            { num: candycane2, slot: "offhand" },
           ]),
 
           // Delayed re-equip
           new Promise((resolve) => {
             setTimeout(() => {
               resolve(
-                Promise.all([
-                  equip(candycane1, "mainhand"),
-                  equip(candycane2, "offhand"),
+                equip_batch([
+                  { num: candycane1, slot: "mainhand" },
+                  { num: candycane2, slot: "offhand" },
                 ]),
               );
             }, 150);
