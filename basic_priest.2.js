@@ -254,7 +254,7 @@ async function zapperLoop() {
     zapCd !== 0 ||
     character.mp < character.max_mp * 0.6 ||
     character.penalty_cd ||
-    !hasZapper
+    !hasZapper || Object.keys(character.c).length
   ) {
     return setTimeout(zapperLoop, Math.max(zapCd, 50));
   }
