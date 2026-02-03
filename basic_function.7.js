@@ -1667,8 +1667,8 @@ async function changeToDailyEventTargets() {
 
     const dragoldInstance = get_nearest_monster({ type: "dragold" });
     if (!dragoldInstance) {
-      await smartMove(parent.S.dragold);
-      change_target(get_nearest_monster({ type: "pinkgoo" }));
+      await advanceSmartMove(parent.S.dragold);
+      change_target(get_nearest_monster({ type: "dragold" }));
       return get_nearest_monster({ type: "dragold" });
     } else {
       change_target(dragoldInstance);
@@ -1681,7 +1681,7 @@ async function changeToDailyEventTargets() {
     let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
     if (!pinkgooInstance) {
       if (parent.S.pinkgoo?.x) {
-        await smartMove(parent.S.pinkgoo);
+        await advanceSmartMove(parent.S.pinkgoo);
         change_target(get_nearest_monster({ type: "pinkgoo" }));
         return get_nearest_monster({ type: "pinkgoo" });
       }
