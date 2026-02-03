@@ -1610,7 +1610,7 @@ function getPresetMembers(preset, currentServer) {
   if (typeof preset === "string")
     return getPresetMembers(DYNAMIC_PARTY_PRESETS[preset], currentServer);
 
-  const value = preset[currentServer] ?? DYNAMIC_PARTY_PRESETS.default();
+  const value = preset[currentServer] ?? preset.default ?? DYNAMIC_PARTY_PRESETS.default();
   return typeof value === "function" ? value() : value;
 }
 
