@@ -217,10 +217,9 @@ async function fight(target) {
     const mobsTargetingAlly = Object.values(parent.entities).find(
       (mob) =>
         mob.type === "monster" &&
-        partyMems.some(
+        [...partyMems, partyMerchant].some(
           (ally) => ally !== character.name && mob.target === ally,
         ) &&
-        mob.attack > 120 && // Mob is dangerous enough
         calculateDamage(mob, character) < 1800 && // Warrior can take the damage
         !mob.cooperative &&
         is_in_range(mob, "taunt"),
