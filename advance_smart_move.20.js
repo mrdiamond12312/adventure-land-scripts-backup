@@ -250,6 +250,33 @@ function pathfinderGetPath(toPosition, speed = character.speed) {
   );
 }
 
+async function useTownWithRetry({ maxRetries = 5, retryDelay = 300 } = {}) {
+  let attempts = 0;
+
+  while (attempts < maxRetries) {
+    try {
+      await use_skill("use_town");
+      await sleep(500);
+      return true;
+    } catch (e) {
+      attempts++;
+      await sleep(retryDelay);
+    }
+  }
+
+  let mapData = parent.G.maps[character.map];
+
+  if (mapData.spawns?.length) {
+    await smart_move({
+      map: character.map,
+      x: mapData.spawns[0][0],
+      y: mapData.spawns[0][1],
+    });
+  }
+
+  return false;
+}
+
 /**
  * A smart move helper using earth's ALPathfinder
  * @param {Object} toPosition
@@ -262,7 +289,7 @@ async function smartMove(
     useMagiport: true,
     useScare: true,
     stopCondition: undefined,
-    speed: 999999999,
+    speed: 100,
   },
 ) {
   if (!toPosition) return;
@@ -391,8 +418,8 @@ async function smartMove(
       }
 
       if (segment.method === "town") {
-        await use_skill("use_town");
-        await sleep(500);
+        await useTownWithRetry();
+        continue;
       }
     }
   } catch (e) {
