@@ -21,7 +21,7 @@ if (parent.caracAL) {
 var onDuty = false;
 var isExeing = false;
 
-const fishingLocation = { map: "main", x: -1368, y: -82 };
+const fishingLocation = { map: "main", x: -1367, y: -82 };
 const miningLocation = { map: "tunnel", x: -279, y: -148 };
 const homeLocation = { map: "main", x: -152, y: -137 };
 const haveAComputer = () =>
