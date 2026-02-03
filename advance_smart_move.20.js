@@ -495,6 +495,14 @@ function resetSmartMove() {
   smart.try_exact_spot = true;
 }
 
+async function smartMoveWrapper(args, options = undefined) {
+  if (parent.caracAL && parent.caracAL.ALPathfinder) {
+    return smartMove(args, options);
+  } else {
+    return smart_move(args);
+  }
+}
+
 async function advanceSmartMove(
   props,
   options = {
@@ -538,7 +546,7 @@ async function advanceSmartMove(
       get("cryptInstance")
     ) {
       if (distance(character, CRYPT_DOOR) > 100)
-        await smart_move(CRYPT_DOOR).catch((e) => e);
+        await smartMoveWrapper(CRYPT_DOOR).catch((e) => e);
 
       await enter("crypt", get("cryptInstance"));
       await sleep(character.ping * 3 + 3000);
@@ -557,12 +565,11 @@ async function advanceSmartMove(
         await mageBlink(character.map, [props.x, props.y]);
         log("Blinked!");
         await sleep(character.ping);
-        isAdvanceSmartMoving = false;
         log("Done!");
-        await smart_move(props);
+        await smartMoveWrapper(props);
         resetSmartMove();
         clearInterval(scareInterval);
-
+        isAdvanceSmartMoving = false;
         return;
       }
 
@@ -582,7 +589,7 @@ async function advanceSmartMove(
         // Blink to location if enough mana
         await mageBlink(aliaTo.map, [props.x, props.y]);
         await sleep(character.ping + 800);
-        await smart_move(props);
+        await smartMoveWrapper(props);
         isAdvanceSmartMoving = false;
         resetSmartMove();
         clearInterval(scareInterval);
@@ -594,17 +601,18 @@ async function advanceSmartMove(
         const checkingMapInterval = setInterval(() => {
           if (character.map === props.map) {
             stop("smart");
+            stop("moving");
             clearInterval(checkingMapInterval);
           }
         }, 1000);
 
-        await smart_move({ map: props.map }).catch((e) => e);
+        await smartMoveWrapper({ map: props.map }).catch((e) => e);
 
         await mageBlink(props.map, [props.x, props.y]);
 
         await sleep(character.ping);
         isAdvanceSmartMoving = false;
-        await smart_move(props);
+        await smartMoveWrapper(props);
         clearInterval(scareInterval);
         resetSmartMove();
         return;
@@ -652,7 +660,7 @@ async function advanceSmartMove(
             send_cm(MAGE, "magiport");
             log("Whoosh!");
             await sleep(character.ping * 2);
-            if (distance(character, props) < 300) stop("smart");
+            if (distance(character, props) < 300) stop();
             clearInterval(checkingMageMagiportInterval);
           }
         }, 1000);
@@ -667,7 +675,7 @@ async function advanceSmartMove(
           })
         ) {
           await move(props.x, props.y);
-        } else await smart_move(props);
+        } else await smartMoveWrapper(props);
         clearInterval(checkingMageMagiportInterval);
         isAdvanceSmartMoving = false;
         clearInterval(scareInterval);
