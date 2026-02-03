@@ -648,7 +648,9 @@ async function equipBatch(suggestedItems, forced = false) {
   if (
     (character.cc > 130 ||
       isEquipingItems ||
-      // character.s.penalty_cd ||
+      (character.s.penalty_cd &&
+        character.s.penalty_cd.ms >
+          (ms_to_next_skill("attack") ?? 1000 / character.frequency)) ||
       isLooting) &&
     !forced
   )
