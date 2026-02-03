@@ -107,7 +107,7 @@ async function fight(target) {
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
-  if (!isAttackReady && shouldAttack()) {
+  if (!isAttackReady && inRange(target) && shouldAttack()) {
     promisesToAwait.push(currentStrategy(target));
   }
 
@@ -139,46 +139,37 @@ async function fight(target) {
       const candycane2 = findMaxLevelItem("candycanesword", 1);
 
       if (candycane1 !== -1 && candycane2 !== -1) {
-        // isEquipingItems = true;
-        const equipPromise =
-          // Promise.all([
+        isEquipingItems = true;
+        const equipPromise = Promise.all([
           // Immediate equip
           equip_batch([
             { num: candycane1, slot: "mainhand" },
             { num: candycane2, slot: "offhand" },
-          ]);
-        // ,
+          ]),
 
-        // Delayed re-equip
-        // new Promise((resolve) => {
-        //   setTimeout(
-        //     () => {
-        //       const warriorItems = calculateWarriorItems();
-        //       const mainhandSlot = findMaxLevelItem(warriorItems.mainhand);
-        //       const offhandSlot = findMaxLevelItem(
-        //         warriorItems.offhand,
-        //         warriorItems.mainhand === warriorItems.offhand,
-        //       );
-        //       resolve(
-        //         equip_batch([
-        //           {
-        //             num: mainhandSlot === -1 ? candycane1 : mainhandSlot,
-        //             slot: "mainhand",
-        //           },
-        //           {
-        //             num: offhandSlot === -1 ? candycane2 : offhandSlot,
-        //             slot: "offhand",
-        //           },
-        //         ]),
-        //       );
-        //     },
-        //     Math.min(character.ping, 100),
-        //   );
-        // }),
-        // ])
-        // .finally(() => {
-        //   isEquipingItems = false;
-        // });
+          // Delayed re-equip
+          new Promise((resolve) => {
+            setTimeout(
+              () => {
+                resolve(
+                  equip_batch([
+                    {
+                      num: candycane1,
+                      slot: "mainhand",
+                    },
+                    {
+                      num: candycane2,
+                      slot: "offhand",
+                    },
+                  ]),
+                );
+              },
+              Math.min(character.ping, 125),
+            );
+          }),
+        ]).finally(() => {
+          isEquipingItems = false;
+        });
 
         promisesToAwait.push(equipPromise);
       }
