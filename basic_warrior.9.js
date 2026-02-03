@@ -149,14 +149,26 @@ async function fight(target) {
 
           // Delayed re-equip
           new Promise((resolve) => {
-            setTimeout(() => {
-              resolve(
-                equip_batch([
-                  { num: candycane1, slot: "mainhand" },
-                  { num: candycane2, slot: "offhand" },
-                ]),
-              );
-            }, 150);
+            setTimeout(
+              () => {
+                const warriorItems = calculateWarriorItems();
+                const mainhandSlot = findMaxLevelItem(warriorItems.mainhand);
+                const offhandSlot = findMaxLevelItem(warriorItems.offhand);
+                resolve(
+                  equip_batch([
+                    {
+                      num: mainhandSlot === -1 ? candycane1 : mainhandSlot,
+                      slot: "mainhand",
+                    },
+                    {
+                      num: offhandSlot === -1 ? candycane2 : offhandSlot,
+                      slot: "offhand",
+                    },
+                  ]),
+                );
+              },
+              Math.min(character.ping, 100),
+            );
           }),
         ]).finally(() => {
           isEquipingItems = false;
