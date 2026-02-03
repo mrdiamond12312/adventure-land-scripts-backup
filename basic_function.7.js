@@ -1861,8 +1861,11 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
-      join("franky");
-      await advanceSmartMove(parent.S.franky);
+      try {
+        await join("franky");
+      } catch (e) {
+        await advanceSmartMove(parent.S.franky);
+      }
       change_target(get_nearest_monster({ type: "franky" }));
       frankyInstance = get_nearest_monster({ type: "franky" });
     }
@@ -1870,11 +1873,10 @@ async function changeToDailyEventTargets() {
     if (frankyInstance)
       if (frankyInstance.target && !partyMems.includes(frankyInstance.target)) {
         rangeRate = 0.2;
-        return frankyInstance;
       } else {
         scareAwayMobs();
-        return frankyInstance;
       }
+    return frankyInstance;
   }
 
   if (parent.S.abtesting && !character.s.hopsickness) {
