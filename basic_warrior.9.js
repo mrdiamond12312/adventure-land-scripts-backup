@@ -107,7 +107,7 @@ async function fight(target) {
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
-  if (isAttackReady && inRange(target) && shouldAttack()) {
+  if (!isAttackReady && shouldAttack()) {
     promisesToAwait.push(currentStrategy(target));
   }
 
