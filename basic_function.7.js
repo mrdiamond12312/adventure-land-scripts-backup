@@ -818,7 +818,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   const loopInterval = Math.max(200, getLoopInterval());
   // const totalExtraRange = extraRangeTarget + extraRangeSelf;
   const rangeRadius = character.range * rangeRateFn;
-  const extendedRadius = character.xrange;
+  const extendedRadius = character.xrange * 0.9;
   // + totalExtraRange;
 
   // --- 1. Early exits and sanity checks ---
@@ -832,7 +832,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   if (
     character.ctype === "warrior" &&
     distance(character, target) > character.range * 0.35 &&
-    distance(character, target) < rangeRadius + extendedRadius * 0.9
+    distance(character, target) < rangeRadius + extendedRadius
   ) {
     const allEntities = Object.values(parent.entities);
     const noAggro = allEntities
@@ -851,10 +851,11 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   // Reset angle when switching or losing target
+  const lastTarget = parent.entities[lastKitingTargetId];
   const targetChanged =
-    !lastKitingTargetId ||
-    (lastKitingTargetId !== target.id &&
-      distance(parent.entities[lastKitingTargetId], target) > 30);
+    !lastTarget ||
+    lastKitingTargetId !== target.id ||
+    distance(lastTarget, target) > 30;
   if (targetChanged) angle = undefined;
 
   lastKitingTargetId = target.id;
@@ -938,7 +939,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   // --- 8. Execute movement or retry later ---
-  if (destinationX && destinationY) {
+  if (destinationX !== undefined && destinationY !== undefined) {
     const maxStep = (character.speed * 500) / 1000;
 
     const dx = destinationX - character.real_x;
@@ -1969,16 +1970,15 @@ function on_magiport(name) {
   }
 }
 
-function attackErrorHandler(error) {
+function attackErrorHandler(error, target = get_target()) {
   if (error.failed) {
     if (error.response === "cooldown" && error.place) {
       reduce_cooldown(error.place, -error.ms + Math.min(...parent.pings) / 2);
     } else if (error.reason === "too_far") {
-      if (character.cc < 125) {
+      if (character.cc < 125 && target) {
         const currentX = character.x;
         const currentY = character.y;
 
-        const target = get_target();
         const targetX = target.real_x ?? target.x;
         const targetY = target.real_y ?? target.y;
 

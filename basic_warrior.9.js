@@ -38,8 +38,9 @@ const bosses = {
 // Main fight function
 async function fight(target) {
   const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
-  const attackRange = character.range + character.xrange * 0.9;
-  const inRange = (entity, mult = 1) => distance(entity, character) < attackRange * mult;
+  const attackRange = character.range + character.xrange;
+  const inRange = (entity, mult = 1) =>
+    distance(entity, character) < attackRange * mult;
 
   const haveIgnoreMobAroundTarget = (targetMob) => {
     return mobsListAroundTarget(targetMob, blastRadius).some((mob) =>
@@ -120,7 +121,7 @@ async function fight(target) {
           // attackSpeedCompensate(attackFrequencyBeforeComponsate);
           reduceCd("attack");
         })
-        .catch((e) => attackErrorHandler(e)),
+        .catch((e) => attackErrorHandler(e, target)),
     );
 
     // Offhand swap logic: Use Candy Canes for farming
