@@ -260,6 +260,7 @@ async function smartMove(
   options = {
     useBlink: true,
     useMagiport: true,
+    useScare: true,
     stopCondition: undefined,
     speed: 999999999,
   },
@@ -362,6 +363,14 @@ async function smartMove(
   }
   isAdvanceSmartMoving = true;
 
+  if (options.useScare) {
+    await scareAwayMobs();
+    scareInterval = setInterval(() => {
+      scareAwayMobs();
+    }, 1000);
+    setTimeout(() => clearInterval(scareInterval), 300000);
+  }
+
   try {
     // Moving
     for (const segment of pathFindingResult) {
@@ -386,10 +395,11 @@ async function smartMove(
       }
     }
   } catch (e) {
+    console.log("smartMove error:", e);
+  } finally {
+    clearInterval(scareInterval);
     isAdvanceSmartMoving = false;
   }
-
-  isAdvanceSmartMoving = false;
 }
 
 async function scareAwayMobs() {

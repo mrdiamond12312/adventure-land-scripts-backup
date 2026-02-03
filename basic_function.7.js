@@ -1610,7 +1610,8 @@ function getPresetMembers(preset, currentServer) {
   if (typeof preset === "string")
     return getPresetMembers(DYNAMIC_PARTY_PRESETS[preset], currentServer);
 
-  const value = preset[currentServer] ?? preset.default ?? DYNAMIC_PARTY_PRESETS.default();
+  const value =
+    preset[currentServer] ?? preset.default ?? DYNAMIC_PARTY_PRESETS.default();
   return typeof value === "function" ? value() : value;
 }
 
@@ -1665,10 +1666,11 @@ async function changeToDailyEventTargets() {
     changeToPullStrategies();
 
     const dragoldInstance = get_nearest_monster({ type: "dragold" });
-    if (!dragoldInstance) advanceSmartMove(parent.S.dragold);
-    else {
+    if (!dragoldInstance) {
+      await smartMove(parent.S.dragold);
+      change_target(get_nearest_monster({ type: "pinkgoo" }));
+    } else {
       change_target(dragoldInstance);
-
       return dragoldInstance;
     }
   }
@@ -1678,7 +1680,7 @@ async function changeToDailyEventTargets() {
     let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
     if (!pinkgooInstance) {
       if (parent.S.pinkgoo?.x) {
-        await advanceSmartMove(parent.S.pinkgoo);
+        await smartMove(parent.S.pinkgoo);
         change_target(get_nearest_monster({ type: "pinkgoo" }));
         return get_nearest_monster({ type: "pinkgoo" });
       }
