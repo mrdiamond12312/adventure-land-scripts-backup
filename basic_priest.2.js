@@ -213,7 +213,7 @@ async function priestBuff() {
   }
 
   // Absorb Skill Logic
-  const vulnerableMems = partyMems.filter(
+  const vulnerableMems = [...partyMems, partyMerchant].filter(
     (memberId) => memberId !== character.name && memberId !== TANKER,
   );
   for (const memberId of vulnerableMems) {

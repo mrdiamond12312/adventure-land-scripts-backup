@@ -832,7 +832,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   if (
     character.ctype === "warrior" &&
     distance(character, target) > character.range * 0.35 &&
-    distance(character, target) < rangeRadius + extendedRadius
+    distance(character, target) < rangeRadius + extendedRadius * 0.9
   ) {
     const allEntities = Object.values(parent.entities);
     const noAggro = allEntities
@@ -1559,14 +1559,18 @@ const DYNAMIC_PARTY_PRESETS = {
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
-      return [ROGUE, RANGER, MAGE];
+      return [WARRIOR, RANGER, MAGE];
     },
     USII: () => {
       RANGER = RANGER1;
       HEALER = PRIEST;
       return [MAGE, RANGER, PRIEST];
     },
-    default: [WARRIOR, RANGER, MAGE],
+    default: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
   },
   crabxx: () => {
     const isAggroed = !!parent.S.crabxx?.target;
