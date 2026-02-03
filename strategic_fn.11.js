@@ -704,12 +704,7 @@ async function equipBatch(suggestedItems, forced = false) {
     msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
   const maxItemsToEquip = Math.max(
     0,
-    Math.floor(
-      (timeToNextAttack -
-        (character.s.penalty_cd?.ms ?? 0) -
-        character.ping / 2) /
-        120,
-    ),
+    Math.floor((timeToNextAttack - (character.s.penalty_cd?.ms ?? 0)) / 120),
   );
   if (itemSlots.length > maxItemsToEquip && !forced) {
     itemSlots.splice(maxItemsToEquip);
