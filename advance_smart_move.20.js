@@ -252,19 +252,24 @@ function pathfinderGetPath(toPosition, speed = character.speed) {
 
 async function useTownWithRetry({ maxRetries = 5, retryDelay = 300 } = {}) {
   let attempts = 0;
+  let mapData = parent.G.maps[character.map];
 
   while (attempts < maxRetries) {
-    try {
-      await use_skill("use_town");
-      await sleep(500);
+    await town();
+
+    if (mapData.spawns?.length) {
+      if (
+        distance(character, {
+          map: character.map,
+          x: mapData.spawns[0][0],
+          y: mapData.spawns[0][1],
+        }) > 100
+      ) {
+        continue;
+      }
       return true;
-    } catch (e) {
-      attempts++;
-      await sleep(retryDelay);
     }
   }
-
-  let mapData = parent.G.maps[character.map];
 
   if (mapData.spawns?.length) {
     await smart_move({
@@ -289,7 +294,7 @@ async function smartMove(
     useMagiport: true,
     useScare: true,
     stopCondition: undefined,
-    speed: 100,
+    speed: 50,
   },
 ) {
   if (!toPosition) return;
