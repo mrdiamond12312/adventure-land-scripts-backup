@@ -648,7 +648,7 @@ async function equipBatch(suggestedItems, forced = false) {
   if (
     (character.cc > 130 ||
       isEquipingItems ||
-      character.s.penalty_cd ||
+      // character.s.penalty_cd ||
       isLooting) &&
     !forced
   )
