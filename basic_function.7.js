@@ -1669,6 +1669,7 @@ async function changeToDailyEventTargets() {
     if (!dragoldInstance) {
       await smartMove(parent.S.dragold);
       change_target(get_nearest_monster({ type: "pinkgoo" }));
+      return get_nearest_monster({ type: "dragold" });
     } else {
       change_target(dragoldInstance);
       return dragoldInstance;
