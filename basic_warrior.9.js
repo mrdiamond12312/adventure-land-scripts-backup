@@ -153,7 +153,10 @@ async function fight(target) {
               () => {
                 const warriorItems = calculateWarriorItems();
                 const mainhandSlot = findMaxLevelItem(warriorItems.mainhand);
-                const offhandSlot = findMaxLevelItem(warriorItems.offhand);
+                const offhandSlot = findMaxLevelItem(
+                  warriorItems.offhand,
+                  warriorItems.mainhand === warriorItems.offhand,
+                );
                 resolve(
                   equip_batch([
                     {
