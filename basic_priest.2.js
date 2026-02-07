@@ -118,24 +118,27 @@ async function fight(target, isDeterminedToHeal = false) {
   }
 
   // Attack Logic
-  if (!isDeterminedToHeal) {
-    const isAttackReady =
-      ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-    const isTargetInAttackRange =
-      distance(target, character) <= characterBufferedRange;
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  const isTargetInAttackRange =
+    distance(target, character) <= characterBufferedRange;
 
-    if (!isAttackReady && isTargetInAttackRange && shouldAttack()) {
-      promisesToAwait.push(currentStrategy(target));
-    }
+  if (
+    !isAttackReady &&
+    isTargetInAttackRange &&
+    shouldAttack() &&
+    !isDeterminedToHeal
+  ) {
+    promisesToAwait.push(currentStrategy(target));
+  }
 
-    if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
-      set_message("Attacking");
-      promisesToAwait.push(
-        attack(target)
-          .then(() => reduceCd("attack"))
-          .catch((e) => attackErrorHandler(e)),
-      );
-    }
+  if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
+    set_message("Attacking");
+    promisesToAwait.push(
+      attack(target)
+        .then(() => reduceCd("attack"))
+        .catch((e) => attackErrorHandler(e)),
+    );
   }
 
   // Await All Actions
@@ -254,7 +257,8 @@ async function zapperLoop() {
     zapCd !== 0 ||
     character.mp < character.max_mp * 0.6 ||
     character.penalty_cd ||
-    !hasZapper || Object.keys(character.c).length
+    !hasZapper ||
+    Object.keys(character.c).length
   ) {
     return setTimeout(zapperLoop, Math.max(zapCd, 50));
   }
