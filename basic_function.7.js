@@ -1861,7 +1861,7 @@ async function changeToDailyEventTargets() {
     changeToNormalStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
-      await join("franky");
+      await join("franky").catch((e) => console.warn(e));
       await sleep(character.ping);
       await advanceSmartMove(parent.S.franky);
       frankyInstance = get_nearest_monster({ type: "franky" });
