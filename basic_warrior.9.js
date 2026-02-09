@@ -149,23 +149,20 @@ async function fight(target) {
 
           // Delayed re-equip
           new Promise((resolve) => {
-            setTimeout(
-              () => {
-                resolve(
-                  equip_batch([
-                    {
-                      num: candycane1,
-                      slot: "mainhand",
-                    },
-                    {
-                      num: candycane2,
-                      slot: "offhand",
-                    },
-                  ]),
-                );
-              },
-              Math.min(character.ping, 125),
-            );
+            setTimeout(() => {
+              resolve(
+                equip_batch([
+                  {
+                    num: candycane1,
+                    slot: "mainhand",
+                  },
+                  {
+                    num: candycane2,
+                    slot: "offhand",
+                  },
+                ]),
+              );
+            }, 150);
           }),
         ]).finally(() => {
           isEquipingItems = false;
