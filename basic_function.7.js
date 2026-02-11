@@ -1543,6 +1543,11 @@ const DYNAMIC_PARTY_PRESETS = {
   },
   dragold: {
     USI: [WARRIOR, PRIEST, ROGUE],
+    EUI: () => {
+      RANGER = RANGER1;
+      HEALER = PRIEST;
+      return [ROGUE, RANGER, PRIEST];
+    },
     EUII: () => {
       RANGER = RANGER2;
       HEALER = PRIEST;
