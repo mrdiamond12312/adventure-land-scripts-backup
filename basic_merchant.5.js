@@ -120,6 +120,7 @@ async function exchangeXyn() {
     { name: "mistletoe", quantity: 1 },
     { name: "candycane", quantity: 1 },
     { name: "greenenvelope", quantity: 1 },
+    { name: "brownenvelope", quantity: 1 },
     { name: "goldenegg", quantity: 1 },
     { name: "5bucks", quantity: 1 },
     { name: "candypop", quantity: 10 },
@@ -517,6 +518,7 @@ const ITEM_NEEDED = [
   "jacko",
   "gcape",
   "carrot",
+  "brownenvelope",
   "harbringer",
 ];
 

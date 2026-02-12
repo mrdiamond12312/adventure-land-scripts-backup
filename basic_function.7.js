@@ -107,13 +107,13 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = -289;
 // var mapY = -188;
 
-var map = "winterland";
-var mapX = 423;
-var mapY = -2614;
+// var map = "winterland";
+// var mapX = 423;
+// var mapY = -2614;
 
-// var map = "desertland";
-// var mapX = 223;
-// var mapY = -708;
+var map = "desertland";
+var mapX = 223;
+var mapY = -708;
 
 // var map = "tunnel";
 // var mapX = 0;
@@ -145,8 +145,8 @@ var mapY = -2614;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-var mobsToFarm = ["phoenix", "stompy", "wolf"];
-// var mobsToFarm = ["fireroamer"];
+// var mobsToFarm = ["phoenix", "stompy", "wolf"];
+var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 
 // var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
@@ -1137,6 +1137,7 @@ async function midasLooting(forced = false) {
                 gloves: "handofmidas",
                 amulet: "spookyamulet",
                 booster: "goldbooster",
+                cape: "horsecapeg",
               },
               true,
             ),
@@ -1554,23 +1555,23 @@ const DYNAMIC_PARTY_PRESETS = {
       return [ROGUE, RANGER, PRIEST];
     },
     USII: () => {
-      RANGER = RANGER1;
       HEALER = PRIEST;
-      return [WARRIOR, RANGER, PRIEST];
+      return [WARRIOR, MAGE, PRIEST];
     },
     default: [WARRIOR, PRIEST, ROGUE],
   },
   pinkgoo: {
-    USI: [WARRIOR, MAGE, ROGUE],
+    USI: [WARRIOR, PRIEST, ROGUE],
+    USII: [WARRIOR, MAGE, PRIEST],
+    EUI: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
       return [WARRIOR, RANGER, MAGE];
-    },
-    USII: () => {
-      RANGER = RANGER1;
-      HEALER = PRIEST;
-      return [MAGE, RANGER, PRIEST];
     },
     default: () => {
       RANGER = RANGER1;
@@ -1587,7 +1588,7 @@ const DYNAMIC_PARTY_PRESETS = {
 
   default: () => {
     const globalParty = get("currentParty");
-    const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
+    const knownTankers = ["CrownPriest"];
 
     if (
       globalParty &&

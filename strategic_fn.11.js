@@ -538,7 +538,7 @@ function calculatePriestItems(target) {
     gloves: "supermittens",
     amulet: isTanking ? "t2stramulet" : "intamulet",
     ring1: feelingLucky ? "ringhs" : "cring",
-    ring2: "zapper",
+    ring2: feelingLucky ? "ringhs" : "zapper",
     cape: "angelwings",
   };
 }
