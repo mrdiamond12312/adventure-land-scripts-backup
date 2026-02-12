@@ -216,6 +216,7 @@ function calculateMageItems() {
     pants: "starkillers",
     shoes: "wingedboots",
     gloves: "supermittens",
+    cape: "ecape",
     orb: feelingLucky ? "rabbitsfoot" : feelingWise ? "talkingskull" : "jacko",
     amulet: feelingWise ? "spookyamulet" : "intamulet",
   };
