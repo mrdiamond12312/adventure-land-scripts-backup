@@ -308,7 +308,6 @@ var IGNORE = [
   "pmaceofthedead",
   "staffofthedead",
   "swordofthedead",
-  'lmace',
   ...BUYABLE,
 ];
 
