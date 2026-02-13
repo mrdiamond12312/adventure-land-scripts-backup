@@ -111,9 +111,9 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = 423;
 // var mapY = -2614;
 
-var map = "desertland";
-var mapX = 223;
-var mapY = -708;
+// var map = "desertland";
+// var mapX = 223;
+// var mapY = -708;
 
 // var map = "tunnel";
 // var mapX = 0;
@@ -135,9 +135,9 @@ var mapY = -708;
 // var mapX = -1111;
 // var mapY = 132;
 
-// var map = "desertland";
-// var mapX = -800;
-// var mapY = -354;
+var map = "desertland";
+var mapX = -800;
+var mapY = -354;
 
 // var map = "level1";
 // var mapX = 50;
@@ -146,7 +146,7 @@ var mapY = -708;
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 // var mobsToFarm = ["phoenix", "stompy", "wolf"];
-var mobsToFarm = ["fireroamer"];
+// var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 
 // var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
@@ -162,7 +162,7 @@ var mobsToFarm = ["fireroamer"];
 //   "turtle",
 //   "crabx",
 // ];
-// var mobsToFarm = ["plantoid"];
+var mobsToFarm = ["plantoid"];
 // var mobsToFarm = ["prat"];
 
 // desired elixir named
