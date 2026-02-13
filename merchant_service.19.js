@@ -161,9 +161,11 @@ async function lureMechaGnome() {
     isLuringMobs ||
     onDuty ||
     serverCurrentlyHasLiveEvent() ||
-    !parent.party_list ||
-    (!trustedPartners.some((name) => parent.party_list.includes(name)) &&
-      !parent.party_list.includes(PRIEST))
+    (!(
+      parent.party_list &&
+      trustedPartners.some((name) => parent.party_list.includes(name))
+    ) &&
+      !parent.caracAL.siblings.includes(PRIEST))
   ) {
     return setTimeout(lureMechaGnome, 500);
   }
@@ -183,6 +185,7 @@ async function lureMechaGnome() {
       (entity) =>
         entity && entity.type === "monster" && entity.mtype === "mechagnome",
     );
+
     if (!gnomesNearby.length) {
       nextDelay = 45_000;
       throw new Error("No mechagnome found");
@@ -193,7 +196,8 @@ async function lureMechaGnome() {
       if (!mageInfo) return false;
       return (
         mageInfo.mp >= G.skills["magiport"].mp + 100 &&
-        Date.now() - mageInfo.time < 15_000
+        Date.now() - mageInfo.time < 15_000 &&
+        distance(mageInfo, { map: map, x: mapX, y: mapY }) < 300
       );
     }, 10_000);
 
