@@ -1805,6 +1805,9 @@ async function changeToDailyEventTargets() {
         .sort((a, b) => a.hp - b.hp)[0]; // lowest hp first
     };
 
+    const crabxList = Object.values(parent.entities).filter(
+      (e) => e?.mtype === "crabx",
+    );
     let crabxxInstance = get_nearest_monster({ type: "crabxx" });
     let crabxInstance = findBestCrabx();
 
@@ -1824,8 +1827,7 @@ async function changeToDailyEventTargets() {
       character.ctype === "warrior" &&
       crabxxInstance &&
       !crabxxInstance.s.stunned &&
-      Object.values(parent.entities).filter((e) => e?.mtype === "crabx")
-        .length <= 1
+      (crabxList.length <= 1 || crabxList.length >= 6)
     ) {
       await warriorStomp();
     }
