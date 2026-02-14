@@ -1781,95 +1781,87 @@ async function changeToDailyEventTargets() {
   ) {
     if (character.range > 100) rangeRate = 0.3;
 
-    const findBestCrabx = () =>
-      Object.values(parent.entities)
-        .filter((m) => m.mtype === "crabx")
-        .sort((lhs, rhs) =>
-          is_in_range(lhs, "attack") !== is_in_range(rhs, "attack")
-            ? is_in_range(lhs, "attack")
-              ? -1
-              : 1
-            : lhs.hp === rhs.hp
-            ? distance(rhs, character) - distance(lhs, character)
-            : lhs.hp - rhs.hp,
-        )
-        .pop();
+    const inRange = (entity) =>
+      distance(entity, character) < character.range + character.xrange * 0.8;
 
-    const findCrabxNearCrabxx = (crabxx) => {
-      const crabxList = Object.values(parent.entities).filter(
-        (e) => e?.mtype === "crabx" && !e.rip,
-      );
+    const getCrabs = () => {
+      const entities = Object.values(parent.entities);
+      const crabxList = [];
+      let crabxxInstance;
 
-      return crabxList
-        .filter((crabx) => distance(crabx, crabxx) <= 17)
-        .sort((a, b) => a.hp - b.hp)[0]; // lowest hp first
+      for (const entity of entities) {
+        if (!entity || entity.rip) continue;
+
+        if (entity.mtype === "crabxx" && !crabxxInstance) {
+          crabxxInstance = entity;
+        }
+
+        if (entity.mtype === "crabx") {
+          crabxList.push(entity);
+        }
+      }
+      return { crabxxInstance, crabxList };
     };
 
-    const crabxList = Object.values(parent.entities).filter(
-      (e) => e?.mtype === "crabx",
-    );
-    let crabxxInstance = get_nearest_monster({ type: "crabxx" });
-    let crabxInstance = findBestCrabx();
+    let { crabxxInstance, crabxList } = getCrabs();
 
     if (!crabxxInstance) {
       if (character.s.hopsickness) {
-        await advanceSmartMove({ map: "main", x: -960, y: 1655 });
+        await advanceSmartMove(parent.S.crabxx);
       } else {
         await join("crabxx");
         await sleep(character.ping);
       }
+      ({ crabxxInstance, crabxList } = getCrabs());
 
-      crabxxInstance = get_nearest_monster({ type: "crabxx" });
-      crabxInstance = findBestCrabx();
+      if (!crabxxInstance) return;
+    }
+
+    let bestCrabx;
+    let bestClusteredCrabx;
+
+    for (const crabx of crabxList) {
+      const isCurrentCrabxInRange = inRange(crabx);
+
+      if (!bestCrabx) {
+        bestCrabx = crabx;
+      } else {
+        const isBestCrabxInRange = inRange(bestCrabx);
+
+        if (isCurrentCrabxInRange && !isBestCrabxInRange) {
+          bestCrabx = crabx;
+        } else if (isCurrentCrabxInRange === isBestCrabxInRange) {
+          if (crabx.hp > bestCrabx.hp) {
+            bestCrabx = crabx;
+          }
+        }
+      }
+
+      if (distance(crabx, crabxxInstance) <= BLAST_RADIUS) {
+        if (!bestClusteredCrabx || crabx.hp > bestClusteredCrabx.hp) {
+          bestClusteredCrabx = crabx;
+        }
+      }
     }
 
     if (
       character.ctype === "warrior" &&
-      crabxxInstance &&
       !crabxxInstance.s.stunned &&
       (crabxList.length <= 1 || crabxList.length >= 6)
     ) {
-      await warriorStomp();
+      warriorStomp();
     }
-
-    // if (
-    //   character.ctype === "mage" &&
-    //   crabxxInstance &&
-    //   crabxxInstance.target &&
-    //   character.mp > 600 &&
-    //   is_in_range(crabxxInstance, "cburst") &&
-    //   !is_on_cooldown("cburst")
-    // ) {
-    //   const crabxToCBurst = Object.values(parent.entities)
-    //     .filter(
-    //       (entity) =>
-    //         entity.type === "monster" &&
-    //         entity.mtype === "crabx" &&
-    //         entity.hp < 500 &&
-    //         !entity.rip,
-    //     )
-    //     .map((crabx) => [crabx, crabx.hp * 2]);
-    //   use_skill("cburst", [[crabxxInstance, 1], ...crabxToCBurst]);
-    // }
 
     let targetCrab;
+
     if (character.ctype === "warrior") {
-      targetCrab =
-        findCrabxNearCrabxx(crabxxInstance) || crabxxInstance || crabxInstance;
+      targetCrab = bestClusteredCrabx || crabxxInstance || bestCrabx;
     } else {
       targetCrab =
-        crabxInstance || (crabxxInstance?.target ? crabxxInstance : undefined);
+        bestCrabx || (crabxxInstance?.target ? crabxxInstance : undefined);
     }
 
-    // if (
-    //   crabxxInstance &&
-    //   crabxxInstance.target &&
-    //   !partyMems.includes(crabxxInstance.target)
-    // )
-    //   changeToPullStrategies();
-    // else
     changeToPullStrategies();
-
     change_target(targetCrab);
     return targetCrab;
   }
