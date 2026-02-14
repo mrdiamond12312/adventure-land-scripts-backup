@@ -699,7 +699,7 @@ async function equipBatch(suggestedItems, forced = false) {
     })
     .filter((equipInfo) => equipInfo.num >= 0);
 
-  // Slice items to fit with penalty_cd & frequency
+  // Slice items to prevent penalty_cd from affecting attack cooldown
   const msToNextAttack = ms_to_next_skill("attack");
   const timeToNextAttack =
     msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;

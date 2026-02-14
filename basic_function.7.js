@@ -1580,10 +1580,12 @@ const DYNAMIC_PARTY_PRESETS = {
     },
   },
   crabxx: () => {
-    const isAggroed = !!parent.S.crabxx?.target;
-    if (isAggroed) RANGER = RANGER1;
-    HEALER = isAggroed ? RANGER1 : PRIEST;
-    return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
+    // const isAggroed = !!parent.S.crabxx?.target;
+    // if (isAggroed) RANGER = RANGER1;
+    // HEALER = isAggroed ? RANGER1 : PRIEST;
+    // return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
+    RANGER = RANGER1;
+    return [WARRIOR, PRIEST, RANGER1];
   },
 
   default: () => {
@@ -1772,10 +1774,10 @@ async function changeToDailyEventTargets() {
   }
 
   if (
-    parent.S.crabxx?.live &&
-    parent.S.crabxx.hp < parent.S.crabxx.max_hp &&
-    parent.S.crabxx?.target &&
-    !partyMems.includes(parent.S.crabxx.target)
+    parent.S.crabxx?.live
+    // parent.S.crabxx.hp < parent.S.crabxx.max_hp &&
+    // parent.S.crabxx?.target &&
+    // !partyMems.includes(parent.S.crabxx.target)
   ) {
     if (character.range > 100) rangeRate = 0.3;
 
@@ -1792,6 +1794,16 @@ async function changeToDailyEventTargets() {
             : lhs.hp - rhs.hp,
         )
         .pop();
+
+    const findCrabxNearCrabxx = (crabxx) => {
+      const crabxList = Object.values(parent.entities).filter(
+        (e) => e?.mtype === "crabx" && !e.rip,
+      );
+
+      return crabxList
+        .filter((crabx) => distance(crabx, crabxx) <= 17)
+        .sort((a, b) => a.hp - b.hp)[0]; // lowest hp first
+    };
 
     let crabxxInstance = get_nearest_monster({ type: "crabxx" });
     let crabxInstance = findBestCrabx();
@@ -1840,7 +1852,8 @@ async function changeToDailyEventTargets() {
 
     let targetCrab;
     if (character.ctype === "warrior") {
-      targetCrab = crabxxInstance?.target ? crabxxInstance : crabxInstance;
+      targetCrab =
+        findCrabxNearCrabxx(crabxxInstance) || crabxxInstance || crabxInstance;
     } else {
       targetCrab =
         crabxInstance || (crabxxInstance?.target ? crabxxInstance : undefined);
@@ -1853,7 +1866,7 @@ async function changeToDailyEventTargets() {
     // )
     //   changeToPullStrategies();
     // else
-    changeToNormalStrategies();
+    changeToPullStrategies();
 
     change_target(targetCrab);
     return targetCrab;
