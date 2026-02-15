@@ -789,7 +789,7 @@ function listOfMonsterAttacking(characterEntity) {
 function mobbingMultiplier(numberOfMobs) {
   // return numberOfMobs < 5 ? 1.7 : numberOfMobs < 6 ? 1.8 : 2;
 
-  return numberOfMobs < 3 ? 1 : 1.7;
+  return numberOfMobs < 3 ? 1 : 1.5;
 }
 
 function avgDmgTaken(characterEntity, dmgType = null) {
