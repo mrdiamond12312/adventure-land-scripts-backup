@@ -147,9 +147,13 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = 255;
 // var mapY = -1160;
 
-var map = "spookytown";
-var mapX = 412;
-var mapY = -694;
+// var map = "spookytown";
+// var mapX = 412;
+// var mapY = -694;
+
+var map = "mforest";
+var mapX = -172;
+var mapY = 708;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
@@ -173,7 +177,8 @@ var mapY = -694;
 // var mobsToFarm = ["plantoid"];
 // var mobsToFarm = ["prat"];
 // var mobsToFarm = ["mummy"];
-var mobsToFarm = ["jr", "booboo"];
+// var mobsToFarm = ["jr", "booboo"];
+var mobsToFarm = ["odino"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -1865,7 +1870,7 @@ async function changeToDailyEventTargets() {
     let targetCrab;
 
     if (character.ctype === "warrior") {
-      targetCrab = bestClusteredCrabx|| bestCrabx || crabxxInstance;
+      targetCrab = bestClusteredCrabx || bestCrabx || crabxxInstance;
     } else {
       targetCrab =
         bestCrabx || (crabxxInstance?.target ? crabxxInstance : undefined);
