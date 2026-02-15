@@ -1860,7 +1860,7 @@ async function changeToDailyEventTargets() {
     let targetCrab;
 
     if (character.ctype === "warrior") {
-      targetCrab = bestClusteredCrabx || crabxxInstance || bestCrabx;
+      targetCrab = bestClusteredCrabx|| bestCrabx || crabxxInstance;
     } else {
       targetCrab =
         bestCrabx || (crabxxInstance?.target ? crabxxInstance : undefined);
