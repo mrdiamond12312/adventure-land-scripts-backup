@@ -119,7 +119,7 @@ async function fight(target) {
     hpOk &&
     character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 1000 &&
     weakMobs.length >= 4 &&
-    mobsTo5Shot.all((mob) => shouldAttack(mob));
+    mobsTo5Shot.every((mob) => shouldAttack(mob));
 
   const mobsTo3Shot = potentialTargets.slice(0, 3);
   const is3ShotReady =
@@ -128,7 +128,7 @@ async function fight(target) {
     hpOk &&
     character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 1000 &&
     potentialTargets.length >= 2 &&
-    mobsTo3Shot.all((mob) => shouldAttack(mob));
+    mobsTo3Shot.every((mob) => shouldAttack(mob));
 
   if (is5ShotReady) {
     if (!isAttackReady) promisesToAwait.push(currentStrategy(mobsTo5Shot));
