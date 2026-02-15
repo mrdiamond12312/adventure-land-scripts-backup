@@ -112,21 +112,25 @@ async function fight(target) {
 
   // 5shot > 3shot > single
   const hpOk = character.hp > character.max_hp * 0.55;
+  const mobsTo5Shot = weakMobs.slice(0, 5);
   const is5ShotReady =
     character.level >= G.skills["5shot"].level &&
     canMultiShot &&
     hpOk &&
     character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 1000 &&
-    weakMobs.length >= 4;
+    weakMobs.length >= 4 &&
+    mobsTo5Shot.all((mob) => shouldAttack(mob));
+
+  const mobsTo3Shot = potentialTargets.slice(0, 3);
   const is3ShotReady =
     character.level >= G.skills["3shot"].level &&
     canMultiShot &&
     hpOk &&
     character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 1000 &&
-    potentialTargets.length >= 2;
+    potentialTargets.length >= 2 &&
+    mobsTo3Shot.all((mob) => shouldAttack(mob));
 
   if (is5ShotReady) {
-    const mobsTo5Shot = weakMobs.slice(0, 5);
     if (!isAttackReady) promisesToAwait.push(currentStrategy(mobsTo5Shot));
     else if (!isCupid) promisesToAwait.push(tryMultiShot("5shot", mobsTo5Shot));
     else {
@@ -136,7 +140,6 @@ async function fight(target) {
       );
     }
   } else if (is3ShotReady) {
-    const mobsTo3Shot = potentialTargets.slice(0, 3);
     if (!isAttackReady) promisesToAwait.push(currentStrategy(mobsTo3Shot));
     else if (!isCupid)
       promisesToAwait.push(tryMultiShot("3shot", potentialTargets.slice(0, 3)));
