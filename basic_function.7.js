@@ -1690,7 +1690,7 @@ async function changeToDailyEventTargets() {
   }
 
   if (parent.S.pinkgoo?.live) {
-    changeToNormalStrategies();
+    changeToPullStrategies();
     let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
     if (!pinkgooInstance) {
       if (parent.S.pinkgoo?.x) {
