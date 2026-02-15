@@ -49,7 +49,7 @@ async function fight(target) {
   };
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
-  if (currentStrategy === usePullStrategies && !target?.name.includes("crabx")) {
+  if (currentStrategy === usePullStrategies && !target?.mtype.includes("crabx")) {
     const aggroedMobs = Object.values(parent.entities)
       .filter((entity) => {
         return (
