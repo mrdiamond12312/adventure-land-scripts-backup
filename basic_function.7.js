@@ -143,9 +143,13 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = 50;
 // var mapY = 425;
 
+// var map = "spookytown";
+// var mapX = 255;
+// var mapY = -1160;
+
 var map = "spookytown";
-var mapX = 255;
-var mapY = -1160;
+var mapX = -512;
+var mapY = -625;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
@@ -168,7 +172,8 @@ var mapY = -1160;
 // ];
 // var mobsToFarm = ["plantoid"];
 // var mobsToFarm = ["prat"];
-var mobsToFarm = ["mummy"];
+// var mobsToFarm = ["mummy"];
+var mobsToFarm = ["jr", "booboo"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";

@@ -859,11 +859,11 @@ function rotateLeader(partyList, newLeaderId) {
 function assignRoles() {
   if (partyMems.includes(WARRIOR) && partyMems.includes(HEALER)) {
     const partyDmgTaken = avgPartyDmgTaken(partyMems);
-    const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "magical");
+    const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "physical");
 
     // If more than half of taken DMG is magical, set our HEALER to be TANKER
-    const magicDmgRatio = partyMagicalDmgTaken / partyDmgTaken;
-    TANKER = magicDmgRatio > 0.5 ? HEALER : WARRIOR;
+    const physicalDmgRatio = partyMagicalDmgTaken / partyDmgTaken;
+    TANKER = physicalDmgRatio <= 0.5 ? HEALER : WARRIOR;
     partyMems = rotateLeader(partyMems, TANKER);
   }
 }
