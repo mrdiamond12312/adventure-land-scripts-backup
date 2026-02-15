@@ -83,7 +83,7 @@ async function fight(target) {
 
   const weakMobs = potentialTargets.filter(isWeak);
 
-  if (potentialTargets.length) {
+  if (potentialTargets.length && !target?.name.includes("crabx")) {
     target = potentialTargets[0];
     change_target(target);
   } // Reacquire target if feared

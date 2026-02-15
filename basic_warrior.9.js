@@ -49,7 +49,7 @@ async function fight(target) {
   };
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
-  if (currentStrategy === usePullStrategies) {
+  if (currentStrategy === usePullStrategies && !target?.name.includes("crabx")) {
     const aggroedMobs = Object.values(parent.entities)
       .filter((entity) => {
         return (
@@ -62,7 +62,6 @@ async function fight(target) {
           !haveIgnoreMobAroundTarget(entity)
         );
       })
-      // Optimization: Pre-calculate the cluster count BEFORE sorting
       .map((mob) => {
         mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
         return mob;
