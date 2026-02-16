@@ -999,29 +999,31 @@ function getPlayersToHeal() {
   const minHealMod = 0.9;
   const healThreshold = character.ctype === "priest" ? 0.8 : 0.65;
   const healPower = character.heal || character.attack * 2.5;
-  const prioritizedNamesList = prioritizedNames();
+  const prioritizedNamesList = new Set(prioritizedNames());
 
   const shouldHeal = (entity) => {
-    const missing = entity.max_hp - entity.hp;
+    const entityHp = entity.predictedHp ?? entity.hp;
+    const missing = entity.max_hp - entityHp;
     return (
       missing > minHealMod * healPower ||
-      entity.hp < healThreshold * entity.max_hp
+      entityHp < healThreshold * entity.max_hp
     );
   };
-
-  // Prioritized characters
-  // const prioritized = prioritizedNamesList
-  //   .map((name) => get_entity(name))
-  //   .filter(
-  //     (player) => player && !player.dead && !player.rip && shouldHeal(player),
-  //   )
-  //   .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp);
 
   // Other healable entities
   const potentialHealees = [
     ...Object.values(parent.entities),
     ...(character.ctype === "priest" ? [character] : []),
   ]
+    .map((entity) => {
+      const incomingNumber =
+        PROJECTILE_MANAGER?.getIncomingHeals(entity.name) ?? 0;
+
+      const predictedHp =
+        entity.name === character.name ? entity.hp : entity.hp + incomingNumber;
+
+      return { ...entity, predictedHp };
+    })
     .filter((entity) => {
       if (!entity) return false;
       if (entity.dead || entity.rip) return false;
@@ -1038,8 +1040,8 @@ function getPlayersToHeal() {
     .sort((lhs, rhs) => {
       // Ghosts first if both exist
 
-      const isLhsPrioritized = prioritizedNamesList.includes(lhs.name);
-      const isRhsPrioritized = prioritizedNamesList.includes(rhs.name);
+      const isLhsPrioritized = prioritizedNamesList.has(lhs.name);
+      const isRhsPrioritized = prioritizedNamesList.has(rhs.name);
 
       if (isLhsPrioritized !== isRhsPrioritized)
         return isLhsPrioritized ? -1 : 1;
@@ -1047,7 +1049,10 @@ function getPlayersToHeal() {
       const ghostLhs = lhs.mtype === "ghost";
       const ghostRhs = rhs.mtype === "ghost";
       if (ghostLhs !== ghostRhs) return ghostLhs ? -1 : 1;
-      return lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp;
+
+      const lhsHp = lhs.predictedHp ?? lhs.hp;
+      const rhsHp = rhs.predictedHp ?? rhs.hp;
+      return lhsHp / lhs.max_hp - rhsHp / rhs.max_hp;
     });
 
   return potentialHealees;
