@@ -708,9 +708,36 @@ async function equipBatch(suggestedItems, forced = false) {
   }
 }
 
+function calculateHeal(fromEntity, toEntity) {
+  if (!fromEntity) return 0;
+  switch (fromEntity?.damage_type) {
+    case "magical":
+      return (
+        fromEntity.heal *
+        damage_multiplier(
+          toEntity.resistance -
+            (fromEntity.name === character.name
+              ? character.rpiercing / 2 ?? 0
+              : 0),
+        )
+      );
+    case "physical":
+      return (
+        fromEntity.attack *
+        damage_multiplier(
+          toEntity.armor -
+            (fromEntity.name === character.name
+              ? character.apiercing / 2 ?? 0
+              : 0),
+        )
+      );
+  }
+}
+
 // Utilities
 function calculateDamage(fromEntity, toEntity, recursion = true) {
   if (!fromEntity) return 0;
+
   switch (fromEntity?.damage_type) {
     case "magical":
       return (
@@ -1183,3 +1210,148 @@ async function useTemporalSurge() {
 setInterval(async () => {
   await useTemporalSurge();
 }, 1000);
+
+class ProjectileManagement {
+  constructor(socket) {
+    this.socket = socket;
+    this.projectilesByTarget = new Map(); // name/ID -> Map(pid -> projectile)
+    this.pidToTarget = new Map(); // pid -> target for O(1) removals
+
+    this.init();
+  }
+
+  _calculateSingleHitDamage(from, to) {
+    const clone = { ...from, frequency: 1 };
+    return calculateDamage(clone, to, false);
+  }
+
+  _onIncomingProjectile = (data) => {
+    if (!data?.pid || !data?.target) return;
+    if (data.source !== "attack" && data.source !== "heal") return;
+    if (data.instant) return;
+
+    // Only consider projectiles that have a damage or heal value
+    const rawValue = data.damage ?? data.heal;
+    if (typeof rawValue !== "number") return;
+
+    const projectileActor = parent.entities[data.attacker];
+    const projectileTarget = parent.entities[data.target];
+
+    const projectile = {
+      type: data.source, // "attack" | "heal"
+      attacker: data.attacker,
+      eta: data.eta,
+      arrival: performance.now() + data.eta,
+    };
+
+    // damage as negative and heal as positive
+    if (projectileActor && projectileTarget) {
+      projectile.value =
+        data.damage != null
+          ? -this._calculateSingleHitDamage(projectileActor, projectileTarget)
+          : calculateHeal(projectileActor, projectileTarget);
+    } else {
+      projectile.value = data.damage != null ? -rawValue : rawValue;
+    }
+
+    const { target, pid } = data;
+
+    // Init map for target if undefined
+    if (!this.projectilesByTarget.has(target)) {
+      this.projectilesByTarget.set(target, new Map());
+    }
+
+    // Store projectile under target -> pid
+    this.projectilesByTarget.get(target).set(pid, projectile);
+
+    // Optional but strongly recommended for O(1) removal later
+    this.pidToTarget.set(pid, target);
+  };
+
+  _onProjectileHit = (data) => {
+    if (!data?.pid) return;
+
+    const target = this.pidToTarget.get(data.pid);
+    if (!target) return;
+
+    const targetMap = this.projectilesByTarget.get(target);
+    if (targetMap) {
+      targetMap.delete(data.pid);
+      if (targetMap.size === 0) {
+        this.projectilesByTarget.delete(target);
+      }
+    }
+
+    this.pidToTarget.delete(data.pid);
+  };
+
+  _bindEvents() {
+    this.socket.on("action", this._onIncomingProjectile);
+    this.socket.on("hit", this._onProjectileHit);
+  }
+
+  _cleanExpiredProjectile() {
+    const now = performance.now();
+
+    for (const [target, map] of this.projectilesByTarget) {
+      for (const [pid, projectile] of map) {
+        if (projectile.arrival + 100 < now) {
+          map.delete(pid);
+          this.pidToTarget.delete(pid);
+        }
+      }
+
+      if (map.size === 0) {
+        this.projectilesByTarget.delete(target);
+      }
+    }
+  }
+
+  cleanUp() {
+    if (this.socket) {
+      this.socket.off("action", this._onIncomingProjectile);
+      this.socket.off("hit", this._onProjectileHit);
+    }
+
+    if (this._cleanupInterval) {
+      clearInterval(this._cleanupInterval);
+      this._cleanupInterval = null;
+    }
+
+    this.projectilesByTarget.clear();
+    this.pidToTarget.clear();
+
+    this._initialized = false;
+    this.socket = null;
+  }
+
+  getIncomingNumber(target) {
+    const map = this.projectilesByTarget.get(target);
+    if (!map) return 0;
+
+    let total = 0;
+    for (const projectile of map.values()) {
+      total += projectile.value;
+    }
+    return total;
+  }
+
+  init() {
+    if (!this.socket) return;
+
+    // Prevent double init
+    if (this._initialized) return;
+    this._initialized = true;
+
+    // Bind socket listeners
+    this._bindEvents();
+
+    this._cleanupInterval = setInterval(() => {
+      this._cleanExpiredProjectile();
+    }, 500); // clear projectile once every 500ms
+  }
+}
+
+if (!PROJECTILE_MANAGER && parent.socket && character.ctype === "priest") {
+  var PROJECTILE_MANAGER = new ProjectileManagement(parent.socket);
+}
