@@ -3,12 +3,11 @@ async function usePullStrategies(target) {
   const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
   const healerFreq = partyHealer?.frequency || 1;
   const healReceivableAmount =
-    healerPower * 0.925 * healerFreq +
+    healerPower * healerFreq +
     (parent.entities["$Caroline"]?.focus &&
     distance(parent.entities["$Caroline"], character) < 250
       ? 1200
       : 0);
-  const partyTanker = get_entity(TANKER);
   const mobsList = Object.values(parent.entities).filter(
     (mob) => mob.type === "monster",
   );
