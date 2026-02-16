@@ -59,7 +59,7 @@ function getCharacter(name) {
 }
 
 if (parent.caracAL && parent.caracAL.ALPathfinder) {
-  parent.caracAL.ALPathfinder.prepare(parent.G, ['bank_u']); // Ignore bank_u for pathfinding
+  parent.caracAL.ALPathfinder.prepare(parent.G, ["bank_u"]); // Ignore bank_u for pathfinding
 }
 
 /**
@@ -254,9 +254,9 @@ async function useTownWithRetry({ maxRetries = 5, retryDelay = 300 } = {}) {
   let attempts = 0;
   let mapData = parent.G.maps[character.map];
 
-  while (attempts < maxRetries) {
+  while (attempts++ < maxRetries) {
     await town();
-
+    await sleep(retryDelay);
     if (mapData.spawns?.length) {
       if (
         distance(character, {
