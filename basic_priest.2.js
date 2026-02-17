@@ -170,12 +170,25 @@ async function priestBuff() {
 
       if (
         !smart.moving &&
+        !isAdvanceSmartMoving &&
         dist >= bufferedRange &&
         prioritizedBuffeesNames.includes(buffee.name)
       ) {
-        promises.push(
-          move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
-        );
+        const middleX = (buffee.x + character.x) / 2;
+        const middleY = (buffee.y + character.y) / 2;
+        if (parent.caracAL)
+          promises.push(
+            advanceSmartMove({
+              map: character.map,
+              x: middleX,
+              y: middleY,
+            }),
+          );
+        else if (can_move_to(middleX, middleY))
+          promises.push(
+            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
+          );
+        else advanceSmartMove({ map: character.map, x: buffee.x, y: buffee.y });
         set_message(`Moving to ${buffee.name}`);
         continue;
       }
