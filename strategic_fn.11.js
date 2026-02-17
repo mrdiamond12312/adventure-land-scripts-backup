@@ -464,7 +464,7 @@ function calculateRangerItems(target) {
       : "orbofdex",
     amulet: feelingWise ? "spookyamulet" : "dexamulet",
     shoes: feelingLucky ? "wshoes" : "wingedboots",
-    gloves: feelingLucky ? "wgloves" : "mittens",
+    gloves: feelingLucky ? "wgloves" : "supermittens",
   };
 }
 

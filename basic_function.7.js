@@ -311,7 +311,6 @@ var IGNORE = [
   "rod",
   "tracker",
   "sword",
-  "throwingstars",
   "orboffire",
   "orboffrost",
   "orbofplague",
@@ -324,6 +323,7 @@ var IGNORE = [
   "staffofthedead",
   "swordofthedead",
   "supermittens",
+  "horsecapeg",
   ...BUYABLE,
 ];
 
@@ -463,7 +463,6 @@ const SALE_ABLE = [
   "hboots",
   "sword",
   "spear",
-  "throwingstars",
   // Easter's loots
   // "eears",
   // "eslippers",

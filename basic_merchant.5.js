@@ -520,7 +520,8 @@ const ITEM_NEEDED = [
   "gcape",
   "carrot",
   "brownenvelope",
-  "harbringer","throwingstars",
+  "harbringer",
+  "throwingstars",
 ];
 
 function secondhandsHandler(events) {
