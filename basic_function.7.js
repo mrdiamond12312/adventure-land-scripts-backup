@@ -323,7 +323,8 @@ var IGNORE = [
   "staffofthedead",
   "swordofthedead",
   "supermittens",
-  "horsecapeg",
+  // "horsecapeg",
+  "throwingstars",
   ...BUYABLE,
 ];
 

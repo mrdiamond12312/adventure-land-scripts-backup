@@ -190,9 +190,9 @@ function moveHome() {
   return smart_move(homeLocation)
     .then(() => {
       onDuty = false;
-      if (locate_item("stand0") === -1) {
+      if (locate_item("stand0") === -1 && !haveAComputer()) {
         retrieveBankItem("stand0");
-      } else open_stand(locate_item("stand0"));
+      } else open_stand();
     })
     .catch((e) => {
       if (e.reason === "failed" && e.failed) use_skill("use_town");
