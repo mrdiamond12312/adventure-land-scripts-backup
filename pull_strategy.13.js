@@ -69,7 +69,7 @@ async function usePullStrategies(target) {
 
       const formidableMonsterAppeared = mobsList.find(
         (mob) =>
-          mob.attack * mob.frequency > MAX_MOB_DPS ||
+          calculateDamage(mob, character) > MAX_MOB_DPS ||
           MELEE_IGNORE_LIST.includes(mob.mtype),
       );
 
@@ -148,12 +148,12 @@ async function usePullStrategies(target) {
       // Mob Target Check: Agitate won't steal from others or cooperative mobs
       const wontStealOrBreakCoop = !listOfNoTargetMonsterInRange.some(
         (mob) =>
-          (mob.cooperative && // Cooperative mob
-            !mob["1hp"] && // Is not a 1HP cooperative mob (maybe ignored?)
-            !partyMems.includes(mob.target)) || // And its target is not one of my character
-          parent.party_list
-            .filter((id) => !partyMems.includes(id))
-            .includes(mob.target), // OR its target is other player in the party
+          mob.cooperative &&
+          !mob["1hp"] &&
+          (!partyMems.includes(mob.target) ||
+            parent.party_list
+              .filter((id) => !partyMems.includes(id))
+              .includes(mob.target)),
       );
 
       // Fear Check

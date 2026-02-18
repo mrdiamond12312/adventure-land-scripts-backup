@@ -1,7 +1,7 @@
 const MAX_TARGET = 10;
 const BLAST_RADIUS = character.blast / 3.6 || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
-const MAX_MOB_DPS = 1000;
+const MAX_MOB_DPS = 2500;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
 const WATCHOUT_ABILITIES = ["burn"];
 
