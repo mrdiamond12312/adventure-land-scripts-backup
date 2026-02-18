@@ -823,14 +823,6 @@ function extraDistanceWithinHitbox(target) {
 
 var lastKitingTargetId = undefined;
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
-  // Debug: Fixed width and height of target
-  if (target) {
-    target.awidth = 24;
-    target.aheight = 24;
-    target.width = 24;
-    target.height = 24;
-  }
-
   const loopInterval = Math.max(200, getLoopInterval());
   // const totalExtraRange = extraRangeTarget + extraRangeSelf;
   const rangeRadius = character.range * rangeRateFn;
@@ -843,6 +835,20 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     angle = undefined;
     lastKitingTargetId = undefined;
     return setTimeout(hitAndRun, loopInterval);
+  }
+
+  // CRABXX strategy: orbit the TANKER around the center of spawn
+  if (target?.mtype.includes("crabx") && isAssignedAsTanker()) {
+    const crabxxSpawn = getMonsterSpawns("crabxx")[0];
+    target = {
+      ...target,
+      x: crabxxSpawn.x,
+      y: crabxxSpawn.y,
+      real_x: crabxxSpawn.x,
+      real_y: crabxxSpawn.y,
+      going_x: crabxxSpawn.x,
+      going_y: crabxxSpawn.y,
+    };
   }
 
   if (
