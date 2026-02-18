@@ -439,12 +439,30 @@ async function smartMove(
             throw new Error("Magiport unavailable, mage location unknown");
           }
 
-          if (mageEntity.map === segment.map && distance(segment, mageEntity) < 300) {
+          if (
+            mageEntity.map === segment.map &&
+            distance(segment, mageEntity) < 300
+          ) {
             send_cm(MAGE, "magiport");
             await sleep(character.ping * 6);
             if (distance(character, segment) < 300) continue;
           } else {
-            throw new Error(`Magiport unavailable, mage too far from blink destination: ${distance(segment, mageEntity)}`);
+            throw new Error(
+              `Magiport unavailable, mage too far from blink destination: ${distance(
+                segment,
+                mageEntity,
+              )}`,
+            );
+          }
+        } else {
+          if (
+            character.mp > G.skills["blink"].mp &&
+            !is_on_cooldown("blink") &&
+            character.map === segment.map
+          ) {
+            await use_skill("blink", [segment.x, segment.y]);
+            await sleep(character.ping * 0.7);
+            continue;
           }
         }
       }
