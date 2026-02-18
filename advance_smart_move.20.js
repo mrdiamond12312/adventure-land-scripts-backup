@@ -382,7 +382,7 @@ async function smartMove(
           map: toPosition.map,
           x: toPosition.x,
           y: toPosition.y,
-          method: "move",
+          method: "blink",
         });
       }
     }
@@ -425,6 +425,28 @@ async function smartMove(
       if (segment.method === "town") {
         await useTownWithRetry();
         continue;
+      }
+
+      if (segment.method === "blink") {
+        if (character.ctype !== "mage") {
+          const mageEntity = parent.caracAL
+            ? parent.caracAL.siblings.includes(MAGE)
+              ? get("mageLocation")
+              : undefined
+            : getCharacter(MAGE);
+
+          if (!mageEntity || mageEntity.Date.now() - mageInfo.time > 15_000) {
+            throw new Error("Magiport unavailable, mage location unknown");
+          }
+
+          if (mageEntity.map === segment.map && distance(segment, mageEntity) < 300) {
+            send_cm(MAGE, "magiport");
+            await sleep(character.ping * 6);
+            if (distance(character, segment) < 300) continue;
+          } else {
+            throw new Error(`Magiport unavailable, mage too far from blink destination: ${distance(segment, mageEntity)}`);
+          }
+        }
       }
     }
   } catch (e) {

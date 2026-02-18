@@ -838,7 +838,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   // CRABXX strategy: orbit the TANKER around the center of spawn
-  if (target?.mtype.includes("crabx") && isAssignedAsTanker()) {
+  if (target.type === "monster" && target?.mtype.includes("crabx") && isAssignedAsTanker()) {
     const crabxxSpawn = getMonsterSpawns("crabxx")[0];
     target = {
       ...target,
