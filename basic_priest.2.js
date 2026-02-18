@@ -1,5 +1,4 @@
 // Load basic functions from other code snippet
-
 if (parent.caracAL) {
   parent.caracAL
     .load_scripts([
@@ -15,233 +14,270 @@ if (parent.caracAL) {
   load_code(8);
 }
 
-// Kiting
+// Kiting & Global Config
 var originRangeRate = 0.5;
-var rangeRate = 0.5;
-const loopInterval = ((1 / character.frequency) * 1000) / 4;
+var rangeRate = originRangeRate;
+const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 4);
 
-async function fight(target) {
-  // Make Priest prior mobs without poison effect that attacking the party, to reduce their attack spped
+const reduceCd = (skillName) =>
+  reduce_cooldown(skillName, Math.min(...parent.pings));
+
+// Combat Logic
+
+async function fight(target, isDeterminedToHeal = false) {
   const partyDmgRecieved = avgPartyDmgTaken(partyMems);
   const characterBufferedRange = character.range + character.xrange;
+  const prioritizedCharacter = prioritizedNames();
+  const mobsInRange = Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity.type === "monster" &&
+        !entity.dead &&
+        distance(character, entity) <= characterBufferedRange,
+    )
+    .map((mob) => ({
+      ...mob,
+      cluster_count: numberOfMonsterAroundTarget(mob, 17),
+    }));
 
+  // Target Selection (Taunt & Debuff Logic)
   const targetToTaunt =
     isAssignedAsTanker() && currentStrategy === usePullStrategies
-      ? Object.values(parent.entities)
+      ? mobsInRange
           .filter(
             (mob) =>
-              mob.type === "monster" &&
-              !mob.dead &&
               !mob.target &&
-              is_in_range(mob, "attack") &&
               partyDmgRecieved + calculateDamage(mob, character) <
                 character.heal * 0.9 * character.frequency,
           )
           .sort(
-            (lhs, rhs) => distance(lhs, character) - distance(rhs, character),
+            (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
           )
           .shift()
       : null;
 
   const targetToAttack =
-    character.slots.orb?.name === "test_orb" && !target.cooperative
-      ? Object.values(parent.entities)
+    (character.slots.orb?.name === "test_orb" ||
+      character.slots.mainhand?.name === "oozingterror") &&
+    !target?.cooperative
+      ? mobsInRange
           .filter(
             (mob) =>
-              mob.type === "monster" &&
-              !mob.s.poisoned &&
-              !mob.dead &&
-              mob.hp &&
-              distance(character, mob) < characterBufferedRange &&
-              (parent.party_list && parent.party_list.length > 0
-                ? parent.party_list
-                : partyMems
-              ).includes(mob.target),
+              !mob.s.poisoned && prioritizedCharacter.includes(mob.target),
           )
-          .sort((lhs, rhs) => rhs.attack - lhs.attack)
-          .pop() ?? target
+          .sort((lhs, rhs) => {
+            if (rhs.attack === lhs.attack) {
+              return rhs.hp - lhs.hp;
+            }
+            return rhs.attack - lhs.attack;
+          })
+          .shift() ?? target
       : target;
+
   target = targetToTaunt ?? targetToAttack;
-  change_target(target);
+  if (target) change_target(target);
+
+  // Early Exit
+  if (!target) return;
 
   const promisesToAwait = [];
 
-  if (
-    target &&
-    !target.s.curse &&
-    character.mp > 1100 &&
-    !is_on_cooldown("curse") &&
-    is_in_range(target, "curse") &&
-    target.max_hp > 3000
-  )
+  // Curse Logic
+  const canCurse = !is_on_cooldown("curse") && character.mp > 1600;
+  const targetToCurse =
+    mobsInRange
+      .filter(
+        (mob) =>
+          !mob.s.curse &&
+          is_in_range(mob, "curse") &&
+          mob.max_hp > 3000 &&
+          prioritizedCharacter.includes(mob.target),
+      )
+      .sort((lhs, rhs) => {
+        if (lhs.cooperative !== rhs.cooperative) {
+          return lhs.cooperative ? -1 : 1;
+        }
+        if (lhs.cluster_count === rhs.cluster_count) return rhs.hp - lhs.hp;
+        return rhs.cluster_count - lhs.cluster_count;
+      })
+      .shift() ?? target;
+  if (canCurse && is_in_range(targetToCurse, "curse")) {
     promisesToAwait.push(
-      withTimeout(use_skill("curse", target), 2500).then(() =>
-        reduce_cooldown("curse", Math.min(...parent.pings)),
-      ),
-    );
-
-  if (
-    target &&
-    shouldAttack() &&
-    !is_on_cooldown("darkblessing") &&
-    character.mp > G.skills["darkblessing"].mp &&
-    !character.s?.darkblessing
-  )
-    promisesToAwait.push(
-      withTimeout(use_skill("darkblessing"), 2500).then(() =>
-        reduce_cooldown("darkblessing", Math.min(...parent.pings)),
-      ),
-    );
-
-  if (
-    !character.s.penalty_cd &&
-    ms_to_next_skill("attack") === 0 &&
-    distance(target, character) <
-      character.range +
-        character.xrange +
-        extraDistanceWithinHitbox(target) +
-        extraDistanceWithinHitbox(character) &&
-    shouldAttack()
-  ) {
-    set_message("Attacking");
-    promisesToAwait.push(
-      currentStrategy(target),
-      withTimeout(attack(target), 2500)
-        .then(() => {
-          reduce_cooldown("attack", Math.min(...parent.pings));
-        })
-        .catch((e) => {
-          attackErrorHandler(e);
-        }),
+      use_skill("curse", targetToCurse).then(() => reduceCd("curse")),
     );
   }
 
+  // Dark Blessing Logic
+  const canDarkBless =
+    !is_on_cooldown("darkblessing") &&
+    character.mp > G.skills["darkblessing"].mp;
+  if (canDarkBless && shouldAttack() && !character.s?.darkblessing) {
+    promisesToAwait.push(
+      use_skill("darkblessing").then(() => reduceCd("darkblessing")),
+    );
+  }
+
+  // Attack Logic
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  const isTargetInAttackRange =
+    distance(target, character) <= characterBufferedRange;
+
+  if (
+    !isAttackReady &&
+    isTargetInAttackRange &&
+    shouldAttack() &&
+    !isDeterminedToHeal
+  ) {
+    promisesToAwait.push(currentStrategy(target));
+  }
+
+  if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
+    set_message("Attacking");
+    promisesToAwait.push(
+      attack(target)
+        .then(() => reduceCd("attack"))
+        .catch((e) => attackErrorHandler(e)),
+    );
+  }
+
+  // Await All Actions
   try {
-    await withTimeout(Promise.all(promisesToAwait), 2500);
-  } catch (e) {}
+    await withTimeout(Promise.allSettled(promisesToAwait), 2500);
+  } catch (e) {
+    console.error(e);
+  }
 }
 
 async function priestBuff() {
   const promises = [];
-  const minPing = () => Math.min(...parent.pings);
 
-  // --- Single Target Heal (Attack Cooldown) ---
-  if (ms_to_next_skill("attack") === 0) {
-    const buffees = getPlayersToHeal();
+  // Heal Logic
+  const buffees = getPlayersToHeal();
+  const prioritizedBuffeesNames = prioritizedNames();
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
+  if (buffees.length !== 0) {
     for (const buffee of buffees) {
-      const characterBufferedRange = character.range + character.xrange * 0.9;
-      const distanceToTarget = distance(buffee, character);
+      const bufferedRange = character.range + character.xrange * 0.9;
+      const dist = distance(buffee, character);
 
-      // If too far, and a party member (prioritized), move closer.
-      if (
-        !smart.moving &&
-        distanceToTarget >= characterBufferedRange &&
-        prioritizedNames().includes(buffee.name)
-      ) {
-        // To the midpoint between the priest and the target
-        promises.push(
-          move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
-        );
-        set_message("Moving to heal " + buffee.name);
-        continue; // Stop and wait for movement
+      if (!isAttackReady) {
+        promises.push(currentStrategy(buffee));
+        break;
       }
 
-      // If in range, heal and stop the loop.
-      if (distanceToTarget < characterBufferedRange) {
-        try {
-          promises.push(currentStrategy(buffee));
+      if (
+        !smart.moving &&
+        !isAdvanceSmartMoving &&
+        dist >= bufferedRange &&
+        prioritizedBuffeesNames.includes(buffee.name)
+      ) {
+        const middleX = (buffee.x + character.x) / 2;
+        const middleY = (buffee.y + character.y) / 2;
+        if (parent.caracAL)
           promises.push(
-            withTimeout(
-              heal(buffee).then(() => {
-                reduce_cooldown("attack", minPing());
-              }),
-            ),
+            advanceSmartMove({
+              map: character.map,
+              x: middleX,
+              y: middleY,
+            }),
           );
-          set_message("Heal " + buffee.name);
-        } catch (e) {
-          // console.error("Heal failed:", e);
-        }
-        break; // Heal one target and wait for the next attack cooldown
+        else if (can_move_to(middleX, middleY))
+          promises.push(
+            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
+          );
+        else advanceSmartMove({ map: character.map, x: buffee.x, y: buffee.y });
+        set_message(`Moving to ${buffee.name}`);
+        continue;
+      }
+
+      if (dist < bufferedRange && isAttackReady) {
+        set_message(`Heal ${buffee.name}`);
+        promises.push(heal(buffee).then(() => reduceCd("attack")));
+        break;
       }
     }
   }
 
-  // --- Party Heal Logic ---
-  const allies = parent.party_list
+  // Party Heal Logic
+  const allies = (parent.party_list || [])
     .map((name) => get_entity(name))
-    .filter((visible) => visible);
+    .filter((entity) => entity);
+  const modInjuredThreshold = character.level * 20;
 
-  if (!is_on_cooldown("partyheal") && character.mp > 1000 && allies.length) {
-    // Condition for Party Heal:
-    // any ally is critically low (under 30% HP) OR out of single-heal range while moderately injured.
-    // OR All allies are moderately injured (HP < max_hp - character.level * 20).
-    const moderatelyInjuredThreshold = character.level * 20;
-
+  if (
+    !is_on_cooldown("partyheal") &&
+    character.mp > G.skills["partyheal"].mp + 400 &&
+    allies.length
+  ) {
     const shouldPartyHeal =
       allies.some(
-        (ally) =>
-          ally.hp < ally.max_hp * 0.3 || // Critically low
-          (ally.hp < ally.max_hp - moderatelyInjuredThreshold &&
-            !is_in_range(ally, "heal")), // Moderately low & out of range
+        (lhs) =>
+          lhs.hp < lhs.max_hp * 0.3 ||
+          (lhs.hp < lhs.max_hp - modInjuredThreshold &&
+            !is_in_range(lhs, "heal")),
       ) ||
-      allies.every(
-        (ally) => ally.hp < ally.max_hp - moderatelyInjuredThreshold, // All moderately low
-      );
+      (allies.every((lhs) => lhs.hp < lhs.max_hp - modInjuredThreshold * 5) &&
+        allies.length > 1);
 
     if (shouldPartyHeal) {
-      use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", minPing()),
-      );
+      use_skill("partyheal").then(() => reduceCd("partyheal"));
       set_message("Party Heal");
     }
   }
 
-  // --- Absorb Skill Logic ---
-  const vulnerableMembers = partyMems.filter(
-    (member) => member !== character.name && member !== TANKER,
+  // Absorb Skill Logic
+  const vulnerableMems = [...partyMems, partyMerchant].filter(
+    (memberId) => memberId !== character.name && memberId !== TANKER,
   );
-
-  for (const memberName of vulnerableMembers) {
-    const member = get_entity(memberName);
-    if (!member) continue;
-
-    const monstersTargetingMember = Object.values(parent.entities).filter(
-      (entity) => entity.type === "monster" && entity.target === memberName,
-    );
-
-    const requiredMonsterCount = isAssignedAsTanker() ? 1 : 2;
-
+  for (const memberId of vulnerableMems) {
+    const member = get_entity(memberId);
     if (
-      is_in_range(member, "absorb") &&
+      member &&
       !is_on_cooldown("absorb") &&
-      character.mp >= G.skills["absorb"].mp &&
-      monstersTargetingMember.length >= requiredMonsterCount
+      is_in_range(member, "absorb") &&
+      character.mp >= G.skills["absorb"].mp + 200
     ) {
-      use_skill("absorb", member);
-      set_message("Absorb " + memberName);
-      break; // Absorb one target and move on
+      const hasAggro = Object.values(parent.entities).some(
+        (e) => e.target === memberId,
+      );
+      if (hasAggro) {
+        use_skill("absorb", member);
+        set_message(`Absorb ${memberId}`);
+        break;
+      }
     }
   }
-
-  return withTimeout(Promise.all(promises), 750);
+  try {
+    await withTimeout(Promise.allSettled(promises), 2500);
+  } catch (e) {
+    console.error(e);
+    return false;
+  }
+  return buffees.length > 0;
 }
 
+// Specialized Loops
 async function zapperLoop() {
+  const zapCd = ms_to_next_skill("zapperzap");
+  const hasZapper =
+    character.slots.ring1?.name === "zapper" ||
+    character.slots.ring2?.name === "zapper";
+
   if (
-    ms_to_next_skill("zapperzap") !== 0 ||
+    zapCd !== 0 ||
     character.mp < character.max_mp * 0.6 ||
     character.penalty_cd ||
-    character.cc > 100 ||
-    (character.slots.ring1?.name !== "zapper" &&
-      character.slots.ring2?.name !== "zapper")
-  )
-    return setTimeout(zapperLoop, Math.max(ms_to_next_skill("zapperzap"), 50));
+    !hasZapper ||
+    Object.keys(character.c).length
+  ) {
+    return setTimeout(zapperLoop, Math.max(zapCd, 50));
+  }
 
   try {
-    const promisesToAwait = [];
-    const isTanking = isAssignedAsTanker();
-    const targetInSight = Object.values(parent.entities)
+    const targets = Object.values(parent.entities)
       .filter(
         (entity) =>
           entity.type === "monster" &&
@@ -253,46 +289,33 @@ async function zapperLoop() {
       )
       .map((entity) => ({
         ...entity,
-        distance: distance(entity, character),
-        hp_percent: entity.hp / entity.max_hp,
-        weak: entity.max_hp < 1000,
-      }));
-
-    if (isTanking) {
-    } else {
-      const sortedTargets = targetInSight.sort((lhs, rhs) => {
-        const lhsHasTarget = Boolean(lhs.target);
-        const rhsHasTarget = Boolean(rhs.target);
-        if (lhsHasTarget !== rhsHasTarget) return lhsHasTarget ? -1 : 1;
-
-        // higher hp% mobs first to balance the aoe cluster
-        if (lhsHasTarget && rhsHasTarget) {
-          if (lhs.hp_percent !== rhs.hp_percent)
-            return rhs.hp_percent - lhs.hp_percent;
-          else return rhs.distance - lhs.distance;
-        }
-
-        // sort weak mobs among other mob if above criterias not met
-        if (lhs.weak !== rhs.weak) return lhs.weak ? -1 : 1;
-
-        // fallback: furthest ones
-        return rhs.distance - lhs.distance;
+        dist: distance(entity, character),
+        hp_p: entity.hp / entity.max_hp,
+        weak: entity.max_hp < 2000,
+      }))
+      .sort((lhs, rhs) => {
+        if (!!lhs.target !== !!rhs.target) return lhs.target ? -1 : 1;
+        if (lhs.target && rhs.target)
+          return lhs.hp_p !== rhs.hp_p
+            ? rhs.hp_p - lhs.hp_p
+            : rhs.dist - lhs.dist;
+        return lhs.weak !== rhs.weak
+          ? lhs.weak
+            ? -1
+            : 1
+          : rhs.dist - lhs.dist;
       });
-      if (sortedTargets) {
-        const zapTarget = sortedTargets[0];
-        promisesToAwait.push(
-          use_skill("zapperzap", zapTarget).then(() =>
-            reduce_cooldown("zapperzap", Math.min(...parent.pings)),
-          ),
-        );
-      }
+
+    if (targets.length) {
+      use_skill("zapperzap", targets[0]).then(() => reduceCd("zapperzap"));
     }
-    await withTimeout(Promise.all(promisesToAwait), 500);
   } catch (e) {
-    console.log("Error while zapping: ", e);
+    console.log("Zap Error:", e);
   }
   setTimeout(zapperLoop, Math.max(ms_to_next_skill("zapperzap"), 50));
 }
+
+// Main Control Loop
 
 async function mainLoop() {
   try {
@@ -300,51 +323,55 @@ async function mainLoop() {
 
     if (character.rip) {
       respawn();
-      throw new Error("Character's down", {
-        cause: "death",
-      });
+      throw new Error("Character down", { cause: "death" });
     }
 
-    await priestBuff();
+    // Costume & Cape Logic
+    if (!character.skin || character.skin !== "snow_angel") {
+      if (character.slots.cape?.name !== "angelwings") {
+        await equipBatch({ cape: "angelwings" });
+      }
+      if (character.slots.cape?.name === "angelwings") {
+        parent.socket.emit("activate", { slot: "cape" });
+      }
+    }
 
-    if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
-      throw new Error("Smart moving", {
-        cause: "smart_move",
-      });
+    const isDeterminedToHeal = await priestBuff();
 
+    const isMovingControlled =
+      (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
+    if (isMovingControlled) {
+      throw new Error("Smart moving", { cause: "smart_move" });
+    }
+
+    // Target Selection
     let target = getTarget();
+    if (get("cryptInstance")) {
+      target = await useCryptStrategy(target);
+    } else {
+      target = await changeToDailyEventTargets();
+    }
 
-    //// THE CRYPT & EVENTS
-    if (get("cryptInstance")) target = await useCryptStrategy(target);
-    else target = await changeToDailyEventTargets();
-
-    //// Logic to targets and farm places
+    // Movement Logic
     if (!target) {
-      if (
-        !smart.moving &&
-        !isAdvanceSmartMoving &&
-        get("cryptInstance") &&
-        character.map !== "crypt"
-      ) {
+      const cryptKey = get("cryptInstance");
+      const isPartyLeaderOrAlone =
+        partyMems[0] === character.name || !get_entity(partyMems[0]);
+      const isFarFromFarm =
+        distance(character, { x: mapX, y: mapY, map }) > 500;
+
+      if (cryptKey && character.map !== "crypt") {
         changeToNormalStrategies();
         advanceSmartMove(CRYPT_STARTING_LOCATION);
-      } else if (
-        !smart.moving &&
-        !get("cryptInstance") &&
-        (partyMems[0] == character.name ||
-          !get_entity(partyMems[0]) ||
-          distance(character, { x: mapX, y: mapY, map }) > 500)
-      ) {
+      } else if (!cryptKey && (isPartyLeaderOrAlone || isFarFromFarm)) {
         changeToNormalStrategies();
-        advanceSmartMove({
-          map,
-          x: mapX,
-          y: mapY,
-        });
+        advanceSmartMove({ map, x: mapX, y: mapY });
       }
-    } else await fight(target);
+    } else {
+      await fight(target, isDeterminedToHeal);
+    }
   } catch (e) {
-    console.error(e);
+    if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
   }
 
   setTimeout(mainLoop, getLoopInterval());

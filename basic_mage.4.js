@@ -15,7 +15,7 @@ if (parent.caracAL) {
 }
 
 // Kiting
-var originRangeRate = 0.85;
+var originRangeRate = 0.4;
 rangeRate = originRangeRate;
 const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 4);
 
@@ -34,6 +34,7 @@ async function fight(target) {
           entity.type === "monster" &&
           entity.target && // Must be aggroed
           !entity.dead &&
+          !entity.s?.fullguardx &&
           !haveFormidableMonsterAroundTarget(entity) &&
           distance(entity, character) <= attackRange,
       )
@@ -45,18 +46,21 @@ async function fight(target) {
 
     if (aggroedMobs.length) {
       // Sort: Find the best mob to target for cluster damage
-      const bestPullTarget = aggroedMobs
+      const bestTarget = aggroedMobs
         .sort((lhs, rhs) => {
-          // 1. Prioritize highest cluster count
+          if (lhs.cooperative !== rhs.cooperative) {
+            return lhs.cooperative ? -1 : 1;
+          }
+          // Prioritize highest cluster count
           if (lhs.cluster_count !== rhs.cluster_count) {
             return rhs.cluster_count - lhs.cluster_count;
           }
-          // 2. If cluster counts are equal, prioritize highest HP to apply max damage
+          // If cluster counts are equal, prioritize highest HP to apply max damage
           return rhs.hp - lhs.hp;
         })
         .shift(); // Get the first (best) target
 
-      target = bestPullTarget ?? target;
+      target = bestTarget ?? target;
       change_target(target);
     }
   }
@@ -91,17 +95,25 @@ async function fight(target) {
 
     if (energizeTarget) {
       promisesToAwait.push(
-        use_skill("energize", energizeTarget).then(() => reduceCd("energize")),
+        use_skill(
+          "energize",
+          energizeTarget,
+          Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
+        )
+          .then(() => reduceCd("energize"))
+          .catch((e) => attackErrorHandler(e)),
       );
     }
   }
 
-  // --- Attack Logic ---
+  if (!isAttackReady && isTargetInAttackRange && shouldAttack()) {
+    promisesToAwait.push(currentStrategy(target));
+  }
 
   if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
     set_message("Attacking");
     promisesToAwait.push(
-      currentStrategy(target), // Assumes currentStrategy includes moving/kiting logic
+      // currentStrategy(target),
       attack(target)
         .then(() => reduceCd("attack"))
         .catch((e) => {
@@ -112,17 +124,17 @@ async function fight(target) {
 
   // --- Await and Error Handling ---
   try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
+    await withTimeout(Promise.all(promisesToAwait), 1000);
   } catch (e) {
     console.log(e);
   }
 
   // --- Reflection Logic ---
   const isMagicalTarget = target["damage_type"] === "magical";
-  const canReflect = !is_on_cooldown("reflection") && character.mp > 1000;
+  const canUseReflection = !is_on_cooldown("reflection") && character.mp > 1000;
   const targetAggroesParty = partyMems.includes(target.target);
 
-  if (isMagicalTarget && canReflect && targetAggroesParty) {
+  if (isMagicalTarget && canUseReflection && targetAggroesParty) {
     use_skill("reflection", get_entity(target.target)).then(() =>
       reduceCd("reflection"),
     );
@@ -166,6 +178,7 @@ async function mainLoop() {
         map: character.map,
         x: character.x,
         y: character.y,
+        time: Date.now(),
       });
     }
 
@@ -194,11 +207,11 @@ async function mainLoop() {
       const needsToEnterCrypt = cryptKey && character.map !== "crypt";
       const isPartyLeaderOrAlone =
         TANKER === character.name || !get_entity(TANKER);
-      const isFarFromPartyLeader =
+      const isFarFromFarmingSpot =
         distance(character, { x: mapX, y: mapY, map }) > 500;
 
       const needsToMoveToFarmLocation =
-        !cryptKey && (isPartyLeaderOrAlone || isFarFromPartyLeader);
+        !cryptKey && (isPartyLeaderOrAlone || isFarFromFarmingSpot);
 
       if (needsToEnterCrypt) {
         // Move to Crypt start if a crypt instance is active but we aren't there

@@ -20,13 +20,19 @@ var originRangeRate = 0.95;
 rangeRate = originRangeRate;
 
 async function fight(target) {
+  const inRange = (entity) =>
+    distance(entity, character) < character.range + character.xrange;
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+
   if (currentStrategy === usePullStrategies) {
     const allAggroedByParty = Object.values(parent.entities)
       .filter(
         (entity) =>
           entity.type === "monster" &&
           ([...partyMems, ...parent.party_list].includes(entity.target) ||
-            (entity.cooperative && entity.target)),
+            (entity.cooperative && entity.target)) &&
+          inRange(entity),
       )
       .sort((lhs, rhs) => {
         const lhsHpPercentage = lhs.hp / lhs.max_hp;
@@ -49,19 +55,16 @@ async function fight(target) {
 
   const promisesToAwait = [];
 
-  if (
-    ms_to_next_skill("attack") === 0 &&
-    !character.s.penalty_cd &&
-    distance(target, character) < character.range + character.xrange &&
-    shouldAttack()
-  ) {
+  if (!isAttackReady && inRange(target) && shouldAttack())
+    promisesToAwait.push(currentStrategy(target));
+
+  if (isAttackReady && inRange(target) && shouldAttack()) {
     if (!ms_to_next_skill("invis")) {
       use_skill("invis").then(() =>
         reduce_cooldown("invis", Math.min(...parent.pings)),
       );
     }
     promisesToAwait.push(
-      currentStrategy(target),
       withTimeout(attack(target), 2500)
         .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
         .catch((e) => {
@@ -90,7 +93,7 @@ async function fuaLoop() {
       .filter(
         (entity) =>
           entity.type === "character" &&
-          (!entity.s.rspeed || entity.s.rspeed.ms < 2.1e6) &&
+          (!entity.s.rspeed || entity.s.rspeed.ms < 2.22e6) &&
           is_in_range(entity, "rspeed"),
       )
       .sort((lhs, rhs) => {
@@ -104,7 +107,9 @@ async function fuaLoop() {
       ms_to_next_skill("rspeed") === 0 &&
       character.mp > G.skills["rspeed"].mp
     ) {
-      use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift());
+      promisesToAwait.push(
+        use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift()),
+      );
     }
 
     if (
@@ -177,7 +182,7 @@ async function mainLoop() {
         !smart.moving &&
         !isAdvanceSmartMoving &&
         !get("cryptInstance") &&
-        (partyMems[0] == character.name ||
+        (partyMems[0] === character.name ||
           !get_entity(partyMems[0]) ||
           distance(character, { x: mapX, y: mapY, map }) > 500)
       ) {

@@ -39,7 +39,8 @@ const bosses = {
 async function fight(target) {
   const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
   const attackRange = character.range + character.xrange;
-  const inRange = (entity) => distance(entity, character) < attackRange;
+  const inRange = (entity, mult = 1) =>
+    distance(entity, character) < attackRange * mult;
 
   const haveIgnoreMobAroundTarget = (targetMob) => {
     return mobsListAroundTarget(targetMob, blastRadius).some((mob) =>
@@ -48,19 +49,19 @@ async function fight(target) {
   };
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
-  if (currentStrategy === usePullStrategies) {
+  if (currentStrategy === usePullStrategies && !target?.mtype.includes("crabx")) {
     const aggroedMobs = Object.values(parent.entities)
       .filter((entity) => {
         return (
           entity.type === "monster" &&
+          !entity.s?.fullguardx &&
           !MELEE_IGNORE_LIST.includes(entity.mtype) &&
           entity.target &&
           !haveFormidableMonsterAroundTarget(entity) &&
-          inRange(entity) &&
+          inRange(entity, 2) &&
           !haveIgnoreMobAroundTarget(entity)
         );
       })
-      // Optimization: Pre-calculate the cluster count BEFORE sorting
       .map((mob) => {
         mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
         return mob;
@@ -105,22 +106,28 @@ async function fight(target) {
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
+  if (!isAttackReady && inRange(target) && shouldAttack()) {
+    promisesToAwait.push(currentStrategy(target));
+  }
+
   if (isAttackReady && inRange(target) && shouldAttack()) {
     set_message("Attacking");
 
     // Main attack execution
     promisesToAwait.push(
-      currentStrategy(target),
       attack(target)
-        .then(() => reduceCd("attack")) // <-- Use reduceCd()
-        .catch((e) => attackErrorHandler(e)),
+        .then(() => {
+          // attackSpeedCompensate(attackFrequencyBeforeComponsate);
+          reduceCd("attack");
+        })
+        .catch((e) => attackErrorHandler(e, target)),
     );
 
     // Offhand swap logic: Use Candy Canes for farming
     const shouldUseCandyCanes =
       character.ping < 1000 &&
+      !isCleaving &&
       !character.s.sugarrush &&
-      !isEquipingItems &&
       (character.slots.offhand?.name === "fireblade" ||
         character.slots.mainhand?.name === "fireblade") &&
       character.slots.offhand?.name !== "mshield" &&
@@ -134,18 +141,24 @@ async function fight(target) {
         isEquipingItems = true;
         const equipPromise = Promise.all([
           // Immediate equip
-          Promise.all([
-            equip(candycane1, "mainhand"),
-            equip(candycane2, "offhand"),
+          equip_batch([
+            { num: candycane1, slot: "mainhand" },
+            { num: candycane2, slot: "offhand" },
           ]),
 
           // Delayed re-equip
           new Promise((resolve) => {
             setTimeout(() => {
               resolve(
-                Promise.all([
-                  equip(candycane1, "mainhand"),
-                  equip(candycane2, "offhand"),
+                equip_batch([
+                  {
+                    num: candycane1,
+                    slot: "mainhand",
+                  },
+                  {
+                    num: candycane2,
+                    slot: "offhand",
+                  },
                 ]),
               );
             }, 150);
@@ -185,7 +198,7 @@ async function fight(target) {
   }
 
   // Warrior Stomp (Basher logic)
-  const hasBasherEquipped = locate_item("basher") !== -1;
+  const hasBasherInInventory = locate_item("basher") !== -1;
   const partyHasInjured = (
     parent.party_list.length ? parent.party_list : [character]
   )
@@ -193,7 +206,7 @@ async function fight(target) {
     .filter((entity) => entity)
     .some((player) => player.hp < player.max_hp * 0.4);
 
-  if (hasBasherEquipped && partyHasInjured) {
+  if (hasBasherInInventory && partyHasInjured) {
     promisesToAwait.push(warriorStomp());
   }
 
@@ -209,10 +222,9 @@ async function fight(target) {
     const mobsTargetingAlly = Object.values(parent.entities).find(
       (mob) =>
         mob.type === "monster" &&
-        partyMems.some(
+        [...partyMems, partyMerchant].some(
           (ally) => ally !== character.name && mob.target === ally,
         ) &&
-        mob.attack > 120 && // Mob is dangerous enough
         calculateDamage(mob, character) < 1800 && // Warrior can take the damage
         !mob.cooperative &&
         is_in_range(mob, "taunt"),
@@ -230,6 +242,7 @@ async function fight(target) {
     const shouldTauntTarget =
       !target.target ||
       (target.target !== character.name &&
+        partyMems.includes(target.target) &&
         target.attack < 1500 &&
         !target.cooperative &&
         is_in_range(target, "taunt"));
@@ -264,7 +277,7 @@ async function fight(target) {
 
   // --- Await and Error Handling ---
   try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
+    await withTimeout(Promise.all(promisesToAwait), 1000);
   } catch (e) {
     console.error("Error while attacking", e);
   }
@@ -274,11 +287,15 @@ async function cleaveLoop() {
   try {
     const shouldCleave =
       smart.moving ||
-      ms_to_next_skill("attack") > 50 ||
+      ms_to_next_skill("attack") > 0 ||
       distance(character, get_targeted_monster()) >
         character.range + character.xrange * 1.1;
 
-    if (shouldCleave) {
+    if (
+      shouldCleave &&
+      character.mp > 1720 &&
+      !Object.keys(character.c).length
+    ) {
       await withTimeout(
         warriorCleave(
           currentStrategy === usePullStrategies ? "pull" : "normal",
@@ -299,7 +316,10 @@ if (!parent.caracAL) cleaveLoop();
 async function mainLoop() {
   try {
     // --- Initialization and Status Checks ---
-    desiredElixir = isAssignedAsTanker() ? "elixirluck" : "pumpkinspice";
+    desiredElixir =
+      isAssignedAsTanker() && avgDmgTaken(character) > 300
+        ? "elixirluck"
+        : "pumpkinspice";
     assignRoles();
 
     // Use Charge if moving (for speed boost)
@@ -345,12 +365,12 @@ async function mainLoop() {
         get("cryptInstance") && character.map !== "crypt";
       const isPartyLeaderOrAlone =
         partyMems[0] === character.name || !get_entity(partyMems[0]);
-      const isFarFromPartyLeader =
+      const isFarFromFarmingSpot =
         distance(character, { x: mapX, y: mapY, map }) > 500;
 
       // Only move to farm location if not doing crypt and either the leader/alone or far away.
       const needsToMoveToFarmLocation =
-        !get("cryptInstance") && (isPartyLeaderOrAlone || isFarFromPartyLeader);
+        !get("cryptInstance") && isPartyLeaderOrAlone && isFarFromFarmingSpot;
 
       if (needsToEnterCrypt) {
         advanceSmartMove(CRYPT_STARTING_LOCATION);

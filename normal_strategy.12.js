@@ -45,7 +45,7 @@ async function useNormalStrategy(target) {
           (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
         )
       ) {
-        promises.push(equipBatch(suggestedRangerItems));
+        promises.push(equipBatch(suggestedRangerItems, character.slots.mainhand?.name === "cupid"));
       }
       break;
 

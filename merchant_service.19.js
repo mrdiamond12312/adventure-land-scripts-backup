@@ -14,7 +14,6 @@ character.on("cm", async function ({ name, message }) {
   } else return;
 
   equipBroom();
-  // const sender = get_characters().find(character => character.name === name);
 
   switch (message.msg) {
     case "inv_full":
@@ -152,4 +151,72 @@ async function openCryptInstance() {
 
   onDuty = false;
   return;
+}
+
+var isLuringMobs = false;
+const trustedPartners = ["earthPriest", "earthWar"];
+
+async function lureMechaGnome() {
+  if (
+    isLuringMobs ||
+    onDuty ||
+    serverCurrentlyHasLiveEvent() ||
+    (!(
+      parent.party_list &&
+      trustedPartners.some((name) => parent.party_list.includes(name))
+    ) &&
+      !parent.caracAL.siblings.includes(PRIEST))
+  ) {
+    return setTimeout(lureMechaGnome, 500);
+  }
+
+  // Global flags to prevent other tasks from interrupting
+  onDuty = true;
+  isLuringMobs = true; // Prevent scareAwayMobs
+
+  let nextDelay = 500;
+
+  try {
+    close_stand();
+    await smartMove({ map: "cyberland" });
+    await sleep(character.ping);
+
+    const gnomesNearby = Object.values(parent.entities).filter(
+      (entity) =>
+        entity && entity.type === "monster" && entity.mtype === "mechagnome",
+    );
+
+    if (!gnomesNearby.length) {
+      nextDelay = 45_000;
+      throw new Error("No mechagnome found");
+    } else nextDelay = 150_000;
+
+    const mageResponse = await waitUntil(() => {
+      const mageInfo = get("mageLocation");
+      if (!mageInfo) return false;
+      return (
+        mageInfo.mp >= G.skills["magiport"].mp + 100 &&
+        Date.now() - mageInfo.time < 15_000 &&
+        distance(mageInfo, { map: map, x: mapX, y: mapY }) < 300
+      );
+    }, 10_000);
+
+    if (!mageResponse) {
+      nextDelay = 15_000;
+      throw new Error("Mage did not have mana / not online");
+    }
+
+    parent.socket.emit("eval", { command: "mooooooh" });
+    await advanceSmartMove(get("mageLocation"), { useScare: false });
+  } catch (e) {
+    console.error(e);
+  } finally {
+    isLuringMobs = false;
+    onDuty = false;
+    setTimeout(lureMechaGnome, nextDelay);
+  }
+}
+
+if (!parent.caracAL) {
+  lureMechaGnome();
 }

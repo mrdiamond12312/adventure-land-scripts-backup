@@ -1,4 +1,4 @@
-// Load basic functions from other code snippet (unchanged)
+// Load basic functions from other code snippet
 if (parent.caracAL) {
   parent.caracAL
     .load_scripts([
@@ -13,17 +13,15 @@ if (parent.caracAL) {
   load_code(8);
 }
 
-// Kiting (unchanged)
-var originRangeRate = 0.85;
+// Kiting
+var originRangeRate = 0.6;
 rangeRate = originRangeRate;
 
-// --- Helper Functions ---
+// Utils
 const isWeak = (monster) =>
   monster.hp < calculateDamage(character, monster) * 0.9 || monster.target;
 const isCooperative = (monster) => monster.cooperative;
 const isMob = (entity) => entity.type === "monster";
-
-// 1. Reusable Cooldown Reduction
 const reduceCd = (skillName) =>
   reduce_cooldown(skillName, Math.min(...parent.pings));
 
@@ -31,22 +29,22 @@ const tryMultiShot = async (skill, entityList) => {
   if (entityList.length === 0) return false;
   set_message(`${skill} Shooting`);
   return use_skill(skill, entityList)
-    .then(() => reduceCd(skill)) // Use reduceCd for the skill (was incorrectly hardcoded to "attack")
+    .then(() => reduceCd("attack"))
     .catch((e) => attackErrorHandler(e));
 };
 
 async function fight(target) {
-  if (ms_to_next_skill("attack") > 0) return;
-
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
   const canMultiShot = !character.fear;
   const inRange = (entity) => distance(entity, character) < nearRange;
   const nearRange = character.range + character.xrange;
   const explosionRadius = character.explosion
     ? character.explosion / 3.6
     : BLAST_RADIUS;
-  const notCupid = character.slots.mainhand?.name !== "cupid";
   const entitiesInVision = Object.values(parent.entities);
-  const promisesToAwait = []; // --- Target Selection & Optimization ---
+  const promisesToAwait = [];
+  const isCupid = character.slots.mainhand?.name === "cupid";
 
   const potentialTargets = entitiesInVision
     .filter(
@@ -62,7 +60,7 @@ async function fight(target) {
           entity.target),
     )
     .map((entity) => {
-      // Optimization: Pre-calculate cluster count and distance once
+      // Optimization: Pre-calculate cluster count and distance
       entity.cluster_count = numberOfMonsterAroundTarget(
         entity,
         explosionRadius,
@@ -76,16 +74,16 @@ async function fight(target) {
       if (rhs.cooperative || (rhs.target && !lhs.target)) return 1;
 
       return (
-        // 1. Maximize Cluster Count (Highest First: rhs - lhs)
-        rhs.cluster_count - lhs.cluster_count || // 2. Minimize HP (Lowest First: lhs - rhs) <-- Corrected from your initial code
-        lhs.hp - rhs.hp || // 3. Minimize Distance (Lowest First: lhs - rhs) <-- Corrected from your initial code
+        // Sort by cluster count
+        rhs.cluster_count - lhs.cluster_count ||
+        lhs.hp - rhs.hp ||
         lhs.distance - rhs.distance
       );
     });
 
-  const weakMobs = potentialTargets.filter(isWeak); // --- Target Acquisition ---
+  const weakMobs = potentialTargets.filter(isWeak);
 
-  if (currentStrategy === usePullStrategies && potentialTargets.length) {
+  if (potentialTargets.length && !target?.mtype.includes("crabx")) {
     target = potentialTargets[0];
     change_target(target);
   } // Reacquire target if feared
@@ -98,11 +96,12 @@ async function fight(target) {
     if (aggroing) target = aggroing;
   }
 
-  // --- Huntersmark ---
+  // Huntersmark
+  // TODO: Put in a seperate loop to narrow the gap between marks
   const canHuntersMark =
     target &&
     !target.s?.marked &&
-    character.mp > 300 &&
+    character.mp > 300 + 1000 &&
     !is_on_cooldown("huntersmark") &&
     target.hp > 3000;
   if (canHuntersMark) {
@@ -111,43 +110,66 @@ async function fight(target) {
     );
   }
 
-  // --- Attack Priority: 5shot > 3shot > single ---
+  // 5shot > 3shot > single
   const hpOk = character.hp > character.max_hp * 0.55;
+  const mobsTo5Shot = weakMobs.slice(0, 5);
   const is5ShotReady =
     character.level >= G.skills["5shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp &&
-    weakMobs.length >= 4;
+    character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 1000 &&
+    weakMobs.length >= 4 &&
+    mobsTo5Shot.every((mob) => shouldAttack(mob));
+
+  const mobsTo3Shot = potentialTargets.slice(0, 3);
   const is3ShotReady =
     character.level >= G.skills["3shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp &&
-    potentialTargets.length >= 2;
+    character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 1000 &&
+    potentialTargets.length >= 2 &&
+    mobsTo3Shot.every((mob) => shouldAttack(mob));
 
   if (is5ShotReady) {
-    const mobsTo5Shot = weakMobs.slice(0, 5);
-    promisesToAwait.push(currentStrategy(mobsTo5Shot));
-    if (notCupid) promisesToAwait.push(tryMultiShot("5shot", mobsTo5Shot));
+    if (!isAttackReady) promisesToAwait.push(currentStrategy(mobsTo5Shot));
+    else if (!isCupid) promisesToAwait.push(tryMultiShot("5shot", mobsTo5Shot));
+    else {
+      promisesToAwait.push(
+        currentStrategy(mobsTo5Shot),
+        tryMultiShot("5shot", potentialTargets.slice(0, 5)),
+      );
+    }
   } else if (is3ShotReady) {
-    const mobsTo3Shot = potentialTargets.slice(0, 3);
-    promisesToAwait.push(currentStrategy(mobsTo3Shot));
-    if (notCupid)
+    if (!isAttackReady) promisesToAwait.push(currentStrategy(mobsTo3Shot));
+    else if (!isCupid)
       promisesToAwait.push(tryMultiShot("3shot", potentialTargets.slice(0, 3)));
+    else
+      promisesToAwait.push(
+        currentStrategy(mobsTo3Shot),
+        tryMultiShot("3shot", mobsTo3Shot),
+      );
   } else if (target && distance(target, character) < nearRange) {
     set_message("Shooting");
-    promisesToAwait.push(currentStrategy(target));
-    if (notCupid)
+    if (!isAttackReady) promisesToAwait.push(currentStrategy(target));
+    else if (!isCupid)
       promisesToAwait.push(
-        attack(target)
+        use_skill("attack", target)
+          .then(() => reduceCd("attack"))
+          .catch((e) => attackErrorHandler(e)),
+      );
+    // Base case for Cupid: both attack and currentStrategy
+    else
+      promisesToAwait.push(
+        currentStrategy(target),
+        use_skill("attack", target)
           .then(() => reduceCd("attack"))
           .catch((e) => attackErrorHandler(e)),
       );
   }
 
-  // --- Supershot ---
-  const canSuperShot = character.mp > 400 && !is_on_cooldown("supershot");
+  // Supershot
+  const canSuperShot =
+    character.mp > 400 + 1000 && !is_on_cooldown("supershot");
 
   if (canSuperShot) {
     const coopTarget = target?.cooperative
@@ -175,20 +197,20 @@ async function fight(target) {
       );
   }
 
-  // --- Await and Error Handling ---
+  // Await and Error Handling
   try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1500);
+    await withTimeout(Promise.all(promisesToAwait), 1500);
   } catch (e) {
     console.log(e);
   }
 }
 
-// --- Cupid Heal Logic (Refactored) ---
+// Cupid Logic :cow2:
 async function cupidHeal(playersToHeal) {
-  const isAttackOnCD = ms_to_next_skill("attack") > 0;
+  const isAttackOnCD = ms_to_next_skill("attack") > 0 || character.s.penalty_cd;
   const hasCupid =
     locate_item("cupid") !== -1 || character.slots.mainhand?.name === "cupid";
-  if (isAttackOnCD || !hasCupid) return;
+  if (!hasCupid) return;
 
   const characterRange = character.range + character.xrange;
   const lowHealthPlayersInRange = playersToHeal.filter(
@@ -201,61 +223,71 @@ async function cupidHeal(playersToHeal) {
 
   if (lowHealthPlayersInRange.length > 0) {
     // Equipping Cupid first
-    if (character.slots.mainhand?.name !== "cupid")
-      promisesToAwait.push(equip(findMaxLevelItem("cupid")));
-
-    // Determine the best shot for healing
-    const mpCost = G.skills["huntersmark"].mp;
-    const is5ShotReady =
-      character.level >= G.skills["5shot"].level &&
-      lowHealthPlayersInRange.length >= 4 &&
-      character.mp > G.skills["5shot"].mp + mpCost &&
-      !character.fear;
-    const is3ShotReady =
-      character.level >= G.skills["3shot"].level &&
-      lowHealthPlayersInRange.length >= 2 &&
-      character.mp > G.skills["3shot"].mp + mpCost &&
-      !character.fear;
-
-    let healingTarget = null;
-    let skillName = "attack";
-    let sliceAmount = 1;
-
-    if (is5ShotReady) {
-      skillName = "5shot";
-      sliceAmount = 5;
-    } else if (is3ShotReady) {
-      skillName = "3shot";
-      sliceAmount = 3;
-    } else {
-      // Single shot fallback
-      healingTarget = lowHealthPlayersInRange[0];
+    if (character.slots.mainhand?.name !== "cupid") {
+      const rangerItems = calculateRangerItems(lowHealthPlayersInRange);
+      promisesToAwait.push(equipBatch({ ...rangerItems, mainhand: "cupid" }));
     }
 
-    if (skillName !== "attack") {
-      // Multi-shot healing
-      set_message(`${skillName} Cupid`);
-      const targets = lowHealthPlayersInRange.slice(0, sliceAmount);
-      log(`Healing ${targets.map((player) => player.name).join(", ")}`);
-      promisesToAwait.push(tryMultiShot(skillName, targets));
-    } else if (healingTarget) {
-      // Single shot healing
-      set_message("Single Cupid");
-      log(`Healing ${healingTarget.name}`);
-      promisesToAwait.push(
-        use_skill("attack", healingTarget).then(
-          () => reduceCd("attack"), // Use reduceCd
-        ),
-      );
+    if (!isAttackOnCD) {
+      // Determine the best skill for healing
+      const preservedMP = G.skills["huntersmark"].mp;
+      const is5ShotReady =
+        character.level >= G.skills["5shot"].level &&
+        lowHealthPlayersInRange.length >= 4 &&
+        character.mp > G.skills["5shot"].mp + preservedMP &&
+        !character.fear;
+      const is3ShotReady =
+        character.level >= G.skills["3shot"].level &&
+        lowHealthPlayersInRange.length >= 2 &&
+        character.mp > G.skills["3shot"].mp + preservedMP &&
+        !character.fear;
+
+      let healingTarget = null;
+      let skillName = "attack";
+      let sliceAmount = 1;
+
+      if (is5ShotReady) {
+        skillName = "5shot";
+        sliceAmount = 5;
+      } else if (is3ShotReady) {
+        skillName = "3shot";
+        sliceAmount = 3;
+      } else {
+        // Single shot fallback
+        healingTarget = lowHealthPlayersInRange[0];
+      }
+
+      if (skillName !== "attack") {
+        // Multi-shot healing
+        set_message(`${skillName} Cupid`);
+        const targets = lowHealthPlayersInRange.slice(0, sliceAmount);
+        console.log(
+          `Healing ${targets.map((player) => player.name).join(", ")}`,
+        );
+        promisesToAwait.push(tryMultiShot(skillName, targets));
+      } else if (healingTarget) {
+        // Single shot healing
+        set_message("Single Cupid");
+        log(`Healing ${healingTarget.name}`);
+        promisesToAwait.push(
+          use_skill("attack", healingTarget).then(
+            () => reduceCd("attack"), // Use reduceCd
+          ),
+        );
+      }
     }
   }
 
   try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
+    await withTimeout(Promise.all(promisesToAwait), 1000);
   } catch (e) {
     attackErrorHandler(e);
     console.error("Error while Cupiding!", e);
   }
+
+  // This value determines if
+  // the ranger is about to Cupid (by equipping)/is currently Cupiding
+  return lowHealthPlayersInRange.length > 0;
 }
 
 async function mainLoop() {
@@ -275,7 +307,7 @@ async function mainLoop() {
 
     // 2. Cupid Healing
     const playersToHeal = getPlayersToHeal();
-    await cupidHeal(playersToHeal);
+    const isDeterminedToBeCupid = await cupidHeal(playersToHeal);
 
     // 3. Movement Control Check
     const isMovingControlled =
@@ -302,11 +334,11 @@ async function mainLoop() {
         get("cryptInstance") && character.map !== "crypt";
       const isPartyLeaderOrAlone =
         partyMems[0] === character.name || !get_entity(partyMems[0]);
-      const isFarFromPartyLeader =
+      const isFarFromFarmingSpot =
         distance(character, { x: mapX, y: mapY, map }) > 500;
 
       const needsToMoveToFarmLocation =
-        !get("cryptInstance") && (isPartyLeaderOrAlone || isFarFromPartyLeader);
+        !get("cryptInstance") && (isPartyLeaderOrAlone || isFarFromFarmingSpot);
 
       if (needsToEnterCrypt) {
         changeToNormalStrategies();
@@ -320,7 +352,7 @@ async function mainLoop() {
           y: mapY,
         });
       }
-    } else {
+    } else if (!isDeterminedToBeCupid) {
       // Target found, engage in combat
       await fight(target);
     }
