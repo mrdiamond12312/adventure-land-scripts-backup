@@ -332,7 +332,7 @@ async function oldAdvanceSmartMove(
 }
 
 async function advanceSmartMove(props, options = { useScare: true }) {
-  if (parent.caracAL && parent.caracAL.advancedSmartMove) {
+  if (parent.caracAL) {
     return smartMove(props, options);
   } else {
     return oldAdvanceSmartMove(props, options);

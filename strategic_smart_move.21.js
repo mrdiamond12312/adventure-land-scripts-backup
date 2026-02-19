@@ -527,6 +527,7 @@ class StrategicSmartMove {
             ) {
               send_cm(MAGE, "magiport");
               await sleep(character.ping * 6);
+              this.isSmartMoving = false; // Stop current smart move to let magiport update character position and pathfinding
               segmentIndex++;
               continue;
             } else {
