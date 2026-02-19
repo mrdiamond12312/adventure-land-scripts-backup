@@ -467,7 +467,7 @@ class StrategicSmartMove {
           if (
             blinkLocation &&
             !is_on_cooldown("blink") &&
-            character.mp > parent.G.skills["magiport"].mp * 2 &&
+            character.mp > parent.G.skills["blink"].mp * 2 &&
             distance(character, { x: blinkLocation.x, y: blinkLocation.y }) >
               200 &&
             character.mp > parent.G.skills["blink"].mp
