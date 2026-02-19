@@ -471,11 +471,11 @@ class StrategicSmartMove {
             console.log(
               `Blinking to ${blinkSegment.map} (${blinkSegment.x}, ${blinkSegment.y})`,
             );
-            segmentIndex = lastIndex + 1;
             this.isBlinking = true;
             this.stopTownChanneling();
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
             await sleep(100);
+            segmentIndex = lastIndex;
             this.isBlinking = false;
           }
         } catch (e) {
