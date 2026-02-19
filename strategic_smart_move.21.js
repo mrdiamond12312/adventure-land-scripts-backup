@@ -12,6 +12,7 @@ class StrategicSmartMove {
     this.pathfinder.prepare(parent.G, ["bank_u"]);
     this.scareInterval = undefined;
     this.blinkInterval = undefined;
+    this.isBlinking = false;
     this.magiportInterval = undefined;
     this.watcherInterval = undefined;
     this.isSmartMoving = true;
@@ -470,10 +471,12 @@ class StrategicSmartMove {
             console.log(
               `Blinking to ${blinkSegment.map} (${blinkSegment.x}, ${blinkSegment.y})`,
             );
-            segmentIndex = lastIndex; // Move to the next segment after having blinked successfully
+            segmentIndex = lastIndex + 1;
+            this.isBlinking = true;
+            this.stopTownChanneling();
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
             await sleep(100);
-            this.stopTownChanneling();
+            this.isBlinking = false;
           }
         } catch (e) {
           console.log("Error while blinking:", e);
@@ -495,6 +498,10 @@ class StrategicSmartMove {
     try {
       while (segmentIndex < pathFindingResult.length) {
         if (!this.isSmartMoving) break;
+        if (this.isBlinking) {
+          await sleep(500);
+          continue;
+        }
         const segment = pathFindingResult[segmentIndex];
         if (segment.method === "move") {
           if (segment.map !== character.map) {
