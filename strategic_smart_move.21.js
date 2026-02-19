@@ -306,6 +306,7 @@ class StrategicSmartMove {
         if (Array.isArray(result) && result.length < shortest) {
           shortest = result.length;
           pathFindingResult = result;
+          toPosition = spawn;
 
           // prefer same-map immediately
           if (spawn.map === character.map) break;
@@ -394,7 +395,7 @@ class StrategicSmartMove {
     if (options.useMagiport && character.ctype !== "mage") {
       this.magiportInterval = setInterval(async () => {
         const mageInfo = this.getMageInfo();
-        // Only magiport is nearby the destination
+        // Only magiport if nearby the destination
         // and his info is updated within the last 15 seconds
         if (
           mageInfo &&
@@ -402,7 +403,8 @@ class StrategicSmartMove {
           mageInfo.time > Date.now() - 15_000
         ) {
           send_cm(MAGE, "magiport");
-          await sleep(100);
+          await sleep(500);
+          await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
           this.stopTownChanneling();
           this.isSmartMoving = false;
           clearInterval(this.magiportInterval);
@@ -464,7 +466,7 @@ class StrategicSmartMove {
           if (
             blinkLocation &&
             !is_on_cooldown("blink") &&
-            !character.s.penalty_cd &&
+            // !character.s.penalty_cd &&
             distance(character, { x: blinkLocation.x, y: blinkLocation.y }) >
               200 &&
             character.mp > parent.G.skills["blink"].mp
@@ -475,10 +477,11 @@ class StrategicSmartMove {
             this.isBlinking = true;
             this.stopTownChanneling();
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
-            await sleep(500);
-            if (character.s.penalty_cd) {
-              await sleep(character.s.penalty_cd.ms);
-            }
+            await move (blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
+            // await sleep(500);
+            // if (character.s.penalty_cd) {
+            //   await sleep(character.s.penalty_cd.ms);
+            // }
             segmentIndex = lastIndex + 1;
             this.isBlinking = false;
           }
