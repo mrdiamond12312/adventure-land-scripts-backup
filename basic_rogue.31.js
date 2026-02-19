@@ -196,7 +196,7 @@ async function mainLoop() {
       }
     } else await fight(target);
   } catch (e) {
-    console.error(e);
+    if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
   }
 
   setTimeout(mainLoop, getLoopInterval());
