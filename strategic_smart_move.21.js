@@ -565,10 +565,11 @@ class StrategicSmartMove {
     clearInterval(this.magiportInterval);
     clearInterval(this.watcherInterval);
     this.isSmartMoving = false;
-    this.isAdvanceSmartMoving = false;
+    isAdvanceSmartMoving = false;
   }
 }
 
 const strategicSmartMove = new StrategicSmartMove();
 const smartMove = strategicSmartMove.smartMove.bind(strategicSmartMove);
-const getMonsterSpawns = strategicSmartMove.getMonsterSpawns.bind(strategicSmartMove);
+const getMonsterSpawns =
+  strategicSmartMove.getMonsterSpawns.bind(strategicSmartMove);
