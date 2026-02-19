@@ -402,7 +402,7 @@ class StrategicSmartMove {
         ) {
           send_cm(MAGE, "magiport");
           await sleep(100);
-          stopTownChanneling();
+          this.stopTownChanneling();
           clearInterval(this.magiportInterval);
         }
       }, 1000);
@@ -471,7 +471,7 @@ class StrategicSmartMove {
             );
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
             await sleep(100);
-            stopTownChanneling();
+            this.stopTownChanneling();
             segmentIndex = lastIndex + 1; // Move to the next segment after having blinked successfully
           }
         } catch (e) {
