@@ -400,6 +400,7 @@ class StrategicSmartMove {
         if (
           mageInfo &&
           distance(toPosition, mageInfo) < 200 &&
+          mageInfo.mp > parent.G.skills["magiport"].mp * 2 &&
           mageInfo.time > Date.now() - 15_000
         ) {
           send_cm(MAGE, "magiport");
@@ -466,7 +467,7 @@ class StrategicSmartMove {
           if (
             blinkLocation &&
             !is_on_cooldown("blink") &&
-            // !character.s.penalty_cd &&
+            mageInfo.mp > parent.G.skills["magiport"].mp * 2 &&
             distance(character, { x: blinkLocation.x, y: blinkLocation.y }) >
               200 &&
             character.mp > parent.G.skills["blink"].mp
@@ -477,11 +478,8 @@ class StrategicSmartMove {
             this.isBlinking = true;
             this.stopTownChanneling();
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
+            await sleep(250);
             await move(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
-            // await sleep(500);
-            // if (character.s.penalty_cd) {
-            //   await sleep(character.s.penalty_cd.ms);
-            // }
             segmentIndex = lastIndex + 1;
             this.isBlinking = false;
           }
