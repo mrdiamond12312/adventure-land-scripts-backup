@@ -476,6 +476,9 @@ class StrategicSmartMove {
             this.stopTownChanneling();
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
             await sleep(500);
+            if (character.s.penalty_cd) {
+              await sleep(character.s.penalty_cd.ms);
+            }
             segmentIndex = lastIndex + 1;
             this.isBlinking = false;
           }
