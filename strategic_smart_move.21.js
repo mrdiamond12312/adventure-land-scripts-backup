@@ -472,7 +472,7 @@ class StrategicSmartMove {
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
             await sleep(100);
             this.stopTownChanneling();
-            segmentIndex = lastIndex + 1; // Move to the next segment after having blinked successfully
+            segmentIndex = lastIndex; // Move to the next segment after having blinked successfully
           }
         } catch (e) {
           console.log("Error while blinking:", e);
