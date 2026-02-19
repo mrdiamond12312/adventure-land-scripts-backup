@@ -406,11 +406,6 @@ class StrategicSmartMove {
       pathFindingResult.length
     ) {
       this.blinkInterval = setInterval(async () => {
-        if (segmentIndex >= pathFindingResult.length) {
-          clearInterval(this.blinkInterval);
-          return;
-        }
-
         let lastIndex = segmentIndex;
         const currentMap = character.map;
 
