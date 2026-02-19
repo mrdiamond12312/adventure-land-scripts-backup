@@ -179,6 +179,17 @@ async function mainLoop() {
         x: character.x,
         y: character.y,
         time: Date.now(),
+        isSmartMoving: isAdvanceSmartMoving || smart.moving,
+        isPriestAround:
+          parent.party_list?.length &&
+          parent.party_list.some((id) => {
+            const charEntity = get_player(id);
+            return (
+              charEntity &&
+              charEntity.ctype === "priest" &&
+              distance(character, charEntity) < 200
+            );
+          }),
       });
     }
 

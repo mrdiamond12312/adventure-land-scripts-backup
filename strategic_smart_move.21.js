@@ -503,10 +503,12 @@ class StrategicSmartMove {
     try {
       while (segmentIndex < pathFindingResult.length) {
         if (!this.isSmartMoving) break;
+
         if (this.isBlinking) {
           await sleep(500);
           continue;
         }
+        
         const segment = pathFindingResult[segmentIndex];
         if (segment.method === "move") {
           if (segment.map !== character.map) {

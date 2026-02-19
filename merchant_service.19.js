@@ -197,7 +197,9 @@ async function lureMechaGnome() {
       return (
         mageInfo.mp >= G.skills["magiport"].mp + 100 &&
         Date.now() - mageInfo.time < 15_000 &&
-        distance(mageInfo, { map: map, x: mapX, y: mapY }) < 300
+        distance(mageInfo, { map: map, x: mapX, y: mapY }) < 300 &&
+        !mageInfo.isSmartMoving &&
+        mageInfo.isPriestAround
       );
     }, 10_000);
 
