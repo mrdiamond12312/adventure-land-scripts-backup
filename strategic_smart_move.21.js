@@ -397,12 +397,13 @@ class StrategicSmartMove {
         // and his info is updated within the last 15 seconds
         if (
           mageInfo &&
-          distance(toPosition, mageInfo) < 300 &&
+          distance(toPosition, mageInfo) < 200 &&
           mageInfo.time > Date.now() - 15_000
         ) {
           send_cm(MAGE, "magiport");
           await sleep(100);
           this.stopTownChanneling();
+          this.isSmartMoving = false;
           clearInterval(this.magiportInterval);
         }
       }, 1000);
