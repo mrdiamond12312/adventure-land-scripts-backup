@@ -381,7 +381,7 @@ class StrategicSmartMove {
     }
 
     if (options.useMagiport && character.ctype !== "mage") {
-      this.magiportInterval = setInterval(() => {
+      this.magiportInterval = setInterval(async () => {
         const mageInfo = this.getMageInfo();
         // Only magiport is nearby the destination
         // and his info is updated within the last 15 seconds
@@ -391,9 +391,11 @@ class StrategicSmartMove {
           mageInfo.time > Date.now() - 15_000
         ) {
           send_cm(MAGE, "magiport");
+          await sleep(100);
+          stop("town");
           clearInterval(this.magiportInterval);
         }
-      }, 500);
+      }, 1000);
     }
 
     // Start moving
@@ -458,6 +460,8 @@ class StrategicSmartMove {
               `Blinking to ${blinkSegment.map} (${blinkSegment.x}, ${blinkSegment.y})`,
             );
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
+            await sleep(100);
+            stop("town");
             segmentIndex = lastIndex + 1; // Move to the next segment after having blinked successfully
           }
         } catch (e) {
@@ -500,6 +504,12 @@ class StrategicSmartMove {
 
         if (segment.method === "town") {
           await this.useTownWithRetry();
+          segmentIndex++;
+          continue;
+        }
+
+        if (segment.method === "leave") {
+          await leave();
           segmentIndex++;
           continue;
         }
