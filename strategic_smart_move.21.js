@@ -220,7 +220,7 @@ class StrategicSmartMove {
     while (attempts++ < maxRetries) {
       if (this.stopTown) {
         this.stopTown = false;
-        break;
+        return true;
       }
       await town();
       await sleep(retryDelay);
@@ -477,7 +477,7 @@ class StrategicSmartMove {
             this.isBlinking = true;
             this.stopTownChanneling();
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
-            await move (blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
+            await move(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
             // await sleep(500);
             // if (character.s.penalty_cd) {
             //   await sleep(character.s.penalty_cd.ms);
