@@ -1,6 +1,10 @@
 // Global vars and Constants
 var isAdvanceSmartMoving = false;
-
+if (parent.caracAL) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/strategic_smart_move.21.js",
+  ]);
+}
 const CRYPT_DOOR = {
   map: "cave",
   x: -191,
@@ -34,13 +38,6 @@ const ALIA_FROM_POSITION = {
   },
 };
 
-const CELL = Object.freeze({
-  unknown: 0,
-  unstandable: -1,
-  standable: 1,
-});
-const GRID_CACHE = {};
-
 // Utils
 
 /**
@@ -60,419 +57,6 @@ function getCharacter(name) {
 
 if (parent.caracAL && parent.caracAL.ALPathfinder) {
   parent.caracAL.ALPathfinder.prepare(parent.G, ["bank_u"]); // Ignore bank_u for pathfinding
-}
-
-/**
- * Generates and caches a grid object for the target map on cache miss.
- * TODO: Account for mob spawn points as additional standable seeds.
- *
- * @version 20251227vCow
- * @param {string} mapString - The target map ID
- * @returns {Object} Grid data including standability map and map boundaries
- */
-function getGrid(mapString) {
-  if (GRID_CACHE[mapString]) return GRID_CACHE[mapString];
-  const data = parent.G.geometry[mapString];
-  const { min_x, min_y, max_x, max_y, x_lines, y_lines, points } = data;
-  const mapMobs = parent.G.maps[mapString].monsters;
-  const mapSpawns = mapMobs
-    .filter((p) => !p.boundaries && p.boundary)
-    .reduce((acc, current) => {
-      acc.push([
-        (current.boundary[0] + current.boundary[2]) / 2,
-        (current.boundary[1] + current.boundary[3]) / 2,
-      ]);
-      return acc;
-    }, []);
-
-  // Init Array for Grid coloring
-  const gridWidth = Math.ceil(max_x - min_x);
-  const gridHeight = Math.ceil(max_y - min_y);
-  const mapGrid = new Int8Array(gridWidth * gridHeight);
-  mapGrid.fill(CELL.unknown);
-
-  // Color Boundaries with CELL.unstandable
-  for (const yLine of y_lines) {
-    const y = Math.round(yLine[0] - min_y);
-    const fromX = Math.max(0, Math.round(yLine[1] - min_x));
-    const toX = Math.min(gridWidth - 1, Math.round(yLine[2] - min_x));
-    for (let x = fromX; x <= toX; x++) {
-      if (y >= 0 && y < gridHeight)
-        mapGrid[y * gridWidth + x] = CELL.unstandable;
-    }
-  }
-
-  for (const xLine of x_lines) {
-    const x = Math.round(xLine[0] - min_x);
-    const fromY = Math.max(0, Math.round(xLine[1] - min_y));
-    const toY = Math.min(gridHeight - 1, Math.round(xLine[2] - min_y));
-    for (let y = fromY; y <= toY; y++) {
-      if (x >= 0 && x < gridWidth)
-        mapGrid[y * gridWidth + x] = CELL.unstandable;
-    }
-  }
-
-  // Prepare Seeds (The points where we KNOW we can stand)
-  const queue = [];
-  for (let key in points) {
-    const p = points[key];
-    const px = Math.round(p[0] - min_x);
-    const py = Math.round(p[1] - min_y);
-    const idx = py * gridWidth + px;
-    if (mapGrid[idx] === CELL.unknown) {
-      mapGrid[idx] = CELL.standable;
-      queue.push(idx);
-    }
-  }
-
-  // Seed from monster spawn centers
-  for (const [x, y] of mapSpawns) {
-    const px = Math.round(x - min_x);
-    const py = Math.round(y - min_y);
-    const idx = py * gridWidth + px;
-
-    if (mapGrid[idx] === CELL.unknown) {
-      mapGrid[idx] = CELL.standable;
-      queue.push(idx);
-    }
-  }
-
-  // Flood Fill (BFS)
-  let head = 0;
-  while (head < queue.length) {
-    const currIdx = queue[head++];
-    const x = currIdx % gridWidth;
-    const y = (currIdx / gridWidth) | 0;
-
-    // Standard 4-direction check (1 pixel at a time)
-    const neighbors = [
-      [x + 1, y],
-      [x - 1, y],
-      [x, y + 1],
-      [x, y - 1],
-    ];
-
-    for (const [nx, ny] of neighbors) {
-      if (nx >= 0 && nx < gridWidth && ny >= 0 && ny < gridHeight) {
-        const nextIdx = ny * gridWidth + nx;
-        if (mapGrid[nextIdx] === 0) {
-          // If CELL.unknown and not a wall
-          mapGrid[nextIdx] = 1;
-          queue.push(nextIdx);
-        }
-      }
-    }
-  }
-
-  GRID_CACHE[mapString] = {
-    gridWidth,
-    gridHeight,
-    mapGrid,
-    maxX: max_x,
-    maxY: max_y,
-    minX: min_x,
-    minY: min_y,
-  };
-
-  return GRID_CACHE[mapString];
-}
-
-/**
- * Helper to check against the grid
- * @param {Object} position a position object with `x`, `y`, and `map` id
- * @returns
- */
-function isStandablePoint(position) {
-  const { x, y, map } = position;
-  const { gridWidth, gridHeight, mapGrid, minX, minY } = getGrid(map);
-
-  // Convert world → grid coordinates
-  const gx = Math.round(x - minX);
-  const gy = Math.round(y - minY);
-
-  // Out of bounds = not standable
-  if (gx < 0 || gx >= gridWidth || gy < 0 || gy >= gridHeight) {
-    return false;
-  }
-
-  const idx = gy * gridWidth + gx;
-  return mapGrid[idx] === CELL.standable;
-}
-
-/**
- * Returns spawns data for the given monster
- *
- * @param {string} monster
- * @param {Object} g
- * @returns {Array<{ map: string, x: number, y: number }>}
- */
-function getMonsterSpawns(monster, g = parent.G) {
-  const spawns = [];
-
-  for (const [mapKey, gMap] of Object.entries(g.maps)) {
-    if (gMap.ignore) continue; // Ignore map
-    if (!gMap.monsters) continue; // No monsters on map
-
-    for (const mapMonster of gMap.monsters) {
-      if (mapMonster.type !== monster) continue; // Different monster
-
-      const boundaries = mapMonster.boundaries ?? [
-        [mapKey, ...mapMonster.boundary],
-      ];
-
-      for (const [map, x1, y1, x2, y2] of boundaries) {
-        spawns.push({
-          map,
-          x: (x1 + x2) / 2,
-          y: (y1 + y2) / 2,
-        });
-      }
-    }
-  }
-
-  return spawns;
-}
-
-/**
- * Pathfinding using earth's ALPathfinder
- * @param {Object} toPosition includes `x`, `y` and `map`
- * @param {number} speed set the speed to a very big number to disable use_town, default: character's speed
- */
-function pathfinderGetPath(toPosition, speed = character.speed) {
-  return parent.caracAL.ALPathfinder.getPath(
-    character.map,
-    character.x,
-    character.y,
-    toPosition.map,
-    toPosition.x,
-    toPosition.y,
-    speed,
-  );
-}
-
-async function useTownWithRetry({ maxRetries = 5, retryDelay = 300 } = {}) {
-  let attempts = 0;
-  let mapData = parent.G.maps[character.map];
-
-  while (attempts++ < maxRetries) {
-    await town();
-    await sleep(retryDelay);
-    if (mapData.spawns?.length) {
-      if (
-        distance(character, {
-          map: character.map,
-          x: mapData.spawns[0][0],
-          y: mapData.spawns[0][1],
-        }) > 100
-      ) {
-        continue;
-      }
-      return true;
-    }
-  }
-
-  if (mapData.spawns?.length) {
-    await smart_move({
-      map: character.map,
-      x: mapData.spawns[0][0],
-      y: mapData.spawns[0][1],
-    });
-  }
-
-  return false;
-}
-
-/**
- * A smart move helper using earth's ALPathfinder
- * @param {Object} toPosition
- * @param {Object} options
- */
-async function smartMove(
-  toPosition,
-  options = {
-    useBlink: true,
-    useMagiport: true,
-    useScare: true,
-    stopCondition: undefined,
-    speed: 50,
-  },
-) {
-  if (!toPosition) return;
-
-  let pathFindingResult;
-
-  // If position is a mob's name id
-  if (typeof toPosition === "string") {
-    if (!parent.G.monsters[toPosition]) {
-      throw new Error("Unknown monster");
-    }
-
-    const monsterSpawns = getMonsterSpawns(toPosition);
-    if (!monsterSpawns.length) {
-      throw new Error("Monster has no spawns");
-    }
-
-    let shortest = Infinity;
-
-    for (const spawn of monsterSpawns) {
-      const result = pathfinderGetPath(spawn, options.speed);
-
-      if (Array.isArray(result) && result.length < shortest) {
-        shortest = result.length;
-        pathFindingResult = result;
-
-        // prefer same-map immediately
-        if (spawn.map === character.map) break;
-      }
-    }
-  } else {
-    /* Position filler */
-
-    // Fill map first
-    if (
-      toPosition.map === undefined &&
-      toPosition.x !== undefined &&
-      toPosition.y !== undefined
-    ) {
-      toPosition.map = character.map;
-    }
-
-    let mapData = parent.G.maps[toPosition.map];
-
-    // Fill x/y from spawn
-    if (
-      mapData.spawns?.length &&
-      (toPosition.x === undefined || toPosition.y === undefined)
-    ) {
-      toPosition.x = mapData.spawns[0][0];
-      toPosition.y = mapData.spawns[0][1];
-    }
-
-    // Final validation
-    if (
-      toPosition.map === undefined ||
-      toPosition.x === undefined ||
-      toPosition.y === undefined
-    ) {
-      throw new Error(
-        `Unable to find path from ${character.map},${character.x},${character.y} ` +
-          `to ${toPosition.map},${toPosition.x},${toPosition.y}`,
-      );
-    }
-
-    pathFindingResult = pathfinderGetPath(toPosition, options.speed);
-
-    // Standable fallback (for example: icegolem spawn)
-    if (
-      (!pathFindingResult || !pathFindingResult.length) &&
-      mapData?.spawns?.length &&
-      isStandablePoint(toPosition)
-    ) {
-      pathFindingResult = pathfinderGetPath(
-        {
-          ...toPosition,
-          x: mapData.spawns[0][0],
-          y: mapData.spawns[0][1],
-        },
-        options.speed,
-      );
-
-      if (Array.isArray(pathFindingResult)) {
-        pathFindingResult.push({
-          map: toPosition.map,
-          x: toPosition.x,
-          y: toPosition.y,
-          method: "blink",
-        });
-      }
-    }
-  }
-
-  if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
-    await use_skill("use_town");
-    throw new Error(
-      `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
-    );
-  }
-  isAdvanceSmartMoving = true;
-
-  if (options.useScare) {
-    await scareAwayMobs();
-    scareInterval = setInterval(() => {
-      scareAwayMobs();
-    }, 1000);
-    setTimeout(() => clearInterval(scareInterval), 300000);
-  }
-
-  try {
-    // Moving
-    for (const segment of pathFindingResult) {
-      if (segment.method === "move") {
-        if (segment.map !== character.map) {
-          throw new Error(
-            `Expected map ${segment.map}, currently on ${character.map}`,
-          );
-        }
-        await move(segment.x, segment.y);
-        continue;
-      }
-
-      if (segment.method === "door" || segment.method === "transport") {
-        await transport(segment.map, segment.spawn);
-        continue;
-      }
-
-      if (segment.method === "town") {
-        await useTownWithRetry();
-        continue;
-      }
-
-      if (segment.method === "blink") {
-        if (character.ctype !== "mage") {
-          const mageEntity = parent.caracAL
-            ? parent.caracAL.siblings.includes(MAGE)
-              ? get("mageLocation")
-              : undefined
-            : getCharacter(MAGE);
-
-          if (!mageEntity || mageEntity.Date.now() - mageInfo.time > 15_000) {
-            throw new Error("Magiport unavailable, mage location unknown");
-          }
-
-          if (
-            mageEntity.map === segment.map &&
-            distance(segment, mageEntity) < 300
-          ) {
-            send_cm(MAGE, "magiport");
-            await sleep(character.ping * 6);
-            if (distance(character, segment) < 300) continue;
-          } else {
-            throw new Error(
-              `Magiport unavailable, mage too far from blink destination: ${distance(
-                segment,
-                mageEntity,
-              )}`,
-            );
-          }
-        } else {
-          if (
-            character.mp > G.skills["blink"].mp &&
-            !is_on_cooldown("blink") &&
-            character.map === segment.map
-          ) {
-            await use_skill("blink", [segment.x, segment.y]);
-            await sleep(character.ping * 0.7);
-            continue;
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.log("smartMove error:", e);
-  } finally {
-    clearInterval(scareInterval);
-    isAdvanceSmartMoving = false;
-  }
 }
 
 async function scareAwayMobs() {
@@ -540,15 +124,7 @@ function resetSmartMove() {
   smart.try_exact_spot = true;
 }
 
-async function smartMoveWrapper(args, options = undefined) {
-  if (parent.caracAL && parent.caracAL.ALPathfinder) {
-    return smartMove(args, options);
-  } else {
-    return smart_move(args);
-  }
-}
-
-async function advanceSmartMove(
+async function oldAdvanceSmartMove(
   props,
   options = {
     useScare: true,
@@ -591,7 +167,7 @@ async function advanceSmartMove(
       get("cryptInstance")
     ) {
       if (distance(character, CRYPT_DOOR) > 100)
-        await smartMoveWrapper(CRYPT_DOOR).catch((e) => e);
+        await smart_move(CRYPT_DOOR).catch((e) => e);
 
       await enter("crypt", get("cryptInstance"));
       await sleep(character.ping * 3 + 3000);
@@ -611,7 +187,7 @@ async function advanceSmartMove(
         log("Blinked!");
         await sleep(character.ping);
         log("Done!");
-        await smartMoveWrapper(props);
+        await smart_move(props);
         resetSmartMove();
         clearInterval(scareInterval);
         isAdvanceSmartMoving = false;
@@ -634,7 +210,7 @@ async function advanceSmartMove(
         // Blink to location if enough mana
         await mageBlink(aliaTo.map, [props.x, props.y]);
         await sleep(character.ping + 800);
-        await smartMoveWrapper(props);
+        await smart_move(props);
         isAdvanceSmartMoving = false;
         resetSmartMove();
         clearInterval(scareInterval);
@@ -651,13 +227,13 @@ async function advanceSmartMove(
           }
         }, 1000);
 
-        await smartMoveWrapper({ map: props.map }).catch((e) => e);
+        await smart_move({ map: props.map }).catch((e) => e);
 
         await mageBlink(props.map, [props.x, props.y]);
 
         await sleep(character.ping);
         isAdvanceSmartMoving = false;
-        await smartMoveWrapper(props);
+        await smart_move(props);
         clearInterval(scareInterval);
         resetSmartMove();
         return;
@@ -720,7 +296,7 @@ async function advanceSmartMove(
           })
         ) {
           await move(props.x, props.y);
-        } else await smartMoveWrapper(props);
+        } else await smart_move(props);
         clearInterval(checkingMageMagiportInterval);
         isAdvanceSmartMoving = false;
         clearInterval(scareInterval);
@@ -753,4 +329,12 @@ async function advanceSmartMove(
   resetSmartMove();
 
   return;
+}
+
+async function advanceSmartMove(props, options = { useScare: true }) {
+  if (parent.caracAL && parent.caracAL.advancedSmartMove) {
+    return smartMove(props, options);
+  } else {
+    return oldAdvanceSmartMove(props, options);
+  }
 }
