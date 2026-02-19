@@ -15,6 +15,7 @@ class StrategicSmartMove {
     this.magiportInterval = undefined;
     this.watcherInterval = undefined;
     this.isSmartMoving = true;
+    this.stopTown = false;
   }
 
   /**
@@ -216,6 +217,10 @@ class StrategicSmartMove {
     let mapData = parent.G.maps[character.map];
 
     while (attempts++ < maxRetries) {
+      if (this.stopTown) {
+        this.stopTown = false;
+        break;
+      }
       await town();
       await sleep(retryDelay);
       if (mapData.spawns?.length) {
@@ -241,6 +246,11 @@ class StrategicSmartMove {
     }
 
     return false;
+  }
+
+  stopTownChanneling() {
+    this.stopTown = true;
+    stop("town");
   }
 
   /**
@@ -392,7 +402,7 @@ class StrategicSmartMove {
         ) {
           send_cm(MAGE, "magiport");
           await sleep(100);
-          stop("town");
+          stopTownChanneling();
           clearInterval(this.magiportInterval);
         }
       }, 1000);
@@ -461,7 +471,7 @@ class StrategicSmartMove {
             );
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
             await sleep(100);
-            stop("town");
+            stopTownChanneling();
             segmentIndex = lastIndex + 1; // Move to the next segment after having blinked successfully
           }
         } catch (e) {
