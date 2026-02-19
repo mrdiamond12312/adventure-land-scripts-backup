@@ -380,7 +380,7 @@ class StrategicSmartMove {
       setTimeout(() => clearInterval(this.scareInterval), 300000);
     }
 
-    if (options.useMagiport && character.class !== "mage") {
+    if (options.useMagiport && character.ctype !== "mage") {
       this.magiportInterval = setInterval(() => {
         const mageInfo = this.getMageInfo();
         // Only magiport is nearby the destination
@@ -402,7 +402,7 @@ class StrategicSmartMove {
 
     if (
       options.useBlink &&
-      character.class === "mage" &&
+      character.ctype === "mage" &&
       pathFindingResult.length
     ) {
       this.blinkInterval = setInterval(async () => {
