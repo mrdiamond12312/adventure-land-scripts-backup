@@ -374,15 +374,15 @@ class StrategicSmartMove {
       }
     }
 
+    isAdvanceSmartMoving = true;
+    this.isSmartMoving = true;
     if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
       await this.useTownWithRetry();
+      this.cleanUp();
       throw new Error(
         `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
       );
     }
-
-    isAdvanceSmartMoving = true;
-    this.isSmartMoving = true;
 
     if (options.useScare) {
       await scareAwayMobs();
