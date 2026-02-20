@@ -445,10 +445,10 @@ class StrategicSmartMove {
 
         const blinkSegment = pathFindingResult[lastIndex];
         let blinkLocation;
-        if (blinkSegment.method === "move") {
+        if (blinkSegment && blinkSegment.method === "move") {
           blinkLocation = blinkSegment;
         }
-        if (blinkSegment.method === "town") {
+        if (blinkSegment && blinkSegment.method === "town") {
           const mapData = parent.G.maps[currentMap];
           if (mapData.spawns?.length) {
             blinkLocation = {
@@ -486,6 +486,10 @@ class StrategicSmartMove {
           }
         } catch (e) {
           console.log("Error while blinking:", e);
+        }
+
+        if (segmentIndex >= pathFindingResult.length) {
+          clearInterval(this.blinkInterval);
         }
       }, 500);
     }
