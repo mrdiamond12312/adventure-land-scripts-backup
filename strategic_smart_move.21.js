@@ -139,7 +139,7 @@ class StrategicSmartMove {
    * @param {Object} position a position object with `x`, `y`, and `map` id
    * @returns {Boolean} whether the position is standable based on the grid data
    */
-  isStandablePoint(position) {
+  oldIsStandablePoint(position) {
     const { x, y, map } = position;
     const { gridWidth, gridHeight, mapGrid, minX, minY } = this._getGrid(map);
 
@@ -154,6 +154,13 @@ class StrategicSmartMove {
 
     const idx = gy * gridWidth + gx;
     return mapGrid[idx] === CELL.standable;
+  }
+  
+  /**
+   * Now using alpathfinder's isWalkable to check if the coordinate is standable
+   */
+  isStandablePoint(position) { 
+    return this.pathfinder.isWalkable(position.map, position.x, position.y);
   }
 
   /**
