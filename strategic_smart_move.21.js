@@ -286,6 +286,8 @@ class StrategicSmartMove {
       this.cleanUp();
     }
 
+    if (!can_walk(character)) return;
+
     this.smartMoveSession = (this.smartMoveSession || 0) + 1;
     const session = this.smartMoveSession;
 
