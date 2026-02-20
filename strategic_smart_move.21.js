@@ -400,6 +400,7 @@ class StrategicSmartMove {
         if (
           mageInfo &&
           distance(toPosition, mageInfo) < 200 &&
+          distance(character, mageInfo) > 50 &&
           mageInfo.mp > parent.G.skills["magiport"].mp * 2 &&
           mageInfo.time > Date.now() - 15_000
         ) {
@@ -408,7 +409,11 @@ class StrategicSmartMove {
           await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
           this.stopTownChanneling();
           this.isSmartMoving = false;
-          clearInterval(this.magiportInterval);
+          this.cleanUp();
+        }
+
+        if (distance(character, toPosition) < 100) {
+          this.cleanUp();
         }
       }, 1000);
       setTimeout(() => clearInterval(this.magiportInterval), 300000);
