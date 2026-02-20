@@ -11,9 +11,9 @@ class StrategicSmartMove {
     this.pathfinder = parent.caracAL.ALPathfinder;
     this.pathfinder.prepare(parent.G, ["bank_u"]);
     this.scareInterval = undefined;
-    this.blinkInterval = undefined;
+    this.blinkLoop = undefined;
     this.isBlinking = false;
-    this.magiportInterval = undefined;
+    this.magiportLoop = undefined;
     this.watcherInterval = undefined;
     this.isSmartMoving = true;
     this.stopTown = false;
@@ -274,6 +274,14 @@ class StrategicSmartMove {
    * @param {number} extraOptions.speed - the speed to use for pathfinding, set to a very big number to disable use_town, default: character's speed
    */
   async smartMove(toPosition, extraOptions = {}) {
+    // Stop any existing smart move
+    if (this.isSmartMoving) {
+      this.cleanUp();
+    }
+
+    this.smartMoveSession = (this.smartMoveSession || 0) + 1;
+    const session = this.smartMoveSession;
+
     const options = {
       useBlink: true,
       useMagiport: true,
@@ -386,17 +394,29 @@ class StrategicSmartMove {
 
     if (options.useScare) {
       await scareAwayMobs();
-      this.scareInterval = setInterval(() => {
-        scareAwayMobs();
+      this.scareInterval = setInterval(async () => {
+        if (!this.isSmartMoving || session !== this.smartMoveSession) {
+          clearInterval(this.scareInterval);
+          return;
+        }
+
+        await scareAwayMobs();
       }, 1000);
-      setTimeout(() => clearInterval(this.scareInterval), 300000);
     }
 
     if (options.useMagiport && character.ctype !== "mage") {
-      this.magiportInterval = setInterval(async () => {
+      const magiportCheck = async () => {
+        if (
+          distance(character, toPosition) < 100 ||
+          !this.isSmartMoving ||
+          session !== this.smartMoveSession
+        ) {
+          clearTimeout(this.magiportLoop);
+          return;
+        }
+
         const mageInfo = this.getMageInfo();
-        // Only magiport if nearby the destination
-        // and his info is updated within the last 15 seconds
+
         if (
           mageInfo &&
           distance(toPosition, mageInfo) < 200 &&
@@ -409,14 +429,14 @@ class StrategicSmartMove {
           await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
           this.stopTownChanneling();
           this.isSmartMoving = false;
-          this.cleanUp();
+          clearTimeout(this.magiportLoop);
+          return;
         }
 
-        if (distance(character, toPosition) < 100) {
-          this.cleanUp();
-        }
-      }, 1000);
-      setTimeout(() => clearInterval(this.magiportInterval), 300000);
+        // Recursive timeout to check for magiport availability every second
+        this.magiportLoop = setTimeout(magiportCheck, 1000);
+      };
+      this.magiportLoop = setTimeout(magiportCheck, 1000);
     }
 
     // Start moving
@@ -428,7 +448,16 @@ class StrategicSmartMove {
       character.ctype === "mage" &&
       pathFindingResult.length
     ) {
-      this.blinkInterval = setInterval(async () => {
+      const blinkCheck = async () => {
+        if (
+          segmentIndex >= pathFindingResult.length ||
+          !this.isSmartMoving ||
+          session !== this.smartMoveSession
+        ) {
+          clearTimeout(this.blinkLoop);
+          return;
+        }
+
         let lastIndex = segmentIndex;
         const currentMap = character.map;
 
@@ -450,9 +479,11 @@ class StrategicSmartMove {
 
         const blinkSegment = pathFindingResult[lastIndex];
         let blinkLocation;
+
         if (blinkSegment && blinkSegment.method === "move") {
           blinkLocation = blinkSegment;
         }
+
         if (blinkSegment && blinkSegment.method === "town") {
           const mapData = parent.G.maps[currentMap];
           if (mapData.spawns?.length) {
@@ -465,6 +496,7 @@ class StrategicSmartMove {
             console.log(
               `No spawn data for town segment ${blinkSegment.map}, skipping blink`,
             );
+            this.blinkLoop = setTimeout(blinkCheck, 1000);
             return;
           }
         }
@@ -493,10 +525,10 @@ class StrategicSmartMove {
           console.log("Error while blinking:", e);
         }
 
-        if (segmentIndex >= pathFindingResult.length) {
-          clearInterval(this.blinkInterval);
-        }
-      }, 500);
+        this.blinkLoop = setTimeout(blinkCheck, 1000);
+      };
+
+      this.blinkLoop = setTimeout(blinkCheck, 1000);
     }
 
     if (options.stopWatcher) {
@@ -507,6 +539,9 @@ class StrategicSmartMove {
           clearInterval(this.watcherInterval);
           return;
         }
+
+        if (!this.isSmartMoving || session !== this.smartMoveSession)
+          clearInterval(this.watcherInterval);
       }, 500);
     }
 
@@ -600,10 +635,23 @@ class StrategicSmartMove {
   }
 
   cleanUp() {
-    clearInterval(this.scareInterval);
-    clearInterval(this.blinkInterval);
-    clearInterval(this.magiportInterval);
-    clearInterval(this.watcherInterval);
+    if (this.scareInterval) {
+      clearInterval(this.scareInterval);
+      this.scareInterval = undefined;
+    }
+    if (this.blinkLoop) {
+      clearTimeout(this.blinkLoop);
+      this.blinkLoop = undefined;
+    }
+    if (this.magiportLoop) {
+      clearTimeout(this.magiportLoop);
+      this.magiportLoop = undefined;
+    }
+    if (this.watcherInterval) {
+      clearInterval(this.watcherInterval);
+      this.watcherInterval = undefined;
+    }
+
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
   }
