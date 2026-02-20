@@ -1902,24 +1902,27 @@ async function changeToDailyEventTargets() {
   if (parent.S.snowman?.live) {
     changeToPullStrategies();
 
+    let snowmanInstance = get_nearest_monster({ type: "snowman" });
+
+    if (!snowmanInstance) {
+      await advanceSmartMove(parent.S.snowman);
+      snowmanInstance = get_nearest_monster({ type: "snowman" });
+    }
+
     const currentTarget = get_target();
-    const snowmanInstance = get_nearest_monster({ type: "snowman" });
     const grinchInstance = get_nearest_monster({ type: "grinch" });
     const beeToAttack =
       currentTarget && currentTarget.mtype === "arcticbee"
         ? currentTarget
         : get_nearest_monster({ type: "arcticbee" });
 
-    if (!snowmanInstance) advanceSmartMove(parent.S.snowman);
-    else {
-      if (grinchInstance) change_target(grinchInstance);
-      else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
-      else change_target(snowmanInstance);
+    if (grinchInstance) change_target(grinchInstance);
+    else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
+    else change_target(snowmanInstance);
 
-      return grinchInstance ?? snowmanInstance.s?.fullguardx
-        ? beeToAttack
-        : snowmanInstance;
-    }
+    return grinchInstance ?? snowmanInstance.s?.fullguardx
+      ? beeToAttack
+      : snowmanInstance;
   }
 
   if (parent.S.abtesting && !character.s.hopsickness) {
