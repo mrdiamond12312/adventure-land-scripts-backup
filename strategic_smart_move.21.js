@@ -375,7 +375,7 @@ class StrategicSmartMove {
     }
 
     if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
-      await use_skill("use_town");
+      await this.useTownWithRetry();
       throw new Error(
         `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
       );
@@ -411,6 +411,7 @@ class StrategicSmartMove {
           clearInterval(this.magiportInterval);
         }
       }, 1000);
+      setTimeout(() => clearInterval(this.magiportInterval), 300000);
     }
 
     // Start moving
@@ -508,7 +509,7 @@ class StrategicSmartMove {
           await sleep(500);
           continue;
         }
-        
+
         const segment = pathFindingResult[segmentIndex];
         if (segment.method === "move") {
           if (segment.map !== character.map) {
