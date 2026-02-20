@@ -155,11 +155,11 @@ class StrategicSmartMove {
     const idx = gy * gridWidth + gx;
     return mapGrid[idx] === CELL.standable;
   }
-  
+
   /**
    * Now using alpathfinder's isWalkable to check if the coordinate is standable
    */
-  isStandablePoint(position) { 
+  isStandablePoint(position) {
     return this.pathfinder.isWalkable(position.map, position.x, position.y);
   }
 
@@ -429,11 +429,21 @@ class StrategicSmartMove {
           distance(toPosition, mageInfo) < 200 &&
           distance(character, mageInfo) > 50 &&
           mageInfo.mp > parent.G.skills["magiport"].mp * 2 &&
-          mageInfo.time > Date.now() - 15_000
+          mageInfo.time > Date.now() - 15_000 &&
+          !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
         ) {
           send_cm(MAGE, "magiport");
           await sleep(500);
-          await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
+          if (
+            this.pathfinder.canWalkPath(
+              character.map,
+              character.x,
+              character.y,
+              toPosition.x,
+              toPosition.y,
+            )
+          )
+            await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
           this.stopTownChanneling();
           this.isSmartMoving = false;
           clearTimeout(this.magiportLoop);
