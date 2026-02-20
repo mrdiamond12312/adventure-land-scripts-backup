@@ -838,7 +838,11 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   // CRABXX strategy: orbit the TANKER around the center of spawn
-  if (target.type === "monster" && target?.mtype.includes("crabx") && isAssignedAsTanker()) {
+  if (
+    target.type === "monster" &&
+    target?.mtype.includes("crabx") &&
+    isAssignedAsTanker()
+  ) {
     const crabxxSpawn = getMonsterSpawns("crabxx")[0];
     target = {
       ...target,
@@ -1711,45 +1715,6 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.pinkgoo?.live) {
-    changeToPullStrategies();
-    let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
-    if (!pinkgooInstance) {
-      if (parent.S.pinkgoo?.x) {
-        await advanceSmartMove(parent.S.pinkgoo);
-        change_target(get_nearest_monster({ type: "pinkgoo" }));
-        return get_nearest_monster({ type: "pinkgoo" });
-      }
-    } else {
-      change_target(pinkgooInstance);
-
-      return pinkgooInstance;
-    }
-  }
-
-  if (parent.S.snowman?.live) {
-    changeToPullStrategies();
-
-    const currentTarget = get_target();
-    const snowmanInstance = get_nearest_monster({ type: "snowman" });
-    const grinchInstance = get_nearest_monster({ type: "grinch" });
-    const beeToAttack =
-      currentTarget && currentTarget.mtype === "arcticbee"
-        ? currentTarget
-        : get_nearest_monster({ type: "arcticbee" });
-
-    if (!snowmanInstance) advanceSmartMove(parent.S.snowman);
-    else {
-      if (grinchInstance) change_target(grinchInstance);
-      else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
-      else change_target(snowmanInstance);
-
-      return grinchInstance ?? snowmanInstance.s?.fullguardx
-        ? beeToAttack
-        : snowmanInstance;
-    }
-  }
-
   const activeBosses = [];
 
   if (
@@ -1916,6 +1881,45 @@ async function changeToDailyEventTargets() {
         scareAwayMobs();
         return frankyInstance;
       }
+  }
+
+  if (parent.S.pinkgoo?.live) {
+    changeToPullStrategies();
+    let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
+    if (!pinkgooInstance) {
+      if (parent.S.pinkgoo?.x) {
+        await advanceSmartMove(parent.S.pinkgoo);
+        change_target(get_nearest_monster({ type: "pinkgoo" }));
+        return get_nearest_monster({ type: "pinkgoo" });
+      }
+    } else {
+      change_target(pinkgooInstance);
+
+      return pinkgooInstance;
+    }
+  }
+
+  if (parent.S.snowman?.live) {
+    changeToPullStrategies();
+
+    const currentTarget = get_target();
+    const snowmanInstance = get_nearest_monster({ type: "snowman" });
+    const grinchInstance = get_nearest_monster({ type: "grinch" });
+    const beeToAttack =
+      currentTarget && currentTarget.mtype === "arcticbee"
+        ? currentTarget
+        : get_nearest_monster({ type: "arcticbee" });
+
+    if (!snowmanInstance) advanceSmartMove(parent.S.snowman);
+    else {
+      if (grinchInstance) change_target(grinchInstance);
+      else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
+      else change_target(snowmanInstance);
+
+      return grinchInstance ?? snowmanInstance.s?.fullguardx
+        ? beeToAttack
+        : snowmanInstance;
+    }
   }
 
   if (parent.S.abtesting && !character.s.hopsickness) {

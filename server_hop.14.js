@@ -11,7 +11,7 @@ const tankableBoss = ["snowman"];
 
 const bosses = {
   grinch: { type: "grinch", threshold: 0.7, hoppable: 1 },
-  icegolem: { type: "icegolem", threshold: 0.7, hoppable: 1 },
+  icegolem: { type: "icegolem", threshold: 0.9, hoppable: 1 },
   franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
   mrpumpkin: { type: "mrpumpkin", threshold: 0.3, hoppable: 0.9999 },
   mrgreen: { type: "mrgreen", threshold: 0.3, hoppable: 0.9999 },
