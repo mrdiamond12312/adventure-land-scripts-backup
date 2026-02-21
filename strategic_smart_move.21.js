@@ -429,12 +429,15 @@ class StrategicSmartMove {
         if (
           mageInfo &&
           distance(toPosition, mageInfo) < 200 &&
-          distance(character, mageInfo) > 50 &&
+          distance(character, mageInfo) >= 100 &&
           mageInfo.mp > parent.G.skills["magiport"].mp * 2 &&
           mageInfo.time > Date.now() - 15_000 &&
           !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
         ) {
           send_cm(MAGE, "magiport");
+          stop();
+          this.stopTownChanneling();
+          this.cleanUp();
           await sleep(500);
           if (
             this.pathfinder.canWalkPath(
@@ -446,8 +449,6 @@ class StrategicSmartMove {
             )
           )
             await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
-          this.stopTownChanneling();
-          this.cleanUp();
           return;
         }
 

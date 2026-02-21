@@ -825,21 +825,20 @@ function avgDmgTaken(characterEntity, dmgType = null) {
     characterEntity.firesistance ??
     (characterEntity.slots.orb?.name === "orba" ? 15 : 0);
 
-  const burnPadding =
-    highestBurningMob && highestBurningMob.damage_type === dmgType
-      ? dps_multiplier(
-          highestBurningMob.damage_type === "physical"
-            ? characterEntity.armor -
-                (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
-            : highestBurningMob.damage_type === "magical"
-            ? characterEntity.resistance -
-              (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
-            : 1,
-        ) *
-        ((100 - fireResist) / 100) *
-        (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
-        highestBurningMob.attack
-      : 0;
+  const burnPadding = highestBurningMob
+    ? dps_multiplier(
+        highestBurningMob.damage_type === "physical"
+          ? characterEntity.armor -
+              (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
+          : highestBurningMob.damage_type === "magical"
+          ? characterEntity.resistance -
+            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
+          : 1,
+      ) *
+      ((100 - fireResist) / 100) *
+      (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
+      highestBurningMob.attack
+    : 0;
 
   const currentBurnIntensity = highestBurningMob
     ? characterEntity.s.burned?.intensity ?? 0
