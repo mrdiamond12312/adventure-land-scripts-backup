@@ -302,7 +302,7 @@ class StrategicSmartMove {
 
     if (!toPosition) return;
 
-    let pathFindingResult;
+    let pathFindingResult = [];
 
     // If position is a mob's name id
     if (typeof toPosition === "string") {
