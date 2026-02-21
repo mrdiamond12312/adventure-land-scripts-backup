@@ -320,6 +320,28 @@ async function goMining() {
   }
 }
 
+async function dismantleSomething() {
+  if (
+    onDuty ||
+    isInvFull(4) ||
+    smart.moving ||
+    isAdvanceSmartMoving ||
+    character.c.mining ||
+    character.c.fishing
+  )
+    return;
+
+  const itemToDismantle = DISMANTLE_LIST.find((id) => locate_item(id) !== -1);
+  if (!itemToDismantle) return;
+
+  if (get_nearest_npc()?.name !== "Leo" && !haveAComputer()) {
+    close_stand();
+    await advanceSmartMove(find_npc("craftsman"));
+  }
+
+  return dismantle(locate_item(itemToDismantle));
+}
+
 async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   // Check if craftable
   if (
