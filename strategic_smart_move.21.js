@@ -396,7 +396,7 @@ class StrategicSmartMove {
     if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
       await this.useTownWithRetry();
       this.cleanUp();
-      console.warn(
+      throw new Error(
         `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
       );
     }
@@ -564,7 +564,7 @@ class StrategicSmartMove {
     }
 
     try {
-      while (pathFindingResult && segmentIndex < pathFindingResult.length) {
+      while (segmentIndex < pathFindingResult.length) {
         if (!this.isSmartMoving) break;
 
         if (this.isBlinking) {
@@ -669,7 +669,7 @@ class StrategicSmartMove {
       clearInterval(this.watcherInterval);
       this.watcherInterval = undefined;
     }
-    this.stopTownChanneling();
+
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
   }
