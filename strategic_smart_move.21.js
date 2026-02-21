@@ -420,7 +420,7 @@ class StrategicSmartMove {
           !this.isSmartMoving ||
           session !== this.smartMoveSession
         ) {
-          clearTimeout(this.magiportLoop);
+          this.cleanUp();
           return;
         }
 
@@ -447,8 +447,7 @@ class StrategicSmartMove {
           )
             await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
           this.stopTownChanneling();
-          this.isSmartMoving = false;
-          clearTimeout(this.magiportLoop);
+          this.cleanUp();
           return;
         }
 
@@ -670,7 +669,7 @@ class StrategicSmartMove {
       clearInterval(this.watcherInterval);
       this.watcherInterval = undefined;
     }
-
+    this.stopTownChanneling();
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
   }
