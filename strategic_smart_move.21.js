@@ -245,7 +245,7 @@ class StrategicSmartMove {
       }
     }
 
-    if (mapData.spawns?.length) {
+    if (mapData.spawns?.length && !this.stopTown) {
       await smart_move({
         map: character.map,
         x: mapData.spawns[0][0],
