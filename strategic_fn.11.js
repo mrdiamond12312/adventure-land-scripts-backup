@@ -825,20 +825,21 @@ function avgDmgTaken(characterEntity, dmgType = null) {
     characterEntity.firesistance ??
     (characterEntity.slots.orb?.name === "orba" ? 15 : 0);
 
-  const burnPadding = highestBurningMob
-    ? dps_multiplier(
-        highestBurningMob.damage_type === "physical"
-          ? characterEntity.armor -
-              (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
-          : highestBurningMob.damage_type === "magical"
-          ? characterEntity.resistance -
-            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
-          : 1,
-      ) *
-      ((100 - fireResist) / 100) *
-      (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
-      highestBurningMob.attack
-    : 0;
+  const burnPadding =
+    highestBurningMob && highestBurningMob.damage_type === dmgType
+      ? dps_multiplier(
+          highestBurningMob.damage_type === "physical"
+            ? characterEntity.armor -
+                (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
+            : highestBurningMob.damage_type === "magical"
+            ? characterEntity.resistance -
+              (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
+            : 1,
+        ) *
+        ((100 - fireResist) / 100) *
+        (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
+        highestBurningMob.attack
+      : 0;
 
   return (
     listOfAttackingMobs.reduce(
@@ -868,6 +869,11 @@ function rotateLeader(partyList, newLeaderId) {
 }
 
 function assignRoles() {
+  if (parent.S.franky?.live) {
+    TANKER = WARRIOR;
+    partyMems = rotateLeader(partyMems, TANKER);
+    return;
+  }
   if (partyMems.includes(WARRIOR) && partyMems.includes(HEALER)) {
     const partyDmgTaken = avgPartyDmgTaken(partyMems);
     const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "physical");
@@ -876,6 +882,7 @@ function assignRoles() {
     const physicalDmgRatio = partyMagicalDmgTaken / partyDmgTaken;
     TANKER = physicalDmgRatio <= 0.5 ? HEALER : WARRIOR;
     partyMems = rotateLeader(partyMems, TANKER);
+    return;
   }
 }
 
