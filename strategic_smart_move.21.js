@@ -396,7 +396,7 @@ class StrategicSmartMove {
     if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
       await this.useTownWithRetry();
       this.cleanUp();
-      throw new Error(
+      console.warn(
         `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
       );
     }
