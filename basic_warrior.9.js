@@ -49,7 +49,10 @@ async function fight(target) {
   };
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
-  if (currentStrategy === usePullStrategies && !target?.mtype.includes("crabx")) {
+  if (
+    currentStrategy === usePullStrategies &&
+    !target?.mtype.includes("crabx")
+  ) {
     const aggroedMobs = Object.values(parent.entities)
       .filter((entity) => {
         return (
@@ -213,7 +216,7 @@ async function fight(target) {
   // --- Taunt Logic ---
   const isTanker = isAssignedAsTanker();
   const canTaunt =
-    isTanker && character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt") && ;
+    isTanker && character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt");
   const partyHealer = get_player(HEALER) || get_player(RANGER);
   const isHealerAlive = partyHealer && !partyHealer.rip;
 
