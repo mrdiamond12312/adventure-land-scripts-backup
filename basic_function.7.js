@@ -849,8 +849,11 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     ["franky", "nerfedmummy"].includes(target.mtype) &&
     isAssignedAsTanker()
   ) {
-    if (distance(FRANKY_PREFER_SPOT, character) > 100)
+    if (distance(FRANKY_PREFER_SPOT, character) > 100) {
+      smartmoveDebug = true;
       await advanceSmartMove(FRANKY_PREFER_SPOT, { speed: 200 });
+      smartmoveDebug = false;
+    }
 
     target = {
       ...target,
