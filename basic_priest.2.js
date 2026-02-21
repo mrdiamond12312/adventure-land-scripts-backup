@@ -268,29 +268,81 @@ async function zapperLoop() {
     return setTimeout(zapperLoop, Math.max(zapCd, 50));
   }
 
+  const targetsInRange = Object.values(parent.entities).filter(
+    (entity) =>
+      entity.type === "monster" &&
+      is_in_range(entity, "zapperzap") &&
+      !entity["1hp"],
+  );
+
+  const physicalAggroed = targetsInRange.filter(
+    (entity) =>
+      entity.target === character.name && entity.damage_type === "physical",
+  );
+  const magicalAggroed = targetsInRange.filter(
+    (entity) =>
+      entity.target === character.name && entity.damage_type === "magical",
+  );
+  const pureAggroed = targetsInRange.filter(
+    (entity) =>
+      entity.target === character.name && entity.damage_type === "pure",
+  );
+  const courageMap = {
+    physical: { count: physicalAggroed.length, limit: character.courage },
+    magical: { count: magicalAggroed.length, limit: character.mcourage },
+    pure: { count: pureAggroed, length, limit: character.pcourage },
+  };
+
+  const isTanker = isAssignedAsTanker();
+
   try {
-    const targets = Object.values(parent.entities)
-      .filter(
-        (entity) =>
-          entity.type === "monster" &&
-          is_in_range(entity, "zapperzap") &&
-          !entity["1hp"] &&
-          (entity.target ||
-            entity.hp < 1000 ||
-            calculateDamage(entity, get_player(TANKER) ?? character) < 150),
-      )
+    const targets = targetsInRange
       .map((entity) => ({
         ...entity,
         dist: distance(entity, character),
         hp_p: entity.hp / entity.max_hp,
         weak: entity.max_hp < 2000,
       }))
+      .filter((entity) => {
+        if (entity.target) return true;
+
+        const { count, limit } = courageMap[entity.damage_type] ?? {
+          count: 0,
+          limit: Infinity,
+        };
+        if (count + 1 > limit) return false;
+
+        if (
+          entity.weak ||
+          entity.hp < 1000 ||
+          calculateDamage(entity, get_player(TANKER) ?? character) < 150
+        )
+          return true;
+
+        if (!isTanker) {
+          return (
+            calculateDamage(entity, character) + avgPartyDmgTaken(partyMems) <
+            character.heal * character.frequency
+          );
+        }
+
+        return false;
+      })
       .sort((lhs, rhs) => {
-        if (!!lhs.target !== !!rhs.target) return lhs.target ? -1 : 1;
+        if (isTanker) {
+          // Prioritize unaggrod mobs first
+          if (!!lhs.target !== !!rhs.target) return lhs.target ? 1 : -1;
+        } else {
+          if (!!lhs.target !== !!rhs.target) return lhs.target ? -1 : 1;
+        }
+
         if (lhs.target && rhs.target)
           return lhs.hp_p !== rhs.hp_p
             ? rhs.hp_p - lhs.hp_p
             : rhs.dist - lhs.dist;
+
+        if (isTanker) return rhs.dist - lhs.dist;
+
         return lhs.weak !== rhs.weak
           ? lhs.weak
             ? -1
@@ -299,7 +351,9 @@ async function zapperLoop() {
       });
 
     if (targets.length) {
-      use_skill("zapperzap", targets[0]).then(() => reduceCd("zapperzap"));
+      await withTimeout(
+        use_skill("zapperzap", targets[0]).then(() => reduceCd("zapperzap")),
+      );
     }
   } catch (e) {
     console.log("Zap Error:", e);

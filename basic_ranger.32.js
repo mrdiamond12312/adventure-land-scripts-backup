@@ -117,7 +117,7 @@ async function fight(target) {
     character.level >= G.skills["5shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 1000 &&
+    character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp &&
     weakMobs.length >= 4 &&
     mobsTo5Shot.every((mob) => shouldAttack(mob));
 
@@ -126,7 +126,7 @@ async function fight(target) {
     character.level >= G.skills["3shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 1000 &&
+    character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp &&
     potentialTargets.length >= 2 &&
     mobsTo3Shot.every((mob) => shouldAttack(mob));
 
