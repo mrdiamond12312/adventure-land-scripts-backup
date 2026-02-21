@@ -1128,7 +1128,7 @@ async function warriorStomp() {
 }
 
 function shouldAttack(target = get_target()) {
-  const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
+  const partyHealer = get_entity(HEALER);
 
   if (character.map === "crypt") {
     return !!partyHealer && !partyHealer.rip;
