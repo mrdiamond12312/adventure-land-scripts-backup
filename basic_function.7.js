@@ -1882,7 +1882,9 @@ async function changeToDailyEventTargets() {
   }
 
   if (parent.S.franky?.live) {
-    changeToPullStrategies();
+    if (character.ctype === "warrior") changeToPullStrategies();
+    else changeToNormalStrategies();
+
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
       await join("franky").catch((e) => console.warn(e));
