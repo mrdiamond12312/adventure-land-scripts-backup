@@ -86,8 +86,9 @@ async function fight(target) {
   if (potentialTargets.length && !target?.mtype.includes("crabx")) {
     target = potentialTargets[0];
     change_target(target);
-  } // Reacquire target if feared
-
+  } 
+  
+  // Reacquire target if feared
   if (character.fear) {
     const aggroing = potentialTargets.find(
       (mob) => mob.target === character.name,

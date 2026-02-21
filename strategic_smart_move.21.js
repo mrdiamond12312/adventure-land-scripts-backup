@@ -290,6 +290,8 @@ class StrategicSmartMove {
 
     this.smartMoveSession = (this.smartMoveSession || 0) + 1;
     const session = this.smartMoveSession;
+    isAdvanceSmartMoving = true;
+    this.isSmartMoving = true;
 
     const options = {
       useBlink: true,
@@ -391,8 +393,6 @@ class StrategicSmartMove {
       }
     }
 
-    isAdvanceSmartMoving = true;
-    this.isSmartMoving = true;
     if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
       await this.useTownWithRetry();
       this.cleanUp();
@@ -437,7 +437,6 @@ class StrategicSmartMove {
           send_cm(MAGE, "magiport");
           stop();
           this.stopTownChanneling();
-          this.cleanUp();
           await sleep(500);
           if (
             this.pathfinder.canWalkPath(
@@ -449,6 +448,7 @@ class StrategicSmartMove {
             )
           )
             await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
+          this.cleanUp();
           return;
         }
 
