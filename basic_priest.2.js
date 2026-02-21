@@ -243,7 +243,7 @@ async function priestBuff() {
     }
   }
   try {
-    await withTimeout(Promise.allSettled(promises), 2500);
+    await withTimeout(Promise.all(promises), 2500);
   } catch (e) {
     console.error(e);
     return false;

@@ -213,7 +213,7 @@ async function fight(target) {
   // --- Taunt Logic ---
   const isTanker = isAssignedAsTanker();
   const canTaunt =
-    isTanker && character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt");
+    isTanker && character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt") && ;
   const partyHealer = get_player(HEALER) || get_player(RANGER);
   const isHealerAlive = partyHealer && !partyHealer.rip;
 

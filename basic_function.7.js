@@ -840,14 +840,13 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   // FRANKY strategy: stuck to the corner of the map
-
   if (
     target.type === "monster" &&
     ["franky", "nerfedmummy"].includes(target.mtype) &&
-    ["priest", "warrior"].includes(character.ctype)
+    isAssignedAsTanker()
   ) {
     if (distance(FRANKY_PREFER_SPOT, character) > 100)
-      advanceSmartMove(FRANKY_PREFER_SPOT);
+      await advanceSmartMove(FRANKY_PREFER_SPOT, { speed: 200 });
 
     target = {
       ...target,

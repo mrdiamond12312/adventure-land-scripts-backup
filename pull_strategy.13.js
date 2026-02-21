@@ -197,6 +197,9 @@ async function usePullStrategies(target) {
           )
           .find(
             (mob) =>
+              !WATCHOUT_ABILITIES.some((skill) =>
+                Object.keys(mob.abilities ?? {}).includes(skill),
+              ) &&
               calculateDamage(mob, character) + partyDmgRecieved <
                 healReceivableAmount &&
               is_in_range(mob, "taunt") &&
@@ -258,7 +261,8 @@ async function usePullStrategies(target) {
       }
 
       if (
-        avgPartyDmgTaken(partyMems) > character.heal * 0.95 * character.frequency &&
+        avgPartyDmgTaken(partyMems) >
+          character.heal * 0.95 * character.frequency &&
         character.hp < (isAssignedAsTanker() ? 0.3 : 0.5) * character.max_hp &&
         !is_on_cooldown("scare") &&
         character.cc < 100
