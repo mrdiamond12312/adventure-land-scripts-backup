@@ -869,7 +869,11 @@ function rotateLeader(partyList, newLeaderId) {
 }
 
 function assignRoles() {
-  if (parent.S.franky?.live) {
+  const currentTarget = get_targeted_monster();
+  if (
+    parent.S.franky?.live &&
+    ["franky", "nerfedmummy"].includes(currentTarget?.mtype)
+  ) {
     TANKER = WARRIOR;
     partyMems = rotateLeader(partyMems, TANKER);
     return;
