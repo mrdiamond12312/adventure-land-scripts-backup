@@ -841,6 +841,10 @@ function avgDmgTaken(characterEntity, dmgType = null) {
         highestBurningMob.attack
       : 0;
 
+  const currentBurnIntensity = highestBurningMob
+    ? characterEntity.s.burned?.intensity ?? 0
+    : 0;
+
   return (
     listOfAttackingMobs.reduce(
       (accummulator, currentMob) =>
@@ -848,7 +852,7 @@ function avgDmgTaken(characterEntity, dmgType = null) {
       0,
     ) *
       mobbingMultiplier(numberOfAttackingMobs) +
-    Math.max(characterEntity.s.burned?.intensity ?? 0, burnPadding)
+    Math.max(currentBurnIntensity, burnPadding)
   );
 }
 

@@ -565,7 +565,7 @@ class StrategicSmartMove {
 
     try {
       while (segmentIndex < pathFindingResult.length) {
-        if (!this.isSmartMoving) break;
+        if (!this.isSmartMoving || session !== this.smartMoveSession) break;
 
         if (this.isBlinking) {
           await sleep(500);
