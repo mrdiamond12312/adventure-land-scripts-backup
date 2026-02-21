@@ -1587,9 +1587,9 @@ const DYNAMIC_PARTY_PRESETS = {
   },
   mrpumpkin: "mrgreen", // share config
   franky: () => {
-    const isAggroed = !!parent.S.franky?.target;
-    HEALER = PRIEST;
-    return [WARRIOR, PRIEST, isAggroed ? ROGUE : MAGE];
+    // const isAggroed = !!parent.S.franky?.target;
+    // HEALER = PRIEST;
+    return [WARRIOR, PRIEST, ROGUE];
   },
   icegolem: () => {
     HEALER = PRIEST;
