@@ -1881,11 +1881,7 @@ async function changeToDailyEventTargets() {
     return targetCrab;
   }
 
-  if (
-    parent.S.franky?.live &&
-    parent.S.franky?.target &&
-    parent.S.franky?.hp < 0.97 * parent.S.franky?.max_hp
-  ) {
+  if (parent.S.franky?.live) {
     changeToPullStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
