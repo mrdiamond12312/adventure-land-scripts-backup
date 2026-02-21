@@ -822,14 +822,16 @@ function extraDistanceWithinHitbox(target) {
 }
 
 var lastKitingTargetId = undefined;
+const FRANKY_PREFER_SPOT = {
+  x: 11,
+  y: 8,
+  map: "level2w",
+};
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   const loopInterval = Math.max(200, getLoopInterval());
-  // const totalExtraRange = extraRangeTarget + extraRangeSelf;
   const rangeRadius = character.range * rangeRateFn;
   const extendedRadius = character.xrange * 0.9;
-  // + totalExtraRange;
 
-  // --- 1. Early exits and sanity checks ---
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
   if (!target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
@@ -837,10 +839,31 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     return setTimeout(hitAndRun, loopInterval);
   }
 
-  // CRABXX strategy: orbit the TANKER around the center of spawn
+  // FRANKY strategy: stuck to the corner of the map
+
   if (
     target.type === "monster" &&
-    target?.mtype.includes("crabx") &&
+    ["franky", "nerfedmummy"].includes(target.mtype) &&
+    ["priest", "warrior"].includes(character.ctype)
+  ) {
+    if (distance(FRANKY_PREFER_SPOT, character) > 100)
+      advanceSmartMove(FRANKY_PREFER_SPOT);
+
+    target = {
+      ...target,
+      x: 11,
+      y: 8,
+      real_x: 11,
+      real_y: 8,
+      going_x: 11,
+      going_y: 8,
+    };
+  }
+
+  // CRABXX strategy: orbit the TANKER around the center of spawn
+  if (
+    target?.type === "monster" &&
+    target.mtype.includes("crabx") &&
     isAssignedAsTanker()
   ) {
     const crabxxSpawn = getMonsterSpawns("crabxx")[0];
@@ -1863,7 +1886,7 @@ async function changeToDailyEventTargets() {
     parent.S.franky?.target &&
     parent.S.franky?.hp < 0.97 * parent.S.franky?.max_hp
   ) {
-    changeToNormalStrategies();
+    changeToPullStrategies();
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
       await join("franky").catch((e) => console.warn(e));
