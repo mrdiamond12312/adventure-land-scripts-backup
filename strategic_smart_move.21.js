@@ -302,7 +302,7 @@ class StrategicSmartMove {
 
     if (!toPosition) return;
 
-    let pathFindingResult = [];
+    let pathFindingResult;
 
     // If position is a mob's name id
     if (typeof toPosition === "string") {
@@ -564,7 +564,7 @@ class StrategicSmartMove {
     }
 
     try {
-      while (segmentIndex < pathFindingResult.length) {
+      while (pathFindingResult && segmentIndex < pathFindingResult.length) {
         if (!this.isSmartMoving) break;
 
         if (this.isBlinking) {
