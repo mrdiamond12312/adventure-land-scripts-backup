@@ -176,18 +176,10 @@ async function priestBuff() {
       ) {
         const middleX = (buffee.x + character.x) / 2;
         const middleY = (buffee.y + character.y) / 2;
-        if (parent.caracAL)
-          promises.push(
-            advanceSmartMove({
-              map: character.map,
-              x: middleX,
-              y: middleY,
-            }),
-          );
-        else if (can_move_to(middleX, middleY))
-          promises.push(
-            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
-          );
+        if (can_move_to(middleX, middleY))
+          promises.push(move(middleX, middleY));
+        else if (can_move_to(buffee.x, buffee.y))
+          promises.push(move(buffee.x, buffee.y));
         else advanceSmartMove({ map: character.map, x: buffee.x, y: buffee.y });
         set_message(`Moving to ${buffee.name}`);
         continue;
