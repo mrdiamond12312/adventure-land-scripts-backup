@@ -76,7 +76,7 @@ async function fight(target) {
       return (
         // Sort by cluster count
         rhs.cluster_count - lhs.cluster_count ||
-        lhs.hp - rhs.hp ||
+        rhs.hp - lhs.hp ||
         lhs.distance - rhs.distance
       );
     });
