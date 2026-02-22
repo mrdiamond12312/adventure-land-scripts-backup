@@ -1750,11 +1750,7 @@ async function changeToDailyEventTargets() {
 
   const activeBosses = [];
 
-  if (
-    parent.S.mrpumpkin &&
-    parent.S.mrpumpkin.live &&
-    parent.S.mrpumpkin.target
-  ) {
+  if (parent.S.mrpumpkin?.live) {
     activeBosses.push({
       ...parent.S.mrpumpkin,
       type: "mrpumpkin",
@@ -1762,7 +1758,7 @@ async function changeToDailyEventTargets() {
     });
   }
 
-  if (parent.S.mrgreen?.live && parent.S.mrgreen.target) {
+  if (parent.S.mrgreen?.live) {
     activeBosses.push({
       ...parent.S.mrgreen,
       type: "mrgreen",

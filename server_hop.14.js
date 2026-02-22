@@ -134,9 +134,16 @@ setInterval(async () => {
           return rhsIsTankable - lhsIsTankable;
         }
 
-        return (
-          lhs.hp / G.monsters[lhs.type].hp - rhs.hp / G.monsters[rhs.type].hp
-        );
+        const lhsHpPct = lhs.hp / G.monsters[lhs.type].hp;
+        const rhsHpPct = rhs.hp / G.monsters[rhs.type].hp;
+        if (lhsHpPct !== rhsHpPct) return lhsHpPct - rhsHpPct;
+
+        const homeServer = getHomeServer();
+        const lhsIsHome =
+          `${lhs.serverRegion}${lhs.serverIdentifier}` === homeServer;
+        const rhsIsHome =
+          `${rhs.serverRegion}${rhs.serverIdentifier}` === homeServer;
+        return rhsIsHome - lhsIsHome;
         // return bossPriority.findIndex((boss) => boss === lhs.type) -
         //   bossPriority.findIndex((boss) => boss === rhs.type)
         //   ? bossPriority.findIndex((boss) => boss === lhs.type) -
