@@ -1142,7 +1142,11 @@ function shouldAttack(target = get_target()) {
     return false;
   }
 
-  if (target && target.attack > 600 && !target.target) {
+  if (
+    target &&
+    target.attack > 600 &&
+    (!target.target || target.target === character.name)
+  ) {
     const partyPriest = [...parent.party_list, ...partyMems]
       .map((id) => get_player(id))
       .filter((player) => player?.ctype === "priest");
