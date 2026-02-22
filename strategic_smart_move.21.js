@@ -437,6 +437,7 @@ class StrategicSmartMove {
           send_cm(MAGE, "magiport");
           stop();
           this.stopTownChanneling();
+          this.cleanUp();
           await sleep(500);
           if (
             this.pathfinder.canWalkPath(
@@ -448,7 +449,6 @@ class StrategicSmartMove {
             )
           )
             await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
-          this.cleanUp();
           return;
         }
 
@@ -603,46 +603,16 @@ class StrategicSmartMove {
           continue;
         }
 
-        if (segment.method === "blink") {
-          if (character.ctype !== "mage") {
-            const mageEntity = parent.caracAL
-              ? parent.caracAL.siblings.includes(MAGE)
-                ? get("mageLocation")
-                : undefined
-              : getCharacter(MAGE);
-
-            if (!mageEntity || Date.now() - mageEntity.time > 15_000) {
-              throw new Error("Magiport unavailable, mage location unknown");
-            }
-
-            if (
-              mageEntity.map === segment.map &&
-              distance(segment, mageEntity) < 300
-            ) {
-              send_cm(MAGE, "magiport");
-              await sleep(character.ping * 6);
-              this.isSmartMoving = false; // Stop current smart move to let magiport update character position and pathfinding
-              segmentIndex++;
-              continue;
-            } else {
-              throw new Error(
-                `Magiport unavailable, mage too far from blink destination: ${distance(
-                  segment,
-                  mageEntity,
-                )}`,
-              );
-            }
-          } else {
-            if (
-              character.mp > parent.G.skills["blink"].mp &&
-              !is_on_cooldown("blink") &&
-              character.map === segment.map
-            ) {
-              await use_skill("blink", [segment.x, segment.y]);
-              await sleep(character.ping * 0.7);
-              segmentIndex++;
-              continue;
-            }
+        if (segment.method === "blink" && character.ctype === "mage") {
+          if (
+            character.mp > parent.G.skills["blink"].mp &&
+            !is_on_cooldown("blink") &&
+            character.map === segment.map
+          ) {
+            await use_skill("blink", [segment.x, segment.y]);
+            await sleep(character.ping * 0.7);
+            segmentIndex++;
+            continue;
           }
         }
       }
