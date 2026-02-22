@@ -1788,10 +1788,15 @@ async function changeToDailyEventTargets() {
       .shift();
 
     if (bossToFight) {
-      const bossInstance = get_nearest_monster({ type: bossToFight.type });
+      let bossInstance = get_nearest_monster({ type: bossToFight.type });
       bossToFight.strategy();
-      if (!bossInstance) advanceSmartMove(bossToFight);
-      else {
+      if (!bossInstance) {
+        await advanceSmartMove(bossToFight);
+        bossInstance = get_nearest_monster({ type: bossToFight.type });
+
+        change_target(bossInstance);
+        return bossInstance;
+      } else {
         change_target(bossInstance);
         return bossInstance;
       }
