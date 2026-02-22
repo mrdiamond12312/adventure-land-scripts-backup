@@ -1,10 +1,4 @@
 // Global vars and Constants
-var isAdvanceSmartMoving = false;
-if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/strategic_smart_move.21.js",
-  ]);
-}
 const CRYPT_DOOR = {
   map: "cave",
   x: -191,
@@ -329,12 +323,4 @@ async function oldAdvanceSmartMove(
   resetSmartMove();
 
   return;
-}
-
-async function advanceSmartMove(props, options = { useScare: true }) {
-  if (parent.caracAL) {
-    return smartMove(props, options);
-  } else {
-    return oldAdvanceSmartMove(props, options);
-  }
 }

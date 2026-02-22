@@ -494,15 +494,28 @@ const DISMANTLE_LIST = [
 var maxUpgrade = 7;
 var maxCompound = 3;
 
+// Smart move strategies
+var isAdvanceSmartMoving = false;
 if (parent.caracAL) {
   parent.caracAL.load_scripts([
     "adventure-land-scripts-backup/crypt_strategy.16.js",
+    "adventure-land-scripts-backup/strategic_smart_move.21.js",
     "adventure-land-scripts-backup/advance_smart_move.20.js",
   ]);
 } else {
   load_code(20);
   load_code(16);
 }
+
+// Wrapper to use which depends on client platform
+async function advanceSmartMove(props, options = { useScare: true }) {
+  if (parent.caracAL) {
+    return smartMove(props, options);
+  } else {
+    return oldAdvanceSmartMove(props, options);
+  }
+}
+
 // Pre-set function
 var isSortingInventory = false;
 
