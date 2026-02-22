@@ -53,27 +53,6 @@ if (parent.caracAL && parent.caracAL.ALPathfinder) {
   parent.caracAL.ALPathfinder.prepare(parent.G, ["bank_u"]); // Ignore bank_u for pathfinding
 }
 
-async function scareAwayMobs() {
-  if (
-    (locate_item("jacko") !== -1 || character.slots["orb"].name === "jacko") &&
-    Object.values(parent.entities).some(
-      (mob) => mob?.target === character.name && mob?.type === "monster",
-    ) &&
-    !is_on_cooldown("scare") &&
-    character.mp > 100
-  ) {
-    return Promise.all([
-      equipBatch(
-        {
-          orb: "jacko",
-        },
-        true,
-      ),
-      use_skill("scare"),
-    ]);
-  }
-}
-
 async function mageBlink(
   map,
   coordinates,

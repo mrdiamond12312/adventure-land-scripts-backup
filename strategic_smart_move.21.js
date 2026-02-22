@@ -401,16 +401,20 @@ class StrategicSmartMove {
       );
     }
 
-    if (options.useScare) {
-      await scareAwayMobs();
-      this.scareInterval = setInterval(async () => {
-        if (!this.isSmartMoving || session !== this.smartMoveSession) {
-          clearInterval(this.scareInterval);
-          return;
-        }
-
+    try {
+      if (options.useScare) {
         await scareAwayMobs();
-      }, 1000);
+        this.scareInterval = setInterval(async () => {
+          if (!this.isSmartMoving || session !== this.smartMoveSession) {
+            clearInterval(this.scareInterval);
+            return;
+          }
+
+          await scareAwayMobs();
+        }, 1000);
+      }
+    } catch (e) {
+      console.warn("Code's not ready");
     }
 
     if (options.useMagiport && character.ctype !== "mage") {
