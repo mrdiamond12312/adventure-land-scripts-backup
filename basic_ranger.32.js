@@ -86,8 +86,8 @@ async function fight(target) {
   if (potentialTargets.length && !target?.mtype.includes("crabx")) {
     target = potentialTargets[0];
     change_target(target);
-  } 
-  
+  }
+
   // Reacquire target if feared
   if (character.fear) {
     const aggroing = potentialTargets.find(
@@ -149,7 +149,11 @@ async function fight(target) {
         currentStrategy(mobsTo3Shot),
         tryMultiShot("3shot", mobsTo3Shot),
       );
-  } else if (target && distance(target, character) < nearRange) {
+  } else if (
+    target &&
+    shouldAttack(target) &&
+    distance(target, character) < nearRange
+  ) {
     set_message("Shooting");
     if (!isAttackReady) promisesToAwait.push(currentStrategy(target));
     else if (!isCupid)
