@@ -440,8 +440,6 @@ class StrategicSmartMove {
         ) {
           send_cm(MAGE, "magiport");
           stop();
-          this.stopTownChanneling();
-          this.cleanUp();
           await sleep(500);
           if (
             this.pathfinder.canWalkPath(
@@ -453,13 +451,15 @@ class StrategicSmartMove {
             )
           )
             await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
+          this.cleanUp();
+          this.stopTownChanneling();
           return;
         }
 
         // Recursive timeout to check for magiport availability every second
         this.magiportLoop = setTimeout(magiportCheck, 1000);
       };
-      this.magiportLoop = setTimeout(magiportCheck, 1000);
+      this.magiportLoop = magiportCheck();
     }
 
     // Start moving
