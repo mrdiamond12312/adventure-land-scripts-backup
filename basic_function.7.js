@@ -1577,11 +1577,6 @@ const shouldDeployRogue = () => {
 };
 
 const DYNAMIC_PARTY_PRESETS = {
-  snowman: () => {
-    RANGER = RANGER1;
-    HEALER = RANGER;
-    return [WARRIOR, RANGER, MAGE];
-  },
   mrgreen: {
     USI: [WARRIOR, PRIEST, ROGUE],
     EUII: () => {
@@ -1624,6 +1619,14 @@ const DYNAMIC_PARTY_PRESETS = {
     },
     default: [WARRIOR, PRIEST, ROGUE],
   },
+  crabxx: () => {
+    // const isAggroed = !!parent.S.crabxx?.target;
+    // if (isAggroed) RANGER = RANGER1;
+    // HEALER = isAggroed ? RANGER1 : PRIEST;
+    // return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
+    RANGER = RANGER1;
+    return [WARRIOR, PRIEST, RANGER1];
+  },
   pinkgoo: {
     USI: [WARRIOR, PRIEST, ROGUE],
     USII: [WARRIOR, MAGE, PRIEST],
@@ -1643,13 +1646,10 @@ const DYNAMIC_PARTY_PRESETS = {
       return [WARRIOR, RANGER, MAGE];
     },
   },
-  crabxx: () => {
-    // const isAggroed = !!parent.S.crabxx?.target;
-    // if (isAggroed) RANGER = RANGER1;
-    // HEALER = isAggroed ? RANGER1 : PRIEST;
-    // return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
+  snowman: () => {
     RANGER = RANGER1;
-    return [WARRIOR, PRIEST, RANGER1];
+    HEALER = RANGER;
+    return [WARRIOR, RANGER, MAGE];
   },
 
   default: () => {
