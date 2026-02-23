@@ -11,8 +11,8 @@ class StrategicSmartMove {
     this.pathfinder = parent.caracAL.ALPathfinder;
     this.pathfinder.prepare(parent.G, ["bank_u"]);
     this.scareInterval = undefined;
+    this.isDoingSomethingMagical = false;
     this.blinkLoop = undefined;
-    this.isBlinking = false;
     this.magiportLoop = undefined;
     this.watcherInterval = undefined;
     this.isSmartMoving = true;
@@ -440,6 +440,7 @@ class StrategicSmartMove {
           mageInfo.time > Date.now() - 15_000 &&
           !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
         ) {
+          this.isDoingSomethingMagical = true;
           send_cm(MAGE, "magiport");
           stop();
           await sleep(500);
@@ -455,6 +456,7 @@ class StrategicSmartMove {
             await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
           this.cleanUp();
           this.stopTownChanneling();
+          this.isDoingSomethingMagical = false;
           return;
         }
 
@@ -538,13 +540,13 @@ class StrategicSmartMove {
             console.log(
               `Blinking to ${blinkSegment.map} (${blinkSegment.x}, ${blinkSegment.y})`,
             );
-            this.isBlinking = true;
+            this.isDoingSomethingMagical = true;
             this.stopTownChanneling();
             await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
             await sleep(250);
             await move(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
             segmentIndex = lastIndex + 1;
-            this.isBlinking = false;
+            this.isDoingSomethingMagical = false;
           }
         } catch (e) {
           console.log("Error while blinking:", e);
@@ -574,7 +576,7 @@ class StrategicSmartMove {
       while (segmentIndex < pathFindingResult.length) {
         if (!this.isSmartMoving || session !== this.smartMoveSession) break;
 
-        if (this.isBlinking) {
+        if (this.isDoingSomethingMagical) {
           await sleep(500);
           continue;
         }
