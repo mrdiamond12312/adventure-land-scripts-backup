@@ -196,7 +196,7 @@ async function priestBuff() {
   // Party Heal Logic
   const allies = (parent.party_list || [])
     .map((name) => get_entity(name))
-    .filter((entity) => entity);
+    .filter((entity) => entity && !entity.dead && !entity.rip);
   const modInjuredThreshold = character.level * 20;
 
   if (
