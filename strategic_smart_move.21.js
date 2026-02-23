@@ -443,7 +443,7 @@ class StrategicSmartMove {
           this.isDoingSomethingMagical = true;
           send_cm(MAGE, "magiport");
           stop();
-          await sleep(500);
+          await sleep(1500);
           if (
             this.pathfinder.canWalkPath(
               character.map,
