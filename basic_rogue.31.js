@@ -105,7 +105,7 @@ async function fuaLoop() {
     if (
       playersNearbyWithoutRogueSpeed.length &&
       ms_to_next_skill("rspeed") === 0 &&
-      character.mp > G.skills["rspeed"].mp
+      character.mp > G.skills["rspeed"].mp && shouldAttack()
     ) {
       promisesToAwait.push(
         use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift()),
