@@ -365,6 +365,8 @@ class StrategicSmartMove {
         );
       }
 
+      if (distance(toPosition, character) < 10) return;
+
       pathFindingResult = this.pathfinderGetPath(toPosition, options.speed);
 
       // Standable fallback (for example: icegolem spawn)
