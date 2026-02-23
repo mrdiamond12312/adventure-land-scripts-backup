@@ -621,6 +621,8 @@ class StrategicSmartMove {
             continue;
           }
         }
+
+        segmentIndex++;
       }
     } catch (e) {
       console.log("smartMove error:", e);
