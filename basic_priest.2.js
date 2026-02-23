@@ -258,9 +258,11 @@ async function zapperLoop() {
     character.slots.ring1?.name === "zapper" ||
     character.slots.ring2?.name === "zapper";
 
+  const mpPct = character.mp / character.max_mp;
+
   if (
     zapCd !== 0 ||
-    character.mp < character.max_mp * 0.6 ||
+    mpPct < 0.6 ||
     character.penalty_cd ||
     !hasZapper ||
     Object.keys(character.c).length
@@ -351,9 +353,12 @@ async function zapperLoop() {
       });
 
     if (targets.length) {
-      await withTimeout(
-        use_skill("zapperzap", targets[0]).then(() => reduceCd("zapperzap")),
-      );
+      const targetToZap = targets[0];
+      const mpThreshold = isTanker ? (targetToZap.target ? 0.75 : 0.6) : 0.6;
+      if (mpPct > mpThreshold)
+        await withTimeout(
+          use_skill("zapperzap", targets[0]).then(() => reduceCd("zapperzap")),
+        );
     }
   } catch (e) {
     console.log("Zap Error:", e);
