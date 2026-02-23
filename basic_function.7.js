@@ -1642,7 +1642,7 @@ const DYNAMIC_PARTY_PRESETS = {
     return [WARRIOR, PRIEST, RANGER1];
   },
   pinkgoo: {
-    USI: [WARRIOR, PRIEST, ROGUE],
+    USI: [MAGE, PRIEST, ROGUE],
     USII: [WARRIOR, MAGE, PRIEST],
     EUI: () => {
       RANGER = RANGER1;
