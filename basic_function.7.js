@@ -659,7 +659,7 @@ async function buff() {
 
     if (
       character.hp / character.max_hp < character.mp / character.max_mp ||
-      (character.hp < character.max_hp * 0.6 && character.mp > 500)
+      (character.hp < character.max_hp * 0.6 && character.mp > 1000)
     ) {
       if (
         character.hp < 0.8 * character.max_hp &&
