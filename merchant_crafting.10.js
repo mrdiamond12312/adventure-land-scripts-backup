@@ -25,7 +25,7 @@ const KEEP_THRESHOLD = {
   orb: 2,
   shield: 3, // warrior, 0 if unneccessary
   source: 2, // priest and mage
-  staff: 4,
+  staff: 16,
 
   // Class attribute based
   earring: 4,
@@ -376,11 +376,11 @@ async function upgradeInv() {
       if (
         character.mp > 200 &&
         !is_on_cooldown("massproductionpp") &&
-        character.items[i]?.level >= 3 &&
+        character.items[i]?.level >= 1 &&
         !character.s.massproductionpp
       ) {
         if (character.mp < 1000 && locate_item("mpot1") === -1) {
-          buy("mpot1", 1);
+          buy("mpot1", 10);
         }
         use_skill("massproductionpp");
       }
@@ -414,7 +414,7 @@ async function upgradeInv() {
                   ...item_info({ name: itemName }),
                 };
 
-              if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level + 1 ?? 0) {
+              if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level ?? 0) {
                 close_stand();
                 smart_move(bankPosition).then(() =>
                   bank_store(findMaxLevelItem(itemName))

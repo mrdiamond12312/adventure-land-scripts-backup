@@ -331,12 +331,12 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0,
+      0
     );
 
     const totalQuantityOfBankItem = bankSlots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
-      0,
+      0
     );
 
     let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
@@ -408,13 +408,13 @@ setInterval(async function () {
     upgradeInv(),
     exchangeXyn(),
     // holidayExchange(),
-    craft("xbox"),
-    craft("basketofeggs"),
-    craft("orba", 1, { map: "main", x: -152, y: -137 }),
+    // craft("xbox"),
+    // craft("basketofeggs"),
+    // craft("orba", 1, { map: "main", x: -152, y: -137 }),
     // craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
     // craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
     // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
-    craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
+    // craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
     !isSortingInventory &&
       Promise.all(
         Array.from({ length: 42 }, (_, i) => i)
@@ -426,7 +426,7 @@ setInterval(async function () {
               (character.items[i].level || 0) <= 2
             );
           })
-          .map(async (i) => sell(i, 1000)),
+          .map(async (i) => sell(i, 1000))
       ),
   ]);
 
@@ -497,7 +497,7 @@ function secondhandsHandler(events) {
     if (
       item &&
       ITEM_NEEDED.filter((item) => !SALE_ABLE.includes(item)).includes(
-        item.name,
+        item.name
       )
     ) {
       parent.socket.emit("sbuy", { rid: item.rid });
@@ -528,9 +528,9 @@ if (parent.caracAL) {
 setInterval(() => {
   if (
     !isInvFull(5) &&
-    character.map === "main" &&
+    (character.map === "main" || locate_item("computer")) !== -1 &&
     !(
-      (ITEMS_HIGHEST_LEVEL.staff?.quantity ?? 0) > 3 &&
+      (ITEMS_HIGHEST_LEVEL.staff?.quantity ?? 0) > 16 &&
       (ITEMS_HIGHEST_LEVEL.staff?.level ?? 0) > 7
     )
   ) {
@@ -538,4 +538,4 @@ setInterval(() => {
       buy("staff");
     }
   }
-}, 2000);
+}, 45000);
