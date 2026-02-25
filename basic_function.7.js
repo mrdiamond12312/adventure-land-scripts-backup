@@ -260,15 +260,21 @@ if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
 }
 
 var disablePullingStrategy = false;
+const asyncNoop = async () => {};
 
 function changeToPullStrategies() {
-  currentStrategy = disablePullingStrategy
-    ? useNormalStrategy
-    : usePullStrategies;
+  const normal =
+    typeof useNormalStrategy === "function" ? useNormalStrategy : noop;
+
+  const pull =
+    typeof usePullStrategies === "function" ? usePullStrategies : noop;
+
+  currentStrategy = disablePullingStrategy ? normal : pull;
 }
 
 function changeToNormalStrategies() {
-  currentStrategy = useNormalStrategy;
+  currentStrategy =
+    typeof useNormalStrategy === "function" ? useNormalStrategy : noop;
 }
 
 // Debug stucking
