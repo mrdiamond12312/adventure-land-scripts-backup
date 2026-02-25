@@ -264,17 +264,17 @@ const asyncNoop = async () => {};
 
 function changeToPullStrategies() {
   const normal =
-    typeof useNormalStrategy === "function" ? useNormalStrategy : noop;
+    typeof useNormalStrategy === "function" ? useNormalStrategy : asyncNoop;
 
   const pull =
-    typeof usePullStrategies === "function" ? usePullStrategies : noop;
+    typeof usePullStrategies === "function" ? usePullStrategies : asyncNoop;
 
   currentStrategy = disablePullingStrategy ? normal : pull;
 }
 
 function changeToNormalStrategies() {
   currentStrategy =
-    typeof useNormalStrategy === "function" ? useNormalStrategy : noop;
+    typeof useNormalStrategy === "function" ? useNormalStrategy : asyncNoop;
 }
 
 // Debug stucking
