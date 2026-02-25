@@ -266,9 +266,7 @@ class StrategicSmartMove {
    * @returns mage information from localStorage or from iframe
    */
   getMageInfo() {
-    return parent.caracAL.siblings.includes(MAGE)
-      ? get("mageLocation")
-      : getCharacter(MAGE);
+    return parent.caracAL ? get("mageLocation") : getCharacter(MAGE);
   }
 
   /**
@@ -555,7 +553,7 @@ class StrategicSmartMove {
         this.blinkLoop = setTimeout(blinkCheck, 1000);
       };
 
-      this.blinkLoop = setTimeout(blinkCheck, 1000);
+      this.blinkLoop = blinkCheck();
     }
 
     if (options.stopWatcher) {
