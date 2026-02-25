@@ -877,10 +877,11 @@ function assignRoles() {
     parent.S.franky?.live &&
     ["franky", "nerfedmummy"].includes(currentTarget?.mtype)
   ) {
-    TANKER = WARRIOR;
+    TANKER = PRIEST;
     partyMems = rotateLeader(partyMems, TANKER);
     return;
   }
+
   if (partyMems.includes(WARRIOR) && partyMems.includes(HEALER)) {
     const partyDmgTaken = avgPartyDmgTaken(partyMems);
     const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "physical");
