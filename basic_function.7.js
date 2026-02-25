@@ -1919,14 +1919,19 @@ async function changeToDailyEventTargets() {
       change_target(frankyInstance);
     }
 
-    if (frankyInstance)
-      if (frankyInstance.target && !partyMems.includes(frankyInstance.target)) {
-        rangeRate = 0.2;
-        return frankyInstance;
-      } else {
-        scareAwayMobs();
-        return frankyInstance;
-      }
+    if (frankyInstance) {
+      if (!isAssignedAsTanker()) scareAwayMobs();
+
+      rangeRate = 0.2;
+      return frankyInstance;
+    }
+    // if (frankyInstance.target && !partyMems.includes(frankyInstance.target)) {
+    //   rangeRate = 0.2;
+    //   return frankyInstance;
+    // } else {
+    //   scareAwayMobs();
+    //   return frankyInstance;
+    // }
   }
 
   if (parent.S.pinkgoo?.live) {

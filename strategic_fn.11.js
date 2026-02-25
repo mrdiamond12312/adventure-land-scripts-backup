@@ -4,7 +4,7 @@ const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
 const MAX_MOB_DPS = 2500;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
 const WATCHOUT_ABILITIES = ["burn", "stone"];
-const IGNORE_ABILITIES = ['stone'];
+const IGNORE_ABILITIES = ["stone"];
 
 function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return [];

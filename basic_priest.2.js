@@ -230,7 +230,7 @@ async function priestBuff() {
       member &&
       !is_on_cooldown("absorb") &&
       is_in_range(member, "absorb") &&
-      character.mp >= G.skills["absorb"].mp + 200
+      character.mp >= G.skills["absorb"].mp + 600
     ) {
       const hasAggro = Object.values(parent.entities).some(
         (e) => e.target === memberId,
