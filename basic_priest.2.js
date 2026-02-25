@@ -42,7 +42,9 @@ async function fight(target, isDeterminedToHeal = false) {
 
   // Target Selection (Taunt & Debuff Logic)
   const targetToTaunt =
-    isAssignedAsTanker() && currentStrategy === usePullStrategies
+    isAssignedAsTanker() &&
+    typeof usePullStrategies === "function" &&
+    currentStrategy === usePullStrategies
       ? mobsInRange
           .filter(
             (mob) =>

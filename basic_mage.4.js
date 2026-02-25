@@ -23,7 +23,10 @@ const reduceCd = (skillName) =>
   reduce_cooldown(skillName, Math.min(...parent.pings));
 
 async function fight(target) {
-  if (currentStrategy === usePullStrategies) {
+  if (
+    typeof usePullStrategies === "function" &&
+    currentStrategy === usePullStrategies
+  ) {
     const attackRange = character.range + character.xrange;
     const blastRadius = character.blast / 3.6 || BLAST_RADIUS;
 

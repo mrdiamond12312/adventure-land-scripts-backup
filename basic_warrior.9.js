@@ -50,6 +50,7 @@ async function fight(target) {
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
   if (
+    typeof usePullStrategies === "function" &&
     currentStrategy === usePullStrategies &&
     !target?.mtype.includes("crabx")
   ) {
