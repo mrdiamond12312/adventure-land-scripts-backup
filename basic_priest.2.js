@@ -309,7 +309,7 @@ async function zapperLoop() {
         if (entity.target) return true;
 
         if (
-          WATCHOUT_ABILITIES.some((skill) =>
+          IGNORE_ABILITIES.some((skill) =>
             Object.keys(entity.abilities ?? {}).includes(skill),
           )
         )
