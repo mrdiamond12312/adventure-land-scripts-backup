@@ -143,7 +143,7 @@ async function fight(target, isDeterminedToHeal = false) {
 
   // Await All Actions
   try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 2500);
+    await withTimeout(Promise.all(promisesToAwait), 2500);
   } catch (e) {
     console.error(e);
   }
@@ -307,6 +307,13 @@ async function zapperLoop() {
       }))
       .filter((entity) => {
         if (entity.target) return true;
+
+        if (
+          WATCHOUT_ABILITIES.some((skill) =>
+            Object.keys(entity.abilities ?? {}).includes(skill),
+          )
+        )
+          return false;
 
         const { count, limit } = courageMap[entity.damage_type] ?? {
           count: 0,
