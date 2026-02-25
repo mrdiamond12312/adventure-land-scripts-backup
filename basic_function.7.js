@@ -515,6 +515,12 @@ if (parent.caracAL) {
 
 // Wrapper to use which depends on client platform
 async function advanceSmartMove(props, options = { useScare: true }) {
+  if (
+    typeof smartMove !== "function" ||
+    typeof oldAdvanceSmartMove !== "function"
+  )
+    return asyncNoop();
+
   if (parent.caracAL) {
     return smartMove(props, options);
   } else {
