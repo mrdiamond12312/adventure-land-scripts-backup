@@ -42,7 +42,7 @@ async function hopToServer(serverRegion, serverIdentifier) {
       .filter((id) => id !== character.name)
       .forEach((id) => parent.caracAL.shutdown(id));
 
-    parent.caracAL.deploy(null, `${serverRegion}${serverIdentifier}`);
+    parent.caracAL.deploy(null, `SR_${serverRegion}${serverIdentifier}`);
   } else {
     partyMems.forEach((id) => send_cm("loot-before-hopping"));
     await midasLooting(true);
