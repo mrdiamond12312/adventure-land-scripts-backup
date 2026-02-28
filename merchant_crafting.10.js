@@ -132,7 +132,7 @@ function getItemBankSlots(itemId) {
 
 function groupItemsByLevel(items) {
   return items.reduce((acc, item) => {
-    (acc[item.level] ??= []).push(item);
+    (acc[item.level] = acc[item.level] ?? []).push(item);
     return acc;
   }, {});
 }
