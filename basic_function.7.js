@@ -516,8 +516,9 @@ if (parent.caracAL) {
 // Wrapper to use which depends on client platform
 async function advanceSmartMove(props, options = { useScare: true }) {
   if (
-    typeof smartMove !== "function" ||
-    typeof oldAdvanceSmartMove !== "function"
+    parent.caracAL &&
+    (typeof smartMove !== "function" ||
+      typeof oldAdvanceSmartMove !== "function")
   )
     return asyncNoop();
 
@@ -809,7 +810,7 @@ function getLoopInterval() {
 
   return ms_to_next_skill("attack") <= dynamicInterval
     ? Math.max(ms_to_next_skill("attack"), 1)
-    : dynamicInterval ?? frequencyInterval;
+    : (dynamicInterval ?? frequencyInterval);
 }
 
 function ms_to_next_skill(skill) {
@@ -1238,7 +1239,7 @@ async function midasLooting(forced = false) {
         for (const chest of chests) {
           if (breakFlag-- <= 0) break;
           if (distance(chest, character) <= 800) {
-            promises.push(loot(chest.id));
+            promises.push(parent.open_chest(chest.id));
           }
         }
       }
@@ -1267,7 +1268,7 @@ async function midasLooting(forced = false) {
           if (
             partyMidasUsers.every((player) => distance(chest, player) > 800)
           ) {
-            promises.push(loot(chest.id));
+            promises.push(parent.open_chest(chest.id));
           }
         }
       }
@@ -1472,6 +1473,7 @@ async function getServerPlayers() {
 function deployCharacters() {
   //// Deploy characters which arent active
   const loadedCharacters = get_active_characters();
+  const loadedCharactersNames = Object.keys(loadedCharacters);
   const allCharacters = [...partyMems, partyMerchant];
 
   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
@@ -1485,11 +1487,12 @@ function deployCharacters() {
       .forEach((id) => {
         parent.caracAL.deploy(id, null, caracALconfig.characters[id].script);
       });
-  } else if (
-    !character.controller &&
-    allCharacters.filter((characterId) => characterId !== character.name)
-      .length !== loadedCharacters.length
-  ) {
+  } else if (!character.controller) {
+    loadedCharactersNames
+      .filter(
+        (id) => loadedCharacters[id] !== "self" && !allCharacters.includes(id),
+      )
+      .forEach((id) => stop_character(id));
     allCharacters
       .filter((id) => !loadedCharacters[id])
       .forEach((id) => start_character(id, CODE_SLOTS[id].script));
@@ -1539,6 +1542,10 @@ setInterval(async () => {
       });
     }
   }
+
+  // put this in a loop somewhere :cow2:
+  if (character.afk && !is_paused()) pause();
+  else if (!character.afk && is_paused()) pause();
 
   leaveJail();
 }, 10000);
@@ -1632,12 +1639,12 @@ const DYNAMIC_PARTY_PRESETS = {
     EUI: () => {
       RANGER = RANGER1;
       HEALER = PRIEST;
-      return [ROGUE, RANGER, PRIEST];
+      return [WARRIOR, RANGER, PRIEST];
     },
     EUII: () => {
       RANGER = RANGER2;
       HEALER = PRIEST;
-      return [ROGUE, RANGER, PRIEST];
+      return [WARRIOR, RANGER, PRIEST];
     },
     USII: () => {
       HEALER = PRIEST;
@@ -1980,7 +1987,7 @@ async function changeToDailyEventTargets() {
     else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
     else change_target(snowmanInstance);
 
-    return grinchInstance ?? snowmanInstance.s?.fullguardx
+    return (grinchInstance ?? snowmanInstance.s?.fullguardx)
       ? beeToAttack
       : snowmanInstance;
   }

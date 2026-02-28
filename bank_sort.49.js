@@ -94,7 +94,7 @@ function getPacksOnThisFloor() {
 
 function sort_all_bank(inv_indices, sorted_bank, i_running) {
   if (!character.bank) return log("Not inside the bank");
-  
+
   const packsOnFloor = getPacksOnThisFloor();
 
   if (!inv_indices) {
@@ -131,7 +131,7 @@ function sort_all_bank(inv_indices, sorted_bank, i_running) {
           character.bank[bank_pack][i] &&
           al_items.order.comparator(
             character.bank[bank_pack][i],
-            sorted_bank[bank_pack][i]
+            sorted_bank[bank_pack][i],
           )
         ) {
           log("Swapping empty " + inv_pointer + " with " + i + bank_pack);
@@ -142,14 +142,14 @@ function sort_all_bank(inv_indices, sorted_bank, i_running) {
             inv: inv_pointer,
           });
           return sleep(150).then((x) =>
-            sort_all_bank(inv_indices, sorted_bank, i_running)
+            sort_all_bank(inv_indices, sorted_bank, i_running),
           );
         }
       }
     }
     inv_indices.splice(i_running, 1);
     return sleep(150).then((x) =>
-      sort_all_bank(inv_indices, sorted_bank, i_running)
+      sort_all_bank(inv_indices, sorted_bank, i_running),
     );
 
     //good to go. slice off this party of shit and go on
@@ -161,7 +161,7 @@ function sort_all_bank(inv_indices, sorted_bank, i_running) {
           !al_items.order.comparator(inv_itm, sorted_bank[bank_pack][i]) &&
           al_items.order.comparator(
             character.bank[bank_pack][i],
-            sorted_bank[bank_pack][i]
+            sorted_bank[bank_pack][i],
           )
         ) {
           log({ operation: "swap", pack: bank_pack, str: i, inv: inv_pointer });
@@ -172,7 +172,7 @@ function sort_all_bank(inv_indices, sorted_bank, i_running) {
             str: i,
           });
           return sleep(150).then((x) =>
-            sort_all_bank(inv_indices, sorted_bank, i_running)
+            sort_all_bank(inv_indices, sorted_bank, i_running),
           );
         }
       }
