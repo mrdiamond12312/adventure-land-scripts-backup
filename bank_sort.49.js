@@ -79,8 +79,24 @@ order.comparator = function (a, b) {
   );
 };
 
+function getPacksOnThisFloor() {
+  const floor = character.map; // "bank", "bank_b", or "bank_u"
+
+  const packs = [];
+
+  for (const key in bank_packs) {
+    const [type] = bank_packs[key];
+    if (type === floor) packs.push(key);
+  }
+
+  return packs;
+}
+
 function sort_all_bank(inv_indices, sorted_bank, i_running) {
   if (!character.bank) return log("Not inside the bank");
+
+  const packsOnFloor = getPacksOnThisFloor();
+
   if (!inv_indices) {
     inv_indices = [];
     for (let i = 0; i < 42; i++) {
@@ -90,13 +106,13 @@ function sort_all_bank(inv_indices, sorted_bank, i_running) {
   if (inv_indices.length == 0) return log("Make some space in inventory");
   if (!sorted_bank) {
     let bank_array = [];
-    for (let bank_pack in character.bank) {
+    for (let bank_pack of packsOnFloor) {
       if (bank_pack == "gold") continue;
       bank_array = bank_array.concat(character.bank[bank_pack]);
     }
     bank_array.sort(al_items.order.comparator);
     sorted_bank = {};
-    for (let bank_pack in character.bank) {
+    for (let bank_pack of packsOnFloor) {
       if (bank_pack == "gold") continue;
       sorted_bank[bank_pack] = bank_array.slice(0, 42);
       bank_array = bank_array.slice(42);
@@ -108,7 +124,7 @@ function sort_all_bank(inv_indices, sorted_bank, i_running) {
   const inv_itm = character.items[inv_pointer];
   //check every
   if (!inv_itm) {
-    for (let bank_pack in character.bank) {
+    for (let bank_pack of packsOnFloor) {
       if (bank_pack == "gold") continue;
       for (let i = 0; i < 42; i++) {
         if (
@@ -138,7 +154,7 @@ function sort_all_bank(inv_indices, sorted_bank, i_running) {
 
     //good to go. slice off this party of shit and go on
   } else {
-    for (let bank_pack in character.bank) {
+    for (let bank_pack of packsOnFloor) {
       if (bank_pack == "gold") continue;
       for (let i = 0; i < 42; i++) {
         if (
