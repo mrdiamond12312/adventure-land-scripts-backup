@@ -810,7 +810,7 @@ function getLoopInterval() {
 
   return ms_to_next_skill("attack") <= dynamicInterval
     ? Math.max(ms_to_next_skill("attack"), 1)
-    : (dynamicInterval ?? frequencyInterval);
+    : dynamicInterval ?? frequencyInterval;
 }
 
 function ms_to_next_skill(skill) {
@@ -1528,7 +1528,7 @@ setInterval(async () => {
         partyWhitelistRegex.some((regex) => regex.test(member.name)),
       ).name,
     );
-  }
+  } else if (parent.party_list.length && hasWhitelistedMember) leave_party();
 
   if (Math.min(...parent.pings) > 1000 && character.ctype !== "merchant") {
     if (parent.caracAL) parent.caracAL.shutdown();
@@ -1987,7 +1987,7 @@ async function changeToDailyEventTargets() {
     else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
     else change_target(snowmanInstance);
 
-    return (grinchInstance ?? snowmanInstance.s?.fullguardx)
+    return grinchInstance ?? snowmanInstance.s?.fullguardx
       ? beeToAttack
       : snowmanInstance;
   }
