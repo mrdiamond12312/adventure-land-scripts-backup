@@ -1520,7 +1520,7 @@ setInterval(async () => {
 
   if (
     whitelistPartyMembers.length &&
-    whitelistPartyMembers.length <= 9 &&
+    whitelistPartyMembers.length <= 6 &&
     (!parent.party_list.length || !hasWhitelistedMember)
   ) {
     send_party_request(
