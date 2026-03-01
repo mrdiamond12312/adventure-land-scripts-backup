@@ -296,6 +296,7 @@ class StrategicSmartMove {
       useMagiport: true,
       useScare: true,
       stopWatcher: undefined,
+      wait: 0,
       speed: character.speed,
       ...extraOptions,
     };
@@ -399,6 +400,10 @@ class StrategicSmartMove {
       throw new Error(
         `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
       );
+    }
+
+    if (options.wait) {
+      await sleep(options.wait);
     }
 
     try {
