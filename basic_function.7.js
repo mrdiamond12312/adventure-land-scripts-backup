@@ -1506,29 +1506,38 @@ setInterval(deployCharacters, 30000);
 setInterval(async () => {
   // if (isMerchant()) return;
 
+  const currentPartySize = parent.party_list.length;
   const serverCharacters = await getServerPlayers();
   const partyWhitelistRegex = [/^earth/];
   const whitelistPartyMembers = serverCharacters.filter(
     (char) =>
       !partyMems.includes(char.name) &&
-      char.type !== "merchant" &&
       partyWhitelistRegex.some((regex) => regex.test(char.party)),
   );
   const hasWhitelistedMember = parent.party_list.some((member) =>
     whitelistPartyMembers.some((whitelisted) => whitelisted.name === member),
   );
 
+  const characterNotInParty = [...partyMems, partyMerchant].filter(
+    (member) => !parent.party_list.includes(member),
+  );
+
   if (
     whitelistPartyMembers.length &&
-    whitelistPartyMembers.length <= 6 &&
-    (!parent.party_list.length || !hasWhitelistedMember)
+    whitelistPartyMembers.length + characterNotInParty.length <= 6 &&
+    (!currentPartySize || !hasWhitelistedMember)
   ) {
     send_party_request(
       whitelistPartyMembers.find((member) =>
         partyWhitelistRegex.some((regex) => regex.test(member.name)),
       ).name,
     );
-  } else if (parent.party_list.length && hasWhitelistedMember) leave_party();
+  } else if (
+    currentPartySize &&
+    hasWhitelistedMember &&
+    currentPartySize + characterNotInParty.length > 10
+  )
+    leave_party();
 
   if (Math.min(...parent.pings) > 1000 && character.ctype !== "merchant") {
     if (parent.caracAL) parent.caracAL.shutdown();
