@@ -187,7 +187,7 @@ function moveHome() {
   log("Moving back Town!");
   close_stand();
   equipBroom();
-  return smart_move(homeLocation)
+  return advanceSmartMove(homeLocation)
     .then(() => {
       onDuty = false;
       if (locate_item("stand0") === -1 && !haveAComputer()) {
