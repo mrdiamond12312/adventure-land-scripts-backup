@@ -1667,7 +1667,7 @@ const DYNAMIC_PARTY_PRESETS = {
     // HEALER = isAggroed ? RANGER1 : PRIEST;
     // return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
     RANGER = RANGER1;
-    return [WARRIOR, PRIEST, RANGER1];
+    return [WARRIOR, PRIEST, MAGE];
   },
   pinkgoo: {
     USI: [MAGE, PRIEST, ROGUE],
