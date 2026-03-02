@@ -1899,13 +1899,13 @@ async function changeToDailyEventTargets() {
 
     for (const crabx of crabxList) {
       const isCurrentCrabxInRange = inRange(crabx);
+      const currentCrabxHp = crabx.predictedHp ?? crabx.hp ?? 0;
+      const bestCrabxHp = bestCrabx.predictedHp ?? bestCrabx.hp ?? 0;
 
       if (!bestCrabx) {
         bestCrabx = crabx;
       } else {
         const isBestCrabxInRange = inRange(bestCrabx);
-        const currentCrabxHp = crabx.predictedHp ?? crabx.hp;
-        const bestCrabxHp = bestCrabx.predictedHp ?? bestCrabx.hp;
 
         if (isCurrentCrabxInRange && !isBestCrabxInRange) {
           bestCrabx = crabx;
@@ -1925,7 +1925,8 @@ async function changeToDailyEventTargets() {
 
     if (
       character.ctype === "warrior" &&
-      (!crabxxInstance.s.stunned || crabxxInstance.s.stunned.ms < character.ping) &&
+      (!crabxxInstance.s.stunned ||
+        crabxxInstance.s.stunned.ms < character.ping) &&
       (crabxList.length <= 1 || crabxList.length >= 6)
     ) {
       warriorStomp();
