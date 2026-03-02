@@ -173,7 +173,7 @@ async function exchangeMines() {
   }
 }
 
-function moveHome() {
+async function moveHome() {
   if (
     distance(character, homeLocation) < 50 ||
     smart.moving ||
@@ -184,19 +184,28 @@ function moveHome() {
     character.c.mining
   )
     return;
+
   log("Moving back Town!");
   close_stand();
   equipBroom();
-  return advanceSmartMove(homeLocation, { wait: 2000 })
-    .then(() => {
-      onDuty = false;
-      if (locate_item("stand0") === -1 && !haveAComputer()) {
-        retrieveBankItem("stand0");
-      } else open_stand();
-    })
-    .catch((e) => {
-      if (e.reason === "failed" && e.failed) use_skill("use_town");
-    });
+
+  try {
+    await advanceSmartMove(homeLocation, { wait: 2000 });
+
+    if (distance(character, homeLocation) > 50) return;
+
+    onDuty = false;
+
+    if (locate_item("stand0") === -1 && !haveAComputer()) {
+      retrieveBankItem("stand0");
+    } else {
+      open_stand();
+    }
+  } catch (e) {
+    if (e?.reason === "failed" && e.failed) {
+      await town();
+    }
+  }
 }
 
 async function goFishing() {
@@ -510,7 +519,7 @@ setInterval(async function () {
         console.error(e);
       }
     }
-    if (!smart.moving) await moveHome();
+    if (!smart.moving || !isAdvanceSmartMoving) await moveHome();
     onDuty = false;
   }
 }, 750);

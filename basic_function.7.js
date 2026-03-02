@@ -1864,6 +1864,15 @@ async function changeToDailyEventTargets() {
           crabxxInstance = entity;
         }
 
+        const incomingNumber =
+          PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
+
+        const predictedHp =
+          entity.name === character.name
+            ? entity.hp
+            : entity.hp + incomingNumber;
+        entity.predictedHp = predictedHp;
+
         if (entity.mtype === "crabx") {
           crabxList.push(entity);
         }
@@ -1895,18 +1904,20 @@ async function changeToDailyEventTargets() {
         bestCrabx = crabx;
       } else {
         const isBestCrabxInRange = inRange(bestCrabx);
+        const currentCrabxHp = crabx.predictedHp ?? crabx.hp;
+        const bestCrabxHp = bestCrabx.predictedHp ?? bestCrabx.hp;
 
         if (isCurrentCrabxInRange && !isBestCrabxInRange) {
           bestCrabx = crabx;
         } else if (isCurrentCrabxInRange === isBestCrabxInRange) {
-          if (crabx.hp > bestCrabx.hp) {
+          if (currentCrabxHp > bestCrabxHp) {
             bestCrabx = crabx;
           }
         }
       }
 
       if (distance(crabx, crabxxInstance) <= BLAST_RADIUS) {
-        if (!bestClusteredCrabx || crabx.hp > bestClusteredCrabx.hp) {
+        if (!bestClusteredCrabx || currentCrabxHp > bestCrabxHp) {
           bestClusteredCrabx = crabx;
         }
       }
@@ -1914,7 +1925,7 @@ async function changeToDailyEventTargets() {
 
     if (
       character.ctype === "warrior" &&
-      !crabxxInstance.s.stunned &&
+      (!crabxxInstance.s.stunned || crabxxInstance.s.stunned.ms < character.ping) &&
       (crabxList.length <= 1 || crabxList.length >= 6)
     ) {
       warriorStomp();
