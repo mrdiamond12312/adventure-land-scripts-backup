@@ -1941,6 +1941,8 @@ async function changeToDailyEventTargets() {
         bestCrabx || (crabxxInstance?.target ? crabxxInstance : undefined);
     }
 
+    if (!isAssignedAsTanker()) scareAwayMobs();
+
     changeToPullStrategies();
     change_target(targetCrab);
     return targetCrab;
