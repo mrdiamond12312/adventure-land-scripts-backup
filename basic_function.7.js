@@ -1929,7 +1929,7 @@ async function changeToDailyEventTargets() {
         crabxxInstance.s.stunned.ms < character.ping) &&
       (crabxList.length <= 1 || crabxList.length >= 6)
     ) {
-      warriorStomp();
+      await warriorStomp();
     }
 
     let targetCrab;
@@ -1941,7 +1941,7 @@ async function changeToDailyEventTargets() {
         bestCrabx || (crabxxInstance?.target ? crabxxInstance : undefined);
     }
 
-    if (!isAssignedAsTanker()) scareAwayMobs();
+    if (!isAssignedAsTanker()) await scareAwayMobs();
 
     changeToPullStrategies();
     change_target(targetCrab);
