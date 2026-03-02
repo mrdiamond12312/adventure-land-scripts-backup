@@ -1900,7 +1900,7 @@ async function changeToDailyEventTargets() {
     for (const crabx of crabxList) {
       const isCurrentCrabxInRange = inRange(crabx);
       const currentCrabxHp = crabx.predictedHp ?? crabx.hp ?? 0;
-      const bestCrabxHp = bestCrabx.predictedHp ?? bestCrabx.hp ?? 0;
+      const bestCrabxHp = bestCrabx?.predictedHp ?? bestCrabx?.hp ?? 0;
 
       if (!bestCrabx) {
         bestCrabx = crabx;
