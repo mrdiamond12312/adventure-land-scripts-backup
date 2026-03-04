@@ -336,7 +336,9 @@ async function dismantleSomething() {
     smart.moving ||
     isAdvanceSmartMoving ||
     character.c.mining ||
-    character.c.fishing
+    character.c.fishing ||
+    isSortingInventory ||
+    Math.max(character.ping) > 300
   )
     return;
 
@@ -462,6 +464,7 @@ setInterval(async function () {
       upgradeInv(),
       exchangeXyn(),
       holidayExchange(),
+      dismantleSomething(),
       craft("xbox"),
       craft("basketofeggs"),
       craft("orba", 1, homeLocation),
