@@ -111,9 +111,9 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = 423;
 // var mapY = -2614;
 
-var map = "desertland";
-var mapX = 223;
-var mapY = -708;
+// var map = "desertland";
+// var mapX = 223;
+// var mapY = -708;
 
 // var map = "tunnel";
 // var mapX = 0;
@@ -143,9 +143,9 @@ var mapY = -708;
 // var mapX = 50;
 // var mapY = 425;
 
-// var map = "spookytown";
-// var mapX = 255;
-// var mapY = -1160;
+var map = "spookytown";
+var mapX = 255;
+var mapY = -1160;
 
 // var map = "spookytown";
 // var mapX = 412;
@@ -158,7 +158,7 @@ var mapY = -708;
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
 // var mobsToFarm = ["phoenix", "stompy", "wolf"];
-var mobsToFarm = ["fireroamer"];
+// var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 
 // var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
@@ -176,7 +176,7 @@ var mobsToFarm = ["fireroamer"];
 // ];
 // var mobsToFarm = ["plantoid"];
 // var mobsToFarm = ["prat"];
-// var mobsToFarm = ["mummy"];
+var mobsToFarm = ["mummy"];
 // var mobsToFarm = ["jr", "booboo"];
 // var mobsToFarm = ["odino"];
 
