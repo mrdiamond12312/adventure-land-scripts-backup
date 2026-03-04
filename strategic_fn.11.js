@@ -1393,10 +1393,6 @@ class ProjectileManagement {
   }
 }
 
-if (
-  !PROJECTILE_MANAGER &&
-  parent.socket &&
-  ["priest", "ranger"].includes(character.ctype)
-) {
+if (!PROJECTILE_MANAGER && parent.socket) {
   var PROJECTILE_MANAGER = new ProjectileManagement(parent.socket);
 }
