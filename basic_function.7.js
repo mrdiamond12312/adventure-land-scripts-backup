@@ -1518,13 +1518,15 @@ setInterval(async () => {
     whitelistPartyMembers.some((whitelisted) => whitelisted.name === member),
   );
 
-  const characterNotInParty = [...partyMems, partyMerchant].filter(
-    (member) => !parent.party_list.includes(member),
+  const characterNotInOutsiderParty = serverCharacters.filter(
+    (char) =>
+      [...partyMems, partyMerchant].includes(char) &&
+      !partyWhitelistRegex.some((regex) => regex.test(char.party)),
   );
 
   if (
     whitelistPartyMembers.length &&
-    whitelistPartyMembers.length + characterNotInParty.length <= 6 &&
+    whitelistPartyMembers.length + characterNotInOutsiderParty.length <= 10 &&
     (!currentPartySize || !hasWhitelistedMember)
   ) {
     send_party_request(
@@ -1535,7 +1537,7 @@ setInterval(async () => {
   } else if (
     currentPartySize &&
     hasWhitelistedMember &&
-    currentPartySize + characterNotInParty.length > 10
+    currentPartySize + characterNotInOutsiderParty.length > 10
   )
     leave_party();
 
