@@ -1480,7 +1480,11 @@ function deployCharacters() {
     if (character.ctype === "merchant" && parent.caracAL.siblings.length)
       parent.caracAL.siblings
         .filter((id) => id !== character.name && !partyMems.includes(id))
-        .forEach((id) => parent.caracAL.shutdown(id));
+        .forEach(async (id) => {
+          send_cm(id, "dc-harakiri");
+          await sleep(character.ping);
+          parent.caracAL.shutdown(id);
+        });
 
     allCharacters
       .filter((id) => parent.caracAL && !parent.caracAL.siblings.includes(id))
@@ -1493,6 +1497,7 @@ function deployCharacters() {
         (id) => loadedCharacters[id] !== "self" && !allCharacters.includes(id),
       )
       .forEach((id) => stop_character(id));
+
     allCharacters
       .filter((id) => !loadedCharacters[id])
       .forEach((id) => start_character(id, CODE_SLOTS[id].script));

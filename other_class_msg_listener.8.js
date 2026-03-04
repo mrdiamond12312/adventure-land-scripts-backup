@@ -61,6 +61,11 @@ character.on("cm", async function ({ name, message }) {
       }
       break;
 
+    case "dc-harakiri":
+      midasLooting();
+      parent.socket.emit("harakiri");
+      break;
+
     case "loot-before-hopping":
       midasLooting(true);
       parent.socket.emit("harakiri");
