@@ -190,7 +190,7 @@ async function moveHome() {
   equipBroom();
 
   try {
-    await advanceSmartMove(homeLocation, { wait: 2000 });
+    await smart_move(homeLocation);
 
     if (distance(character, homeLocation) > 50) return;
 
