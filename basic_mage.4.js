@@ -127,7 +127,7 @@ async function fight(target) {
 
   // --- Await and Error Handling ---
   try {
-    await withTimeout(Promise.all(promisesToAwait), 1000);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
   } catch (e) {
     console.log(e);
   }

@@ -204,7 +204,7 @@ async function fight(target) {
 
   // Await and Error Handling
   try {
-    await withTimeout(Promise.all(promisesToAwait), 1500);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1500);
   } catch (e) {
     console.log(e);
   }
@@ -284,7 +284,7 @@ async function cupidHeal(playersToHeal) {
   }
 
   try {
-    await withTimeout(Promise.all(promisesToAwait), 1000);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
   } catch (e) {
     attackErrorHandler(e);
     console.error("Error while Cupiding!", e);

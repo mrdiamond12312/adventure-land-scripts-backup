@@ -79,7 +79,7 @@ async function fight(target) {
   }
 
   try {
-    await Promise.all(promisesToAwait);
+    await Promise.allSettled(promisesToAwait);
   } catch (e) {}
 }
 

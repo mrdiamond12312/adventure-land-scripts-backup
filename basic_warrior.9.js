@@ -143,7 +143,7 @@ async function fight(target) {
 
       if (candycane1 !== -1 && candycane2 !== -1) {
         isEquipingItems = true;
-        const equipPromise = Promise.all([
+        const equipPromise = Promise.allSettled([
           // Immediate equip
           equip_batch([
             { num: candycane1, slot: "mainhand" },
@@ -281,7 +281,7 @@ async function fight(target) {
 
   // --- Await and Error Handling ---
   try {
-    await withTimeout(Promise.all(promisesToAwait), 1000);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
   } catch (e) {
     console.error("Error while attacking", e);
   }
