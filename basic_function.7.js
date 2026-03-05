@@ -1933,8 +1933,8 @@ async function changeToDailyEventTargets() {
     if (
       character.ctype === "warrior" &&
       (!crabxxInstance.s.stunned ||
-        crabxxInstance.s.stunned.ms < character.ping) &&
-      (crabxList.length <= 1 || crabxList.length >= 6)
+        crabxxInstance.s.stunned.ms < character.ping / 2) &&
+      crabxList.length <= 1
     ) {
       await warriorStomp();
     }
