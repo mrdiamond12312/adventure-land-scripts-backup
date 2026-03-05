@@ -1949,6 +1949,7 @@ async function changeToDailyEventTargets() {
     }
 
     if (
+      !isAssignedAsTanker() &&
       crabxList.some(
         (entity) => entity.s?.young && entity.target === character.name,
       )
