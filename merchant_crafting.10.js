@@ -189,8 +189,8 @@ function retrievedBankItemToUpgrade() {
 
   // Respect keep threshold
   const keep =
-    KEEP_THRESHOLD[itemName] ??
-    KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type] ??
+    KEEP_THRESHOLD[desiredItemId] ??
+    KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ??
     2;
   desiredItems = desiredItems.slice(0, desiredItems.length - keep);
 
