@@ -659,9 +659,8 @@ async function waitUntil(fn, timeout = 10_000, interval = character.ping) {
 
 async function buff() {
   try {
-    if (Object.keys(character.c).length) {
-      throw new Error("Wait for channeling before using potions");
-    }
+    const isChanneling =
+      character.c.town || character.c.fishing || character.c.mining;
     const minPing = Math.min(...parent.pings);
     const adjustPotionsCooldown = () => {
       reduce_cooldown("use_mp", minPing);
@@ -673,9 +672,9 @@ async function buff() {
       (character.hp < character.max_hp * 0.6 && character.mp > 1000)
     ) {
       if (
-        character.hp < 0.8 * character.max_hp &&
         character.hp < character.max_hp - 500 &&
-        !is_on_cooldown("use_hp")
+        !is_on_cooldown("use_hp") &&
+        !isChanneling
       ) {
         await withTimeout(use_skill("use_hp"), 500);
         adjustPotionsCooldown();
@@ -687,7 +686,11 @@ async function buff() {
         adjustPotionsCooldown();
       }
     } else {
-      if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
+      if (
+        character.mp < character.max_mp - 500 &&
+        !is_on_cooldown("use_mp") &&
+        !isChanneling
+      ) {
         await withTimeout(use_skill("use_mp"), 500);
         adjustPotionsCooldown();
       } else if (
@@ -700,7 +703,7 @@ async function buff() {
     }
   } catch (e) {}
   setTimeout(
-    async () => buff(),
+    buff,
     Math.min(
       Math.max(ms_to_next_skill("use_mp"), 5),
       Math.max(ms_to_next_skill("use_hp"), 5),

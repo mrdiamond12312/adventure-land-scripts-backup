@@ -145,13 +145,32 @@ async function exchangeSomething() {
     }
   }
 
-  if (slot !== undefined)
-    exchange(slot).catch((e) => {
-      switch (e.response) {
-        case "inventory_full":
-          onDuty = true;
-      }
-    });
+  if (!slot) return;
+
+  if (
+    character.mp > 400 &&
+    !is_on_cooldown("massexchangepp") &&
+    !character.s.massexchangepp
+  ) {
+    if (character.mp < 1000 && locate_item("mpot1") === -1) {
+      buy("mpot1", 1);
+    }
+    use_skill("massexchangepp");
+  }
+
+  if (
+    character.mp > 50 &&
+    !is_on_cooldown("massexchange") &&
+    !character.s.massexchange
+  )
+    use_skill("massexchange");
+
+  return exchange(slot).catch((e) => {
+    switch (e.response) {
+      case "inventory_full":
+        onDuty = true;
+    }
+  });
 }
 
 async function exchangeMines() {
