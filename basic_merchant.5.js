@@ -258,7 +258,7 @@ async function goFishing() {
   ) {
     close_stand();
     equipBroom();
-    await smart_move(fishingLocation);
+    await advanceSmartMove(fishingLocation, { exact: true });
   }
 
   if (character.mp > 120) {
@@ -320,7 +320,7 @@ async function goMining() {
   ) {
     close_stand();
     equipBroom();
-    await smart_move(miningLocation);
+    await advanceSmartMove(miningLocation, { exact: true });
   }
 
   if (character.mp > 120) {

@@ -298,6 +298,7 @@ class StrategicSmartMove {
       stopWatcher: undefined,
       wait: 0,
       speed: character.speed,
+      exact: false,
       ...extraOptions,
     };
 
@@ -404,6 +405,15 @@ class StrategicSmartMove {
 
     if (options.wait) {
       await sleep(options.wait);
+    }
+
+    if (options.exact && typeof toPosition === "object") {
+      pathFindingResult.push({
+        method: "move",
+        map: toPosition.map,
+        x: toPosition.x,
+        y: toPosition.y,
+      });
     }
 
     try {
