@@ -483,8 +483,6 @@ const SALE_ABLE = [
   // "intring",
   // "dexamulet",
   // "stramulet",
-  "dexbelt",
-  "intbelt",
   // Halloween temp for gold
   // "bowofthedead",
   // "daggerofthedead",
