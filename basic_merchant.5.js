@@ -191,14 +191,12 @@ async function moveHome() {
   )
     return;
 
-  if (distance(character, homeLocation) < 100) return;
-
   log("Moving back Town!");
   close_stand();
   equipBroom();
 
   try {
-    await advanceSmartMove(homeLocation, { wait: 1500, exact: true });
+    await advanceSmartMove(homeLocation, { wait: 200, exact: true });
 
     onDuty = false;
 
