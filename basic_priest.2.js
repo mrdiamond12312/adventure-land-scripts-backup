@@ -183,7 +183,7 @@ async function priestBuff() {
         else
           advanceSmartMove(
             { map: character.map, x: buffee.x, y: buffee.y },
-            { kiting: true },
+            { smartmoveDebug: true },
           );
         set_message(`Moving to ${buffee.name}`);
         continue;

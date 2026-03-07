@@ -296,15 +296,15 @@ class StrategicSmartMove {
       wait: 0,
       speed: character.speed,
       exact: false,
-      kiting: false, // to not set the global var isAdvanceSmartMoving to true
+      smartmoveDebug: false, // to set the global var smartmoveDebug
       ...extraOptions,
     };
 
     this.smartMoveSession = (this.smartMoveSession || 0) + 1;
     const session = this.smartMoveSession;
-    isAdvanceSmartMoving = options.kiting;
+    isAdvanceSmartMoving = true;
     this.isSmartMoving = true;
-
+    smartmoveDebug = options.smartmoveDebug;
 
     if (!toPosition) return;
 
