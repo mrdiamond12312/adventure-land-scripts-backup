@@ -22,7 +22,7 @@ const KEEP_THRESHOLD = {
   gloves: 3,
   shoes: 3,
   chest: 3,
-  cape: 7,
+  cape: 4,
 
   // Class based
   weapon: 2,
