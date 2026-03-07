@@ -411,7 +411,7 @@ class StrategicSmartMove {
       await sleep(options.wait);
     }
 
-    if (options.exact && typeof toPosition === "object") {
+    if (options.exact) {
       pathFindingResult.push({
         method: "move",
         map: toPosition.map,

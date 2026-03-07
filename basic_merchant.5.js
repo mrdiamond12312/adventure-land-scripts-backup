@@ -318,7 +318,7 @@ async function goMining() {
   ) {
     close_stand();
     equipBroom();
-    await smart_move(miningLocation, { exact: true });
+    await smart_move(miningLocation);
   }
 
   if (character.mp > 120) {
