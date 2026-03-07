@@ -448,7 +448,7 @@ async function upgradeInv() {
                   ...item_info({ name: itemName }),
                 };
 
-              if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0) {
+              if (e?.level >= (ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0)) {
                 close_stand();
                 smart_move(bankPosition).then(() =>
                   bank_store(findMaxLevelItem(itemName)),
