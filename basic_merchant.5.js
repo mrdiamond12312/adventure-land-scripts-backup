@@ -512,9 +512,9 @@ setInterval(async function () {
   )
     await moveHome();
 
-  if (isInvFull() && !smart.moving && !isAdvanceSmartMoving) {
+  if (isInvFull() && !isAdvanceSmartMoving) {
     close_stand();
-    if (!smart.moving) await advanceSmartMove(bankPosition);
+    await advanceSmartMove(bankPosition);
     if (character.map === "bank") {
       try {
         character.items
