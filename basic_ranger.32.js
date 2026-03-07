@@ -300,8 +300,6 @@ async function mainLoop() {
     desiredElixir = "pumpkinspice";
     assignRoles();
 
-    // buff();
-
     // 1. Death Check
     if (character.rip) {
       respawn();
