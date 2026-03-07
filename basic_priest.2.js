@@ -159,10 +159,10 @@ async function priestBuff() {
   const prioritizedBuffeesNames = prioritizedNames();
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  const bufferedRange = character.range + character.xrange * 0.9;
 
   if (buffees.length !== 0) {
     for (const buffee of buffees) {
-      const bufferedRange = character.range + character.xrange * 0.9;
       const dist = distance(buffee, character);
 
       if (!isAttackReady) {
@@ -182,14 +182,18 @@ async function priestBuff() {
           promises.push(move(middleX, middleY));
         else if (can_move_to(buffee.x, buffee.y))
           promises.push(move(buffee.x, buffee.y));
-        else advanceSmartMove({ map: character.map, x: buffee.x, y: buffee.y });
-        set_message(`Moving to ${buffee.name}`);
+        else
+          advanceSmartMove(
+            { map: character.map, x: buffee.x, y: buffee.y },
+            { kiting: true },
+          ),
+            set_message(`Moving to ${buffee.name}`);
         continue;
       }
 
       if (dist < bufferedRange && isAttackReady) {
         set_message(`Heal ${buffee.name}`);
-        promises.push(heal(buffee).then(() => reduceCd("attack")));
+        promises.push(use_skill("heal", buffee).then(() => reduceCd("heal")));
         break;
       }
     }
@@ -217,7 +221,7 @@ async function priestBuff() {
         allies.length > 1);
 
     if (shouldPartyHeal) {
-      use_skill("partyheal").then(() => reduceCd("partyheal"));
+      promises.push(use_skill("partyheal").then(() => reduceCd("partyheal")));
       set_message("Party Heal");
     }
   }
@@ -238,7 +242,7 @@ async function priestBuff() {
         (e) => e.target === memberId,
       );
       if (hasAggro) {
-        use_skill("absorb", member);
+        promises.push(use_skill("absorb", member));
         set_message(`Absorb ${memberId}`);
         break;
       }

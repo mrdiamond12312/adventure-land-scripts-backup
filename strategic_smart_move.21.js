@@ -288,11 +288,6 @@ class StrategicSmartMove {
 
     if (!can_walk(character)) return;
 
-    this.smartMoveSession = (this.smartMoveSession || 0) + 1;
-    const session = this.smartMoveSession;
-    isAdvanceSmartMoving = true;
-    this.isSmartMoving = true;
-
     const options = {
       useBlink: true,
       useMagiport: true,
@@ -301,8 +296,15 @@ class StrategicSmartMove {
       wait: 0,
       speed: character.speed,
       exact: false,
+      kiting: false, // to not set the global var isAdvanceSmartMoving to true
       ...extraOptions,
     };
+
+    this.smartMoveSession = (this.smartMoveSession || 0) + 1;
+    const session = this.smartMoveSession;
+    isAdvanceSmartMoving = options.kiting;
+    this.isSmartMoving = true;
+
 
     if (!toPosition) return;
 
