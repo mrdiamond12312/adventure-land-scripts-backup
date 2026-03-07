@@ -2,12 +2,13 @@ character.on("cm", async function ({ name, message }) {
   if (isInvFull()) {
     return;
   }
+  
   switch (message) {
     case "inv_ok":
       onDuty = false;
-      moveHome();
       break;
   }
+
   if (!onDuty) {
     onDuty = true;
     close_stand();
@@ -24,7 +25,6 @@ character.on("cm", async function ({ name, message }) {
       send_cm(name, "inv_full_merchant_near");
       await sleep(5000);
       onDuty = false;
-      moveHome();
       break;
 
     case "buy_mana":
@@ -44,7 +44,6 @@ character.on("cm", async function ({ name, message }) {
       send_cm(name, "buy_mana_merchant_near");
       await sleep(5000);
       onDuty = false;
-      moveHome();
       break;
 
     case "buy_hp":
@@ -64,7 +63,6 @@ character.on("cm", async function ({ name, message }) {
       send_cm(name, "buy_hp_merchant_near");
       await sleep(5000);
       onDuty = false;
-      moveHome();
       break;
 
     case "buff_mluck":
@@ -75,7 +73,6 @@ character.on("cm", async function ({ name, message }) {
         use_skill("mluck", get_entity(name));
       }
       onDuty = false;
-      moveHome();
       break;
 
     case "elixir":

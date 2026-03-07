@@ -191,14 +191,14 @@ async function moveHome() {
   )
     return;
 
+  if (distance(character, homeLocation) < 100) return;
+
   log("Moving back Town!");
   close_stand();
   equipBroom();
 
   try {
-    await smart_move(homeLocation);
-
-    if (distance(character, homeLocation) > 50) return;
+    await advanceSmartMove(homeLocation, { wait: 1500 });
 
     onDuty = false;
 
@@ -250,7 +250,7 @@ async function goFishing() {
     character.slots.mainhand?.name !== rodItemId &&
     locate_item(rodItemId) === -1
   )
-    return moveHome();
+    return;
 
   if (
     character.real_x != fishingLocation.x &&
@@ -312,7 +312,7 @@ async function goMining() {
     character.slots.mainhand?.name !== pickaxeItemId &&
     locate_item(pickaxeItemId) === -1
   )
-    return moveHome();
+    return;
 
   if (
     character.real_x != miningLocation.x &&
@@ -449,7 +449,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 }
 
 setInterval(async function () {
-  loot();
   if (character.rip) {
     respawn();
     return;
@@ -514,9 +513,8 @@ setInterval(async function () {
     await moveHome();
 
   if (isInvFull() && !smart.moving && !isAdvanceSmartMoving) {
-    if (!smart.moving) await moveHome();
     close_stand();
-    if (!smart.moving) await smart_move(bankPosition);
+    if (!smart.moving) await advanceSmartMove(bankPosition);
     if (character.map === "bank") {
       try {
         character.items
