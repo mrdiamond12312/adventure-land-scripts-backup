@@ -284,6 +284,8 @@ class StrategicSmartMove {
       this.cleanUp();
     }
 
+    console.warn(toPosition);
+
     if (!can_walk(character)) return;
 
     this.smartMoveSession = (this.smartMoveSession || 0) + 1;
