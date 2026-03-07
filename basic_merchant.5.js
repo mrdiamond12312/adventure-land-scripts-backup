@@ -108,7 +108,7 @@ async function holidayExchange() {
   });
 }
 
-async function exchangeXyn() {
+async function exchangeSomething() {
   if (isInvFull(6)) return;
 
   const itemName = [
@@ -125,6 +125,7 @@ async function exchangeXyn() {
     { name: "5bucks", quantity: 1 },
     { name: "candypop", quantity: 10 },
     { name: "basketofeggs", quantity: 1 },
+    { name: "seashell", quantity: 20, npc: "fisherman" },
   ];
   let slot = undefined;
   for (const item of itemName) {
@@ -135,6 +136,11 @@ async function exchangeXyn() {
     const slotIndex = locate_item(item.name);
     if (slotIndex !== -1 && character.items[slotIndex].q >= item.quantity) {
       slot = slotIndex;
+
+      if (item.npc && !haveAComputer()) {
+        await advanceSmartMove(find_npc(item.npc));
+      }
+
       break;
     }
   }
@@ -462,7 +468,7 @@ setInterval(async function () {
     Promise.allSettled([
       compoundInv(),
       upgradeInv(),
-      exchangeXyn(),
+      exchangeSomething(),
       holidayExchange(),
       dismantleSomething(),
       craft("xbox"),
@@ -556,6 +562,8 @@ const ITEM_NEEDED = [
   "brownenvelope",
   "harbringer",
   "throwingstars",
+  "angelwings",
+  "smoke",
 ];
 
 function secondhandsHandler(events) {

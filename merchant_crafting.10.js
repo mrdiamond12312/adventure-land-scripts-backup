@@ -12,20 +12,24 @@ const IGNORE_BANK_SLOTS = ["gold", "items8", "items9"];
 const IGNORE_RARE_GOLD_THRESHOLD = 40e8;
 
 const KEEP_THRESHOLD = {
+  // Event specific
+  lmace: 7,
+  horsecapeg: 7,
+
   // Every character needs
   helmet: 3,
   pants: 3,
   gloves: 3,
   shoes: 3,
   chest: 3,
-  cape: 3,
+  cape: 7,
 
   // Class based
   weapon: 2,
-  orb: 2,
+  orb: 3,
   shield: 2, // warrior, 0 if unneccessary
   source: 2, // priest and mage
-  staff: 2,
+  staff: 3,
 
   // Class attribute based
   earring: 4,
@@ -184,7 +188,10 @@ function retrievedBankItemToUpgrade() {
   let desiredItems = getItemBankSlots(desiredItemId);
 
   // Respect keep threshold
-  const keep = KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ?? 2;
+  const keep =
+    KEEP_THRESHOLD[itemName] ??
+    KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type] ??
+    2;
   desiredItems = desiredItems.slice(0, desiredItems.length - keep);
 
   const info = item_info({ name: desiredItemId });
@@ -246,7 +253,8 @@ async function compoundInv() {
         if (
           ITEMS_HIGHEST_LEVEL[itemName] &&
           ITEMS_HIGHEST_LEVEL[itemName].quantity <
-            (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type] + 3 ?? 5) &&
+            ((KEEP_THRESHOLD[itemName] ??
+              KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type]) + 3 ?? 5) &&
           character.items[i].level === ITEMS_HIGHEST_LEVEL[itemName].level
         ) {
           continue;
@@ -358,7 +366,9 @@ async function upgradeInv() {
           !(
             ITEMS_HIGHEST_LEVEL[itemName] &&
             ITEMS_HIGHEST_LEVEL[itemName].quantity >
-              (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type] ?? 2) &&
+              (KEEP_THRESHOLD[itemName] ??
+                KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type] ??
+                2) &&
             character.items[i]?.level === ITEMS_HIGHEST_LEVEL[itemName].level
           )
         ) {
