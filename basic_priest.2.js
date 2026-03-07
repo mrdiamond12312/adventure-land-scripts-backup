@@ -395,6 +395,7 @@ async function mainLoop() {
       }
       if (character.slots.cape?.name === "angelwings") {
         parent.socket.emit("activate", { slot: "cape" });
+        await withTimeout(push_deferred("activate"), 300);
       }
     }
 
