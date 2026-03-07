@@ -2,7 +2,7 @@ character.on("cm", async function ({ name, message }) {
   if (isInvFull()) {
     return;
   }
-  
+
   switch (message) {
     case "inv_ok":
       onDuty = false;
@@ -157,6 +157,8 @@ async function lureMechaGnome() {
   if (
     isLuringMobs ||
     onDuty ||
+    isAdvanceSmartMoving ||
+    smart.moving ||
     serverCurrentlyHasLiveEvent() ||
     (!(
       parent.party_list &&
