@@ -198,7 +198,7 @@ async function moveHome() {
   equipBroom();
 
   try {
-    await advanceSmartMove(homeLocation, { wait: 1500 });
+    await advanceSmartMove(homeLocation, { wait: 1500, exact: true });
 
     onDuty = false;
 
