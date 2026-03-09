@@ -1,6 +1,6 @@
 const HOP_SERVERS = ["US", "ASIA", "EU"];
 
-const ignoreServer = [];
+const ignoreServer = ["ASIAI"];
 
 const HOME_SERVER = {
   serverRegion: "US",
