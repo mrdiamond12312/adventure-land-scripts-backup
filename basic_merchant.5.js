@@ -145,9 +145,7 @@ async function exchangeSomething() {
     }
   }
 
-  console.warn(slot);
-
-  if (!slot) return;
+  if (slot === undefined) return;
 
   if (
     character.mp > 400 &&
