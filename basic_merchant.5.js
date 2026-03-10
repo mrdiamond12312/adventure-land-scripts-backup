@@ -138,13 +138,14 @@ async function exchangeSomething() {
       slot = slotIndex;
 
       if (item.npc && !haveAComputer()) {
-        console.warn(find_npc(item.npc));
         await advanceSmartMove(find_npc(item.npc));
       }
 
       break;
     }
   }
+
+  console.warn(slot);
 
   if (!slot) return;
 
