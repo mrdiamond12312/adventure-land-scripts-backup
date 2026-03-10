@@ -200,7 +200,7 @@ async function exchangeMines() {
 
 async function moveHome() {
   if (
-    distance(character, homeLocation) < 50 ||
+    distance(character, homeLocation) < 150 ||
     smart.moving ||
     isAdvanceSmartMoving ||
     character.moving ||
