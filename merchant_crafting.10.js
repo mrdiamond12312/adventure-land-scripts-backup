@@ -473,6 +473,7 @@ if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
     retrievedBankItemToUpgrade();
   });
 }
+
 setInterval(async () => {
   if (
     character.map === "main" &&
@@ -523,3 +524,26 @@ setInterval(async () => {
     onDuty = false;
   }
 }, 120000);
+
+// Push bank data to earth's API
+const syncBankData = async () => {
+  try {
+    if (!BANK_CACHE) throw new Error("Have yet enter the bank once!");
+    const url = `https://aldata.earthiverse.ca/bank/${character.owner}/${character.name}`;
+    const settings = {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...BANK_CACHE, inv: character.items }),
+    };
+
+    await fetch(url, settings);
+    console.log(
+      "Bank & inventory data synced to aldata.earthiverse.ca successfully!",
+    );
+  } catch (error) {
+    console.error("Sync failed:", error);
+  } finally {
+    setTimeout(syncBankData, 60000);
+  }
+};
+syncBankData();
