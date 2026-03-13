@@ -8,7 +8,7 @@ if (parent.caracAL) {
 
 var BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
-const IGNORE_BANK_SLOTS = ["gold", "items8", "items9"];
+const IGNORE_BANK_SLOTS = ["gold", "items8", "items9", "items10", "items11"];
 const IGNORE_RARE_GOLD_THRESHOLD = 40e8;
 
 const KEEP_THRESHOLD = {
