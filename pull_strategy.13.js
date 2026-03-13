@@ -146,15 +146,24 @@ async function usePullStrategies(target) {
       );
 
       // Mob Target Check: Agitate won't steal from others or cooperative mobs
-      const wontStealOrBreakCoop = !listOfNoTargetMonsterInRange.some(
-        (mob) =>
-          mob.cooperative &&
-          !mob["1hp"] &&
-          (!partyMems.includes(mob.target) ||
-            parent.party_list
-              .filter((id) => !partyMems.includes(id))
-              .includes(mob.target)),
+      const externalPartyMembers = parent.party_list.filter(
+        (name) => !partyMems.includes(name),
       );
+
+      const mobsTargetingExternalParty = mobsList.some((mob) =>
+        externalPartyMembers.includes(mob.target),
+      );
+
+      const wontStealOrBreakCoop =
+        !listOfNoTargetMonsterInRange.some(
+          (mob) =>
+            mob.cooperative &&
+            !mob["1hp"] &&
+            (!partyMems.includes(mob.target) ||
+              externalPartyMembers.includes(mob.target)),
+        ) &&
+        (!mobsTargetingExternalParty ||
+          distance(character, { map: map, x: mapX, y: mapY }) > 300);
 
       // Fear Check
       const willNotBeFeared = !isFearedAfterAgitating;
