@@ -261,12 +261,26 @@ class StrategicSmartMove {
     stop("town");
   }
 
+  // Mage Utils
+
   /**
    * Get Mage Information
    * @returns mage information from localStorage or from iframe
    */
   getMageInfo() {
     return parent.caracAL ? get("mageLocation") : getCharacter(MAGE);
+  }
+
+  /**
+   * Check Mage condition before blinking
+   * @returns true if mage can blink
+   */
+  hasMpToBlink() {
+    return (
+      character.ctype === "mage" &&
+      character.mp >= G.skills["blink"].mp &&
+      !is_on_cooldown("blink")
+    );
   }
 
   /**
@@ -631,11 +645,13 @@ class StrategicSmartMove {
         }
 
         if (segment.method === "blink" && character.ctype === "mage") {
-          if (
-            character.mp > parent.G.skills["blink"].mp &&
-            !is_on_cooldown("blink") &&
-            character.map === segment.map
-          ) {
+          const readyToBlink = this.hasMpToBlink();
+
+          if (!this.hasMpToBlink()) {
+            await waitUntil(() => this.hasMpToBlink(), 15_000);
+          }
+
+          if (this.hasMpToBlink() && character.map === segment.map) {
             await use_skill("blink", [segment.x, segment.y]);
             await sleep(character.ping * 0.7);
             segmentIndex++;

@@ -23,7 +23,7 @@ if (parent.caracAL) {
 }
 
 // Kiting settings (unchanged)
-const originRangeRate = 0.9;
+const originRangeRate = 0.65;
 rangeRate = originRangeRate;
 
 const bosses = {
