@@ -983,7 +983,7 @@ async function warriorCleave(currentStrategy) {
   );
 
   if (
-    character.s.sugarrush ||
+    // character.s.sugarrush ||
     character.s.penalty_cd ||
     character.mp < G.skills["cleave"].mp + 280 ||
     is_on_cooldown("cleave") ||
