@@ -215,7 +215,7 @@ async function cupidHeal(playersToHeal) {
   const isAttackOnCD = ms_to_next_skill("attack") > 0 || character.s.penalty_cd;
   const hasCupid =
     locate_item("cupid") !== -1 || character.slots.mainhand?.name === "cupid";
-  if (!hasCupid || character.fear) return;
+  if (!hasCupid || character.fear) return false;
 
   const characterRange = character.range + character.xrange;
   const lowHealthPlayersInRange = playersToHeal.filter(
