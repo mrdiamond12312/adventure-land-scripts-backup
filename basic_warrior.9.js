@@ -117,8 +117,8 @@ async function fight(target) {
 
   if (isAttackReady && inRange(target) && shouldAttack()) {
     set_message("Attacking");
-    const xrangeUsed = distance(target, character) - character.range;
-    if (xrangeUsed > 0) character.xrange -= xrangeUsed;
+    // const xrangeUsed = distance(target, character) - character.range;
+    // if (xrangeUsed > 0) character.xrange -= xrangeUsed;
     // Main attack execution
     promisesToAwait.push(
       attack(target)
