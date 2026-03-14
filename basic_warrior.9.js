@@ -23,7 +23,7 @@ if (parent.caracAL) {
 }
 
 // Kiting settings (unchanged)
-const originRangeRate = 0.65;
+const originRangeRate = 0.9;
 rangeRate = originRangeRate;
 
 const bosses = {
@@ -39,6 +39,7 @@ const bosses = {
 async function fight(target) {
   const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
   const attackRange = character.range + character.xrange;
+  const attackFrequencyBeforeComponsate = character.frequency;
   const inRange = (entity, mult = 1) =>
     distance(entity, character) < attackRange * mult;
 
@@ -116,12 +117,13 @@ async function fight(target) {
 
   if (isAttackReady && inRange(target) && shouldAttack()) {
     set_message("Attacking");
-
+    const xrangeUsed = distance(target, character) - character.range;
     // Main attack execution
     promisesToAwait.push(
       attack(target)
         .then(() => {
-          // attackSpeedCompensate(attackFrequencyBeforeComponsate);
+          if (xrangeUsed > 0) character.xrange -= xrangeUsed;
+          attackSpeedCompensate(attackFrequencyBeforeComponsate);
           reduceCd("attack");
         })
         .catch((e) => attackErrorHandler(e, target)),
