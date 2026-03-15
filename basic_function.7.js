@@ -861,7 +861,7 @@ const FRANKY_PREFER_SPOT = {
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   const loopInterval = Math.max(200, getLoopInterval());
   const rangeRadius = character.range * rangeRateFn;
-  const extendedRadius = character.xrange * 0.9;
+  const extendedRadius = character.xrange * 0.5;
 
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
   if (!target || smart.moving || isAdvanceSmartMoving) {
@@ -919,7 +919,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   if (
     character.ctype === "warrior" &&
     distance(character, target) > character.range * 0.35 &&
-    distance(character, target) < rangeRadius
+    distance(character, target) < rangeRadius + extendedRadius
   ) {
     const allEntities = Object.values(parent.entities);
     const noAggro = allEntities
