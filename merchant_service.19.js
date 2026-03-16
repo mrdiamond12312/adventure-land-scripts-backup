@@ -207,11 +207,12 @@ async function lureMechaGnome() {
 
     parent.socket.emit("eval", { command: "mooooooh" });
     await advanceSmartMove(get("mageLocation"), { useScare: false });
+    await sleep(character.ping);
     await waitUntil(() => {
       const partnerNearby =
         trustedPartners.some((name) => get_player(name)) || get_player(HEALER);
 
-      if (!partnerNearby) return false;
+      if (!partnerNearby) return true;
 
       for (const id in parent.entities) {
         const entity = parent.entities[id];
