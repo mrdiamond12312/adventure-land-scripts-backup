@@ -188,7 +188,7 @@ async function lureMechaGnome() {
     if (!gnomesNearby.length) {
       nextDelay = 45_000;
       throw new Error("No mechagnome found");
-    } else nextDelay = 150_000;
+    } else nextDelay = gnomesNearby.length === 4 ? 90_000 : 60_000;
 
     const mageResponse = await waitUntil(() => {
       const mageInfo = get("mageLocation");
@@ -226,7 +226,7 @@ async function lureMechaGnome() {
       }
 
       return true;
-    }, 1e4);
+    }, 10_000);
   } catch (e) {
     console.error(e);
   } finally {
