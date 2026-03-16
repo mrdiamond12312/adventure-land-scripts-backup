@@ -475,54 +475,39 @@ if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
 }
 
 setInterval(async () => {
-  if (
-    character.map === "main" &&
-    !onDuty &&
-    !character.q.exchange &&
-    !character.c.fishing &&
-    !character.c.mining &&
-    !(
-      !is_on_cooldown("fishing") &&
-      (locate_item("rod") !== -1 || character.slots.mainhand?.name === "rod")
-    ) &&
-    !(
-      !is_on_cooldown("mining") &&
-      (locate_item("pickaxe") !== -1 ||
-        character.slots.mainhand?.name === "pickaxe")
+  if (onDuty || shouldGoChilling()) return;
+
+  onDuty = true;
+  close_stand();
+  await advanceSmartMove(bankPosition);
+  BANK_CACHE = character.bank;
+  const promises = [];
+  character.items.forEach((item, index) => {
+    if (!item) return;
+    const isRareItem = item_grade(item) >= 2;
+    const isHighLevelItem =
+      item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
+
+    const isStoreable = STORE_ABLE.includes(item.name);
+    const isEquipable = item_info(item).compound || item_info(item).upgrade;
+    const shouldItemBeIgnore = IGNORE.includes(item.name);
+
+    if (
+      item &&
+      ((!shouldItemBeIgnore &&
+        (isRareItem || (isEquipable && isHighLevelItem))) ||
+        isStoreable ||
+        RETRIEVE_HISTORY.includes(item.name))
     )
-  ) {
-    onDuty = true;
-    close_stand();
-    await smartMove(bankPosition);
-    BANK_CACHE = character.bank;
-    const promises = [];
-    character.items.forEach((item, index) => {
-      if (!item) return;
-      const isRareItem = item_grade(item) >= 2;
-      const isHighLevelItem =
-        item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
+      promises.push(bank_store(index));
+  });
+  await withTimeout(Promise.allSettled(promises), 2500);
+  retrieveMaxItemsLevel();
+  await retrievedBankItemToUpgrade();
 
-      const isStoreable = STORE_ABLE.includes(item.name);
-      const isEquipable = item_info(item).compound || item_info(item).upgrade;
-      const shouldItemBeIgnore = IGNORE.includes(item.name);
+  retrieveBankItem("gemfragment");
 
-      if (
-        item &&
-        ((!shouldItemBeIgnore &&
-          (isRareItem || (isEquipable && isHighLevelItem))) ||
-          isStoreable ||
-          RETRIEVE_HISTORY.includes(item.name))
-      )
-        promises.push(bank_store(index));
-    });
-    await withTimeout(Promise.allSettled(promises), 2500);
-    retrieveMaxItemsLevel();
-    await retrievedBankItemToUpgrade();
-
-    retrieveBankItem("gemfragment");
-
-    onDuty = false;
-  }
+  onDuty = false;
 }, 120000);
 
 // Push bank data to earth's API

@@ -159,6 +159,7 @@ async function lureMechaGnome() {
     onDuty ||
     isAdvanceSmartMoving ||
     smart.moving ||
+    shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
     (!(
       parent.party_list &&

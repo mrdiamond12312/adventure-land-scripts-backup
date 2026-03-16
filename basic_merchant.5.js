@@ -40,13 +40,8 @@ function equipBroom() {
   }
 }
 
-function shouldGoExchangeXmas() {
-  return !(
-    onDuty ||
-    isInvFull(6) ||
-    character.q.exchange ||
-    smart.moving ||
-    isAdvanceSmartMoving ||
+function shouldGoChilling() {
+  return (
     (!is_on_cooldown("fishing") &&
       (locate_item("rod") !== -1 ||
         character.slots.mainhand?.name === "rod")) ||
@@ -57,6 +52,18 @@ function shouldGoExchangeXmas() {
     character.c.fishing
   );
 }
+
+function shouldGoExchangeXmas() {
+  return !(
+    onDuty ||
+    isInvFull(6) ||
+    character.q.exchange ||
+    smart.moving ||
+    isAdvanceSmartMoving ||
+    shouldGoChilling()
+  );
+}
+
 async function holidayExchange() {
   if (!shouldGoExchangeXmas() || !parent.S["holidayseason"]) return;
 
