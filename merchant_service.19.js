@@ -207,6 +207,25 @@ async function lureMechaGnome() {
 
     parent.socket.emit("eval", { command: "mooooooh" });
     await advanceSmartMove(get("mageLocation"), { useScare: false });
+    await waitUntil(() => {
+      const partnerNearby =
+        trustedPartners.some((name) => get_player(name)) || get_player(HEALER);
+
+      if (!partnerNearby) return false;
+
+      for (const id in parent.entities) {
+        const entity = parent.entities[id];
+        if (
+          entity &&
+          entity.mtype === "mechagnome" &&
+          entity.target === character.name
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    }, 1e4);
   } catch (e) {
     console.error(e);
   } finally {
