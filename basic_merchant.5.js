@@ -215,7 +215,10 @@ async function moveHome() {
   equipBroom();
 
   try {
-    await advanceSmartMove(homeLocation, { wait: 200, exact: true });
+    await advanceSmartMove(homeLocation, {
+      exact: true,
+      useScare: isLuringMobs,
+    });
 
     onDuty = false;
 
