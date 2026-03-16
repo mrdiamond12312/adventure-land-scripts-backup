@@ -220,7 +220,8 @@ async function compoundInv() {
     const itemName = character.items[i].name;
     if (IGNORE.includes(itemName)) continue;
 
-    if (item_info(character.items[i]).compound) {
+    const itemInfo = item_info(character.items[i]);
+    if (itemInfo.compound) {
       const compoundNameChecker = new Set([
         itemName,
         character.items[i + 1]?.name,
@@ -238,7 +239,6 @@ async function compoundInv() {
 
       if (!canCompound) continue;
 
-      const itemInfo = item_info(character.items[i]);
       const itemGrade = item_grade(character.items[i]);
       const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
       const isRareItem =
@@ -273,13 +273,13 @@ async function compoundInv() {
       if (scrollSlot === -1) {
         if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD)
           continue;
-        buy(scrollType, 1)
-          .then(() => {
-            scrollSlot = locate_item(scrollType);
-          })
-          .catch((e) => {
-            breakFlag = true;
-          });
+
+        try {
+          await buy(scrollType, 1);
+          scrollSlot = locate_item(scrollType);
+        } catch (e) {
+          breakFlag = true;
+        }
       }
 
       if (
@@ -398,13 +398,12 @@ async function upgradeInv() {
         if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD)
           continue;
 
-        buy(scrollType, 1)
-          .then(() => {
-            scrollSlot = locate_item(scrollType);
-          })
-          .catch((e) => {
-            breakFlag = true;
-          });
+        try {
+          await buy(scrollType, 1);
+          scrollSlot = locate_item(scrollType);
+        } catch (e) {
+          breakFlag = true;
+        }
       }
 
       if (
@@ -474,41 +473,54 @@ if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
   });
 }
 
-setInterval(async () => {
-  if (onDuty || shouldGoChilling()) return;
+async function bankLoop() {
+  if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
+    close_stand();
+    await advanceSmartMove(bankPosition);
+    retrieveMaxItemsLevel();
+    await retrievedBankItemToUpgrade();
+    return setTimeout(bankLoop, 60000);
+  }
 
-  onDuty = true;
-  close_stand();
-  await advanceSmartMove(bankPosition);
-  BANK_CACHE = character.bank;
-  const promises = [];
-  character.items.forEach((item, index) => {
-    if (!item) return;
-    const isRareItem = item_grade(item) >= 2;
-    const isHighLevelItem =
-      item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
+  if (onDuty || shouldGoChilling()) return setTimeout(bankLoop, 5000);
 
-    const isStoreable = STORE_ABLE.includes(item.name);
-    const isEquipable = item_info(item).compound || item_info(item).upgrade;
-    const shouldItemBeIgnore = IGNORE.includes(item.name);
+  try {
+    onDuty = true;
+    close_stand();
+    await advanceSmartMove(bankPosition);
+    BANK_CACHE = character.bank;
+    const promises = [];
+    character.items.forEach((item, index) => {
+      if (!item) return;
+      const isRareItem = item_grade(item) >= 2;
+      const isHighLevelItem =
+        item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
 
-    if (
-      item &&
-      ((!shouldItemBeIgnore &&
-        (isRareItem || (isEquipable && isHighLevelItem))) ||
+      const isStoreable = STORE_ABLE.includes(item.name);
+      const isEquipable = item_info(item).compound || item_info(item).upgrade;
+      const shouldItemBeIgnore = IGNORE.includes(item.name);
+
+      if (
+        (!shouldItemBeIgnore &&
+          (isRareItem || (isEquipable && isHighLevelItem))) ||
         isStoreable ||
-        RETRIEVE_HISTORY.includes(item.name))
-    )
-      promises.push(bank_store(index));
-  });
-  await withTimeout(Promise.allSettled(promises), 2500);
-  retrieveMaxItemsLevel();
-  await retrievedBankItemToUpgrade();
+        RETRIEVE_HISTORY.includes(item.name)
+      )
+        promises.push(bank_store(index));
+    });
+    await withTimeout(Promise.allSettled(promises), 2500);
+    retrieveMaxItemsLevel();
+    await retrievedBankItemToUpgrade();
+    retrieveBankItem("gemfragment");
+  } catch (e) {
+    console.warn("bank loop error:", e);
+  } finally {
+    onDuty = false;
+  }
 
-  retrieveBankItem("gemfragment");
-
-  onDuty = false;
-}, 120000);
+  return setTimeout(bankLoop, 120000);
+}
+bankLoop();
 
 // Push bank data to earth's API
 const syncBankData = async () => {
