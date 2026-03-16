@@ -322,6 +322,7 @@ var IGNORE = [
   "orbofplague",
   "orbofresolve",
   "gphelmet",
+  "snring",
   // "bowofthedead",
   // "daggerofthedead",
   "maceofthedead",
