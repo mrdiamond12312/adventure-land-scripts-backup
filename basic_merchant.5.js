@@ -484,6 +484,8 @@ setInterval(async function () {
     return;
   }
 
+  if(character.moving && character.stand) close_stand();
+
   if (!isLuringMobs) scareAwayMobs();
 
   await sortInv();
