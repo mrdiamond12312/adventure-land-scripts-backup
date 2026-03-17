@@ -208,7 +208,7 @@ async function lureMechaGnome() {
 
     parent.socket.emit("eval", { command: "mooooooh" });
     await advanceSmartMove(get("mageLocation"), { useScare: false });
-    await sleep(character.ping);
+    await sleep(1000);
     await waitUntil(() => {
       const partnerNearby =
         trustedPartners.some((name) => get_player(name)) || get_player(HEALER);
