@@ -45,7 +45,6 @@ async function retrieveBankItem(searchId, level = 0) {
   if (smart.moving || isAdvanceSmartMoving) return;
 
   if (character.map !== "bank") {
-    close_stand();
     await smart_move(bankPosition);
     BANK_CACHE = character.bank;
   }
@@ -448,7 +447,6 @@ async function upgradeInv() {
                 };
 
               if (e?.level >= (ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0)) {
-                close_stand();
                 smart_move(bankPosition).then(() =>
                   bank_store(findMaxLevelItem(itemName)),
                 );
@@ -466,7 +464,6 @@ async function upgradeInv() {
 }
 
 if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-  close_stand();
   smart_move(bankPosition).then(() => {
     retrieveMaxItemsLevel();
     retrievedBankItemToUpgrade();
@@ -477,7 +474,6 @@ async function bankLoop() {
   let delay = 120000;
   try {
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-      close_stand();
       await advanceSmartMove(bankPosition);
       retrieveMaxItemsLevel();
       await retrievedBankItemToUpgrade();
@@ -491,7 +487,6 @@ async function bankLoop() {
     }
 
     onDuty = true;
-    close_stand();
     await advanceSmartMove(bankPosition);
     BANK_CACHE = character.bank;
     const promises = [];

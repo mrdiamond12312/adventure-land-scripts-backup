@@ -11,7 +11,6 @@ character.on("cm", async function ({ name, message }) {
 
   if (!onDuty) {
     onDuty = true;
-    close_stand();
   } else return;
 
   equipBroom();
@@ -127,7 +126,6 @@ character.on("cm", async function ({ name, message }) {
 });
 
 async function openCryptInstance() {
-  close_stand();
   onDuty = true;
   if (locate_item("cryptkey") === -1) {
     await retrieveBankItem("cryptkey");
@@ -177,7 +175,6 @@ async function lureMechaGnome() {
   let nextDelay = 500;
 
   try {
-    close_stand();
     await advanceSmartMove({ map: "cyberland" });
     await sleep(character.ping);
 

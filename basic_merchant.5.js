@@ -102,7 +102,6 @@ async function holidayExchange() {
   if (!exchangableItem || smart.moving) return;
 
   if (get_nearest_npc()?.npc !== exchangableItem.npc && !haveAComputer()) {
-    close_stand();
     equipBroom();
     await smart_move(find_npc(exchangableItem.npc));
   }
@@ -214,7 +213,6 @@ async function moveHome() {
     return;
 
   log("Moving back Town!");
-  close_stand();
   equipBroom();
 
   try {
@@ -279,7 +277,6 @@ async function goFishing() {
     character.real_x != fishingLocation.x &&
     character.real_y != fishingLocation.y
   ) {
-    close_stand();
     equipBroom();
     await smart_move(fishingLocation);
   }
@@ -341,7 +338,6 @@ async function goMining() {
     character.real_x != miningLocation.x &&
     character.real_y != miningLocation.y
   ) {
-    close_stand();
     equipBroom();
     await smart_move(miningLocation);
   }
@@ -375,7 +371,6 @@ async function dismantleSomething() {
   if (!itemToDismantle) return;
 
   if (get_nearest_npc()?.name !== "Leo" && !haveAComputer()) {
-    close_stand();
     await advanceSmartMove(find_npc("craftsman"));
   }
 
@@ -465,7 +460,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
       !smart.moving &&
       !isAdvanceSmartMoving
     ) {
-      close_stand();
       await smart_move(place);
     }
 
@@ -480,7 +474,10 @@ setInterval(async function () {
     return;
   }
 
-  if (character.moving && character.stand) close_stand();
+  if (character.moving && character.stand) {
+    close_stand();
+    equipBroom();
+  } else if (!character.moving && !character.stand) open_stand();
 
   if (!isLuringMobs) scareAwayMobs();
 
@@ -539,16 +536,11 @@ setInterval(async function () {
     character.items[locate_item("gemfragment")]?.q >= 50
   )
     exchangeMines();
-  else if (
-    !character.c.mining &&
-    !character.c.fishing &&
-    !onDuty
-  )
+  else if (!character.c.mining && !character.c.fishing && !onDuty)
     await moveHome();
 
   if (isInvFull() && !isAdvanceSmartMoving) {
     onDuty = true;
-    close_stand();
     await advanceSmartMove(bankPosition);
     if (character.map === "bank") {
       try {
