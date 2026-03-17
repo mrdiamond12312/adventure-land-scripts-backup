@@ -143,7 +143,7 @@ async function exchangeSomething() {
     if (slotIndex !== -1 && character.items[slotIndex].q >= item.quantity) {
       slot = slotIndex;
 
-      if (item.npc && !haveAComputer() && !isAdvanceSmartMoving) {
+      if (item.npc && !haveAComputer() && !isAdvanceSmartMoving && !smart.moving) {
         await advanceSmartMove(find_npc(item.npc));
       }
 
@@ -544,7 +544,7 @@ setInterval(async function () {
   else if (!character.c.mining && !character.c.fishing && !onDuty)
     await moveHome();
 
-  if (isInvFull() && !isAdvanceSmartMoving) {
+  if (isInvFull() && !isAdvanceSmartMoving && !smart.moving) {
     onDuty = true;
     await advanceSmartMove(bankPosition);
     if (character.map === "bank") {

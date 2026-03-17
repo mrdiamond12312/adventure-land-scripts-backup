@@ -29,11 +29,11 @@ character.on("cm", async function ({ name, message }) {
       case "buy_mana":
         log(`Buying some mana potions for ${name}`);
         if (isInvFull()) {
-          if (!smart.moving) await advanceSmartMove(bankPosition);
+          if (!smart.moving) await smart_move(bankPosition);
           if (character.map === "bank") bank_store(0);
         }
         if (locate_item("mpot1") === -1) {
-          await advanceSmartMove(find_npc("fancypots"));
+          await smart_move(find_npc("fancypots"));
           await buy("mpot1", 9899);
         }
         await advanceSmartMove({
@@ -47,11 +47,11 @@ character.on("cm", async function ({ name, message }) {
       case "buy_hp":
         log(`Buying some health potions for ${name}`);
         if (isInvFull()) {
-          if (!smart.moving) await advanceSmartMove(bankPosition);
+          if (!smart.moving) await smart_move(bankPosition);
           if (character.map === "bank") bank_store(0);
         }
         if (locate_item("hpot1") === -1) {
-          await advanceSmartMove(find_npc("fancypots"));
+          await smart_move(find_npc("fancypots"));
           await buy("hpot1", 9899);
         }
         await advanceSmartMove({
@@ -77,7 +77,7 @@ character.on("cm", async function ({ name, message }) {
           await retrieveBankItem(message.elixir);
 
           if (locate_item(message.elixir) === -1) {
-            await advanceSmartMove({ map: find_npc("wbartender").map });
+            await smart_move({ map: find_npc("wbartender").map });
             await buy(message.elixir);
           }
         }
@@ -98,7 +98,7 @@ character.on("cm", async function ({ name, message }) {
           await retrieveBankItem("xptome");
 
           if (locate_item("xptome") === -1) {
-            await advanceSmartMove(find_npc("premium"));
+            await smart_move(find_npc("premium"));
             await buy("xptome");
           }
         }
@@ -132,7 +132,7 @@ async function openCryptInstance() {
     }
   }
 
-  await advanceSmartMove(CRYPT_DOOR);
+  await smart_move(CRYPT_DOOR);
   await enter("crypt");
 
   set("cryptInstance", character.in);
