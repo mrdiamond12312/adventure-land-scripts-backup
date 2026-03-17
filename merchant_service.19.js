@@ -179,7 +179,7 @@ async function lureMechaGnome() {
   try {
     close_stand();
     await advanceSmartMove({ map: "cyberland" });
-    await sleep(character.ping);
+    await sleep(1000);
 
     const gnomesNearby = Object.values(parent.entities).filter(
       (entity) =>
