@@ -455,15 +455,6 @@ class StrategicSmartMove {
 
     if (options.useMagiport && character.ctype !== "mage") {
       const magiportCheck = async () => {
-        if (
-          distance(character, toPosition) < 100 ||
-          !this.isSmartMoving ||
-          session !== this.smartMoveSession
-        ) {
-          this.cleanUp();
-          return;
-        }
-
         const mageInfo = this.getMageInfo();
 
         if (
@@ -495,7 +486,15 @@ class StrategicSmartMove {
         }
 
         // Recursive timeout to check for magiport availability every second
-        this.magiportLoop = setTimeout(magiportCheck, 1000);
+
+        if (
+          distance(character, toPosition) < 200 ||
+          !this.isSmartMoving ||
+          session !== this.smartMoveSession
+        ) {
+          this.cleanUp();
+          return;
+        } else this.magiportLoop = setTimeout(magiportCheck, 1000);
       };
       this.magiportLoop = magiportCheck();
     }
