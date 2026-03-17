@@ -467,6 +467,7 @@ async function bankLoop() {
   let delay = 120000;
   try {
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
+      onDuty = true;
       await smart_move(bankPosition);
       retrieveMaxItemsLevel();
       await retrievedBankItemToUpgrade();
