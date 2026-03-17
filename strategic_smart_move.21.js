@@ -230,6 +230,9 @@ class StrategicSmartMove {
         return true;
       }
       await town();
+      await waitUntil(() => {
+        return !character.c.town;
+      }, 5000);
       await sleep(retryDelay);
       if (mapData.spawns?.length) {
         if (

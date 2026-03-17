@@ -33,7 +33,7 @@ character.on("cm", async function ({ name, message }) {
           if (character.map === "bank") bank_store(0);
         }
         if (locate_item("mpot1") === -1) {
-          await smart_move(find_npc("fancypots"));
+          await advanceSmartMove({ map: "main", x: 56, y: -122 });
           await buy("mpot1", 9899);
         }
         await advanceSmartMove({
@@ -51,7 +51,7 @@ character.on("cm", async function ({ name, message }) {
           if (character.map === "bank") bank_store(0);
         }
         if (locate_item("hpot1") === -1) {
-          await smart_move(find_npc("fancypots"));
+          await advanceSmartMove({ map: "main", x: 56, y: -122 });
           await buy("hpot1", 9899);
         }
         await advanceSmartMove({
@@ -77,7 +77,7 @@ character.on("cm", async function ({ name, message }) {
           await retrieveBankItem(message.elixir);
 
           if (locate_item(message.elixir) === -1) {
-            await smart_move({ map: find_npc("wbartender").map });
+            await advanceSmartMove({ map: find_npc("wbartender").map });
             await buy(message.elixir);
           }
         }
