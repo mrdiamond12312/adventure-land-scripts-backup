@@ -225,8 +225,6 @@ async function moveHome() {
 
     if (locate_item("stand0") === -1 && !haveAComputer()) {
       retrieveBankItem("stand0");
-    } else {
-      open_stand();
     }
   } catch (e) {
     if (e?.reason === "failed" && e.failed) {
