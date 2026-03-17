@@ -548,6 +548,7 @@ setInterval(async function () {
     await moveHome();
 
   if (isInvFull() && !isAdvanceSmartMoving) {
+    onDuty = true;
     close_stand();
     await advanceSmartMove(bankPosition);
     if (character.map === "bank") {
@@ -561,7 +562,6 @@ setInterval(async function () {
         console.error(e);
       }
     }
-    if (!smart.moving || !isAdvanceSmartMoving) await moveHome();
     onDuty = false;
   }
 }, 750);
