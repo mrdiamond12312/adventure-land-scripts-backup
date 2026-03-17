@@ -205,23 +205,20 @@ async function exchangeMines() {
 }
 
 async function moveHome() {
-  if (
-    distance(character, homeLocation) < 150 ||
-    smart.moving ||
-    isAdvanceSmartMoving
-  )
-    return;
-
-  log("Moving back Town!");
-  equipBroom();
-
   try {
+    if (
+      distance(character, homeLocation) < 150 ||
+      smart.moving ||
+      isAdvanceSmartMoving
+    )
+      return;
+
+    log("Moving back Town!");
+    equipBroom();
     await advanceSmartMove(homeLocation, {
       exact: true,
       useScare: isLuringMobs,
     });
-
-    onDuty = false;
 
     if (locate_item("stand0") === -1 && !haveAComputer()) {
       retrieveBankItem("stand0");
@@ -232,6 +229,8 @@ async function moveHome() {
     }
 
     console.warn("movehome error:", e);
+  } finally {
+    onDuty = false;
   }
 }
 

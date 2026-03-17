@@ -300,8 +300,6 @@ class StrategicSmartMove {
 
     console.warn(toPosition);
 
-    if (!can_walk(character)) return;
-
     const options = {
       useBlink: true,
       useMagiport: true,
