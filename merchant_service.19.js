@@ -179,7 +179,7 @@ async function lureMechaGnome() {
   try {
     close_stand();
     await advanceSmartMove({ map: "cyberland" });
-    await sleep(1000);
+    await sleep(character.ping);
 
     const gnomesNearby = Object.values(parent.entities).filter(
       (entity) =>
@@ -208,7 +208,7 @@ async function lureMechaGnome() {
 
     parent.socket.emit("eval", { command: "mooooooh" });
     await advanceSmartMove(get("mageLocation"), { useScare: false });
-    await sleep(1000);
+    await sleep(character.ping);
     await waitUntil(() => {
       const partnerNearby =
         trustedPartners.some((name) => get_player(name)) || get_player(HEALER);

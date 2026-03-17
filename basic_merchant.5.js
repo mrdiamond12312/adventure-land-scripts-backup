@@ -209,11 +209,7 @@ async function moveHome() {
   if (
     distance(character, homeLocation) < 150 ||
     smart.moving ||
-    isAdvanceSmartMoving ||
-    character.moving ||
-    character.q.exchange ||
-    character.c.fishing ||
-    character.c.mining
+    isAdvanceSmartMoving
   )
     return;
 
@@ -484,7 +480,7 @@ setInterval(async function () {
     return;
   }
 
-  if(character.moving && character.stand) close_stand();
+  if (character.moving && character.stand) close_stand();
 
   if (!isLuringMobs) scareAwayMobs();
 
@@ -544,11 +540,9 @@ setInterval(async function () {
   )
     exchangeMines();
   else if (
-    !smart.moving &&
-    !isAdvanceSmartMoving &&
     !character.c.mining &&
     !character.c.fishing &&
-    !character.q.exchanging
+    !onDuty
   )
     await moveHome();
 
