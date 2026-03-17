@@ -474,18 +474,22 @@ if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
 }
 
 async function bankLoop() {
-  bankLoopLastRun = Date.now();
-  if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-    close_stand();
-    await advanceSmartMove(bankPosition);
-    retrieveMaxItemsLevel();
-    await retrievedBankItemToUpgrade();
-    return setTimeout(bankLoop, 60000);
-  }
-
-  if (onDuty || shouldGoChilling()) return setTimeout(bankLoop, 5000);
-
+  let delay = 120000;
   try {
+    if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
+      close_stand();
+      await advanceSmartMove(bankPosition);
+      retrieveMaxItemsLevel();
+      await retrievedBankItemToUpgrade();
+      delay = 60000;
+      return
+    }
+
+    if (onDuty || shouldGoChilling()) {
+      delay = 5000;
+      return;
+    }
+
     onDuty = true;
     close_stand();
     await advanceSmartMove(bankPosition);
@@ -519,7 +523,7 @@ async function bankLoop() {
     onDuty = false;
   }
 
-  return setTimeout(bankLoop, 120000);
+  return setTimeout(bankLoop, delay);
 }
 bankLoop();
 
