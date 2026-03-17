@@ -474,6 +474,7 @@ if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
 }
 
 async function bankLoop() {
+  bankLoopLastRun = Date.now();
   if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
     close_stand();
     await advanceSmartMove(bankPosition);
