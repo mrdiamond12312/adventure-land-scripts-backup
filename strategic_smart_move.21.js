@@ -294,147 +294,147 @@ class StrategicSmartMove {
    */
   async smartMove(toPosition, extraOptions = {}) {
     // Stop any existing smart move
+    if (this.isSmartMoving) {
+      this.cleanUp();
+    }
 
-    try {
-      if (this.isSmartMoving) {
-        if (extraOptions.force) this.cleanUp();
-        else return;
+    console.warn(toPosition);
+
+    if (!can_walk(character)) return;
+
+    const options = {
+      useBlink: true,
+      useMagiport: true,
+      useScare: true,
+      stopWatcher: undefined,
+      wait: 0,
+      speed: character.speed,
+      exact: false,
+      smartmoveDebug: false, // to set the global var smartmoveDebug
+      ...extraOptions,
+    };
+
+    this.smartMoveSession = (this.smartMoveSession || 0) + 1;
+    const session = this.smartMoveSession;
+    isAdvanceSmartMoving = true;
+    this.isSmartMoving = true;
+    smartmoveDebug = options.smartmoveDebug;
+
+    if (!toPosition) return;
+
+    let pathFindingResult;
+
+    // If position is a mob's name id
+    if (typeof toPosition === "string") {
+      if (!parent.G.monsters[toPosition]) {
+        throw new Error("Unknown monster");
       }
 
-      console.warn(toPosition);
-
-      const options = {
-        useBlink: true,
-        useMagiport: true,
-        useScare: true,
-        stopWatcher: undefined,
-        wait: 0,
-        speed: character.speed,
-        exact: false,
-        smartmoveDebug: false, // to set the global var smartmoveDebug
-        ...extraOptions,
-      };
-
-      this.smartMoveSession = (this.smartMoveSession || 0) + 1;
-      const session = this.smartMoveSession;
-      isAdvanceSmartMoving = true;
-      this.isSmartMoving = true;
-      smartmoveDebug = options.smartmoveDebug;
-
-      if (!toPosition) return;
-
-      let pathFindingResult;
-
-      // If position is a mob's name id
-      if (typeof toPosition === "string") {
-        if (!parent.G.monsters[toPosition]) {
-          throw new Error("Unknown monster");
-        }
-
-        const monsterSpawns = this.getMonsterSpawns(toPosition);
-        if (!monsterSpawns.length) {
-          throw new Error("Monster has no spawns");
-        }
-
-        let shortest = Infinity;
-
-        for (const spawn of monsterSpawns) {
-          const result = this.pathfinderGetPath(spawn, options.speed);
-
-          if (Array.isArray(result) && result.length < shortest) {
-            shortest = result.length;
-            pathFindingResult = result;
-            toPosition = spawn;
-
-            // prefer same-map immediately
-            if (spawn.map === character.map) break;
-          }
-        }
-      } else {
-        /* Position filler */
-        // Fill map first
-        if (
-          toPosition.map === undefined &&
-          toPosition.x !== undefined &&
-          toPosition.y !== undefined
-        ) {
-          toPosition.map = character.map;
-        }
-
-        let mapData = parent.G.maps[toPosition.map];
-
-        // Fill x/y from spawn
-        if (
-          mapData.spawns?.length &&
-          (toPosition.x === undefined || toPosition.y === undefined)
-        ) {
-          toPosition.x = mapData.spawns[0][0];
-          toPosition.y = mapData.spawns[0][1];
-        }
-
-        // Final validation
-        if (
-          toPosition.map === undefined ||
-          toPosition.x === undefined ||
-          toPosition.y === undefined
-        ) {
-          throw new Error(
-            `Unable to find path from ${character.map},${character.x},${character.y} ` +
-              `to ${toPosition.map},${toPosition.x},${toPosition.y}`,
-          );
-        }
-
-        if (distance(toPosition, character) < 10) return;
-
-        pathFindingResult = this.pathfinderGetPath(toPosition, options.speed);
-
-        // Standable fallback (for example: icegolem spawn)
-        if (
-          (!pathFindingResult || !pathFindingResult.length) &&
-          mapData?.spawns?.length &&
-          this.isStandablePoint(toPosition)
-        ) {
-          pathFindingResult = this.pathfinderGetPath(
-            {
-              ...toPosition,
-              x: mapData.spawns[0][0],
-              y: mapData.spawns[0][1],
-            },
-            options.speed,
-          );
-
-          if (Array.isArray(pathFindingResult)) {
-            pathFindingResult.push({
-              map: toPosition.map,
-              x: toPosition.x,
-              y: toPosition.y,
-              method: "blink",
-            });
-          }
-        }
+      const monsterSpawns = this.getMonsterSpawns(toPosition);
+      if (!monsterSpawns.length) {
+        throw new Error("Monster has no spawns");
       }
 
-      if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
-        await this.useTownWithRetry();
-        this.cleanUp();
+      let shortest = Infinity;
+
+      for (const spawn of monsterSpawns) {
+        const result = this.pathfinderGetPath(spawn, options.speed);
+
+        if (Array.isArray(result) && result.length < shortest) {
+          shortest = result.length;
+          pathFindingResult = result;
+          toPosition = spawn;
+
+          // prefer same-map immediately
+          if (spawn.map === character.map) break;
+        }
+      }
+    } else {
+      /* Position filler */
+      // Fill map first
+      if (
+        toPosition.map === undefined &&
+        toPosition.x !== undefined &&
+        toPosition.y !== undefined
+      ) {
+        toPosition.map = character.map;
+      }
+
+      let mapData = parent.G.maps[toPosition.map];
+
+      // Fill x/y from spawn
+      if (
+        mapData.spawns?.length &&
+        (toPosition.x === undefined || toPosition.y === undefined)
+      ) {
+        toPosition.x = mapData.spawns[0][0];
+        toPosition.y = mapData.spawns[0][1];
+      }
+
+      // Final validation
+      if (
+        toPosition.map === undefined ||
+        toPosition.x === undefined ||
+        toPosition.y === undefined
+      ) {
         throw new Error(
-          `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
+          `Unable to find path from ${character.map},${character.x},${character.y} ` +
+            `to ${toPosition.map},${toPosition.x},${toPosition.y}`,
         );
       }
 
-      if (options.wait) {
-        await sleep(options.wait);
-      }
+      if (distance(toPosition, character) < 10) return;
 
-      if (options.exact) {
-        pathFindingResult.push({
-          method: "move",
-          map: toPosition.map,
-          x: toPosition.x,
-          y: toPosition.y,
-        });
-      }
+      pathFindingResult = this.pathfinderGetPath(toPosition, options.speed);
 
+      // Standable fallback (for example: icegolem spawn)
+      if (
+        (!pathFindingResult || !pathFindingResult.length) &&
+        mapData?.spawns?.length &&
+        this.isStandablePoint(toPosition)
+      ) {
+        pathFindingResult = this.pathfinderGetPath(
+          {
+            ...toPosition,
+            x: mapData.spawns[0][0],
+            y: mapData.spawns[0][1],
+          },
+          options.speed,
+        );
+
+        if (Array.isArray(pathFindingResult)) {
+          pathFindingResult.push({
+            map: toPosition.map,
+            x: toPosition.x,
+            y: toPosition.y,
+            method: "blink",
+          });
+        }
+      }
+    }
+
+    if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
+      await this.useTownWithRetry();
+      this.cleanUp();
+      throw new Error(
+        `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
+      );
+    }
+
+    if (options.wait) {
+      await sleep(options.wait);
+    }
+
+    if (options.exact) {
+      pathFindingResult.push({
+        method: "move",
+        map: toPosition.map,
+        x: toPosition.x,
+        y: toPosition.y,
+      });
+    }
+
+    try {
       if (options.useScare) {
         await scareAwayMobs();
         this.scareInterval = setInterval(async () => {
@@ -664,9 +664,8 @@ class StrategicSmartMove {
     } catch (e) {
       console.log("smartMove error:", e);
     } finally {
+      this.cleanUp();
     }
-
-    this.cleanUp();
   }
 
   cleanUp() {
