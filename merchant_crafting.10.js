@@ -514,6 +514,7 @@ async function bankLoop() {
     retrieveBankItem("gemfragment");
   } catch (e) {
     console.warn("bank loop error:", e);
+    delay = 15000;
   } finally {
     onDuty = false;
     return setTimeout(bankLoop, delay);
