@@ -463,13 +463,6 @@ async function upgradeInv() {
   }
 }
 
-if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-  smart_move(bankPosition).then(() => {
-    retrieveMaxItemsLevel();
-    retrievedBankItemToUpgrade();
-  });
-}
-
 async function bankLoop() {
   let delay = 120000;
   try {
