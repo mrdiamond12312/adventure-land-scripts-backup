@@ -144,7 +144,7 @@ async function exchangeSomething() {
     if (slotIndex !== -1 && character.items[slotIndex].q >= item.quantity) {
       slot = slotIndex;
 
-      if (item.npc && !haveAComputer()) {
+      if (item.npc && !haveAComputer() && !isAdvanceSmartMoving) {
         await advanceSmartMove(find_npc(item.npc));
       }
 
