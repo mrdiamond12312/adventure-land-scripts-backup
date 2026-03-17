@@ -511,7 +511,7 @@ async function bankLoop() {
     await withTimeout(Promise.allSettled(promises), 2500);
     retrieveMaxItemsLevel();
     await retrievedBankItemToUpgrade();
-    await retrieveBankItem("gemfragment");
+    // await retrieveBankItem("gemfragment");
   } catch (e) {
     console.warn("bank loop error:", e);
     delay = 15000;

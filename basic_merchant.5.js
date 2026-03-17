@@ -230,6 +230,8 @@ async function moveHome() {
     if (e?.reason === "failed" && e.failed) {
       await town();
     }
+
+    console.warn("movehome error:", e);
   }
 }
 
