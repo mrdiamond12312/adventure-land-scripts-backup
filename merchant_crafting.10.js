@@ -42,7 +42,7 @@ const ITEMS_HIGHEST_LEVEL = {};
 const RETRIEVE_HISTORY = [];
 
 async function retrieveBankItem(searchId, level = 0) {
-  if (smart.moving) return;
+  if (smart.moving || isAdvanceSmartMoving) return;
 
   if (character.map !== "bank") {
     close_stand();

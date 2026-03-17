@@ -391,8 +391,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   if (
     onDuty ||
     isInvFull(4) ||
-    smart.moving ||
-    isAdvanceSmartMoving ||
     character.c.mining ||
     character.c.fishing ||
     !craftQuantity
@@ -465,7 +463,12 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   }
 
   if (isEnoughIngredients) {
-    if (get_nearest_npc()?.name !== "Leo" && !haveAComputer()) {
+    if (
+      get_nearest_npc()?.name !== "Leo" &&
+      !haveAComputer() &&
+      !smart.moving &&
+      !isAdvanceSmartMoving
+    ) {
       close_stand();
       await smart_move(place);
     }
