@@ -311,7 +311,7 @@ class StrategicSmartMove {
       useScare: true,
       stopWatcher: undefined,
       wait: 0,
-      speed: character.speed,
+      speed: Math.max(character.speed, 40),
       exact: false,
       smartmoveDebug: false, // to set the global var smartmoveDebug
       ...extraOptions,
