@@ -477,7 +477,13 @@ setInterval(async function () {
   if (character.moving && character.stand) {
     close_stand();
     equipBroom();
-  } else if (!character.moving && !character.stand) open_stand();
+  } else if (
+    !character.moving &&
+    !character.stand &&
+    !smart.moving &&
+    !isAdvanceSmartMoving
+  )
+    open_stand();
 
   if (!isLuringMobs) scareAwayMobs();
 

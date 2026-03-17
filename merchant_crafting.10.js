@@ -45,7 +45,7 @@ async function retrieveBankItem(searchId, level = 0) {
   if (smart.moving || isAdvanceSmartMoving) return;
 
   if (character.map !== "bank") {
-    await smart_move(bankPosition);
+    await advanceSmartMove(bankPosition);
     BANK_CACHE = character.bank;
   }
 

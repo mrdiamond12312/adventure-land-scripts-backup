@@ -13,115 +13,111 @@ character.on("cm", async function ({ name, message }) {
     onDuty = true;
   } else return;
 
-  equipBroom();
+  try {
+    equipBroom();
 
-  switch (message.msg) {
-    case "inv_full":
-      log(`Go collecting ${name} compoundables at ${message.map}`);
-      await advanceSmartMove({
-        ...message,
-      });
-      send_cm(name, "inv_full_merchant_near");
-      await sleep(5000);
-      onDuty = false;
-      break;
+    switch (message.msg) {
+      case "inv_full":
+        log(`Go collecting ${name} compoundables at ${message.map}`);
+        await advanceSmartMove({
+          ...message,
+        });
+        send_cm(name, "inv_full_merchant_near");
+        await sleep(5000);
+        break;
 
-    case "buy_mana":
-      log(`Buying some mana potions for ${name}`);
-      if (isInvFull()) {
-        if (!smart.moving) await smart_move(bankPosition);
-        if (character.map === "bank") bank_store(0);
-      }
-      if (locate_item("mpot1") === -1) {
-        await smart_move(find_npc("fancypots"));
-        await buy("mpot1", 9899);
-      }
-      await advanceSmartMove({
-        ...message,
-      });
-      await send_item(name, locate_item("mpot1"), 10000);
-      send_cm(name, "buy_mana_merchant_near");
-      await sleep(5000);
-      onDuty = false;
-      break;
-
-    case "buy_hp":
-      log(`Buying some health potions for ${name}`);
-      if (isInvFull()) {
-        if (!smart.moving) await smart_move(bankPosition);
-        if (character.map === "bank") bank_store(0);
-      }
-      if (locate_item("hpot1") === -1) {
-        await smart_move(find_npc("fancypots"));
-        await buy("hpot1", 9899);
-      }
-      await advanceSmartMove({
-        ...message,
-      });
-      await send_item(name, locate_item("hpot1"), 10000);
-      send_cm(name, "buy_hp_merchant_near");
-      await sleep(5000);
-      onDuty = false;
-      break;
-
-    case "buff_mluck":
-      await advanceSmartMove({
-        ...message,
-      });
-      if (!is_on_cooldown("mluck") && character.mp > 20) {
-        use_skill("mluck", get_entity(name));
-      }
-      onDuty = false;
-      break;
-
-    case "elixir":
-      if (locate_item(message.elixir) === -1) {
-        await retrieveBankItem(message.elixir);
-
-        if (locate_item(message.elixir) === -1) {
-          await smart_move({ map: find_npc("wbartender").map });
-          await buy(message.elixir);
+      case "buy_mana":
+        log(`Buying some mana potions for ${name}`);
+        if (isInvFull()) {
+          if (!smart.moving) await smart_move(bankPosition);
+          if (character.map === "bank") bank_store(0);
         }
-      }
-      if (locate_item(message.elixir) === -1) {
+        if (locate_item("mpot1") === -1) {
+          await smart_move(find_npc("fancypots"));
+          await buy("mpot1", 9899);
+        }
+        await advanceSmartMove({
+          ...message,
+        });
+        await send_item(name, locate_item("mpot1"), 10000);
+        send_cm(name, "buy_mana_merchant_near");
+        await sleep(5000);
+        break;
+
+      case "buy_hp":
+        log(`Buying some health potions for ${name}`);
+        if (isInvFull()) {
+          if (!smart.moving) await smart_move(bankPosition);
+          if (character.map === "bank") bank_store(0);
+        }
+        if (locate_item("hpot1") === -1) {
+          await smart_move(find_npc("fancypots"));
+          await buy("hpot1", 9899);
+        }
+        await advanceSmartMove({
+          ...message,
+        });
+        await send_item(name, locate_item("hpot1"), 10000);
+        send_cm(name, "buy_hp_merchant_near");
+        await sleep(5000);
+        break;
+
+      case "buff_mluck":
+        await advanceSmartMove({
+          ...message,
+        });
+        if (!is_on_cooldown("mluck") && character.mp > 20) {
+          use_skill("mluck", get_entity(name));
+        }
         onDuty = false;
         break;
-      }
-      await advanceSmartMove({
-        ...message,
-      });
-      await send_item(name, locate_item(message.elixir), 10);
-      onDuty = false;
-      break;
 
-    case "xptome":
-      if (!partyMems.includes(name)) break;
-      log(`Buying Tome of Protection for ${name}`);
+      case "elixir":
+        if (locate_item(message.elixir) === -1) {
+          await retrieveBankItem(message.elixir);
 
-      if (locate_item("xptome") === -1) {
-        await retrieveBankItem("xptome");
+          if (locate_item(message.elixir) === -1) {
+            await smart_move({ map: find_npc("wbartender").map });
+            await buy(message.elixir);
+          }
+        }
+        if (locate_item(message.elixir) === -1) {
+          break;
+        }
+        await advanceSmartMove({
+          ...message,
+        });
+        await send_item(name, locate_item(message.elixir), 10);
+        break;
+
+      case "xptome":
+        if (!partyMems.includes(name)) break;
+        log(`Buying Tome of Protection for ${name}`);
 
         if (locate_item("xptome") === -1) {
-          await smart_move(find_npc("premium"));
-          await buy("xptome");
+          await retrieveBankItem("xptome");
+
+          if (locate_item("xptome") === -1) {
+            await smart_move(find_npc("premium"));
+            await buy("xptome");
+          }
         }
-      }
 
-      if (locate_item("xptome") === -1) {
-        onDuty = false;
+        if (locate_item("xptome") === -1) {
+          break;
+        }
+
+        await advanceSmartMove({
+          ...message,
+        });
+        await send_item(name, locate_item("xptome"), 1);
         break;
-      }
 
-      await advanceSmartMove({
-        ...message,
-      });
-      await send_item(name, locate_item("xptome"), 1);
-      onDuty = false;
-      break;
-
-    default:
-      onDuty = false;
-      log(`Unidentified '${message.msg}'`);
+      default:
+        log(`Unidentified '${message.msg}'`);
+    }
+  } finally {
+    onDuty = false;
   }
 });
 
