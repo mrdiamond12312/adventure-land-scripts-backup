@@ -486,15 +486,7 @@ class StrategicSmartMove {
         }
 
         // Recursive timeout to check for magiport availability every second
-
-        if (
-          distance(character, toPosition) < 200 ||
-          !this.isSmartMoving ||
-          session !== this.smartMoveSession
-        ) {
-          this.cleanUp();
-          return;
-        } else this.magiportLoop = setTimeout(magiportCheck, 1000);
+        this.magiportLoop = setTimeout(magiportCheck, 1000);
       };
       this.magiportLoop = magiportCheck();
     }
