@@ -295,7 +295,8 @@ class StrategicSmartMove {
   async smartMove(toPosition, extraOptions = {}) {
     // Stop any existing smart move
     if (this.isSmartMoving) {
-      this.cleanUp();
+      if (extraOptions.force) this.cleanUp();
+      else return;
     }
 
     console.warn(toPosition);
