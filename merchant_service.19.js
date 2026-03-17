@@ -179,10 +179,10 @@ async function lureMechaGnome() {
         entity && entity.type === "monster" && entity.mtype === "mechagnome",
     );
 
-    if (!gnomesNearby.length) {
+    if (gnomesNearby.length < 3) {
       nextDelay = 45_000;
-      throw new Error("No mechagnome found");
-    } else nextDelay = gnomesNearby.length === 4 ? 90_000 : 60_000;
+      throw new Error("Gnome not fully spawned");
+    } else nextDelay = 110_000;
 
     const mageResponse = await waitUntil(() => {
       const mageInfo = get("mageLocation");

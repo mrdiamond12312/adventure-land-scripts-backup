@@ -16,7 +16,7 @@ class StrategicSmartMove {
     this.magiportLoop = undefined;
     this.watcherInterval = undefined;
     this.isSmartMoving = true;
-    this.stopTown = false;
+    this.stopTownSession = null;
   }
 
   /**
@@ -225,8 +225,7 @@ class StrategicSmartMove {
     let mapData = parent.G.maps[character.map];
 
     while (attempts++ < maxRetries) {
-      if (this.stopTown) {
-        this.stopTown = false;
+      if (this.stopTownSession === this.smartMoveSession) {
         return true;
       }
       await town();
@@ -248,7 +247,10 @@ class StrategicSmartMove {
       }
     }
 
-    if (mapData.spawns?.length && !this.stopTown) {
+    if (
+      mapData.spawns?.length &&
+      this.stopTownSession !== this.smartMoveSession
+    ) {
       await smart_move({
         map: character.map,
         x: mapData.spawns[0][0],
@@ -260,7 +262,7 @@ class StrategicSmartMove {
   }
 
   stopTownChanneling() {
-    this.stopTown = true;
+    this.stopTownSession = this.smartMoveSession;
     stop("town");
   }
 
@@ -455,8 +457,9 @@ class StrategicSmartMove {
 
     if (options.useMagiport && character.ctype !== "mage") {
       const magiportCheck = async () => {
-        const mageInfo = this.getMageInfo();
+        if (session !== this.smartMoveSession) return;
 
+        const mageInfo = this.getMageInfo();
         if (
           mageInfo &&
           distance(toPosition, mageInfo) < 200 &&
