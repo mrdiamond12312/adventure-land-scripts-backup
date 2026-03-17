@@ -478,7 +478,7 @@ async function bankLoop() {
       retrieveMaxItemsLevel();
       await retrievedBankItemToUpgrade();
       delay = 60000;
-      return
+      return;
     }
 
     if (onDuty || shouldGoChilling()) {
@@ -516,9 +516,8 @@ async function bankLoop() {
     console.warn("bank loop error:", e);
   } finally {
     onDuty = false;
+    return setTimeout(bankLoop, delay);
   }
-
-  return setTimeout(bankLoop, delay);
 }
 bankLoop();
 
