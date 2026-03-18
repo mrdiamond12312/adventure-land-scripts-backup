@@ -514,7 +514,6 @@ async function bankLoop() {
     return setTimeout(bankLoop, delay);
   }
 }
-bankLoop();
 
 // Push bank data to earth's API
 const syncBankData = async () => {
@@ -537,4 +536,8 @@ const syncBankData = async () => {
     setTimeout(syncBankData, 60000);
   }
 };
-syncBankData();
+
+if (!parent.caracAL) {
+  bankLoop();
+  syncBankData();
+}

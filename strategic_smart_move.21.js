@@ -319,12 +319,6 @@ class StrategicSmartMove {
       ...extraOptions,
     };
 
-    this.smartMoveSession = (this.smartMoveSession || 0) + 1;
-    const session = this.smartMoveSession;
-    isAdvanceSmartMoving = true;
-    this.isSmartMoving = true;
-    smartmoveDebug = options.smartmoveDebug;
-
     if (!toPosition) return;
 
     let pathFindingResult;
@@ -426,6 +420,12 @@ class StrategicSmartMove {
       );
     }
 
+    this.smartMoveSession = (this.smartMoveSession || 0) + 1;
+    const session = this.smartMoveSession;
+    isAdvanceSmartMoving = true;
+    this.isSmartMoving = true;
+    smartmoveDebug = options.smartmoveDebug;
+
     if (options.wait) {
       await sleep(options.wait);
     }
@@ -469,6 +469,7 @@ class StrategicSmartMove {
           !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
         ) {
           this.isDoingSomethingMagical = true;
+          console.warn(`Whoosh! #${session}`);
           send_cm(MAGE, "magiport");
           stop();
           await sleep(1500);
@@ -489,9 +490,10 @@ class StrategicSmartMove {
         }
 
         // Recursive timeout to check for magiport availability every second
+        if (session !== this.smartMoveSession || !this.isSmartMoving) return;
         this.magiportLoop = setTimeout(magiportCheck, 1000);
       };
-      this.magiportLoop = magiportCheck();
+      this.magiportLoop = setTimeout(magiportCheck, 0);
     }
 
     // Start moving
@@ -567,7 +569,7 @@ class StrategicSmartMove {
               200 &&
             character.mp > parent.G.skills["blink"].mp
           ) {
-            console.log(
+            console.warn(
               `Blinking to ${blinkSegment.map} (${blinkSegment.x}, ${blinkSegment.y})`,
             );
             this.isDoingSomethingMagical = true;
@@ -582,10 +584,11 @@ class StrategicSmartMove {
           console.log("Error while blinking:", e);
         }
 
+        if (session !== this.smartMoveSession || !this.isSmartMoving) return;
         this.blinkLoop = setTimeout(blinkCheck, 1000);
       };
 
-      this.blinkLoop = blinkCheck();
+      this.blinkLoop = setTimeout(blinkCheck, 0);
     }
 
     if (options.stopWatcher) {
@@ -642,8 +645,6 @@ class StrategicSmartMove {
         }
 
         if (segment.method === "blink" && character.ctype === "mage") {
-          const readyToBlink = this.hasMpToBlink();
-
           if (!this.hasMpToBlink()) {
             await waitUntil(() => this.hasMpToBlink(), 15_000);
           }

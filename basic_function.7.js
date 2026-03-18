@@ -649,13 +649,21 @@ async function withTimeout(
   ]);
 }
 
-async function waitUntil(fn, timeout = 10_000, interval = character.ping) {
+async function waitUntil(fn, timeout = 10_000, interval = 100) {
   const start = Date.now();
-  while (!fn()) {
+
+  while (true) {
+    try {
+      if (fn()) return true;
+    } catch (e) {
+      console.warn("waitUntil fn error:", e);
+      return false;
+    }
+
     if (Date.now() - start > timeout) return false;
-    await sleep(interval);
+
+    await sleep(interval || 100);
   }
-  return true;
 }
 
 async function buff() {

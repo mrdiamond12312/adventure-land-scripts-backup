@@ -10,6 +10,8 @@ if (parent.caracAL) {
       "adventure-land-scripts-backup/merchant_service.19.js",
     ])
     .then(() => {
+      syncBankData();
+      bankLoop();
       lureMechaGnome();
     });
 } else {
@@ -143,7 +145,12 @@ async function exchangeSomething() {
     if (slotIndex !== -1 && character.items[slotIndex].q >= item.quantity) {
       slot = slotIndex;
 
-      if (item.npc && !haveAComputer() && !isAdvanceSmartMoving && !smart.moving) {
+      if (
+        item.npc &&
+        !haveAComputer() &&
+        !isAdvanceSmartMoving &&
+        !smart.moving
+      ) {
         await advanceSmartMove(find_npc(item.npc));
       }
 
