@@ -459,6 +459,8 @@ class StrategicSmartMove {
       const magiportCheck = async () => {
         if (session !== this.smartMoveSession) return;
 
+        console.warn("magiport tick", session);
+
         const mageInfo = this.getMageInfo();
         if (
           mageInfo &&
