@@ -2151,14 +2151,14 @@ function attackErrorHandler(error, target = get_target()) {
         move(newX, newY);
       }
 
-      console.warn(
-        error,
-        error.distance
-          ? `| ${Math.round(error.distance)} distance / ${
-              character.range + character.xrange
-            } range`
-          : "",
-      );
+      // console.warn(
+      //   error,
+      //   error.distance
+      //     ? `| ${Math.round(error.distance)} distance / ${
+      //         character.range + character.xrange
+      //       } range`
+      //     : "",
+      // );
     }
   } else console.warn("Error while attacking:", error);
 }
