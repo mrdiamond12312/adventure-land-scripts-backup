@@ -630,6 +630,7 @@ class StrategicSmartMove {
 
         if (segment.method === "door" || segment.method === "transport") {
           await transport(segment.map, segment.spawn);
+          console.warn("Map after transporting:", character.map);
           segmentIndex++;
           continue;
         }
@@ -662,7 +663,7 @@ class StrategicSmartMove {
         segmentIndex++;
       }
     } catch (e) {
-      console.log("smartMove error:", e);
+      console.warn("smartMove error:", e);
     } finally {
       this.cleanUp();
     }
@@ -688,6 +689,7 @@ class StrategicSmartMove {
 
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
+    stop();
   }
 }
 
