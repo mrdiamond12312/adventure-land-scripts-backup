@@ -307,6 +307,7 @@ class StrategicSmartMove {
   async transport(map, spawn) {
     const waitPromise = this.waitForNewMap();
     parent.socket.emit("transport", { to: map, s: spawn });
+    parent.push_deferred("transport");
 
     try {
       await waitPromise;
