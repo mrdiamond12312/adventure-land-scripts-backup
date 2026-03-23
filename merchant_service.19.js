@@ -78,7 +78,7 @@ character.on("cm", async function ({ name, message }) {
           const merchantThatSellNeededElixir =
             findVendorMerchantOf(elixirToDeliver);
           if (getItemBankSlots(elixirToDeliver).length) {
-            await retrieveBankItem(message.elixir, true);
+            await retrieveBankItem(message.elixir);
           } else if (merchantThatSellNeededElixir) {
             await advanceSmartMove({
               map: find_npc(merchantThatSellNeededElixir).map,
@@ -99,7 +99,7 @@ character.on("cm", async function ({ name, message }) {
         await send_item(name, locate_item(message.elixir), 10);
         break;
       }
-      
+
       case "xptome":
         if (!partyMems.includes(name)) break;
         log(`Buying Tome of Protection for ${name}`);
