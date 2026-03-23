@@ -72,7 +72,7 @@ character.on("cm", async function ({ name, message }) {
         onDuty = false;
         break;
 
-      case "elixir":
+      case "elixir": {
         const elixirToDeliver = message.elixir;
         if (locate_item(elixirToDeliver) === -1) {
           const merchantThatSellNeededElixir =
@@ -84,6 +84,8 @@ character.on("cm", async function ({ name, message }) {
               map: find_npc(merchantThatSellNeededElixir).map,
             });
             await buy(message.elixir);
+          } else {
+            break;
           }
         }
 
@@ -96,7 +98,8 @@ character.on("cm", async function ({ name, message }) {
         });
         await send_item(name, locate_item(message.elixir), 10);
         break;
-
+      }
+      
       case "xptome":
         if (!partyMems.includes(name)) break;
         log(`Buying Tome of Protection for ${name}`);
