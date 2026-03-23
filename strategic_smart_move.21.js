@@ -288,6 +288,33 @@ class StrategicSmartMove {
     );
   }
 
+  waitForNewMap(timeout = 5000) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        parent.socket.off("new_map", handler);
+        reject(new Error("new_map timeout"));
+      }, timeout);
+
+      function handler(data) {
+        clearTimeout(timer);
+        resolve(data);
+      }
+
+      parent.socket.once("new_map", handler);
+    });
+  }
+
+  async transport(map, spawn) {
+    const waitPromise = this.waitForNewMap();
+    parent.socket.emit("transport", { to: map, s: spawn });
+
+    try {
+      await waitPromise;
+    } catch (error) {
+      console.warn("Transport timeout! Current map:", character.map);
+    }
+  }
+
   /**
    * @param {string | Object} toPosition - the monster id or map or coordinates object to move to
    * @param {*} extraOptions - extra settings
@@ -308,7 +335,7 @@ class StrategicSmartMove {
     if (!can_walk(character)) return;
 
     const options = {
-      useBlink: true,
+      useBlink: character.ctype === "mage",
       useMagiport: true,
       useScare: true,
       stopWatcher: undefined,
@@ -618,19 +645,18 @@ class StrategicSmartMove {
 
         const segment = pathFindingResult[segmentIndex];
         if (segment.method === "move") {
-          if (segment.map !== character.map) {
-            throw new Error(
-              `Expected map ${segment.map}, currently on ${character.map}`,
-            );
-          }
+          // if (segment.map !== character.map) {
+          //   throw new Error(
+          //     `Expected map ${segment.map}, currently on ${character.map}`,
+          //   );
+          // }
           await move(segment.x, segment.y);
           segmentIndex++;
           continue;
         }
 
         if (segment.method === "door" || segment.method === "transport") {
-          await transport(segment.map, segment.spawn);
-          console.warn("Map after transporting:", character.map);
+          await this.transport(segment.map, segment.spawn);
           segmentIndex++;
           continue;
         }
