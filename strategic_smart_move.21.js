@@ -714,6 +714,7 @@ class StrategicSmartMove {
       this.watcherInterval = undefined;
     }
 
+    this.stopTownChanneling();
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
     stop();
