@@ -73,17 +73,24 @@ character.on("cm", async function ({ name, message }) {
         break;
 
       case "elixir":
-        if (locate_item(message.elixir) === -1) {
-          await retrieveBankItem(message.elixir);
-
-          if (locate_item(message.elixir) === -1) {
-            await advanceSmartMove({ map: find_npc("wbartender").map });
+        const elixirToDeliver = message.elixir;
+        if (locate_item(elixirToDeliver) === -1) {
+          const merchantThatSellNeededElixir =
+            findVendorMerchantOf(elixirToDeliver);
+          if (getItemBankSlots(elixirToDeliver).length) {
+            await retrieveBankItem(message.elixir, true);
+          } else if (merchantThatSellNeededElixir) {
+            await advanceSmartMove({
+              map: find_npc(merchantThatSellNeededElixir).map,
+            });
             await buy(message.elixir);
           }
         }
+
         if (locate_item(message.elixir) === -1) {
           break;
         }
+
         await advanceSmartMove({
           ...message,
         });
