@@ -80,9 +80,10 @@ character.on("cm", async function ({ name, message }) {
           if (getItemBankSlots(elixirToDeliver).length) {
             await retrieveBankItem(message.elixir);
           } else if (merchantThatSellNeededElixir) {
-            await advanceSmartMove({
-              map: find_npc(merchantThatSellNeededElixir).map,
-            });
+            if (!haveAComputer())
+              await advanceSmartMove({
+                map: find_npc(merchantThatSellNeededElixir).map,
+              });
             await buy(message.elixir);
           } else {
             break;
