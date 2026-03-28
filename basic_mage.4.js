@@ -23,7 +23,10 @@ const reduceCd = (skillName) =>
   reduce_cooldown(skillName, Math.min(...parent.pings));
 
 async function fight(target) {
-  if (currentStrategy === usePullStrategies) {
+  if (
+    currentStrategy === usePullStrategies &&
+    !target?.mtype.includes("crabx")
+  ) {
     const attackRange = character.range + character.xrange;
     const blastRadius = character.blast / 3.6 || BLAST_RADIUS;
 
@@ -124,7 +127,7 @@ async function fight(target) {
 
   // --- Await and Error Handling ---
   try {
-    await withTimeout(Promise.all(promisesToAwait), 1000);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
   } catch (e) {
     console.log(e);
   }

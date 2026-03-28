@@ -11,8 +11,8 @@ const tankableBoss = ["snowman"];
 
 const bosses = {
   grinch: { type: "grinch", threshold: 0.7, hoppable: 1 },
-  icegolem: { type: "icegolem", threshold: 0.7, hoppable: 1 },
-  franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
+  icegolem: { type: "icegolem", threshold: 0.9, hoppable: 1 },
+  franky: { type: "franky", threshold: 0.75, hoppable: 1 },
   mrpumpkin: { type: "mrpumpkin", threshold: 0.3, hoppable: 0.9999 },
   mrgreen: { type: "mrgreen", threshold: 0.3, hoppable: 0.9999 },
   crabxx: { type: "crabxx", threshold: 0.95, hoppable: 1 },
@@ -42,7 +42,7 @@ async function hopToServer(serverRegion, serverIdentifier) {
       .filter((id) => id !== character.name)
       .forEach((id) => parent.caracAL.shutdown(id));
 
-    parent.caracAL.deploy(null, `${serverRegion}${serverIdentifier}`);
+    parent.caracAL.deploy(null, `SR_${serverRegion}${serverIdentifier}`);
   } else {
     partyMems.forEach((id) => send_cm("loot-before-hopping"));
     await midasLooting(true);
@@ -134,9 +134,16 @@ setInterval(async () => {
           return rhsIsTankable - lhsIsTankable;
         }
 
-        return (
-          lhs.hp / G.monsters[lhs.type].hp - rhs.hp / G.monsters[rhs.type].hp
-        );
+        const lhsHpPct = lhs.hp / G.monsters[lhs.type].hp;
+        const rhsHpPct = rhs.hp / G.monsters[rhs.type].hp;
+        if (lhsHpPct !== rhsHpPct) return lhsHpPct - rhsHpPct;
+
+        const homeServer = getHomeServer();
+        const lhsIsHome =
+          `${lhs.serverRegion}${lhs.serverIdentifier}` === homeServer;
+        const rhsIsHome =
+          `${rhs.serverRegion}${rhs.serverIdentifier}` === homeServer;
+        return rhsIsHome - lhsIsHome;
         // return bossPriority.findIndex((boss) => boss === lhs.type) -
         //   bossPriority.findIndex((boss) => boss === rhs.type)
         //   ? bossPriority.findIndex((boss) => boss === lhs.type) -

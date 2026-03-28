@@ -2,135 +2,137 @@ character.on("cm", async function ({ name, message }) {
   if (isInvFull()) {
     return;
   }
+
   switch (message) {
     case "inv_ok":
       onDuty = false;
-      moveHome();
       break;
   }
+
   if (!onDuty) {
     onDuty = true;
-    close_stand();
   } else return;
 
-  equipBroom();
+  try {
+    equipBroom();
 
-  switch (message.msg) {
-    case "inv_full":
-      log(`Go collecting ${name} compoundables at ${message.map}`);
-      await advanceSmartMove({
-        ...message,
-      });
-      send_cm(name, "inv_full_merchant_near");
-      await sleep(5000);
-      onDuty = false;
-      moveHome();
-      break;
+    switch (message.msg) {
+      case "inv_full":
+        log(`Go collecting ${name} compoundables at ${message.map}`);
+        await advanceSmartMove({
+          ...message,
+        });
+        send_cm(name, "inv_full_merchant_near");
+        await sleep(5000);
+        break;
 
-    case "buy_mana":
-      log(`Buying some mana potions for ${name}`);
-      if (isInvFull()) {
-        if (!smart.moving) await smart_move(bankPosition);
-        if (character.map === "bank") bank_store(0);
-      }
-      if (locate_item("mpot1") === -1) {
-        await smart_move(find_npc("fancypots"));
-        await buy("mpot1", 9899);
-      }
-      await advanceSmartMove({
-        ...message,
-      });
-      await send_item(name, locate_item("mpot1"), 10000);
-      send_cm(name, "buy_mana_merchant_near");
-      await sleep(5000);
-      onDuty = false;
-      moveHome();
-      break;
+      case "buy_mana":
+        log(`Buying some mana potions for ${name}`);
+        if (isInvFull()) {
+          if (!smart.moving) await smart_move(bankPosition);
+          if (character.map === "bank") bank_store(0);
+        }
+        if (locate_item("mpot1") === -1) {
+          await advanceSmartMove({ map: "main", x: 56, y: -122 });
+          await buy("mpot1", 9899);
+        }
+        await advanceSmartMove({
+          ...message,
+        });
+        await send_item(name, locate_item("mpot1"), 10000);
+        send_cm(name, "buy_mana_merchant_near");
+        await sleep(5000);
+        break;
 
-    case "buy_hp":
-      log(`Buying some health potions for ${name}`);
-      if (isInvFull()) {
-        if (!smart.moving) await smart_move(bankPosition);
-        if (character.map === "bank") bank_store(0);
-      }
-      if (locate_item("hpot1") === -1) {
-        await smart_move(find_npc("fancypots"));
-        await buy("hpot1", 9899);
-      }
-      await advanceSmartMove({
-        ...message,
-      });
-      await send_item(name, locate_item("hpot1"), 10000);
-      send_cm(name, "buy_hp_merchant_near");
-      await sleep(5000);
-      onDuty = false;
-      moveHome();
-      break;
+      case "buy_hp":
+        log(`Buying some health potions for ${name}`);
+        if (isInvFull()) {
+          if (!smart.moving) await smart_move(bankPosition);
+          if (character.map === "bank") bank_store(0);
+        }
+        if (locate_item("hpot1") === -1) {
+          await advanceSmartMove({ map: "main", x: 56, y: -122 });
+          await buy("hpot1", 9899);
+        }
+        await advanceSmartMove({
+          ...message,
+        });
+        await send_item(name, locate_item("hpot1"), 10000);
+        send_cm(name, "buy_hp_merchant_near");
+        await sleep(5000);
+        break;
 
-    case "buff_mluck":
-      await advanceSmartMove({
-        ...message,
-      });
-      if (!is_on_cooldown("mluck") && character.mp > 20) {
-        use_skill("mluck", get_entity(name));
-      }
-      onDuty = false;
-      moveHome();
-      break;
+      case "buff_mluck":
+        await advanceSmartMove({
+          ...message,
+        });
+        if (!is_on_cooldown("mluck") && character.mp > 20) {
+          use_skill("mluck", get_entity(name));
+        }
+        onDuty = false;
+        break;
 
-    case "elixir":
-      if (locate_item(message.elixir) === -1) {
-        await retrieveBankItem(message.elixir);
+      case "elixir": {
+        const elixirToDeliver = message.elixir;
+        if (locate_item(elixirToDeliver) === -1) {
+          const merchantThatSellNeededElixir =
+            findVendorMerchantOf(elixirToDeliver);
+          if (getItemBankSlots(elixirToDeliver).length) {
+            await retrieveBankItem(message.elixir);
+          } else if (merchantThatSellNeededElixir) {
+            if (!haveAComputer())
+              await advanceSmartMove({
+                map: find_npc(merchantThatSellNeededElixir).map,
+              });
+            await buy(message.elixir);
+          } else {
+            break;
+          }
+        }
 
         if (locate_item(message.elixir) === -1) {
-          await smart_move({ map: find_npc("wbartender").map });
-          await buy(message.elixir);
+          break;
         }
-      }
-      if (locate_item(message.elixir) === -1) {
-        onDuty = false;
+
+        await advanceSmartMove({
+          ...message,
+        });
+        await send_item(name, locate_item(message.elixir), 10);
         break;
       }
-      await advanceSmartMove({
-        ...message,
-      });
-      await send_item(name, locate_item(message.elixir), 10);
-      onDuty = false;
-      break;
 
-    case "xptome":
-      if (!partyMems.includes(name)) break;
-      log(`Buying Tome of Protection for ${name}`);
-
-      if (locate_item("xptome") === -1) {
-        await retrieveBankItem("xptome");
+      case "xptome":
+        if (!partyMems.includes(name)) break;
+        log(`Buying Tome of Protection for ${name}`);
 
         if (locate_item("xptome") === -1) {
-          await smart_move(find_npc("premium"));
-          await buy("xptome");
+          await retrieveBankItem("xptome");
+
+          if (locate_item("xptome") === -1) {
+            await smart_move(find_npc("premium"));
+            await buy("xptome");
+          }
         }
-      }
 
-      if (locate_item("xptome") === -1) {
-        onDuty = false;
+        if (locate_item("xptome") === -1) {
+          break;
+        }
+
+        await advanceSmartMove({
+          ...message,
+        });
+        await send_item(name, locate_item("xptome"), 1);
         break;
-      }
 
-      await advanceSmartMove({
-        ...message,
-      });
-      await send_item(name, locate_item("xptome"), 1);
-      onDuty = false;
-      break;
-
-    default:
-      onDuty = false;
-      log(`Unidentified '${message.msg}'`);
+      default:
+        log(`Unidentified '${message.msg}'`);
+    }
+  } finally {
+    onDuty = false;
   }
 });
 
 async function openCryptInstance() {
-  close_stand();
   onDuty = true;
   if (locate_item("cryptkey") === -1) {
     await retrieveBankItem("cryptkey");
@@ -160,6 +162,9 @@ async function lureMechaGnome() {
   if (
     isLuringMobs ||
     onDuty ||
+    isAdvanceSmartMoving ||
+    smart.moving ||
+    shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
     (!(
       parent.party_list &&
@@ -167,6 +172,14 @@ async function lureMechaGnome() {
     ) &&
       !parent.caracAL.siblings.includes(PRIEST))
   ) {
+    console.log("lureMechaGnome blocked by:", {
+      isLuringMobs,
+      onDuty,
+      isAdvanceSmartMoving,
+      smart: smart.moving,
+      chilling: shouldGoChilling(),
+      liveEvent: serverCurrentlyHasLiveEvent(),
+    });
     return setTimeout(lureMechaGnome, 500);
   }
 
@@ -177,8 +190,7 @@ async function lureMechaGnome() {
   let nextDelay = 500;
 
   try {
-    close_stand();
-    await smartMove({ map: "cyberland" });
+    await advanceSmartMove({ map: "cyberland" });
     await sleep(character.ping);
 
     const gnomesNearby = Object.values(parent.entities).filter(
@@ -186,10 +198,10 @@ async function lureMechaGnome() {
         entity && entity.type === "monster" && entity.mtype === "mechagnome",
     );
 
-    if (!gnomesNearby.length) {
+    if (gnomesNearby.length < 3) {
       nextDelay = 45_000;
-      throw new Error("No mechagnome found");
-    } else nextDelay = 150_000;
+      throw new Error("Gnome not fully spawned");
+    } else nextDelay = 110_000;
 
     const mageResponse = await waitUntil(() => {
       const mageInfo = get("mageLocation");
@@ -208,6 +220,26 @@ async function lureMechaGnome() {
 
     parent.socket.emit("eval", { command: "mooooooh" });
     await advanceSmartMove(get("mageLocation"), { useScare: false });
+    await sleep(character.ping);
+    await waitUntil(() => {
+      const partnerNearby =
+        trustedPartners.some((name) => get_player(name)) || get_player(HEALER);
+
+      if (!partnerNearby) return true;
+
+      for (const id in parent.entities) {
+        const entity = parent.entities[id];
+        if (
+          entity &&
+          entity.mtype === "mechagnome" &&
+          entity.target === character.name
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    }, 10_000);
   } catch (e) {
     console.error(e);
   } finally {

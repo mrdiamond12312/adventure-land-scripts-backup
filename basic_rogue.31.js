@@ -25,7 +25,10 @@ async function fight(target) {
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
-  if (currentStrategy === usePullStrategies) {
+  if (
+    typeof usePullStrategies === "function" &&
+    currentStrategy === usePullStrategies
+  ) {
     const allAggroedByParty = Object.values(parent.entities)
       .filter(
         (entity) =>
@@ -76,7 +79,7 @@ async function fight(target) {
   }
 
   try {
-    await Promise.all(promisesToAwait);
+    await Promise.allSettled(promisesToAwait);
   } catch (e) {}
 }
 
@@ -105,7 +108,8 @@ async function fuaLoop() {
     if (
       playersNearbyWithoutRogueSpeed.length &&
       ms_to_next_skill("rspeed") === 0 &&
-      character.mp > G.skills["rspeed"].mp
+      character.mp > G.skills["rspeed"].mp &&
+      shouldAttack()
     ) {
       promisesToAwait.push(
         use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift()),
@@ -196,7 +200,7 @@ async function mainLoop() {
       }
     } else await fight(target);
   } catch (e) {
-    console.error(e);
+    if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
   }
 
   setTimeout(mainLoop, getLoopInterval());

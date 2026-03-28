@@ -42,7 +42,9 @@ async function fight(target, isDeterminedToHeal = false) {
 
   // Target Selection (Taunt & Debuff Logic)
   const targetToTaunt =
-    isAssignedAsTanker() && currentStrategy === usePullStrategies
+    isAssignedAsTanker() &&
+    typeof usePullStrategies === "function" &&
+    currentStrategy === usePullStrategies
       ? mobsInRange
           .filter(
             (mob) =>
@@ -157,10 +159,10 @@ async function priestBuff() {
   const prioritizedBuffeesNames = prioritizedNames();
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  const bufferedRange = character.range + character.xrange * 0.9;
 
   if (buffees.length !== 0) {
     for (const buffee of buffees) {
-      const bufferedRange = character.range + character.xrange * 0.9;
       const dist = distance(buffee, character);
 
       if (!isAttackReady) {
@@ -176,26 +178,20 @@ async function priestBuff() {
       ) {
         const middleX = (buffee.x + character.x) / 2;
         const middleY = (buffee.y + character.y) / 2;
-        if (parent.caracAL)
-          promises.push(
-            advanceSmartMove({
-              map: character.map,
-              x: middleX,
-              y: middleY,
-            }),
+        if (can_move_to(middleX, middleY)) move(middleX, middleY);
+        else if (can_move_to(buffee.x, buffee.y)) move(buffee.x, buffee.y);
+        else
+          advanceSmartMove(
+            { map: character.map, x: buffee.x, y: buffee.y },
+            { smartmoveDebug: true },
           );
-        else if (can_move_to(middleX, middleY))
-          promises.push(
-            move((buffee.x + character.x) / 2, (buffee.y + character.y) / 2),
-          );
-        else advanceSmartMove({ map: character.map, x: buffee.x, y: buffee.y });
         set_message(`Moving to ${buffee.name}`);
         continue;
       }
 
       if (dist < bufferedRange && isAttackReady) {
         set_message(`Heal ${buffee.name}`);
-        promises.push(heal(buffee).then(() => reduceCd("attack")));
+        promises.push(use_skill("heal", buffee).then(() => reduceCd("heal")));
         break;
       }
     }
@@ -204,7 +200,7 @@ async function priestBuff() {
   // Party Heal Logic
   const allies = (parent.party_list || [])
     .map((name) => get_entity(name))
-    .filter((entity) => entity);
+    .filter((entity) => entity && !entity.dead && !entity.rip);
   const modInjuredThreshold = character.level * 20;
 
   if (
@@ -223,7 +219,7 @@ async function priestBuff() {
         allies.length > 1);
 
     if (shouldPartyHeal) {
-      use_skill("partyheal").then(() => reduceCd("partyheal"));
+      promises.push(use_skill("partyheal").then(() => reduceCd("partyheal")));
       set_message("Party Heal");
     }
   }
@@ -238,13 +234,13 @@ async function priestBuff() {
       member &&
       !is_on_cooldown("absorb") &&
       is_in_range(member, "absorb") &&
-      character.mp >= G.skills["absorb"].mp + 200
+      character.mp >= G.skills["absorb"].mp + 600
     ) {
       const hasAggro = Object.values(parent.entities).some(
         (e) => e.target === memberId,
       );
       if (hasAggro) {
-        use_skill("absorb", member);
+        promises.push(use_skill("absorb", member));
         set_message(`Absorb ${memberId}`);
         break;
       }
@@ -266,9 +262,11 @@ async function zapperLoop() {
     character.slots.ring1?.name === "zapper" ||
     character.slots.ring2?.name === "zapper";
 
+  const mpPct = character.mp / character.max_mp;
+
   if (
     zapCd !== 0 ||
-    character.mp < character.max_mp * 0.6 ||
+    mpPct < 0.6 ||
     character.penalty_cd ||
     !hasZapper ||
     Object.keys(character.c).length
@@ -276,29 +274,88 @@ async function zapperLoop() {
     return setTimeout(zapperLoop, Math.max(zapCd, 50));
   }
 
+  const targetsInRange = Object.values(parent.entities).filter(
+    (entity) =>
+      entity.type === "monster" &&
+      is_in_range(entity, "zapperzap") &&
+      !entity["1hp"],
+  );
+
+  const physicalAggroed = targetsInRange.filter(
+    (entity) =>
+      entity.target === character.name && entity.damage_type === "physical",
+  );
+  const magicalAggroed = targetsInRange.filter(
+    (entity) =>
+      entity.target === character.name && entity.damage_type === "magical",
+  );
+  const pureAggroed = targetsInRange.filter(
+    (entity) =>
+      entity.target === character.name && entity.damage_type === "pure",
+  );
+  const courageMap = {
+    physical: { count: physicalAggroed.length, limit: character.courage },
+    magical: { count: magicalAggroed.length, limit: character.mcourage },
+    pure: { count: pureAggroed, length, limit: character.pcourage },
+  };
+
+  const isTanker = isAssignedAsTanker();
+
   try {
-    const targets = Object.values(parent.entities)
-      .filter(
-        (entity) =>
-          entity.type === "monster" &&
-          is_in_range(entity, "zapperzap") &&
-          !entity["1hp"] &&
-          (entity.target ||
-            entity.hp < 1000 ||
-            calculateDamage(entity, get_player(TANKER) ?? character) < 150),
-      )
+    const targets = targetsInRange
       .map((entity) => ({
         ...entity,
         dist: distance(entity, character),
         hp_p: entity.hp / entity.max_hp,
         weak: entity.max_hp < 2000,
       }))
+      .filter((entity) => {
+        if (entity.target) return true;
+
+        if (
+          IGNORE_ABILITIES.some((skill) =>
+            Object.keys(entity.abilities ?? {}).includes(skill),
+          )
+        )
+          return false;
+
+        const { count, limit } = courageMap[entity.damage_type] ?? {
+          count: 0,
+          limit: Infinity,
+        };
+        if (count + 1 > limit) return false;
+
+        if (
+          entity.weak ||
+          entity.hp < 1000 ||
+          calculateDamage(entity, get_player(TANKER) ?? character) < 150
+        )
+          return true;
+
+        if (!isTanker) {
+          return (
+            calculateDamage(entity, character) + avgPartyDmgTaken(partyMems) <
+            character.heal * character.frequency
+          );
+        }
+
+        return false;
+      })
       .sort((lhs, rhs) => {
-        if (!!lhs.target !== !!rhs.target) return lhs.target ? -1 : 1;
+        if (isTanker) {
+          // Prioritize unaggrod mobs first
+          if (!!lhs.target !== !!rhs.target) return lhs.target ? 1 : -1;
+        } else {
+          if (!!lhs.target !== !!rhs.target) return lhs.target ? -1 : 1;
+        }
+
         if (lhs.target && rhs.target)
           return lhs.hp_p !== rhs.hp_p
             ? rhs.hp_p - lhs.hp_p
             : rhs.dist - lhs.dist;
+
+        if (isTanker) return rhs.dist - lhs.dist;
+
         return lhs.weak !== rhs.weak
           ? lhs.weak
             ? -1
@@ -307,7 +364,12 @@ async function zapperLoop() {
       });
 
     if (targets.length) {
-      use_skill("zapperzap", targets[0]).then(() => reduceCd("zapperzap"));
+      const targetToZap = targets[0];
+      const mpThreshold = isTanker ? (targetToZap.target ? 0.75 : 0.6) : 0.6;
+      if (mpPct > mpThreshold)
+        await withTimeout(
+          use_skill("zapperzap", targets[0]).then(() => reduceCd("zapperzap")),
+        );
     }
   } catch (e) {
     console.log("Zap Error:", e);
@@ -333,6 +395,7 @@ async function mainLoop() {
       }
       if (character.slots.cape?.name === "angelwings") {
         parent.socket.emit("activate", { slot: "cape" });
+        await withTimeout(push_deferred("activate"), 300);
       }
     }
 

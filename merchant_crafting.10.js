@@ -8,24 +8,28 @@ if (parent.caracAL) {
 
 var BANK_CACHE = undefined;
 const bankPosition = { map: "bank", x: 0, y: -280 };
-const IGNORE_BANK_SLOTS = ["gold", "items8", "items9"];
+const IGNORE_BANK_SLOTS = ["gold", "items8", "items9", "items10", "items11"];
 const IGNORE_RARE_GOLD_THRESHOLD = 40e8;
 
 const KEEP_THRESHOLD = {
+  // Event specific
+  lmace: 7,
+  horsecapeg: 7,
+
   // Every character needs
   helmet: 3,
   pants: 3,
   gloves: 3,
   shoes: 3,
   chest: 3,
-  cape: 3,
+  cape: 4,
 
   // Class based
   weapon: 2,
-  orb: 2,
+  orb: 3,
   shield: 2, // warrior, 0 if unneccessary
   source: 2, // priest and mage
-  staff: 2,
+  staff: 3,
 
   // Class attribute based
   earring: 4,
@@ -37,13 +41,21 @@ const ITEMS_HIGHEST_LEVEL = {};
 
 const RETRIEVE_HISTORY = [];
 
-async function retrieveBankItem(searchId, level = 0) {
-  if (smart.moving) return;
+async function updateBank() {
+  if (character.bank) BANK_CACHE = character.bank;
+}
 
+function findVendorMerchantOf(itemName) {
+  for (const id in G.npcs) {
+    const npcData = G.npcs[id];
+    if (npcData.role === "merchant" && npcData.items?.includes(itemName)) return id;
+  }
+}
+
+async function retrieveBankItem(searchId, level = 0) {
   if (character.map !== "bank") {
-    close_stand();
-    await smart_move(bankPosition);
-    BANK_CACHE = character.bank;
+    await advanceSmartMove(bankPosition);
+    updateBank();
   }
 
   for (const [bankPack, items] of Object.entries(character.bank).filter(
@@ -54,9 +66,7 @@ async function retrieveBankItem(searchId, level = 0) {
         item && item.name === searchId && (!level || level === item.level),
     );
     if (slot !== -1) {
-      return bank_retrieve(bankPack, slot).then(
-        () => (BANK_CACHE = character.bank),
-      );
+      return bank_retrieve(bankPack, slot).then(updateBank);
     }
   }
 }
@@ -69,7 +79,7 @@ function retrieveMaxItemsLevel() {
     delete ITEMS_HIGHEST_LEVEL[key];
   }
 
-  BANK_CACHE = character.bank;
+  updateBank();
 
   const processItem = (item) => {
     if (!item || item.q || IGNORE.includes(item.name)) return;
@@ -132,7 +142,7 @@ function getItemBankSlots(itemId) {
 
 function groupItemsByLevel(items) {
   return items.reduce((acc, item) => {
-    (acc[item.level] ??= []).push(item);
+    (acc[item.level] = acc[item.level] ?? []).push(item);
     return acc;
   }, {});
 }
@@ -184,7 +194,10 @@ function retrievedBankItemToUpgrade() {
   let desiredItems = getItemBankSlots(desiredItemId);
 
   // Respect keep threshold
-  const keep = KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ?? 2;
+  const keep =
+    KEEP_THRESHOLD[desiredItemId] ??
+    KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[desiredItemId].type] ??
+    2;
   desiredItems = desiredItems.slice(0, desiredItems.length - keep);
 
   const info = item_info({ name: desiredItemId });
@@ -213,7 +226,8 @@ async function compoundInv() {
     const itemName = character.items[i].name;
     if (IGNORE.includes(itemName)) continue;
 
-    if (item_info(character.items[i]).compound) {
+    const itemInfo = item_info(character.items[i]);
+    if (itemInfo.compound) {
       const compoundNameChecker = new Set([
         itemName,
         character.items[i + 1]?.name,
@@ -231,7 +245,6 @@ async function compoundInv() {
 
       if (!canCompound) continue;
 
-      const itemInfo = item_info(character.items[i]);
       const itemGrade = item_grade(character.items[i]);
       const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
       const isRareItem =
@@ -246,7 +259,8 @@ async function compoundInv() {
         if (
           ITEMS_HIGHEST_LEVEL[itemName] &&
           ITEMS_HIGHEST_LEVEL[itemName].quantity <
-            (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type] + 3 ?? 5) &&
+            ((KEEP_THRESHOLD[itemName] ??
+              KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type]) + 3 ?? 5) &&
           character.items[i].level === ITEMS_HIGHEST_LEVEL[itemName].level
         ) {
           continue;
@@ -265,13 +279,13 @@ async function compoundInv() {
       if (scrollSlot === -1) {
         if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD)
           continue;
-        buy(scrollType, 1)
-          .then(() => {
-            scrollSlot = locate_item(scrollType);
-          })
-          .catch((e) => {
-            breakFlag = true;
-          });
+
+        try {
+          await buy(scrollType, 1);
+          scrollSlot = locate_item(scrollType);
+        } catch (e) {
+          breakFlag = true;
+        }
       }
 
       if (
@@ -358,7 +372,9 @@ async function upgradeInv() {
           !(
             ITEMS_HIGHEST_LEVEL[itemName] &&
             ITEMS_HIGHEST_LEVEL[itemName].quantity >
-              (KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type] ?? 2) &&
+              (KEEP_THRESHOLD[itemName] ??
+                KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName].type] ??
+                2) &&
             character.items[i]?.level === ITEMS_HIGHEST_LEVEL[itemName].level
           )
         ) {
@@ -388,13 +404,12 @@ async function upgradeInv() {
         if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD)
           continue;
 
-        buy(scrollType, 1)
-          .then(() => {
-            scrollSlot = locate_item(scrollType);
-          })
-          .catch((e) => {
-            breakFlag = true;
-          });
+        try {
+          await buy(scrollType, 1);
+          scrollSlot = locate_item(scrollType);
+        } catch (e) {
+          breakFlag = true;
+        }
       }
 
       if (
@@ -438,8 +453,7 @@ async function upgradeInv() {
                   ...item_info({ name: itemName }),
                 };
 
-              if (e?.level >= ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0) {
-                close_stand();
+              if (e?.level >= (ITEMS_HIGHEST_LEVEL[itemName].level - 1 ?? 0)) {
                 smart_move(bankPosition).then(() =>
                   bank_store(findMaxLevelItem(itemName)),
                 );
@@ -456,34 +470,26 @@ async function upgradeInv() {
   }
 }
 
-if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-  close_stand();
-  smart_move(bankPosition).then(() => {
-    retrieveMaxItemsLevel();
-    retrievedBankItemToUpgrade();
-  });
-}
-setInterval(async () => {
-  if (
-    character.map === "main" &&
-    !onDuty &&
-    !character.q.exchange &&
-    !character.c.fishing &&
-    !character.c.mining &&
-    !(
-      !is_on_cooldown("fishing") &&
-      (locate_item("rod") !== -1 || character.slots.mainhand?.name === "rod")
-    ) &&
-    !(
-      !is_on_cooldown("mining") &&
-      (locate_item("pickaxe") !== -1 ||
-        character.slots.mainhand?.name === "pickaxe")
-    )
-  ) {
+async function bankLoop() {
+  let delay = 120000;
+  try {
+    if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
+      onDuty = true;
+      await smart_move(bankPosition);
+      retrieveMaxItemsLevel();
+      await retrievedBankItemToUpgrade();
+      delay = 60000;
+      return;
+    }
+
+    if (onDuty || shouldGoChilling()) {
+      delay = 5000;
+      return;
+    }
+
     onDuty = true;
-    close_stand();
-    await smartMove(bankPosition);
-    BANK_CACHE = character.bank;
+    await advanceSmartMove(bankPosition);
+    updateBank();
     const promises = [];
     character.items.forEach((item, index) => {
       if (!item) return;
@@ -496,20 +502,49 @@ setInterval(async () => {
       const shouldItemBeIgnore = IGNORE.includes(item.name);
 
       if (
-        item &&
-        ((!shouldItemBeIgnore &&
+        (!shouldItemBeIgnore &&
           (isRareItem || (isEquipable && isHighLevelItem))) ||
-          isStoreable ||
-          RETRIEVE_HISTORY.includes(item.name))
+        isStoreable ||
+        RETRIEVE_HISTORY.includes(item.name)
       )
         promises.push(bank_store(index));
     });
     await withTimeout(Promise.allSettled(promises), 2500);
     retrieveMaxItemsLevel();
     await retrievedBankItemToUpgrade();
-
-    retrieveBankItem("gemfragment");
-
+    // await retrieveBankItem("gemfragment");
+  } catch (e) {
+    console.warn("bank loop error:", e);
+    delay = 15000;
+  } finally {
     onDuty = false;
+    return setTimeout(bankLoop, delay);
   }
-}, 120000);
+}
+
+// Push bank data to earth's API
+const syncBankData = async () => {
+  try {
+    if (!BANK_CACHE) throw new Error("Have yet enter the bank once!");
+    const url = `https://aldata.earthiverse.ca/bank/${character.owner}/${character.name}`;
+    const settings = {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...BANK_CACHE, inv: character.items }),
+    };
+
+    await fetch(url, settings);
+    console.log(
+      "Bank & inventory data synced to aldata.earthiverse.ca successfully!",
+    );
+  } catch (error) {
+    console.error("Sync failed:", error);
+  } finally {
+    setTimeout(syncBankData, 60000);
+  }
+};
+
+if (!parent.caracAL) {
+  bankLoop();
+  syncBankData();
+}

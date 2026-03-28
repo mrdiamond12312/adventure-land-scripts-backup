@@ -107,9 +107,9 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = -289;
 // var mapY = -188;
 
-// var map = "winterland";
-// var mapX = 423;
-// var mapY = -2614;
+var map = "winterland";
+var mapX = 423;
+var mapY = -2614;
 
 // var map = "desertland";
 // var mapX = 223;
@@ -151,13 +151,13 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = 412;
 // var mapY = -694;
 
-var map = "mforest";
-var mapX = -172;
-var mapY = 708;
+// var map = "mforest";
+// var mapX = -172;
+// var mapY = 708;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-// var mobsToFarm = ["phoenix", "stompy", "wolf"];
+var mobsToFarm = ["phoenix", "stompy", "wolf"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 
@@ -178,7 +178,7 @@ var mapY = 708;
 // var mobsToFarm = ["prat"];
 // var mobsToFarm = ["mummy"];
 // var mobsToFarm = ["jr", "booboo"];
-var mobsToFarm = ["odino"];
+// var mobsToFarm = ["odino"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -260,15 +260,21 @@ if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
 }
 
 var disablePullingStrategy = false;
+const asyncNoop = async () => {};
 
 function changeToPullStrategies() {
-  currentStrategy = disablePullingStrategy
-    ? useNormalStrategy
-    : usePullStrategies;
+  const normal =
+    typeof useNormalStrategy === "function" ? useNormalStrategy : asyncNoop;
+
+  const pull =
+    typeof usePullStrategies === "function" ? usePullStrategies : asyncNoop;
+
+  currentStrategy = disablePullingStrategy ? normal : pull;
 }
 
 function changeToNormalStrategies() {
-  currentStrategy = useNormalStrategy;
+  currentStrategy =
+    typeof useNormalStrategy === "function" ? useNormalStrategy : asyncNoop;
 }
 
 // Debug stucking
@@ -316,6 +322,7 @@ var IGNORE = [
   "orbofplague",
   "orbofresolve",
   "gphelmet",
+  "snring",
   // "bowofthedead",
   // "daggerofthedead",
   "maceofthedead",
@@ -450,10 +457,6 @@ const SALE_ABLE = [
   "hpamulet",
   "phelmet",
   "gphelmet",
-  "maceofthedead",
-  "pmaceofthedead",
-  "staffofthedead",
-  "swordofthedead",
   "ringsj",
   "hhelmet",
   "hgloves",
@@ -481,24 +484,50 @@ const SALE_ABLE = [
   // "intring",
   // "dexamulet",
   // "stramulet",
-  "dexbelt",
-  "intbelt",
   // Halloween temp for gold
   // "bowofthedead",
   // "daggerofthedead",
 ];
+
+const DISMANTLE_LIST = [
+  "maceofthedead",
+  "pmaceofthedead",
+  "staffofthedead",
+  "swordofthedead",
+];
+
 var maxUpgrade = 7;
 var maxCompound = 3;
 
+// Smart move strategies
+var isAdvanceSmartMoving = false;
 if (parent.caracAL) {
   parent.caracAL.load_scripts([
     "adventure-land-scripts-backup/crypt_strategy.16.js",
+    "adventure-land-scripts-backup/strategic_smart_move.21.js",
     "adventure-land-scripts-backup/advance_smart_move.20.js",
   ]);
 } else {
   load_code(20);
   load_code(16);
 }
+
+// Wrapper to use which depends on client platform
+async function advanceSmartMove(props, options = { useScare: true }) {
+  if (
+    parent.caracAL &&
+    (typeof smartMove !== "function" ||
+      typeof oldAdvanceSmartMove !== "function")
+  )
+    return asyncNoop();
+
+  if (parent.caracAL) {
+    return smartMove(props, options);
+  } else {
+    return oldAdvanceSmartMove(props, options);
+  }
+}
+
 // Pre-set function
 var isSortingInventory = false;
 
@@ -620,20 +649,27 @@ async function withTimeout(
   ]);
 }
 
-async function waitUntil(fn, timeout = 10_000, interval = character.ping) {
+async function waitUntil(fn, timeout = 10_000, interval = 100) {
   const start = Date.now();
-  while (!fn()) {
+
+  while (true) {
+    try {
+      if (fn()) return true;
+    } catch (e) {
+      console.warn("waitUntil fn error:", e);
+      return false;
+    }
+
     if (Date.now() - start > timeout) return false;
-    await sleep(interval);
+
+    await sleep(interval || 100);
   }
-  return true;
 }
 
 async function buff() {
   try {
-    if (Object.keys(character.c).length) {
-      throw new Error("Wait for channeling before using potions");
-    }
+    const isChanneling =
+      character.c.town || character.c.fishing || character.c.mining;
     const minPing = Math.min(...parent.pings);
     const adjustPotionsCooldown = () => {
       reduce_cooldown("use_mp", minPing);
@@ -642,12 +678,12 @@ async function buff() {
 
     if (
       character.hp / character.max_hp < character.mp / character.max_mp ||
-      (character.hp < character.max_hp * 0.6 && character.mp > 500)
+      (character.hp < character.max_hp * 0.6 && character.mp > 1000)
     ) {
       if (
-        character.hp < 0.8 * character.max_hp &&
         character.hp < character.max_hp - 500 &&
-        !is_on_cooldown("use_hp")
+        !is_on_cooldown("use_hp") &&
+        !isChanneling
       ) {
         await withTimeout(use_skill("use_hp"), 500);
         adjustPotionsCooldown();
@@ -659,7 +695,11 @@ async function buff() {
         adjustPotionsCooldown();
       }
     } else {
-      if (character.mp < character.max_mp - 500 && !is_on_cooldown("use_mp")) {
+      if (
+        character.mp < character.max_mp - 500 &&
+        !is_on_cooldown("use_mp") &&
+        !isChanneling
+      ) {
         await withTimeout(use_skill("use_mp"), 500);
         adjustPotionsCooldown();
       } else if (
@@ -672,7 +712,7 @@ async function buff() {
     }
   } catch (e) {}
   setTimeout(
-    async () => buff(),
+    buff,
     Math.min(
       Math.max(ms_to_next_skill("use_mp"), 5),
       Math.max(ms_to_next_skill("use_hp"), 5),
@@ -822,14 +862,16 @@ function extraDistanceWithinHitbox(target) {
 }
 
 var lastKitingTargetId = undefined;
+const FRANKY_PREFER_SPOT = {
+  x: 11,
+  y: 8,
+  map: "level2w",
+};
 async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   const loopInterval = Math.max(200, getLoopInterval());
-  // const totalExtraRange = extraRangeTarget + extraRangeSelf;
   const rangeRadius = character.range * rangeRateFn;
-  const extendedRadius = character.xrange * 0.9;
-  // + totalExtraRange;
+  const extendedRadius = character.xrange * 0.5;
 
-  // --- 1. Early exits and sanity checks ---
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
   if (!target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
@@ -837,8 +879,40 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     return setTimeout(hitAndRun, loopInterval);
   }
 
+  // FRANKY strategy: stuck to the corner of the map
+  if (
+    target.type === "monster" &&
+    ["franky", "nerfedmummy"].includes(target.mtype) &&
+    isAssignedAsTanker()
+  ) {
+    if (distance(FRANKY_PREFER_SPOT, character) > 100) {
+      smartmoveDebug = true;
+      await advanceSmartMove(FRANKY_PREFER_SPOT, {
+        speed: 200,
+        useScare: false,
+        useMagiport: false,
+        useBlink: false,
+      });
+      smartmoveDebug = false;
+    }
+
+    target = {
+      ...target,
+      x: 11,
+      y: 8,
+      real_x: 11,
+      real_y: 8,
+      going_x: 11,
+      going_y: 8,
+    };
+  }
+
   // CRABXX strategy: orbit the TANKER around the center of spawn
-  if (target.type === "monster" && target?.mtype.includes("crabx") && isAssignedAsTanker()) {
+  if (
+    target?.type === "monster" &&
+    target.mtype.includes("crabx") &&
+    isAssignedAsTanker()
+  ) {
     const crabxxSpawn = getMonsterSpawns("crabxx")[0];
     target = {
       ...target,
@@ -1175,7 +1249,7 @@ async function midasLooting(forced = false) {
         for (const chest of chests) {
           if (breakFlag-- <= 0) break;
           if (distance(chest, character) <= 800) {
-            promises.push(loot(chest.id));
+            promises.push(parent.open_chest(chest.id));
           }
         }
       }
@@ -1204,7 +1278,7 @@ async function midasLooting(forced = false) {
           if (
             partyMidasUsers.every((player) => distance(chest, player) > 800)
           ) {
-            promises.push(loot(chest.id));
+            promises.push(parent.open_chest(chest.id));
           }
         }
       }
@@ -1409,24 +1483,31 @@ async function getServerPlayers() {
 function deployCharacters() {
   //// Deploy characters which arent active
   const loadedCharacters = get_active_characters();
+  const loadedCharactersNames = Object.keys(loadedCharacters);
   const allCharacters = [...partyMems, partyMerchant];
 
   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
     if (character.ctype === "merchant" && parent.caracAL.siblings.length)
       parent.caracAL.siblings
         .filter((id) => id !== character.name && !partyMems.includes(id))
-        .forEach((id) => parent.caracAL.shutdown(id));
+        .forEach(async (id) => {
+          send_cm(id, "dc-harakiri");
+          await sleep(character.ping);
+          parent.caracAL.shutdown(id);
+        });
 
     allCharacters
       .filter((id) => parent.caracAL && !parent.caracAL.siblings.includes(id))
       .forEach((id) => {
         parent.caracAL.deploy(id, null, caracALconfig.characters[id].script);
       });
-  } else if (
-    !character.controller &&
-    allCharacters.filter((characterId) => characterId !== character.name)
-      .length !== loadedCharacters.length
-  ) {
+  } else if (!character.controller) {
+    loadedCharactersNames
+      .filter(
+        (id) => loadedCharacters[id] !== "self" && !allCharacters.includes(id),
+      )
+      .forEach((id) => stop_character(id));
+
     allCharacters
       .filter((id) => !loadedCharacters[id])
       .forEach((id) => start_character(id, CODE_SLOTS[id].script));
@@ -1440,29 +1521,40 @@ setInterval(deployCharacters, 30000);
 setInterval(async () => {
   // if (isMerchant()) return;
 
+  const currentPartySize = parent.party_list.length;
   const serverCharacters = await getServerPlayers();
   const partyWhitelistRegex = [/^earth/];
   const whitelistPartyMembers = serverCharacters.filter(
     (char) =>
       !partyMems.includes(char.name) &&
-      char.type !== "merchant" &&
       partyWhitelistRegex.some((regex) => regex.test(char.party)),
   );
   const hasWhitelistedMember = parent.party_list.some((member) =>
     whitelistPartyMembers.some((whitelisted) => whitelisted.name === member),
   );
 
+  const characterNotInOutsiderParty = serverCharacters.filter(
+    (char) =>
+      [...partyMems, partyMerchant].includes(char) &&
+      !partyWhitelistRegex.some((regex) => regex.test(char.party)),
+  );
+
   if (
     whitelistPartyMembers.length &&
-    whitelistPartyMembers.length <= 9 &&
-    (!parent.party_list.length || !hasWhitelistedMember)
+    whitelistPartyMembers.length + characterNotInOutsiderParty.length <= 10 &&
+    (!currentPartySize || !hasWhitelistedMember)
   ) {
     send_party_request(
       whitelistPartyMembers.find((member) =>
         partyWhitelistRegex.some((regex) => regex.test(member.name)),
       ).name,
     );
-  }
+  } else if (
+    currentPartySize &&
+    hasWhitelistedMember &&
+    currentPartySize + characterNotInOutsiderParty.length > 10
+  )
+    leave_party();
 
   if (Math.min(...parent.pings) > 1000 && character.ctype !== "merchant") {
     if (parent.caracAL) parent.caracAL.shutdown();
@@ -1476,6 +1568,10 @@ setInterval(async () => {
       });
     }
   }
+
+  // put this in a loop somewhere :cow2:
+  if (character.afk && !is_paused()) pause();
+  else if (!character.afk && is_paused()) pause();
 
   leaveJail();
 }, 10000);
@@ -1540,11 +1636,6 @@ const shouldDeployRogue = () => {
 };
 
 const DYNAMIC_PARTY_PRESETS = {
-  snowman: () => {
-    RANGER = RANGER1;
-    HEALER = RANGER;
-    return [WARRIOR, RANGER, MAGE];
-  },
   mrgreen: {
     USI: [WARRIOR, PRIEST, ROGUE],
     EUII: () => {
@@ -1561,9 +1652,9 @@ const DYNAMIC_PARTY_PRESETS = {
   },
   mrpumpkin: "mrgreen", // share config
   franky: () => {
-    const isAggroed = !!parent.S.franky?.target;
-    HEALER = PRIEST;
-    return [WARRIOR, PRIEST, isAggroed ? ROGUE : MAGE];
+    // const isAggroed = !!parent.S.franky?.target;
+    // HEALER = PRIEST;
+    return [WARRIOR, PRIEST, ROGUE];
   },
   icegolem: () => {
     HEALER = PRIEST;
@@ -1574,12 +1665,12 @@ const DYNAMIC_PARTY_PRESETS = {
     EUI: () => {
       RANGER = RANGER1;
       HEALER = PRIEST;
-      return [ROGUE, RANGER, PRIEST];
+      return [WARRIOR, RANGER, PRIEST];
     },
     EUII: () => {
       RANGER = RANGER2;
       HEALER = PRIEST;
-      return [ROGUE, RANGER, PRIEST];
+      return [WARRIOR, RANGER, PRIEST];
     },
     USII: () => {
       HEALER = PRIEST;
@@ -1587,8 +1678,16 @@ const DYNAMIC_PARTY_PRESETS = {
     },
     default: [WARRIOR, PRIEST, ROGUE],
   },
+  crabxx: () => {
+    // const isAggroed = !!parent.S.crabxx?.target;
+    // if (isAggroed) RANGER = RANGER1;
+    // HEALER = isAggroed ? RANGER1 : PRIEST;
+    // return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
+    RANGER = RANGER1;
+    return [WARRIOR, PRIEST, MAGE];
+  },
   pinkgoo: {
-    USI: [WARRIOR, PRIEST, ROGUE],
+    USI: [MAGE, PRIEST, ROGUE],
     USII: [WARRIOR, MAGE, PRIEST],
     EUI: () => {
       RANGER = RANGER1;
@@ -1606,18 +1705,15 @@ const DYNAMIC_PARTY_PRESETS = {
       return [WARRIOR, RANGER, MAGE];
     },
   },
-  crabxx: () => {
-    // const isAggroed = !!parent.S.crabxx?.target;
-    // if (isAggroed) RANGER = RANGER1;
-    // HEALER = isAggroed ? RANGER1 : PRIEST;
-    // return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
+  snowman: () => {
     RANGER = RANGER1;
-    return [WARRIOR, PRIEST, RANGER1];
+    HEALER = RANGER;
+    return [WARRIOR, RANGER, MAGE];
   },
 
   default: () => {
     const globalParty = get("currentParty");
-    const knownTankers = ["CrownPriest"];
+    const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
 
     if (
       globalParty &&
@@ -1711,52 +1807,9 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.pinkgoo?.live) {
-    changeToPullStrategies();
-    let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
-    if (!pinkgooInstance) {
-      if (parent.S.pinkgoo?.x) {
-        await advanceSmartMove(parent.S.pinkgoo);
-        change_target(get_nearest_monster({ type: "pinkgoo" }));
-        return get_nearest_monster({ type: "pinkgoo" });
-      }
-    } else {
-      change_target(pinkgooInstance);
-
-      return pinkgooInstance;
-    }
-  }
-
-  if (parent.S.snowman?.live) {
-    changeToPullStrategies();
-
-    const currentTarget = get_target();
-    const snowmanInstance = get_nearest_monster({ type: "snowman" });
-    const grinchInstance = get_nearest_monster({ type: "grinch" });
-    const beeToAttack =
-      currentTarget && currentTarget.mtype === "arcticbee"
-        ? currentTarget
-        : get_nearest_monster({ type: "arcticbee" });
-
-    if (!snowmanInstance) advanceSmartMove(parent.S.snowman);
-    else {
-      if (grinchInstance) change_target(grinchInstance);
-      else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
-      else change_target(snowmanInstance);
-
-      return grinchInstance ?? snowmanInstance.s?.fullguardx
-        ? beeToAttack
-        : snowmanInstance;
-    }
-  }
-
   const activeBosses = [];
 
-  if (
-    parent.S.mrpumpkin &&
-    parent.S.mrpumpkin.live &&
-    parent.S.mrpumpkin.target
-  ) {
+  if (parent.S.mrpumpkin?.live) {
     activeBosses.push({
       ...parent.S.mrpumpkin,
       type: "mrpumpkin",
@@ -1764,7 +1817,7 @@ async function changeToDailyEventTargets() {
     });
   }
 
-  if (parent.S.mrgreen?.live && parent.S.mrgreen.target) {
+  if (parent.S.mrgreen?.live) {
     activeBosses.push({
       ...parent.S.mrgreen,
       type: "mrgreen",
@@ -1790,10 +1843,15 @@ async function changeToDailyEventTargets() {
       .shift();
 
     if (bossToFight) {
-      const bossInstance = get_nearest_monster({ type: bossToFight.type });
+      let bossInstance = get_nearest_monster({ type: bossToFight.type });
       bossToFight.strategy();
-      if (!bossInstance) advanceSmartMove(bossToFight);
-      else {
+      if (!bossInstance) {
+        await advanceSmartMove(bossToFight);
+        bossInstance = get_nearest_monster({ type: bossToFight.type });
+
+        change_target(bossInstance);
+        return bossInstance;
+      } else {
         change_target(bossInstance);
         return bossInstance;
       }
@@ -1823,6 +1881,15 @@ async function changeToDailyEventTargets() {
           crabxxInstance = entity;
         }
 
+        const incomingNumber =
+          PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
+
+        const predictedHp =
+          entity.name === character.name
+            ? entity.hp
+            : entity.hp + incomingNumber;
+        entity.predictedHp = predictedHp;
+
         if (entity.mtype === "crabx") {
           crabxList.push(entity);
         }
@@ -1849,6 +1916,8 @@ async function changeToDailyEventTargets() {
 
     for (const crabx of crabxList) {
       const isCurrentCrabxInRange = inRange(crabx);
+      const currentCrabxHp = crabx.predictedHp ?? crabx.hp ?? 0;
+      const bestCrabxHp = bestCrabx?.predictedHp ?? bestCrabx?.hp ?? 0;
 
       if (!bestCrabx) {
         bestCrabx = crabx;
@@ -1858,14 +1927,14 @@ async function changeToDailyEventTargets() {
         if (isCurrentCrabxInRange && !isBestCrabxInRange) {
           bestCrabx = crabx;
         } else if (isCurrentCrabxInRange === isBestCrabxInRange) {
-          if (crabx.hp > bestCrabx.hp) {
+          if (currentCrabxHp > bestCrabxHp) {
             bestCrabx = crabx;
           }
         }
       }
 
       if (distance(crabx, crabxxInstance) <= BLAST_RADIUS) {
-        if (!bestClusteredCrabx || crabx.hp > bestClusteredCrabx.hp) {
+        if (!bestClusteredCrabx || currentCrabxHp > bestCrabxHp) {
           bestClusteredCrabx = crabx;
         }
       }
@@ -1873,10 +1942,11 @@ async function changeToDailyEventTargets() {
 
     if (
       character.ctype === "warrior" &&
-      !crabxxInstance.s.stunned &&
-      (crabxList.length <= 1 || crabxList.length >= 6)
+      (!crabxxInstance.s.stunned ||
+        crabxxInstance.s.stunned.ms < character.ping / 2) &&
+      crabxList.length <= 1
     ) {
-      warriorStomp();
+      await warriorStomp();
     }
 
     let targetCrab;
@@ -1888,17 +1958,23 @@ async function changeToDailyEventTargets() {
         bestCrabx || (crabxxInstance?.target ? crabxxInstance : undefined);
     }
 
+    if (
+      !isAssignedAsTanker() &&
+      crabxList.some(
+        (entity) => entity.s?.young && entity.target === character.name,
+      )
+    )
+      await scareAwayMobs();
+
     changeToPullStrategies();
     change_target(targetCrab);
     return targetCrab;
   }
 
-  if (
-    parent.S.franky?.live &&
-    parent.S.franky?.target &&
-    parent.S.franky?.hp < 0.97 * parent.S.franky?.max_hp
-  ) {
-    changeToNormalStrategies();
+  if (parent.S.franky?.live) {
+    if (character.ctype === "warrior") changeToPullStrategies();
+    else changeToNormalStrategies();
+
     let frankyInstance = get_nearest_monster({ type: "franky" });
     if (!frankyInstance) {
       await join("franky").catch((e) => console.warn(e));
@@ -1908,14 +1984,58 @@ async function changeToDailyEventTargets() {
       change_target(frankyInstance);
     }
 
-    if (frankyInstance)
-      if (frankyInstance.target && !partyMems.includes(frankyInstance.target)) {
-        rangeRate = 0.2;
-        return frankyInstance;
-      } else {
-        scareAwayMobs();
+    if (frankyInstance) {
+      rangeRate = 0.2;
+
+      if (!partyMems.includes(frankyInstance.target)) {
         return frankyInstance;
       }
+
+      scareAwayMobs();
+      return frankyInstance;
+    }
+  }
+
+  if (parent.S.pinkgoo?.live) {
+    changeToPullStrategies();
+    let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
+    if (!pinkgooInstance) {
+      if (parent.S.pinkgoo?.x) {
+        await advanceSmartMove(parent.S.pinkgoo);
+        change_target(get_nearest_monster({ type: "pinkgoo" }));
+        return get_nearest_monster({ type: "pinkgoo" });
+      }
+    } else {
+      change_target(pinkgooInstance);
+
+      return pinkgooInstance;
+    }
+  }
+
+  if (parent.S.snowman?.live) {
+    changeToPullStrategies();
+
+    let snowmanInstance = get_nearest_monster({ type: "snowman" });
+
+    if (!snowmanInstance) {
+      await advanceSmartMove(parent.S.snowman);
+      snowmanInstance = get_nearest_monster({ type: "snowman" });
+    }
+
+    const currentTarget = get_target();
+    const grinchInstance = get_nearest_monster({ type: "grinch" });
+    const beeToAttack =
+      currentTarget && currentTarget.mtype === "arcticbee"
+        ? currentTarget
+        : get_nearest_monster({ type: "arcticbee" });
+
+    if (grinchInstance) change_target(grinchInstance);
+    else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
+    else change_target(snowmanInstance);
+
+    return grinchInstance ?? snowmanInstance.s?.fullguardx
+      ? beeToAttack
+      : snowmanInstance;
   }
 
   if (parent.S.abtesting && !character.s.hopsickness) {
@@ -2031,14 +2151,14 @@ function attackErrorHandler(error, target = get_target()) {
         move(newX, newY);
       }
 
-      console.warn(
-        error,
-        error.distance
-          ? `| ${Math.round(error.distance)} distance / ${
-              character.range + character.xrange
-            } range`
-          : "",
-      );
+      // console.warn(
+      //   error,
+      //   error.distance
+      //     ? `| ${Math.round(error.distance)} distance / ${
+      //         character.range + character.xrange
+      //       } range`
+      //     : "",
+      // );
     }
   } else console.warn("Error while attacking:", error);
 }

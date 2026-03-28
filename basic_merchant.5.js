@@ -10,6 +10,8 @@ if (parent.caracAL) {
       "adventure-land-scripts-backup/merchant_service.19.js",
     ])
     .then(() => {
+      syncBankData();
+      bankLoop();
       lureMechaGnome();
     });
 } else {
@@ -40,13 +42,8 @@ function equipBroom() {
   }
 }
 
-function shouldGoExchangeXmas() {
-  return !(
-    onDuty ||
-    isInvFull(6) ||
-    character.q.exchange ||
-    smart.moving ||
-    isAdvanceSmartMoving ||
+function shouldGoChilling() {
+  return (
     (!is_on_cooldown("fishing") &&
       (locate_item("rod") !== -1 ||
         character.slots.mainhand?.name === "rod")) ||
@@ -57,6 +54,18 @@ function shouldGoExchangeXmas() {
     character.c.fishing
   );
 }
+
+function shouldGoExchangeXmas() {
+  return !(
+    onDuty ||
+    isInvFull(6) ||
+    character.q.exchange ||
+    smart.moving ||
+    isAdvanceSmartMoving ||
+    shouldGoChilling()
+  );
+}
+
 async function holidayExchange() {
   if (!shouldGoExchangeXmas() || !parent.S["holidayseason"]) return;
 
@@ -95,7 +104,6 @@ async function holidayExchange() {
   if (!exchangableItem || smart.moving) return;
 
   if (get_nearest_npc()?.npc !== exchangableItem.npc && !haveAComputer()) {
-    close_stand();
     equipBroom();
     await smart_move(find_npc(exchangableItem.npc));
   }
@@ -108,7 +116,7 @@ async function holidayExchange() {
   });
 }
 
-async function exchangeXyn() {
+async function exchangeSomething() {
   if (isInvFull(6)) return;
 
   const itemName = [
@@ -125,6 +133,7 @@ async function exchangeXyn() {
     { name: "5bucks", quantity: 1 },
     { name: "candypop", quantity: 10 },
     { name: "basketofeggs", quantity: 1 },
+    { name: "seashell", quantity: 20, npc: "fisherman" },
   ];
   let slot = undefined;
   for (const item of itemName) {
@@ -135,17 +144,46 @@ async function exchangeXyn() {
     const slotIndex = locate_item(item.name);
     if (slotIndex !== -1 && character.items[slotIndex].q >= item.quantity) {
       slot = slotIndex;
+
+      if (
+        item.npc &&
+        !haveAComputer() &&
+        !isAdvanceSmartMoving &&
+        !smart.moving
+      ) {
+        await advanceSmartMove(find_npc(item.npc));
+      }
+
       break;
     }
   }
 
-  if (slot !== undefined)
-    exchange(slot).catch((e) => {
-      switch (e.response) {
-        case "inventory_full":
-          onDuty = true;
-      }
-    });
+  if (slot === undefined) return;
+
+  if (
+    character.mp > 400 &&
+    !is_on_cooldown("massexchangepp") &&
+    !character.s.massexchangepp
+  ) {
+    if (character.mp < 1000 && locate_item("mpot1") === -1) {
+      buy("mpot1", 1);
+    }
+    use_skill("massexchangepp");
+  }
+
+  if (
+    character.mp > 50 &&
+    !is_on_cooldown("massexchange") &&
+    !character.s.massexchange
+  )
+    use_skill("massexchange");
+
+  return exchange(slot).catch((e) => {
+    switch (e.response) {
+      case "inventory_full":
+        onDuty = true;
+    }
+  });
 }
 
 async function exchangeMines() {
@@ -173,30 +211,34 @@ async function exchangeMines() {
   }
 }
 
-function moveHome() {
-  if (
-    distance(character, homeLocation) < 50 ||
-    smart.moving ||
-    isAdvanceSmartMoving ||
-    character.moving ||
-    character.q.exchange ||
-    character.c.fishing ||
-    character.c.mining
-  )
-    return;
-  log("Moving back Town!");
-  close_stand();
-  equipBroom();
-  return smart_move(homeLocation)
-    .then(() => {
-      onDuty = false;
-      if (locate_item("stand0") === -1 && !haveAComputer()) {
-        retrieveBankItem("stand0");
-      } else open_stand();
-    })
-    .catch((e) => {
-      if (e.reason === "failed" && e.failed) use_skill("use_town");
+async function moveHome() {
+  try {
+    if (
+      distance(character, homeLocation) < 150 ||
+      smart.moving ||
+      isAdvanceSmartMoving
+    )
+      return;
+
+    log("Moving back Town!");
+    equipBroom();
+    await advanceSmartMove(homeLocation, {
+      exact: true,
+      useScare: isLuringMobs,
     });
+
+    if (locate_item("stand0") === -1 && !haveAComputer()) {
+      retrieveBankItem("stand0");
+    }
+  } catch (e) {
+    if (e?.reason === "failed" && e.failed) {
+      await town();
+    }
+
+    console.warn("movehome error:", e);
+  } finally {
+    onDuty = false;
+  }
 }
 
 async function goFishing() {
@@ -235,13 +277,12 @@ async function goFishing() {
     character.slots.mainhand?.name !== rodItemId &&
     locate_item(rodItemId) === -1
   )
-    return moveHome();
+    return;
 
   if (
     character.real_x != fishingLocation.x &&
     character.real_y != fishingLocation.y
   ) {
-    close_stand();
     equipBroom();
     await smart_move(fishingLocation);
   }
@@ -297,13 +338,12 @@ async function goMining() {
     character.slots.mainhand?.name !== pickaxeItemId &&
     locate_item(pickaxeItemId) === -1
   )
-    return moveHome();
+    return;
 
   if (
     character.real_x != miningLocation.x &&
     character.real_y != miningLocation.y
   ) {
-    close_stand();
     equipBroom();
     await smart_move(miningLocation);
   }
@@ -320,13 +360,34 @@ async function goMining() {
   }
 }
 
-async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
-  // Check if craftable
+async function dismantleSomething() {
   if (
     onDuty ||
     isInvFull(4) ||
     smart.moving ||
     isAdvanceSmartMoving ||
+    character.c.mining ||
+    character.c.fishing ||
+    isSortingInventory ||
+    Math.max(character.ping) > 300
+  )
+    return;
+
+  const itemToDismantle = DISMANTLE_LIST.find((id) => locate_item(id) !== -1);
+  if (!itemToDismantle) return;
+
+  if (get_nearest_npc()?.name !== "Leo" && !haveAComputer()) {
+    await advanceSmartMove(find_npc("craftsman"));
+  }
+
+  return dismantle(locate_item(itemToDismantle));
+}
+
+async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
+  // Check if craftable
+  if (
+    onDuty ||
+    isInvFull(4) ||
     character.c.mining ||
     character.c.fishing ||
     !craftQuantity
@@ -399,8 +460,12 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   }
 
   if (isEnoughIngredients) {
-    if (get_nearest_npc()?.name !== "Leo" && !haveAComputer()) {
-      close_stand();
+    if (
+      get_nearest_npc()?.name !== "Leo" &&
+      !haveAComputer() &&
+      !smart.moving &&
+      !isAdvanceSmartMoving
+    ) {
       await smart_move(place);
     }
 
@@ -410,11 +475,21 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 }
 
 setInterval(async function () {
-  loot();
   if (character.rip) {
     respawn();
     return;
   }
+
+  if (character.moving && character.stand) {
+    close_stand();
+    equipBroom();
+  } else if (
+    !character.moving &&
+    !character.stand &&
+    !smart.moving &&
+    !isAdvanceSmartMoving
+  )
+    open_stand();
 
   if (!isLuringMobs) scareAwayMobs();
 
@@ -429,8 +504,9 @@ setInterval(async function () {
     Promise.allSettled([
       compoundInv(),
       upgradeInv(),
-      exchangeXyn(),
+      exchangeSomething(),
       holidayExchange(),
+      dismantleSomething(),
       craft("xbox"),
       craft("basketofeggs"),
       craft("orba", 1, homeLocation),
@@ -438,6 +514,14 @@ setInterval(async function () {
       craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
       craft("wingedboots", character.esize - 8, { map: "main", x: -2, y: 295 }),
       craft("pouchbow", character.esize - 8, { map: "main", x: -2, y: 295 }),
+      craft("elixirdex1", 10, { map: "main", x: -2, y: 295 }),
+      craft("elixirdex2", 10, { map: "main", x: -2, y: 295 }),
+      craft("elixirint1", 10, { map: "main", x: -2, y: 295 }),
+      craft("elixirint2", 10, { map: "main", x: -2, y: 295 }),
+      craft("elixirstr1", 10, { map: "main", x: -2, y: 295 }),
+      craft("elixirstr2", 10, { map: "main", x: -2, y: 295 }),
+      craft("elixirvit1", 10, { map: "main", x: -2, y: 295 }),
+      craft("elixirvit2", 10, { map: "main", x: -2, y: 295 }),
       // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
       !isSortingInventory &&
@@ -464,19 +548,12 @@ setInterval(async function () {
     character.items[locate_item("gemfragment")]?.q >= 50
   )
     exchangeMines();
-  else if (
-    !smart.moving &&
-    !isAdvanceSmartMoving &&
-    !character.c.mining &&
-    !character.c.fishing &&
-    !character.q.exchanging
-  )
+  else if (!character.c.mining && !character.c.fishing && !onDuty)
     await moveHome();
 
-  if (isInvFull() && !smart.moving && !isAdvanceSmartMoving) {
-    if (!smart.moving) await moveHome();
-    close_stand();
-    if (!smart.moving) await smart_move(bankPosition);
+  if (isInvFull() && !isAdvanceSmartMoving && !smart.moving) {
+    onDuty = true;
+    await advanceSmartMove(bankPosition);
     if (character.map === "bank") {
       try {
         character.items
@@ -488,7 +565,6 @@ setInterval(async function () {
         console.error(e);
       }
     }
-    if (!smart.moving) await moveHome();
     onDuty = false;
   }
 }, 750);
@@ -522,6 +598,8 @@ const ITEM_NEEDED = [
   "brownenvelope",
   "harbringer",
   "throwingstars",
+  "angelwings",
+  "smoke",
 ];
 
 function secondhandsHandler(events) {

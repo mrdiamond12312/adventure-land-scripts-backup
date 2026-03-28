@@ -3,7 +3,8 @@ const BLAST_RADIUS = character.blast / 3.6 || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
 const MAX_MOB_DPS = 2500;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
-const WATCHOUT_ABILITIES = ["burn"];
+const WATCHOUT_ABILITIES = ["burn", "stone"];
+const IGNORE_ABILITIES = ["stone"];
 
 function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return [];
@@ -216,7 +217,7 @@ function calculateMageItems() {
     pants: "starkillers",
     shoes: "wingedboots",
     gloves: "supermittens",
-    cape: "ecape",
+    cape: "horsecapeg",
     orb: feelingLucky ? "rabbitsfoot" : feelingWise ? "talkingskull" : "jacko",
     amulet: feelingWise ? "spookyamulet" : "intamulet",
   };
@@ -840,6 +841,10 @@ function avgDmgTaken(characterEntity, dmgType = null) {
       highestBurningMob.attack
     : 0;
 
+  const currentBurnIntensity = highestBurningMob
+    ? characterEntity.s.burned?.intensity ?? 0
+    : 0;
+
   return (
     listOfAttackingMobs.reduce(
       (accummulator, currentMob) =>
@@ -847,7 +852,7 @@ function avgDmgTaken(characterEntity, dmgType = null) {
       0,
     ) *
       mobbingMultiplier(numberOfAttackingMobs) +
-    Math.max(characterEntity.s.burned?.intensity ?? 0, burnPadding)
+    Math.max(currentBurnIntensity, burnPadding)
   );
 }
 
@@ -868,6 +873,16 @@ function rotateLeader(partyList, newLeaderId) {
 }
 
 function assignRoles() {
+  const currentTarget = get_targeted_monster();
+  if (
+    parent.S.franky?.live &&
+    ["franky", "nerfedmummy"].includes(currentTarget?.mtype)
+  ) {
+    TANKER = PRIEST;
+    partyMems = rotateLeader(partyMems, TANKER);
+    return;
+  }
+
   if (partyMems.includes(WARRIOR) && partyMems.includes(HEALER)) {
     const partyDmgTaken = avgPartyDmgTaken(partyMems);
     const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "physical");
@@ -876,6 +891,7 @@ function assignRoles() {
     const physicalDmgRatio = partyMagicalDmgTaken / partyDmgTaken;
     TANKER = physicalDmgRatio <= 0.5 ? HEALER : WARRIOR;
     partyMems = rotateLeader(partyMems, TANKER);
+    return;
   }
 }
 
@@ -967,7 +983,7 @@ async function warriorCleave(currentStrategy) {
   );
 
   if (
-    character.s.sugarrush ||
+    // character.s.sugarrush ||
     character.s.penalty_cd ||
     character.mp < G.skills["cleave"].mp + 280 ||
     is_on_cooldown("cleave") ||
@@ -1114,7 +1130,7 @@ async function warriorStomp() {
 }
 
 function shouldAttack(target = get_target()) {
-  const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
+  const partyHealer = get_entity(HEALER);
 
   if (character.map === "crypt") {
     return !!partyHealer && !partyHealer.rip;
@@ -1128,7 +1144,11 @@ function shouldAttack(target = get_target()) {
     return false;
   }
 
-  if (target && target.attack > 600 && !target.target) {
+  if (
+    target &&
+    target.attack > 600 &&
+    (!target.target || target.target === character.name)
+  ) {
     const partyPriest = [...parent.party_list, ...partyMems]
       .map((id) => get_player(id))
       .filter((player) => player?.ctype === "priest");
@@ -1136,6 +1156,27 @@ function shouldAttack(target = get_target()) {
   }
 
   return true;
+}
+
+async function scareAwayMobs() {
+  if (
+    (locate_item("jacko") !== -1 || character.slots["orb"].name === "jacko") &&
+    Object.values(parent.entities).some(
+      (mob) => mob?.target === character.name && mob?.type === "monster",
+    ) &&
+    !is_on_cooldown("scare") &&
+    character.mp > 100
+  ) {
+    return Promise.all([
+      equipBatch(
+        {
+          orb: "jacko",
+        },
+        true,
+      ),
+      use_skill("scare"),
+    ]);
+  }
 }
 
 // New Temporal Surge Logic
@@ -1352,10 +1393,6 @@ class ProjectileManagement {
   }
 }
 
-if (
-  !PROJECTILE_MANAGER &&
-  parent.socket &&
-  ["priest", "ranger"].includes(character.ctype)
-) {
+if (!PROJECTILE_MANAGER && parent.socket) {
   var PROJECTILE_MANAGER = new ProjectileManagement(parent.socket);
 }

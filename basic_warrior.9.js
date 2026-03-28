@@ -39,6 +39,7 @@ const bosses = {
 async function fight(target) {
   const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
   const attackRange = character.range + character.xrange;
+  const attackFrequencyBeforeComponsate = character.frequency;
   const inRange = (entity, mult = 1) =>
     distance(entity, character) < attackRange * mult;
 
@@ -49,7 +50,11 @@ async function fight(target) {
   };
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
-  if (currentStrategy === usePullStrategies && !target?.mtype.includes("crabx")) {
+  if (
+    typeof usePullStrategies === "function" &&
+    currentStrategy === usePullStrategies &&
+    !target?.mtype.includes("crabx")
+  ) {
     const aggroedMobs = Object.values(parent.entities)
       .filter((entity) => {
         return (
@@ -112,12 +117,13 @@ async function fight(target) {
 
   if (isAttackReady && inRange(target) && shouldAttack()) {
     set_message("Attacking");
-
+    // const xrangeUsed = distance(target, character) - character.range;
+    // if (xrangeUsed > 0) character.xrange -= xrangeUsed;
     // Main attack execution
     promisesToAwait.push(
       attack(target)
         .then(() => {
-          // attackSpeedCompensate(attackFrequencyBeforeComponsate);
+          attackSpeedCompensate(attackFrequencyBeforeComponsate);
           reduceCd("attack");
         })
         .catch((e) => attackErrorHandler(e, target)),
@@ -139,7 +145,7 @@ async function fight(target) {
 
       if (candycane1 !== -1 && candycane2 !== -1) {
         isEquipingItems = true;
-        const equipPromise = Promise.all([
+        const equipPromise = Promise.allSettled([
           // Immediate equip
           equip_batch([
             { num: candycane1, slot: "mainhand" },
@@ -277,7 +283,7 @@ async function fight(target) {
 
   // --- Await and Error Handling ---
   try {
-    await withTimeout(Promise.all(promisesToAwait), 1000);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
   } catch (e) {
     console.error("Error while attacking", e);
   }

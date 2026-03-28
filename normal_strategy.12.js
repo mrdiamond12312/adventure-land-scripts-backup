@@ -45,7 +45,12 @@ async function useNormalStrategy(target) {
           (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
         )
       ) {
-        promises.push(equipBatch(suggestedRangerItems, character.slots.mainhand?.name === "cupid"));
+        promises.push(
+          equipBatch(
+            suggestedRangerItems,
+            character.slots.mainhand?.name === "cupid",
+          ),
+        );
       }
       break;
 
@@ -68,6 +73,14 @@ async function useNormalStrategy(target) {
         )
       ) {
         promises.push(equipBatch(suggestedPriestItems));
+      }
+
+      if (
+        avgPartyDmgTaken(partyMems) >
+          character.heal * 0.95 * character.frequency &&
+        character.hp < (isAssignedAsTanker() ? 0.2 : 0.5) * character.max_hp 
+      ) {
+        promises.push(scareAwayMobs());
       }
 
       if (!isAssignedAsTanker()) promises.push(scareAwayMobs());

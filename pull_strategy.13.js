@@ -146,15 +146,24 @@ async function usePullStrategies(target) {
       );
 
       // Mob Target Check: Agitate won't steal from others or cooperative mobs
-      const wontStealOrBreakCoop = !listOfNoTargetMonsterInRange.some(
-        (mob) =>
-          mob.cooperative &&
-          !mob["1hp"] &&
-          (!partyMems.includes(mob.target) ||
-            parent.party_list
-              .filter((id) => !partyMems.includes(id))
-              .includes(mob.target)),
+      const externalPartyMembers = parent.party_list.filter(
+        (name) => !partyMems.includes(name),
       );
+
+      const mobsTargetingExternalParty = mobsList.some((mob) =>
+        externalPartyMembers.includes(mob.target),
+      );
+
+      const wontStealOrBreakCoop =
+        !listOfNoTargetMonsterInRange.some(
+          (mob) =>
+            mob.cooperative &&
+            !mob["1hp"] &&
+            (!partyMems.includes(mob.target) ||
+              externalPartyMembers.includes(mob.target)),
+        ) &&
+        (!mobsTargetingExternalParty ||
+          distance(character, { map: map, x: mapX, y: mapY }) > 300);
 
       // Fear Check
       const willNotBeFeared = !isFearedAfterAgitating;
@@ -197,6 +206,9 @@ async function usePullStrategies(target) {
           )
           .find(
             (mob) =>
+              !WATCHOUT_ABILITIES.some((skill) =>
+                Object.keys(mob.abilities ?? {}).includes(skill),
+              ) &&
               calculateDamage(mob, character) + partyDmgRecieved <
                 healReceivableAmount &&
               is_in_range(mob, "taunt") &&
@@ -258,7 +270,8 @@ async function usePullStrategies(target) {
       }
 
       if (
-        avgPartyDmgTaken(partyMems) > character.heal * 0.95 * healerFreq &&
+        avgPartyDmgTaken(partyMems) >
+          character.heal * 0.95 * character.frequency &&
         character.hp < (isAssignedAsTanker() ? 0.3 : 0.5) * character.max_hp &&
         !is_on_cooldown("scare") &&
         character.cc < 100

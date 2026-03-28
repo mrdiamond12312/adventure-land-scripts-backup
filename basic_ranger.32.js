@@ -76,7 +76,7 @@ async function fight(target) {
       return (
         // Sort by cluster count
         rhs.cluster_count - lhs.cluster_count ||
-        lhs.hp - rhs.hp ||
+        rhs.hp - lhs.hp ||
         lhs.distance - rhs.distance
       );
     });
@@ -86,8 +86,9 @@ async function fight(target) {
   if (potentialTargets.length && !target?.mtype.includes("crabx")) {
     target = potentialTargets[0];
     change_target(target);
-  } // Reacquire target if feared
+  }
 
+  // Reacquire target if feared
   if (character.fear) {
     const aggroing = potentialTargets.find(
       (mob) => mob.target === character.name,
@@ -117,7 +118,7 @@ async function fight(target) {
     character.level >= G.skills["5shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 1000 &&
+    character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 400 &&
     weakMobs.length >= 4 &&
     mobsTo5Shot.every((mob) => shouldAttack(mob));
 
@@ -126,7 +127,7 @@ async function fight(target) {
     character.level >= G.skills["3shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 1000 &&
+    character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 400 &&
     potentialTargets.length >= 2 &&
     mobsTo3Shot.every((mob) => shouldAttack(mob));
 
@@ -148,7 +149,11 @@ async function fight(target) {
         currentStrategy(mobsTo3Shot),
         tryMultiShot("3shot", mobsTo3Shot),
       );
-  } else if (target && distance(target, character) < nearRange) {
+  } else if (
+    target &&
+    shouldAttack(target) &&
+    distance(target, character) < nearRange
+  ) {
     set_message("Shooting");
     if (!isAttackReady) promisesToAwait.push(currentStrategy(target));
     else if (!isCupid)
@@ -199,7 +204,7 @@ async function fight(target) {
 
   // Await and Error Handling
   try {
-    await withTimeout(Promise.all(promisesToAwait), 1500);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1500);
   } catch (e) {
     console.log(e);
   }
@@ -210,7 +215,7 @@ async function cupidHeal(playersToHeal) {
   const isAttackOnCD = ms_to_next_skill("attack") > 0 || character.s.penalty_cd;
   const hasCupid =
     locate_item("cupid") !== -1 || character.slots.mainhand?.name === "cupid";
-  if (!hasCupid) return;
+  if (!hasCupid || character.fear) return false;
 
   const characterRange = character.range + character.xrange;
   const lowHealthPlayersInRange = playersToHeal.filter(
@@ -279,7 +284,7 @@ async function cupidHeal(playersToHeal) {
   }
 
   try {
-    await withTimeout(Promise.all(promisesToAwait), 1000);
+    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
   } catch (e) {
     attackErrorHandler(e);
     console.error("Error while Cupiding!", e);
@@ -294,8 +299,6 @@ async function mainLoop() {
   try {
     desiredElixir = "pumpkinspice";
     assignRoles();
-
-    // buff();
 
     // 1. Death Check
     if (character.rip) {

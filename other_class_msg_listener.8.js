@@ -32,26 +32,9 @@ character.on("cm", async function ({ name, message }) {
             ].includes(item.name)
           )
             return;
-          await send_item(partyMerchant, index, 1000);
+          await send_item(partyMerchant, index, 9999);
         }),
       );
-      // const compoundables = filterCompoundableAndStackable();
-      // const others = Array.from({ length: 42 }, (_, i) => i + 0).filter(
-      //   (i) =>
-      //     compoundables.indexOf(i) < 0 &&
-      //     character.items[i]?.name &&
-      //     !["tracker", "hpot1", "mpot1"].includes(character.items[i].name)
-      // );
-      // await Promise.all(
-      //   compoundables.map(async (index) => {
-      //     await send_item(partyMerchant, index, 1000);
-      //   })
-      // );
-      // await Promise.all(
-      //   others.map(async (index) => {
-      //     await send_item(partyMerchant, index, 1000);
-      //   })
-      // );
       send_cm(partyMerchant, "inv_ok");
       break;
 
@@ -78,11 +61,17 @@ character.on("cm", async function ({ name, message }) {
       }
       break;
 
+    case "dc-harakiri":
+      midasLooting();
+      parent.socket.emit("harakiri");
+      break;
+
     case "loot-before-hopping":
       midasLooting(true);
+      parent.socket.emit("harakiri");
       break;
 
     default:
-      log(`Unidentified MsgCode: ${message}`);
+      console.warn(`Unidentified MsgCode: ${message}`);
   }
 });
