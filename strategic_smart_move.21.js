@@ -499,6 +499,10 @@ class StrategicSmartMove {
           !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
         ) {
           this.isDoingSomethingMagical = true;
+          if (character.ctype === "rogue" && character.s.invis) {
+            await stop("invis");
+          }
+          
           console.warn(`Whoosh! #${session}`);
           send_cm(MAGE, "magiport");
           stop();
