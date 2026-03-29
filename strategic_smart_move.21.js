@@ -440,6 +440,12 @@ class StrategicSmartMove {
       }
     }
 
+    this.smartMoveSession = (this.smartMoveSession || 0) + 1;
+    const session = this.smartMoveSession;
+    isAdvanceSmartMoving = true;
+    this.isSmartMoving = true;
+    smartmoveDebug = options.smartmoveDebug;
+
     if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
       await this.useTownWithRetry();
       this.cleanUp();
@@ -447,12 +453,6 @@ class StrategicSmartMove {
         `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
       );
     }
-
-    this.smartMoveSession = (this.smartMoveSession || 0) + 1;
-    const session = this.smartMoveSession;
-    isAdvanceSmartMoving = true;
-    this.isSmartMoving = true;
-    smartmoveDebug = options.smartmoveDebug;
 
     if (options.wait) {
       await sleep(options.wait);
@@ -502,7 +502,7 @@ class StrategicSmartMove {
           if (character.ctype === "rogue" && character.s.invis) {
             await stop("invis");
           }
-          
+
           console.warn(`Whoosh! #${session}`);
           send_cm(MAGE, "magiport");
           stop();
