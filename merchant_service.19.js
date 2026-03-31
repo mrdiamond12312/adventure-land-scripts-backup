@@ -159,37 +159,36 @@ var isLuringMobs = false;
 const trustedPartners = ["earthPriest", "earthWar"];
 
 async function lureMechaGnome() {
-  if (
-    isLuringMobs ||
-    onDuty ||
-    isAdvanceSmartMoving ||
-    smart.moving ||
-    shouldGoChilling() ||
-    serverCurrentlyHasLiveEvent() ||
-    (!(
-      parent.party_list &&
-      trustedPartners.some((name) => parent.party_list.includes(name))
-    ) &&
-      !parent.caracAL.siblings.includes(PRIEST))
-  ) {
-    console.log("lureMechaGnome blocked by:", {
-      isLuringMobs,
-      onDuty,
-      isAdvanceSmartMoving,
-      smart: smart.moving,
-      chilling: shouldGoChilling(),
-      liveEvent: serverCurrentlyHasLiveEvent(),
-    });
-    return setTimeout(lureMechaGnome, 500);
-  }
-
-  // Global flags to prevent other tasks from interrupting
-  onDuty = true;
-  isLuringMobs = true; // Prevent scareAwayMobs
-
   let nextDelay = 500;
-
   try {
+    if (
+      isLuringMobs ||
+      onDuty ||
+      isAdvanceSmartMoving ||
+      smart.moving ||
+      shouldGoChilling() ||
+      serverCurrentlyHasLiveEvent() ||
+      (!(
+        parent.party_list &&
+        trustedPartners.some((name) => parent.party_list.includes(name))
+      ) &&
+        !parent.caracAL.siblings.includes(PRIEST))
+    ) {
+      console.log("lureMechaGnome blocked by:", {
+        isLuringMobs,
+        onDuty,
+        isAdvanceSmartMoving,
+        smart: smart.moving,
+        chilling: shouldGoChilling(),
+        liveEvent: serverCurrentlyHasLiveEvent(),
+      });
+      return setTimeout(lureMechaGnome, 500);
+    }
+
+    // Global flags to prevent other tasks from interrupting
+    onDuty = true;
+    isLuringMobs = true; // Prevent scareAwayMobs
+
     await advanceSmartMove({ map: "cyberland" });
     await sleep(character.ping);
 
