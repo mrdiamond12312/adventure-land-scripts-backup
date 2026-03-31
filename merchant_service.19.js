@@ -174,7 +174,7 @@ async function lureMechaGnome() {
       ) &&
         !parent.caracAL.siblings.includes(PRIEST))
     ) {
-      console.log("lureMechaGnome blocked by:", {
+      console.warn("lureMechaGnome blocked by:", {
         isLuringMobs,
         onDuty,
         isAdvanceSmartMoving,
@@ -182,7 +182,7 @@ async function lureMechaGnome() {
         chilling: shouldGoChilling(),
         liveEvent: serverCurrentlyHasLiveEvent(),
       });
-      return setTimeout(lureMechaGnome, 500);
+      return;
     }
 
     // Global flags to prevent other tasks from interrupting
