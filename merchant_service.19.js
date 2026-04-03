@@ -174,14 +174,6 @@ async function lureMechaGnome() {
       ) &&
         !parent.caracAL.siblings.includes(PRIEST))
     ) {
-      console.warn("lureMechaGnome blocked by:", {
-        isLuringMobs,
-        onDuty,
-        isAdvanceSmartMoving,
-        smart: smart.moving,
-        chilling: shouldGoChilling(),
-        liveEvent: serverCurrentlyHasLiveEvent(),
-      });
       return;
     }
 
