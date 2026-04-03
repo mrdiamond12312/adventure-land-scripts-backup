@@ -1705,10 +1705,31 @@ const DYNAMIC_PARTY_PRESETS = {
       return [WARRIOR, RANGER, MAGE];
     },
   },
-  snowman: () => {
-    RANGER = RANGER1;
-    HEALER = RANGER;
-    return [WARRIOR, RANGER, MAGE];
+  wabbit: {
+    USI: [MAGE, WARRIOR, ROGUE],
+    USIII: [MAGE, WARRIOR, PRIEST],
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
+    default: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
+  },
+  snowman: {
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
+    default: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
   },
 
   default: () => {
