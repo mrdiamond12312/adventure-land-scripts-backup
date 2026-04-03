@@ -48,11 +48,15 @@ async function updateBank() {
 function findVendorMerchantOf(itemName) {
   for (const id in G.npcs) {
     const npcData = G.npcs[id];
-    if (npcData.role === "merchant" && npcData.items?.includes(itemName)) return id;
+    if (npcData.role === "merchant" && npcData.items?.includes(itemName))
+      return id;
   }
 }
 
 async function retrieveBankItem(searchId, level = 0) {
+  console.warn(
+    `Attempting to retrieve ${searchId} (level ${level}) from bank...`,
+  );
   if (character.map !== "bank") {
     await advanceSmartMove(bankPosition);
     updateBank();
