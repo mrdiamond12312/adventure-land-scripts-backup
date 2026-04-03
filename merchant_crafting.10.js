@@ -58,8 +58,14 @@ async function retrieveBankItem(searchId, level = 0) {
     `Attempting to retrieve ${searchId} (level ${level}) from bank...`,
   );
   if (character.map !== "bank") {
-    await advanceSmartMove(bankPosition);
-    updateBank();
+    if (!smart.moving && !isAdvanceSmartMoving) {
+      await advanceSmartMove(bankPosition);
+      updateBank();
+    } else {
+      console.warn(
+        "Prevent moving to bank while smartMoving. Aborting retrieval.",
+      );
+    }
   }
 
   for (const [bankPack, items] of Object.entries(character.bank).filter(
