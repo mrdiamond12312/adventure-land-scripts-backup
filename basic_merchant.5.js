@@ -554,7 +554,7 @@ setInterval(async function () {
 
   if (isInvFull() && !isAdvanceSmartMoving && !smart.moving) {
     onDuty = true;
-    await advanceSmartMove(bankPosition);
+    if (character.map !== "bank") await advanceSmartMove(bankPosition);
     if (character.map === "bank") {
       try {
         character.items
