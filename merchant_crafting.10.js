@@ -67,6 +67,7 @@ async function retrieveBankItem(searchId, level = 0) {
       console.warn(
         "Prevent moving to bank while smartMoving. Aborting retrieval.",
       );
+      return;
     }
   }
 
