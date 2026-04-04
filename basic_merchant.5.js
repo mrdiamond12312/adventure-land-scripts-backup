@@ -498,7 +498,7 @@ setInterval(async function () {
 
   const computerSlot = locate_item("computer");
   if (computerSlot === -1 && getItemBankSlots("computer").length) {
-    retrieveBankItem("computer");
+    retrieveBankItem("computer", true);
   }
 
   await withTimeout(

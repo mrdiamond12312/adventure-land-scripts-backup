@@ -334,6 +334,11 @@ var IGNORE = [
   "throwingstars",
   "computer",
   "ancientcomputer",
+
+  // avoid upgrading for selling
+  "cape",
+  "carrotsword",
+  "wattire",
   ...BUYABLE,
 ];
 
