@@ -332,6 +332,8 @@ var IGNORE = [
   "supermittens",
   // "horsecapeg",
   "throwingstars",
+  "computer",
+  "ancientcomputer",
   ...BUYABLE,
 ];
 
@@ -490,6 +492,7 @@ const SALE_ABLE = [
   // Sell and replace by crypt's loots
   "intearring",
   "strearring",
+  "wattire",
   // "dexring",
   // "intring",
   // "dexamulet",
@@ -1437,7 +1440,7 @@ setInterval(async function () {
   }
 
   // Inventory check and potions
-  if (isInvFull(6)) {
+  if (isInvFull(4)) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
   } else if (
