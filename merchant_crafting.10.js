@@ -485,17 +485,17 @@ async function upgradeInv() {
 async function bankLoop() {
   let delay = 120000;
   try {
+    if (onDuty || shouldGoChilling()) {
+      delay = 5000;
+      return;
+    }
+
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
       onDuty = true;
       await smart_move(bankPosition);
       retrieveMaxItemsLevel();
       await retrievedBankItemToUpgrade();
       delay = 60000;
-      return;
-    }
-
-    if (onDuty || shouldGoChilling()) {
-      delay = 5000;
       return;
     }
 
