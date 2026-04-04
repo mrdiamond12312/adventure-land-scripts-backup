@@ -575,9 +575,9 @@ setInterval(function () {
   use_skill("mluck", character);
 }, 300000);
 
-setInterval(() => {
-  if (character.moving) parent.socket.emit("emotion", { name: "drop_egg" });
-}, 2000);
+// setInterval(() => {
+//   if (character.moving) parent.socket.emit("emotion", { name: "drop_egg" });
+// }, 2000);
 
 function on_party_invite(name) {
   if (name === partyMems[0]) accept_party_invite(name);
