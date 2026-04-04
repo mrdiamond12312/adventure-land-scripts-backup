@@ -78,6 +78,7 @@ async function retrieveBankItem(searchId, level = 0) {
       (item) =>
         item && item.name === searchId && (!level || level === item.level),
     );
+    console.warn(slot);
     if (slot !== -1) {
       return bank_retrieve(bankPack, slot).then(updateBank);
     }
