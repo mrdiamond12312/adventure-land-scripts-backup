@@ -13,8 +13,10 @@ const IGNORE_RARE_GOLD_THRESHOLD = 40e8;
 
 const KEEP_THRESHOLD = {
   // Event specific
-  lmace: 7,
-  horsecapeg: 7,
+  // lmace: 7,
+  // horsecapeg: 7,
+  bataxe: 7,
+  ecape: 5,
 
   // Every character needs
   helmet: 3,
@@ -197,7 +199,7 @@ function retrievedBankItemToUpgrade() {
   if (!desiredItemId) return;
 
   RETRIEVE_HISTORY.push(desiredItemId);
-  if (RETRIEVE_HISTORY.length >= Object.keys(ITEMS_HIGHEST_LEVEL).length / 2) {
+  if (RETRIEVE_HISTORY.length >= Object.keys(ITEMS_HIGHEST_LEVEL).length / 5) {
     RETRIEVE_HISTORY.shift();
   }
 

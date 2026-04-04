@@ -475,9 +475,11 @@ const SALE_ABLE = [
   "hboots",
   "sword",
   "spear",
+  "cape",
   // Easter's loots
   // "eears",
-  // "eslippers",
+  "eslippers",
+  "epyjamas",
 
   //Christmas loots
   // "xmashat",

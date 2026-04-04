@@ -134,6 +134,7 @@ async function exchangeSomething() {
     { name: "candypop", quantity: 10 },
     { name: "basketofeggs", quantity: 1 },
     { name: "seashell", quantity: 20, npc: "fisherman" },
+    { name: "leather", quantity: 40, npc: "leathermerchant" },
   ];
   let slot = undefined;
   for (const item of itemName) {
@@ -523,7 +524,7 @@ setInterval(async function () {
       craft("elixirvit1", 10, { map: "main", x: -2, y: 295 }),
       craft("elixirvit2", 10, { map: "main", x: -2, y: 295 }),
       // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
-      craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
+      // craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
       !isSortingInventory &&
         Promise.all(
           Array.from({ length: 42 }, (_, i) => i)
@@ -574,6 +575,10 @@ setInterval(function () {
   use_skill("mluck", character);
 }, 300000);
 
+setInterval(() => {
+  if (character.moving) parent.socket.emit("emotion", { name: "drop_egg" });
+}, 2000);
+
 function on_party_invite(name) {
   if (name === partyMems[0]) accept_party_invite(name);
 } // called by the inviter's name
@@ -597,7 +602,7 @@ const ITEM_NEEDED = [
   "carrot",
   "brownenvelope",
   "harbringer",
-  "throwingstars",
+  // "throwingstars",
   "angelwings",
   "smoke",
 ];
