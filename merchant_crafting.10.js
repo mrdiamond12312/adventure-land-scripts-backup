@@ -181,7 +181,7 @@ async function retrieveBankItem(searchId, level = 0) {
   // Find which pack (and floor) holds this item
   let targetPack, targetSlot;
   for (const [pack, items] of Object.entries(BANK_CACHE ?? {})) {
-    if (IGNORE_BANK_SLOTS.includes(pack)) continue;
+    if (pack === "gold") continue;
     const slot = items.findIndex(
       (item) => item?.name === searchId && (!level || level === item.level),
     );
