@@ -140,12 +140,12 @@ async function goToBankFloor(floor, forced = false) {
  * @param {string} itemId
  * @returns {Array<{ name: string, level: number, slot: number, pack: string, floor: string }>}
  */
-function getItemBankSlots(itemId) {
+function getItemBankSlots(itemId, forced = false) {
   if (!BANK_CACHE) return [];
 
   const result = [];
   for (const id in BANK_CACHE) {
-    if (IGNORE_BANK_SLOTS.includes(id)) continue;
+    if (IGNORE_BANK_SLOTS.includes(id) && !forced) continue;
     BANK_CACHE[id].forEach((item, index) => {
       if (item?.name === itemId)
         result.push({
@@ -286,7 +286,7 @@ async function ensureScroll(scrollType, itemGrade) {
   if (
     !character.c.fishing &&
     !character.c.mining &&
-    getItemBankSlots(scrollType).length > 0
+    getItemBankSlots(scrollType, true).length > 0
   ) {
     await retrieveBankItem(scrollType);
   }
@@ -464,7 +464,7 @@ async function retrievedBankItemToUpgrade() {
     RETRIEVE_HISTORY.shift();
   }
 
-  let desiredItems = getItemBankSlots(desiredItemId);
+  let desiredItems = getItemBankSlots(desiredItemId, true);
   const keep = getKeepThreshold(desiredItemId);
   desiredItems = desiredItems.slice(0, desiredItems.length - keep);
 

@@ -93,7 +93,7 @@ async function holidayExchange() {
   const exchangableItem = holidayItems.find((item) => {
     const itemName = item.name;
     const slot = locate_item(itemName);
-    if (slot === -1 && getItemBankSlots(itemName).length) {
+    if (slot === -1 && getItemBankSlots(itemName, true).length) {
       retrieveBankItem(itemName);
     }
 
@@ -315,7 +315,7 @@ async function goMining() {
     return;
 
   const pickaxeItemId = "pickaxe";
-  const availablePickaxesInBank = getItemBankSlots(pickaxeItemId);
+  const availablePickaxesInBank = getItemBankSlots(pickaxeItemId, true);
 
   if (
     availablePickaxesInBank.length > 0 &&
@@ -406,7 +406,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   const isEnoughIngredients = G.craft[item].items.every(([quantity, name]) => {
     quantity = quantity * craftQuantity;
     const slots = character.items.filter((item) => item && item.name === name);
-    const bankSlots = getItemBankSlots(name).filter((item) => !item.level);
+    const bankSlots = getItemBankSlots(name, true).filter((item) => !item.level);
     console.warn(bankSlots);
 
     const totalQuantityOfSlotItem = slots.reduce(
@@ -505,7 +505,7 @@ setInterval(async function () {
   await sortInv();
 
   const computerSlot = locate_item("computer");
-  if (computerSlot === -1 && getItemBankSlots("computer").length) {
+  if (computerSlot === -1 && getItemBankSlots("computer", true).length) {
     retrieveBankItem("computer");
   }
 

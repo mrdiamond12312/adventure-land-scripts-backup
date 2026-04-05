@@ -61,7 +61,7 @@ character.on("cm", async function ({ name, message }) {
         if (locate_item(elixirToDeliver) === -1) {
           const merchantThatSellNeededElixir =
             findVendorMerchantOf(elixirToDeliver);
-          if (getItemBankSlots(elixirToDeliver).length) {
+          if (getItemBankSlots(elixirToDeliver, true).length) {
             await retrieveBankItem(message.elixir);
           } else if (merchantThatSellNeededElixir) {
             if (!haveAComputer())
