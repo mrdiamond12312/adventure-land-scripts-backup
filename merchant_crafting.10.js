@@ -79,6 +79,23 @@ function getPacksOnFloor(floor) {
   return packs;
 }
 
+function getItemNamesOnCurrentFloor() {
+  const names = new Set();
+  const packs = getPacksOnFloor(character.map);
+  const bank = BANK_CACHE ?? character.bank ?? {};
+
+  for (const pack of packs) {
+    const items = bank[pack];
+    if (!items) continue;
+
+    for (const item of items) {
+      if (item?.name) names.add(item.name);
+    }
+  }
+
+  return names;
+}
+
 /**
  * Returns which floor a given bank pack lives on, or undefined if unknown.
  * @param {string} pack - e.g. "items0"
@@ -608,6 +625,32 @@ async function bankLoop() {
     return setTimeout(bankLoop, 5_000);
   }
 
+  async function storeMatchingItemsOnFloor(toStoreItemSet) {
+    const floorItems = getItemNamesOnCurrentFloor();
+
+    if (!floorItems.size) return;
+
+    // collect matching inventory indices
+    const indices = [];
+
+    for (let i = 0; i < character.items.length; i++) {
+      const item = character.items[i];
+      if (!item) continue;
+      if (!toStoreItemSet.has(item.name)) continue;
+      if (floorItems.has(item.name)) {
+        indices.push(i);
+      }
+    }
+
+    const promises = indices.map((index) =>
+      bank_store(index).catch((e) => {
+        console.warn(`Failed storing index ${index} on ${character.map}`, e);
+      }),
+    );
+
+    return withTimeout(Promise.allSettled(promises), 1000);
+  }
+
   try {
     onDuty = true;
 
@@ -643,9 +686,28 @@ async function bankLoop() {
         );
       });
 
-    // Store each item, navigating floors as needed
-    for (const { index } of toStore) {
-      await storeToBankFloor(index);
+    const toStoreItemSet = new Set(toStore.map(({ item }) => item.name));
+
+    // Group items by floor so we only travel to each floor once, and store matching items in bulk
+    const floors = Object.keys(BANK_FLOORS);
+    for (const floor of floors) {
+      await goToBankFloor(floor);
+      storeMatchingItemsOnFloor(toStoreItemSet);
+    }
+
+    // Backward pass (leftovers get another chance)
+    for (const floor of [...floors].reverse()) {
+      await goToBankFloor(floor);
+      for (let i = 0; i < character.items.length; i++) {
+        const item = character.items[i];
+        if (!item) continue;
+
+        if (toStoreItemSet.has(item.name)) {
+          bank_store(i).catch((e) => {
+            console.warn(`Failed storing index ${i} on ${character.map}`, e);
+          });
+        }
+      }
     }
 
     retrieveMaxItemsLevel();
