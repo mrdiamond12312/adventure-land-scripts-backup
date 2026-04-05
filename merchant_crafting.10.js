@@ -145,7 +145,7 @@ function getItemBankSlots(itemId, forced = false) {
 
   const result = [];
   for (const id in BANK_CACHE) {
-    if (!Array.isArray(BANK_CACHE[id])) continue;
+    if (id === "gold") continue;
     if (IGNORE_BANK_SLOTS.includes(id) && !forced) continue;
     BANK_CACHE[id].forEach((item, index) => {
       if (item?.name === itemId)
