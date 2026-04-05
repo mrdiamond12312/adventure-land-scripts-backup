@@ -486,7 +486,7 @@ async function upgradeInv() {
 async function bankLoop() {
   let delay = 120000;
   try {
-    if (onDuty || shouldGoChilling()) {
+    if (onDuty) {
       delay = 5000;
       return;
     }
