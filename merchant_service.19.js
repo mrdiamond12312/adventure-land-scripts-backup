@@ -3,12 +3,6 @@ character.on("cm", async function ({ name, message }) {
     return;
   }
 
-  switch (message) {
-    case "inv_ok":
-      onDuty = false;
-      break;
-  }
-
   if (!onDuty) {
     onDuty = true;
   } else return;
@@ -18,16 +12,14 @@ character.on("cm", async function ({ name, message }) {
 
     switch (message.msg) {
       case "inv_full":
-        log(`Go collecting ${name} compoundables at ${message.map}`);
-        await advanceSmartMove({
-          ...message,
-        });
+        console.warn(`Go collecting ${name} compoundables at ${message.map}`);
+        await advanceSmartMove(message);
         send_cm(name, "inv_full_merchant_near");
         await sleep(5000);
         break;
 
       case "buy_mana":
-        log(`Buying some mana potions for ${name}`);
+        console.warn(`Buying some mana potions for ${name}`);
         if (isInvFull()) {
           if (!smart.moving) await smart_move(bankPosition);
           if (character.map === "bank") bank_store(0);
@@ -36,16 +28,14 @@ character.on("cm", async function ({ name, message }) {
           await advanceSmartMove({ map: "main", x: 56, y: -122 });
           await buy("mpot1", 9899);
         }
-        await advanceSmartMove({
-          ...message,
-        });
+        await advanceSmartMove(message);
         await send_item(name, locate_item("mpot1"), 10000);
         send_cm(name, "buy_mana_merchant_near");
         await sleep(5000);
         break;
 
       case "buy_hp":
-        log(`Buying some health potions for ${name}`);
+        console.warn(`Buying some health potions for ${name}`);
         if (isInvFull()) {
           if (!smart.moving) await smart_move(bankPosition);
           if (character.map === "bank") bank_store(0);
@@ -54,17 +44,15 @@ character.on("cm", async function ({ name, message }) {
           await advanceSmartMove({ map: "main", x: 56, y: -122 });
           await buy("hpot1", 9899);
         }
-        await advanceSmartMove({
-          ...message,
-        });
+        await advanceSmartMove(message);
         await send_item(name, locate_item("hpot1"), 10000);
         send_cm(name, "buy_hp_merchant_near");
         await sleep(5000);
         break;
 
       case "buff_mluck":
-        await advanceSmartMove({
-          ...message,
+        await advanceSmartMove(message, {
+          useMagiport: false,
         });
         if (!is_on_cooldown("mluck") && character.mp > 20) {
           use_skill("mluck", get_entity(name));
@@ -103,7 +91,7 @@ character.on("cm", async function ({ name, message }) {
 
       case "xptome":
         if (!partyMems.includes(name)) break;
-        log(`Buying Tome of Protection for ${name}`);
+        console.warn(`Buying Tome of Protection for ${name}`);
 
         if (locate_item("xptome") === -1) {
           await retrieveBankItem("xptome");
@@ -118,14 +106,12 @@ character.on("cm", async function ({ name, message }) {
           break;
         }
 
-        await advanceSmartMove({
-          ...message,
-        });
+        await advanceSmartMove(message);
         await send_item(name, locate_item("xptome"), 1);
         break;
 
       default:
-        log(`Unidentified '${message.msg}'`);
+        console.warn(`Unidentified '${message.msg}'`);
     }
   } finally {
     onDuty = false;
