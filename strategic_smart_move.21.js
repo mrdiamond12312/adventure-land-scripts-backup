@@ -157,6 +157,22 @@ class StrategicSmartMove {
   }
 
   /**
+   * Helper to find the door leading to a specific map from the current map
+   * @param {*} map destination map id
+   * @param {*} fromMap door search source map, defaults to character's current map
+   * @returns a door object with `map`, `x`, and `y` of the door leading to the destination map, or undefined if no such door exists
+   */
+  _findDoorTo(map, fromMap = character.map) {
+    const doors = G.maps[fromMap].doors || [];
+    const door = doors.find((d) => d[4] === map);
+    return {
+      map: door[4],
+      x: door[0],
+      y: door[1],
+    };
+  }
+
+  /**
    * Now using alpathfinder's isWalkable to check if the coordinate is standable
    */
   isStandablePoint(position) {
@@ -304,16 +320,48 @@ class StrategicSmartMove {
     });
   }
 
+  // async transport(map, spawn) {
+  //   parent.socket.emit("transport", { to: map, s: spawn });
+
+  //   try {
+  //     await parent.push_deferred("transport");
+  //   } catch (e) {
+  //     if (e?.response === "transport_cant_reach") {
+  //       const door = (G.maps[character.map].doors || []).find(
+  //         (d) => d[4] === map && d[5] === spawn,
+  //       );
+  //       if (door) {
+  //         await move(door[0], door[1]);
+  //         await this.transport(map, spawn);
+  //       }
+  //       return;
+  //     }
+  //   }
+
+  //   await this.waitForNewMap().catch(() =>
+  //     console.warn("Transport timeout! Current map:", character.map),
+  //   );
+  // }
+
   async transport(map, spawn) {
-    const waitPromise = this.waitForNewMap();
     parent.socket.emit("transport", { to: map, s: spawn });
-    parent.push_deferred("transport");
 
     try {
-      await waitPromise;
-    } catch (error) {
-      console.warn("Transport timeout! Current map:", character.map);
+      await parent.push_deferred("transport");
+    } catch (e) {
+      if (e?.response === "transport_cant_reach") {
+        const door = this._findDoorTo(map);
+        if (door) {
+          await smart_move(door.x, door.y);
+          await this.transport(map, spawn);
+        }
+        return;
+      }
     }
+
+    await this.waitForNewMap().catch(() =>
+      console.warn("Transport timeout! Current map:", character.map),
+    );
   }
 
   /**
