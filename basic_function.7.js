@@ -376,6 +376,7 @@ const STORE_ABLE = [
   "hotchocolate",
   "gum",
   "essenceofgreed",
+  "mbones",
   "elixirint0",
   "elixirdex0",
   "cscroll2",
@@ -435,7 +436,9 @@ const STORE_ABLE = [
   "mysterybox",
   "weaponbox",
   "armorbox",
+
   "fury",
+  "snring",
 ];
 
 const SALE_ABLE = [
