@@ -458,6 +458,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   }
 
   if (fromBank.length && isEnoughIngredients) {
+    console.warn(fromBank);
     for (const item of fromBank) {
       await retrieveBankItem(item.name, item.level);
     }

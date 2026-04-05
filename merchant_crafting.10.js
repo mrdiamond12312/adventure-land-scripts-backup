@@ -111,10 +111,13 @@ function getFloorOfPack(pack) {
  * @param {string} floor - map id of the target floor
  * @returns {Promise<boolean>} false if aborted
  */
-async function goToBankFloor(floor) {
-  if (character.map === floor) return true;
+async function goToBankFloor(floor, forced = false) {
+  if (character.map === floor) {
+    updateBank();
+    return true;
+  }
 
-  if (smart.moving || isAdvanceSmartMoving) {
+  if ((smart.moving || isAdvanceSmartMoving) && !forced) {
     console.warn(`Prevent moving to ${floor} while smartMoving. Aborting.`);
     return false;
   }
@@ -252,7 +255,7 @@ async function storeMatchingItemsOnFloor(toStoreItemSet) {
     }),
   );
 
-  return withTimeout(Promise.allSettled(promises), 1000);
+  return withTimeout(Promise.allSettled(promises), 1000).then(updateBank);
 }
 
 // ---------------------------------------------------------------------------
@@ -669,23 +672,27 @@ async function bankStoreRoutine() {
   // Group items by floor so we only travel to each floor once, and store matching items in bulk
   const floors = Object.keys(BANK_FLOORS);
   for (const floor of floors) {
-    await goToBankFloor(floor);
-    storeMatchingItemsOnFloor(toStoreItemSet);
+    await goToBankFloor(floor, true);
+    await storeMatchingItemsOnFloor(toStoreItemSet);
   }
 
   // Backward pass (leftovers get another chance)
   for (const floor of [...floors].reverse()) {
-    await goToBankFloor(floor);
+    await goToBankFloor(floor, true);
+    const promises = [];
     for (let i = 0; i < character.items.length; i++) {
       const item = character.items[i];
       if (!item) continue;
 
       if (toStoreItemSet.has(item.name)) {
-        bank_store(i).catch((e) => {
-          console.warn(`Failed storing index ${i} on ${character.map}`, e);
-        });
+        promises.push(
+          bank_store(i).catch((e) => {
+            console.warn(`Failed storing index ${i} on ${character.map}`, e);
+          }),
+        );
       }
     }
+    await withTimeout(Promise.allSettled(promises), 2000);
   }
 }
 
@@ -699,13 +706,13 @@ async function bankLoop() {
   try {
     onDuty = true;
 
-    // Visit all floors to populate BANK_CACHE fully
-    for (const floor of Object.keys(BANK_FLOORS)) {
-      await goToBankFloor(floor);
-    }
-
     // First run: build item level map then fetch items
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
+      // Visit all floors to populate BANK_CACHE fully
+      for (const floor of Object.keys(BANK_FLOORS)) {
+        await goToBankFloor(floor);
+      }
+
       retrieveMaxItemsLevel();
       await retrievedBankItemToUpgrade();
       delay = 60_000;
