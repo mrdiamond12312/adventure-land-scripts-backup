@@ -434,13 +434,16 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
       }
     }
 
-    if (numberOfItemMissing > 0 && totalQuantityOfBankItem) {
-      for (let count = 0; count < numberOfItemMissing; count++) {
-        fromBank.push(name);
+    if (numberOfItemMissing > 0 && totalQuantityOfBankItem > 0) {
+      for (const bankItem of bankSlots) {
+        if (numberOfItemMissing <= 0) break;
 
-        if (bankSlots[count] && bankSlots[count].q) {
-          numberOfItemMissing -= bankSlots[count].q;
-        }
+        const available = bankItem.q ?? 1;
+        const takeAmount = Math.min(available, numberOfItemMissing);
+
+        fromBank.push({ name, level: bankItem.level });
+
+        numberOfItemMissing -= takeAmount;
       }
     }
 
@@ -456,7 +459,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 
   if (fromBank.length && isEnoughIngredients) {
     for (const item of fromBank) {
-      await retrieveBankItem(item);
+      await retrieveBankItem(item.name, item.level);
     }
   }
 
