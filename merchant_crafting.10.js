@@ -710,7 +710,7 @@ async function bankLoop() {
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
       // Visit all floors to populate BANK_CACHE fully
       for (const floor of Object.keys(BANK_FLOORS)) {
-        await goToBankFloor(floor);
+        await goToBankFloor(floor, true);
       }
 
       retrieveMaxItemsLevel();
