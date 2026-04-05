@@ -336,24 +336,23 @@ class StrategicSmartMove {
     const waitPromise = this.waitForNewMap();
     parent.socket.emit("transport", { to: map, s: spawn });
 
-    try {
-      await parent.push_deferred("transport");
-    } catch (e) {
+    const catchPromise = parent.push_deferred("transport").catch(async (e) => {
       if (e?.response === "transport_cant_reach") {
         const door = this._findDoorTo(map);
         if (door) {
-          await smart_move(door.x, door.y);
+          await move(door.x, door.y);
           await this.transport(map, spawn);
         }
-        return;
       }
-    }
+    });
 
     try {
       await waitPromise;
     } catch (error) {
       console.warn("Transport timeout! Current map:", character.map);
     }
+
+    await catchPromise;
   }
 
   /**
