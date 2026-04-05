@@ -11,7 +11,7 @@ var BANK_CACHE = undefined;
 /** Spawn positions for each accessible bank floor */
 const BANK_FLOORS = {
   bank: { map: "bank", x: 0, y: -280 },
-  bank_u: { map: "bank_u", x: 0, y: -280 },
+  bank_u: { map: "bank_u", x: -210, y: -130 },
 };
 
 /**
