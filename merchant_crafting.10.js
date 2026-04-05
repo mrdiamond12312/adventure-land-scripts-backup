@@ -185,6 +185,9 @@ async function retrieveBankItem(searchId, level = 0) {
     const slot = items.findIndex(
       (item) => item?.name === searchId && (!level || level === item.level),
     );
+    console.warn(
+      `Checked ${pack} for ${searchId} (level ${level}), found at slot ${slot}`,
+    );
     if (slot !== -1) {
       targetPack = pack;
       targetSlot = slot;
