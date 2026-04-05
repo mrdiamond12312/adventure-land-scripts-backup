@@ -407,7 +407,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     quantity = quantity * craftQuantity;
     const slots = character.items.filter((item) => item && item.name === name);
     const bankSlots = getItemBankSlots(name, true).filter((item) => !item.level);
-    console.warn(bankSlots);
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
@@ -418,8 +417,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
       (accumulator, current) => accumulator + (current.q ?? 1),
       0,
     );
-    console.warn(`Total ${name} in inventory:`, totalQuantityOfSlotItem);
-    console.warn(`Total ${name} in bank:`, totalQuantityOfBankItem);
 
     let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
 
@@ -442,7 +439,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
         if (numberOfItemMissing <= 0) break;
 
         const available = bankItem.q ?? 1;
-        console.warn(`Available ${name} in bank:`, available);
         const takeAmount = Math.min(available, numberOfItemMissing);
 
         fromBank.push({ name, level: bankItem.level });
@@ -462,7 +458,6 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   }
 
   if (fromBank.length && isEnoughIngredients) {
-    console.warn(fromBank);
     for (const item of fromBank) {
       await retrieveBankItem(item.name, item.level);
     }
