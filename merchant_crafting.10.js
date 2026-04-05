@@ -202,7 +202,7 @@ async function storeToBankFloor(inventoryIndex) {
   for (const floor of Object.keys(BANK_FLOORS)) {
     if (!(await goToBankFloor(floor))) continue;
     try {
-      await bank_store(inventoryIndex);
+      bank_store(inventoryIndex);
       return;
     } catch (e) {
       console.warn(`bank_store failed on ${floor}, trying next floor...`);
@@ -346,9 +346,11 @@ function retrieveMaxItemsLevel() {
   };
 
   character.items.forEach(processItem);
-  for (const slot in character.bank ?? BANK_CACHE) {
+  const bank = character.bank ?? BANK_CACHE ?? {};
+
+  for (const slot in bank) {
     if (IGNORE_BANK_SLOTS.includes(slot)) continue;
-    character.bank[slot].forEach(processItem);
+    bank[slot].forEach(processItem);
   }
 }
 
