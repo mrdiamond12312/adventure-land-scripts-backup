@@ -709,9 +709,7 @@ async function bankLoop() {
     // First run: build item level map then fetch items
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
       // Visit all floors to populate BANK_CACHE fully
-      for (const floor of Object.keys(BANK_FLOORS)) {
-        await goToBankFloor(floor, true);
-      }
+      await smart_move(BANK_FLOORS.bank);
 
       retrieveMaxItemsLevel();
       await retrievedBankItemToUpgrade();
