@@ -229,16 +229,14 @@ async function moveHome() {
     });
 
     if (locate_item("stand0") === -1 && !haveAComputer()) {
-      retrieveBankItem("stand0");
+      await retrieveBankItem("stand0");
     }
   } catch (e) {
     if (e?.reason === "failed" && e.failed) {
       await town();
     }
-
     console.warn("movehome error:", e);
   } finally {
-    onDuty = false;
   }
 }
 
@@ -406,7 +404,9 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   const isEnoughIngredients = G.craft[item].items.every(([quantity, name]) => {
     quantity = quantity * craftQuantity;
     const slots = character.items.filter((item) => item && item.name === name);
-    const bankSlots = getItemBankSlots(name, true).filter((item) => !item.level);
+    const bankSlots = getItemBankSlots(name, true).filter(
+      (item) => !item.level,
+    );
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),

@@ -20,9 +20,6 @@ character.on("cm", async function ({ name, message }) {
 
       case "buy_mana":
         console.warn(`Buying some mana potions for ${name}`);
-        if (isInvFull()) {
-          await bankStoreRoutine();
-        }
         if (locate_item("mpot1") === -1) {
           await advanceSmartMove({ map: "main", x: 56, y: -122 });
           await buy("mpot1", 9899);
@@ -53,7 +50,6 @@ character.on("cm", async function ({ name, message }) {
         if (!is_on_cooldown("mluck") && character.mp > 20) {
           use_skill("mluck", get_entity(name));
         }
-        onDuty = false;
         break;
 
       case "elixir": {
