@@ -554,18 +554,7 @@ setInterval(async function () {
 
   if (isInvFull() && !isAdvanceSmartMoving && !smart.moving) {
     onDuty = true;
-    if (character.map !== "bank") await advanceSmartMove(bankPosition);
-    if (character.map === "bank") {
-      try {
-        character.items
-          .filter((item) => item && !item.l && !IGNORE.includes(item.name))
-          .map((item, index) => {
-            bank_store(index);
-          });
-      } catch (e) {
-        console.error(e);
-      }
-    }
+    await bankStoreRoutine();
     onDuty = false;
   }
 }, 750);

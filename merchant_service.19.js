@@ -21,8 +21,7 @@ character.on("cm", async function ({ name, message }) {
       case "buy_mana":
         console.warn(`Buying some mana potions for ${name}`);
         if (isInvFull()) {
-          if (!smart.moving) await smart_move(bankPosition);
-          if (character.map === "bank") bank_store(0);
+          await bankStoreRoutine();
         }
         if (locate_item("mpot1") === -1) {
           await advanceSmartMove({ map: "main", x: 56, y: -122 });
@@ -37,8 +36,7 @@ character.on("cm", async function ({ name, message }) {
       case "buy_hp":
         console.warn(`Buying some health potions for ${name}`);
         if (isInvFull()) {
-          if (!smart.moving) await smart_move(bankPosition);
-          if (character.map === "bank") bank_store(0);
+          await bankStoreRoutine();
         }
         if (locate_item("hpot1") === -1) {
           await advanceSmartMove({ map: "main", x: 56, y: -122 });

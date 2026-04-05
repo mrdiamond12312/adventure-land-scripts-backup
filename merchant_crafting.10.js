@@ -229,6 +229,32 @@ async function storeToBankFloor(inventoryIndex) {
   console.warn(`Could not store item at index ${inventoryIndex} on any floor.`);
 }
 
+async function storeMatchingItemsOnFloor(toStoreItemSet) {
+  const floorItems = getItemNamesOnCurrentFloor();
+
+  if (!floorItems.size) return;
+
+  // collect matching inventory indices
+  const indices = [];
+
+  for (let i = 0; i < character.items.length; i++) {
+    const item = character.items[i];
+    if (!item) continue;
+    if (!toStoreItemSet.has(item.name)) continue;
+    if (floorItems.has(item.name)) {
+      indices.push(i);
+    }
+  }
+
+  const promises = indices.map((index) =>
+    bank_store(index).catch((e) => {
+      console.warn(`Failed storing index ${index} on ${character.map}`, e);
+    }),
+  );
+
+  return withTimeout(Promise.allSettled(promises), 1000);
+}
+
 // ---------------------------------------------------------------------------
 // Upgrade/Compound Helpers
 // ---------------------------------------------------------------------------
@@ -618,37 +644,56 @@ async function upgradeInv() {
  * then retrieves items to upgrade/compound.
  * Skips if onDuty. Reschedules itself on completion or error.
  */
+async function bankStoreRoutine() {
+  // Determine which items to store
+  const toStore = character.items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item }) => {
+      if (!item) return false;
+      const isRare = item_grade(item) >= 2;
+      const isHighLevel =
+        item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
+      const isStoreable = STORE_ABLE.includes(item.name);
+      const isEquipable = item_info(item).compound || item_info(item).upgrade;
+      const shouldIgnore = IGNORE.includes(item.name);
+
+      return (
+        (!shouldIgnore && (isRare || (isEquipable && isHighLevel))) ||
+        isStoreable ||
+        RETRIEVE_HISTORY.includes(item.name)
+      );
+    });
+
+  const toStoreItemSet = new Set(toStore.map(({ item }) => item.name));
+
+  // Group items by floor so we only travel to each floor once, and store matching items in bulk
+  const floors = Object.keys(BANK_FLOORS);
+  for (const floor of floors) {
+    await goToBankFloor(floor);
+    storeMatchingItemsOnFloor(toStoreItemSet);
+  }
+
+  // Backward pass (leftovers get another chance)
+  for (const floor of [...floors].reverse()) {
+    await goToBankFloor(floor);
+    for (let i = 0; i < character.items.length; i++) {
+      const item = character.items[i];
+      if (!item) continue;
+
+      if (toStoreItemSet.has(item.name)) {
+        bank_store(i).catch((e) => {
+          console.warn(`Failed storing index ${i} on ${character.map}`, e);
+        });
+      }
+    }
+  }
+}
+
 async function bankLoop() {
   let delay = 120_000;
 
   if (onDuty) {
     return setTimeout(bankLoop, 5_000);
-  }
-
-  async function storeMatchingItemsOnFloor(toStoreItemSet) {
-    const floorItems = getItemNamesOnCurrentFloor();
-
-    if (!floorItems.size) return;
-
-    // collect matching inventory indices
-    const indices = [];
-
-    for (let i = 0; i < character.items.length; i++) {
-      const item = character.items[i];
-      if (!item) continue;
-      if (!toStoreItemSet.has(item.name)) continue;
-      if (floorItems.has(item.name)) {
-        indices.push(i);
-      }
-    }
-
-    const promises = indices.map((index) =>
-      bank_store(index).catch((e) => {
-        console.warn(`Failed storing index ${index} on ${character.map}`, e);
-      }),
-    );
-
-    return withTimeout(Promise.allSettled(promises), 1000);
   }
 
   try {
@@ -667,48 +712,7 @@ async function bankLoop() {
       return;
     }
 
-    // Determine which items to store
-    const toStore = character.items
-      .map((item, index) => ({ item, index }))
-      .filter(({ item }) => {
-        if (!item) return false;
-        const isRare = item_grade(item) >= 2;
-        const isHighLevel =
-          item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
-        const isStoreable = STORE_ABLE.includes(item.name);
-        const isEquipable = item_info(item).compound || item_info(item).upgrade;
-        const shouldIgnore = IGNORE.includes(item.name);
-
-        return (
-          (!shouldIgnore && (isRare || (isEquipable && isHighLevel))) ||
-          isStoreable ||
-          RETRIEVE_HISTORY.includes(item.name)
-        );
-      });
-
-    const toStoreItemSet = new Set(toStore.map(({ item }) => item.name));
-
-    // Group items by floor so we only travel to each floor once, and store matching items in bulk
-    const floors = Object.keys(BANK_FLOORS);
-    for (const floor of floors) {
-      await goToBankFloor(floor);
-      storeMatchingItemsOnFloor(toStoreItemSet);
-    }
-
-    // Backward pass (leftovers get another chance)
-    for (const floor of [...floors].reverse()) {
-      await goToBankFloor(floor);
-      for (let i = 0; i < character.items.length; i++) {
-        const item = character.items[i];
-        if (!item) continue;
-
-        if (toStoreItemSet.has(item.name)) {
-          bank_store(i).catch((e) => {
-            console.warn(`Failed storing index ${i} on ${character.map}`, e);
-          });
-        }
-      }
-    }
+    await bankStoreRoutine();
 
     retrieveMaxItemsLevel();
     await retrievedBankItemToUpgrade();
