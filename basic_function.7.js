@@ -2129,7 +2129,7 @@ async function changeToDailyEventTargets() {
   }
 
   if (parent.S.wabbit?.live) {
-    changeToNormalStrategies();
+    changeToPullStrategies();
     if (character.range < 100) rangeRate = 0.1;
     else rangeRate = 0.4;
     const wabbitInstance = get_nearest_monster({ type: "wabbit" });
