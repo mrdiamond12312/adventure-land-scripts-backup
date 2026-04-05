@@ -321,29 +321,19 @@ class StrategicSmartMove {
   }
 
   // async transport(map, spawn) {
+  //   const waitPromise = this.waitForNewMap();
   //   parent.socket.emit("transport", { to: map, s: spawn });
+  //   parent.push_deferred("transport");
 
   //   try {
-  //     await parent.push_deferred("transport");
-  //   } catch (e) {
-  //     if (e?.response === "transport_cant_reach") {
-  //       const door = (G.maps[character.map].doors || []).find(
-  //         (d) => d[4] === map && d[5] === spawn,
-  //       );
-  //       if (door) {
-  //         await move(door[0], door[1]);
-  //         await this.transport(map, spawn);
-  //       }
-  //       return;
-  //     }
+  //     await waitPromise;
+  //   } catch (error) {
+  //     console.warn("Transport timeout! Current map:", character.map);
   //   }
-
-  //   await this.waitForNewMap().catch(() =>
-  //     console.warn("Transport timeout! Current map:", character.map),
-  //   );
   // }
 
   async transport(map, spawn) {
+    const waitPromise = this.waitForNewMap();
     parent.socket.emit("transport", { to: map, s: spawn });
 
     try {
@@ -359,9 +349,11 @@ class StrategicSmartMove {
       }
     }
 
-    await this.waitForNewMap().catch(() =>
-      console.warn("Transport timeout! Current map:", character.map),
-    );
+    try {
+      await waitPromise;
+    } catch (error) {
+      console.warn("Transport timeout! Current map:", character.map);
+    }
   }
 
   /**
