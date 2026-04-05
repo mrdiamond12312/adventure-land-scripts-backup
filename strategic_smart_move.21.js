@@ -651,10 +651,11 @@ class StrategicSmartMove {
             await sleep(250);
             await move(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
             segmentIndex = lastIndex + 1;
-            this.isDoingSomethingMagical = false;
           }
         } catch (e) {
-          console.log("Error while blinking:", e);
+          console.warn("Error while blinking:", e);
+        } finally {
+          this.isDoingSomethingMagical = false;
         }
 
         if (session !== this.smartMoveSession || !this.isSmartMoving) return;
