@@ -51,9 +51,7 @@ character.on("cm", async function ({ name, message }) {
         break;
 
       case "buff_mluck":
-        await advanceSmartMove(message, {
-          useMagiport: false,
-        });
+        await advanceSmartMove(message);
         if (!is_on_cooldown("mluck") && character.mp > 20) {
           use_skill("mluck", get_entity(name));
         }

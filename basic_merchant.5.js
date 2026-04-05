@@ -388,7 +388,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   // Check if craftable
   if (
     onDuty ||
-    isInvFull(Math.max(4, craftQuantity)) ||
+    isInvFull(4) ||
     character.c.mining ||
     character.c.fishing ||
     !craftQuantity
