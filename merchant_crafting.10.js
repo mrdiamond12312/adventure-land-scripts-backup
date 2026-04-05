@@ -174,19 +174,12 @@ function getItemBankSlots(itemId, forced = false) {
  * @returns {Promise<void>}
  */
 async function retrieveBankItem(searchId, level = 0) {
-  console.warn(
-    `Attempting to retrieve ${searchId} (level ${level}) from bank...`,
-  );
-
   // Find which pack (and floor) holds this item
   let targetPack, targetSlot;
   for (const [pack, items] of Object.entries(BANK_CACHE ?? {})) {
     if (pack === "gold") continue;
     const slot = items.findIndex(
       (item) => item?.name === searchId && (!level || level === item.level),
-    );
-    console.warn(
-      `Checked ${pack} for ${searchId} (level ${level}), found at slot ${slot}`,
     );
     if (slot !== -1) {
       targetPack = pack;
