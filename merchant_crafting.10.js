@@ -6,16 +6,23 @@ if (parent.caracAL) {
   load_code(7);
 }
 
-var BANK_CACHE = [];
-const bankPosition = { map: "bank", x: 0, y: -280 };
+var BANK_CACHE = undefined;
+
+/** Spawn positions for each accessible bank floor */
+const BANK_FLOORS = {
+  bank: { map: "bank", x: 0, y: -280 },
+  bank_u: { map: "bank_u", x: 0, y: -280 },
+};
+
+/**
+ * Slots to skip globally (gold, personal storage).
+ * items10 is reserved for personal items and is never touched.
+ */
 const IGNORE_BANK_SLOTS = ["gold", "items8", "items9", "items10", "items11"];
 const IGNORE_RARE_GOLD_THRESHOLD = 40e8;
 
 const KEEP_THRESHOLD = {
-  // event items
   bataxe: 7,
-
-  // by types
   ecape: 5,
   helmet: 3,
   pants: 3,
@@ -60,10 +67,58 @@ function findVendorMerchantOf(itemName) {
 }
 
 /**
- * Returns all bank slots containing the given item, sorted by level ascending.
+ * Returns all pack keys that belong to the given bank floor.
+ * @param {string} floor - e.g. "bank", "bank_u"
+ * @returns {string[]}
+ */
+function getPacksOnFloor(floor) {
+  const packs = [];
+  for (const key in bank_packs) {
+    if (bank_packs[key][0] === floor) packs.push(key);
+  }
+  return packs;
+}
+
+/**
+ * Returns which floor a given bank pack lives on, or undefined if unknown.
+ * @param {string} pack - e.g. "items0"
+ * @returns {string | undefined}
+ */
+function getFloorOfPack(pack) {
+  return bank_packs[pack]?.[0];
+}
+
+/**
+ * Navigates to the given bank floor if not already there.
+ * Aborts if already smart-moving.
+ * @param {string} floor - map id of the target floor
+ * @returns {Promise<boolean>} false if aborted
+ */
+async function goToBankFloor(floor) {
+  if (character.map === floor) return true;
+
+  if (smart.moving || isAdvanceSmartMoving) {
+    console.warn(`Prevent moving to ${floor} while smartMoving. Aborting.`);
+    return false;
+  }
+
+  const position = BANK_FLOORS[floor];
+  if (!position) {
+    console.warn(`No floor entry for ${floor}`);
+    return false;
+  }
+
+  await advanceSmartMove(position);
+  updateBank();
+  return true;
+}
+
+/**
+ * Returns all bank slots containing the given item across all floors,
+ * sorted by level ascending.
  * Filters out rare-grade items if gold is below threshold.
  * @param {string} itemId
- * @returns {Array<{ name: string, level: number, slot: number, pack: string }>}
+ * @returns {Array<{ name: string, level: number, slot: number, pack: string, floor: string }>}
  */
 function getItemBankSlots(itemId) {
   if (!BANK_CACHE) return [];
@@ -73,7 +128,12 @@ function getItemBankSlots(itemId) {
     if (IGNORE_BANK_SLOTS.includes(id)) continue;
     BANK_CACHE[id].forEach((item, index) => {
       if (item?.name === itemId)
-        result.push({ ...item, slot: index, pack: id });
+        result.push({
+          ...item,
+          slot: index,
+          pack: id,
+          floor: getFloorOfPack(id),
+        });
     });
   }
 
@@ -87,7 +147,7 @@ function getItemBankSlots(itemId) {
 
 /**
  * Retrieves an item from the bank by name and optional level.
- * Moves to the bank first if not already there.
+ * Automatically navigates to the correct floor where the item lives.
  * @param {string} searchId
  * @param {number} [level=0] - if 0, matches any level
  * @returns {Promise<void>}
@@ -97,28 +157,59 @@ async function retrieveBankItem(searchId, level = 0) {
     `Attempting to retrieve ${searchId} (level ${level}) from bank...`,
   );
 
-  if (character.map !== "bank") {
-    if (!smart.moving && !isAdvanceSmartMoving) {
-      await advanceSmartMove(bankPosition);
-      updateBank();
-    } else {
-      console.warn(
-        "Prevent moving to bank while smartMoving. Aborting retrieval.",
-      );
-      return;
-    }
-  }
-
-  for (const [bankPack, items] of Object.entries(character.bank).filter(
-    ([key]) => !IGNORE_BANK_SLOTS.includes(key),
-  )) {
+  // Find which pack (and floor) holds this item
+  let targetPack, targetSlot;
+  for (const [pack, items] of Object.entries(BANK_CACHE ?? {})) {
+    if (IGNORE_BANK_SLOTS.includes(pack)) continue;
     const slot = items.findIndex(
       (item) => item?.name === searchId && (!level || level === item.level),
     );
     if (slot !== -1) {
-      return bank_retrieve(bankPack, slot).then(updateBank);
+      targetPack = pack;
+      targetSlot = slot;
+      break;
     }
   }
+
+  if (targetPack === undefined) return;
+
+  const floor = getFloorOfPack(targetPack);
+  if (!(await goToBankFloor(floor))) return;
+
+  return bank_retrieve(targetPack, targetSlot).then(updateBank);
+}
+
+/**
+ * Stores an inventory item into the bank.
+ * Tries the current floor first, then falls back to other accessible floors.
+ * @param {number} inventoryIndex
+ * @returns {Promise<void>}
+ */
+async function storeToBankFloor(inventoryIndex) {
+  // Try storing on the current floor first if we're already in a bank
+  if (BANK_FLOORS[character.map]) {
+    try {
+      await bank_store(inventoryIndex);
+      return;
+    } catch (e) {
+      console.warn(
+        `bank_store failed on ${character.map}, trying other floors...`,
+      );
+    }
+  }
+
+  // Try each accessible floor
+  for (const floor of Object.keys(BANK_FLOORS)) {
+    if (!(await goToBankFloor(floor))) continue;
+    try {
+      await bank_store(inventoryIndex);
+      return;
+    } catch (e) {
+      console.warn(`bank_store failed on ${floor}, trying next floor...`);
+    }
+  }
+
+  console.warn(`Could not store item at index ${inventoryIndex} on any floor.`);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,9 +312,12 @@ function getOfferingSlot(isRareItem) {
 // Item Level Tracking
 // ---------------------------------------------------------------------------
 
-/** Scans inventory + bank to build ITEMS_HIGHEST_LEVEL map. Must be in bank. */
+/**
+ * Scans inventory + bank cache to build ITEMS_HIGHEST_LEVEL map.
+ * Call after visiting all bank floors so BANK_CACHE is fully populated.
+ */
 function retrieveMaxItemsLevel() {
-  if (character.map !== "bank") return;
+  if (!Object.keys(BANK_FLOORS).includes(character.map)) return;
 
   for (const key in ITEMS_HIGHEST_LEVEL) delete ITEMS_HIGHEST_LEVEL[key];
   updateBank();
@@ -292,13 +386,15 @@ function filterCompoundableSets(items, inventoryEmptySlots) {
 
 /**
  * Selects and retrieves the best batch of items from the bank to upgrade/compound.
+ * Visits each floor as needed. Keeps at least 4 inventory slots free for scrolls/offerings.
  * Respects KEEP_THRESHOLD and RETRIEVE_HISTORY to rotate selections.
  * @returns {Promise<void>}
  */
 async function retrievedBankItemToUpgrade() {
+  let inventoryEmptySlots = character.esize - 4; // reserve 4 slots for scrolls/offerings
+
   let desiredItemId;
   let maxItemCount = 0;
-  let inventoryEmptySlots = character.esize - 4;
 
   for (const id in ITEMS_HIGHEST_LEVEL) {
     const info = item_info({ name: id });
@@ -328,13 +424,21 @@ async function retrievedBankItemToUpgrade() {
     desiredItems = filterCompoundableSets(desiredItems, inventoryEmptySlots);
   }
 
-  const promises = [];
+  // Group items by floor so we only travel to each floor once
+  const byFloor = {};
   for (const itemSlot of desiredItems) {
     if (inventoryEmptySlots-- <= 0) break;
-    promises.push(bank_retrieve(itemSlot.pack, itemSlot.slot));
+    (byFloor[itemSlot.floor] = byFloor[itemSlot.floor] ?? []).push(itemSlot);
   }
 
-  return withTimeout(Promise.allSettled(promises), 2500);
+  for (const [floor, slots] of Object.entries(byFloor)) {
+    if (!(await goToBankFloor(floor))) continue;
+    await withTimeout(
+      Promise.allSettled(slots.map((s) => bank_retrieve(s.pack, s.slot))),
+      2500,
+    );
+    updateBank();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -480,9 +584,7 @@ async function upgradeInv() {
         }
 
         if (e.level >= (selectedHighestLevel?.level ?? 0) - 1) {
-          smart_move(bankPosition).then(() =>
-            bank_store(findMaxLevelItem(itemName)),
-          );
+          storeToBankFloor(findMaxLevelItem(itemName));
         }
       })
       .catch(() => {});
@@ -493,7 +595,8 @@ async function upgradeInv() {
 // ---------------------------------------------------------------------------
 
 /**
- * Main bank loop: moves to bank, stores items, retrieves items to upgrade.
+ * Main bank loop: visits all accessible floors, stores qualifying items,
+ * then retrieves items to upgrade/compound.
  * Skips if onDuty. Reschedules itself on completion or error.
  */
 async function bankLoop() {
@@ -506,20 +609,21 @@ async function bankLoop() {
   try {
     onDuty = true;
 
-    // First run: build item level map
+    // Visit all floors to populate BANK_CACHE fully
+    for (const floor of Object.keys(BANK_FLOORS)) {
+      await goToBankFloor(floor);
+    }
+
+    // First run: build item level map then fetch items
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-      await advanceSmartMove(bankPosition);
       retrieveMaxItemsLevel();
       await retrievedBankItemToUpgrade();
       delay = 60_000;
       return;
     }
 
-    await advanceSmartMove(bankPosition);
-    updateBank();
-
-    // Store items that qualify
-    const storePromises = character.items
+    // Determine which items to store
+    const toStore = character.items
       .map((item, index) => ({ item, index }))
       .filter(({ item }) => {
         if (!item) return false;
@@ -535,10 +639,12 @@ async function bankLoop() {
           isStoreable ||
           RETRIEVE_HISTORY.includes(item.name)
         );
-      })
-      .map(({ index }) => bank_store(index));
+      });
 
-    await withTimeout(Promise.allSettled(storePromises), 2500);
+    // Store each item, navigating floors as needed
+    for (const { index } of toStore) {
+      await storeToBankFloor(index);
+    }
 
     retrieveMaxItemsLevel();
     await retrievedBankItemToUpgrade();
