@@ -1730,7 +1730,7 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER;
       return [ROGUE, RANGER, MAGE];
     },
-    USIII: [MAGE, WARRIOR, PRIEST],
+    USIII: [MAGE, RANGER, PRIEST],
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
