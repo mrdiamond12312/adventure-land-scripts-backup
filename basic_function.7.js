@@ -338,7 +338,6 @@ var IGNORE = [
   // avoid upgrading for selling
   "cape",
   "carrotsword",
-  "wattire",
   ...BUYABLE,
 ];
 
