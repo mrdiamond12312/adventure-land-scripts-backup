@@ -93,7 +93,7 @@ async function fight(target) {
     const aggroing = potentialTargets.find(
       (mob) => mob.target === character.name,
     );
-    scareAwayMobs();
+    promisesToAwait.push(scareAwayMobs());
     if (aggroing) target = aggroing;
   }
 

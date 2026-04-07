@@ -454,7 +454,6 @@ const SALE_ABLE = [
   "snowball",
   "carrotsword",
   "shield",
-  // "wcap",
   // "wshoes",
   "wgloves",
   "wbreeches",
@@ -488,8 +487,8 @@ const SALE_ABLE = [
   "cape",
   // Easter's loots
   // "eears",
-  "eslippers",
-  "epyjamas",
+  // "eslippers",
+  // "epyjamas",
 
   //Christmas loots
   // "xmashat",
@@ -500,7 +499,6 @@ const SALE_ABLE = [
   // Sell and replace by crypt's loots
   "intearring",
   "strearring",
-  "wattire",
   // "dexring",
   // "intring",
   // "dexamulet",

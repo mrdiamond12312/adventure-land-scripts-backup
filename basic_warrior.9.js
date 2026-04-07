@@ -271,7 +271,7 @@ async function fight(target) {
     !is_on_cooldown("scare") && character.mp > 100 && character.cc < 100;
 
   if (character.fear || (isDangerouslyLow && isOverwhelmed && isReadyToScare)) {
-    scareAwayMobs();
+    promisesToAwait.push(scareAwayMobs());
   }
 
   // --- Kiting Rate Adjustment ---
