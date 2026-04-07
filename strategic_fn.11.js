@@ -883,13 +883,25 @@ function assignRoles() {
     return;
   }
 
-  if (partyMems.includes(WARRIOR) && partyMems.includes(HEALER)) {
+  if (partyMems.includes(WARRIOR) && partyMems.includes(PRIEST)) {
     const partyDmgTaken = avgPartyDmgTaken(partyMems);
     const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "physical");
 
     // If more than half of taken DMG is magical, set our HEALER to be TANKER
     const physicalDmgRatio = partyMagicalDmgTaken / partyDmgTaken;
-    TANKER = physicalDmgRatio <= 0.5 ? HEALER : WARRIOR;
+    TANKER = physicalDmgRatio <= 0.5 ? PRIEST : WARRIOR;
+    partyMems = rotateLeader(partyMems, TANKER);
+    return;
+  }
+
+  if (partyMems.includes(WARRIOR)) {
+    TANKER = WARRIOR;
+    partyMems = rotateLeader(partyMems, TANKER);
+    return;
+  }
+
+  if (partyMems.includes(PRIEST)) {
+    TANKER = PRIEST;
     partyMems = rotateLeader(partyMems, TANKER);
     return;
   }
