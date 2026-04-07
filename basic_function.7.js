@@ -1725,7 +1725,11 @@ const DYNAMIC_PARTY_PRESETS = {
     },
   },
   wabbit: {
-    USI: [MAGE, WARRIOR, ROGUE],
+    USI:  () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [ROGUE, RANGER, MAGE];
+    },
     USIII: [MAGE, WARRIOR, PRIEST],
     EUII: () => {
       RANGER = RANGER2;
