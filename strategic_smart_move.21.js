@@ -165,6 +165,7 @@ class StrategicSmartMove {
   _findDoorTo(map, fromMap = character.map) {
     const doors = G.maps[fromMap].doors || [];
     const door = doors.find((d) => d[4] === map);
+    if (!door) return undefined;
     return {
       map: door[4],
       x: door[0],
