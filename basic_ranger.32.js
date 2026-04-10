@@ -33,12 +33,13 @@ const tryMultiShot = async (skill, entityList) => {
     .catch((e) => attackErrorHandler(e));
 };
 
+const inRange = (entity) =>
+  distance(entity, character) < character.range + character.xrange * 0.5;
+
 async function fight(target) {
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
   const canMultiShot = !character.fear;
-  const inRange = (entity) => distance(entity, character) < nearRange;
-  const nearRange = character.range + character.xrange;
   const explosionRadius = character.explosion
     ? character.explosion / 3.6
     : BLAST_RADIUS;
@@ -149,11 +150,7 @@ async function fight(target) {
         currentStrategy(mobsTo3Shot),
         tryMultiShot("3shot", mobsTo3Shot),
       );
-  } else if (
-    target &&
-    shouldAttack(target) &&
-    distance(target, character) < nearRange
-  ) {
+  } else if (target && shouldAttack(target) && inRange(target)) {
     set_message("Shooting");
     if (!isAttackReady) promisesToAwait.push(currentStrategy(target));
     else if (!isCupid)
