@@ -369,6 +369,7 @@ class StrategicSmartMove {
     // Stop any existing smart move
     if (this.isSmartMoving) {
       this.cleanUp();
+      this.stopTownChanneling();
     }
 
     console.warn(toPosition);
