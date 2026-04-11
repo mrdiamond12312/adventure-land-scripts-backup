@@ -486,8 +486,8 @@ const SALE_ABLE = [
   "cape",
   // Easter's loots
   // "eears",
-  // "eslippers",
-  // "epyjamas",
+  "eslippers",
+  "epyjamas",
 
   //Christmas loots
   // "xmashat",
