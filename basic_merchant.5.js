@@ -213,14 +213,14 @@ async function exchangeMines() {
 }
 
 async function moveHome() {
-  try {
-    if (
-      distance(character, homeLocation) < 150 ||
-      smart.moving ||
-      isAdvanceSmartMoving
-    )
-      return;
+  if (
+    distance(character, homeLocation) < 150 ||
+    smart.moving ||
+    isAdvanceSmartMoving
+  )
+    return;
 
+  try {
     log("Moving back Town!");
     equipBroom();
     await advanceSmartMove(homeLocation, {
@@ -237,6 +237,7 @@ async function moveHome() {
     }
     console.warn("movehome error:", e);
   } finally {
+    onDuty = false;
   }
 }
 
