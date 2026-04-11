@@ -762,6 +762,7 @@ class StrategicSmartMove {
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
     stop();
+    console.warn("Clean up called for session", this.smartMoveSession);
   }
 }
 
