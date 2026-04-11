@@ -26,6 +26,8 @@ const KEEP_THRESHOLD = {
   pinkie: 12,
   ecape: 20,
   firestars: 12,
+  harbringer: 12,
+  oozingterror: 12,
 
   ecape: 5,
   helmet: 3,
