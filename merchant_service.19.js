@@ -3,9 +3,8 @@ character.on("cm", async function ({ name, message }) {
     return;
   }
 
-  if (!onDuty) {
-    onDuty = true;
-  } else return;
+  if (onDuty) return;
+  onDuty = true;
 
   try {
     equipBroom();
@@ -138,23 +137,24 @@ const trustedPartners = ["earthPriest", "earthWar"];
 
 async function lureMechaGnome() {
   let nextDelay = 500;
-  try {
-    if (
-      isLuringMobs ||
-      onDuty ||
-      isAdvanceSmartMoving ||
-      smart.moving ||
-      shouldGoChilling() ||
-      serverCurrentlyHasLiveEvent() ||
-      (!(
-        parent.party_list &&
-        trustedPartners.some((name) => parent.party_list.includes(name))
-      ) &&
-        !parent.caracAL.siblings.includes(PRIEST))
-    ) {
-      return;
-    }
 
+  if (
+    isLuringMobs ||
+    onDuty ||
+    isAdvanceSmartMoving ||
+    smart.moving ||
+    shouldGoChilling() ||
+    serverCurrentlyHasLiveEvent() ||
+    (!(
+      parent.party_list &&
+      trustedPartners.some((name) => parent.party_list.includes(name))
+    ) &&
+      !parent.caracAL.siblings.includes(PRIEST))
+  ) {
+    return;
+  }
+  
+  try {
     // Global flags to prevent other tasks from interrupting
     onDuty = true;
     isLuringMobs = true; // Prevent scareAwayMobs
