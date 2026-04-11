@@ -916,12 +916,12 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
     target = {
       ...target,
-      x: 11,
-      y: 8,
-      real_x: 11,
-      real_y: 8,
-      going_x: 11,
-      going_y: 8,
+      x: FRANKY_PREFER_SPOT.x,
+      y: FRANKY_PREFER_SPOT.y,
+      real_x: FRANKY_PREFER_SPOT.x,
+      real_y: FRANKY_PREFER_SPOT.y,
+      going_x: FRANKY_PREFER_SPOT.x,
+      going_y: FRANKY_PREFER_SPOT.y,
     };
   }
 
@@ -1724,7 +1724,7 @@ const DYNAMIC_PARTY_PRESETS = {
     },
   },
   wabbit: {
-    USI:  () => {
+    USI: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
       return [ROGUE, RANGER, MAGE];
@@ -2029,12 +2029,7 @@ async function changeToDailyEventTargets() {
 
     if (frankyInstance) {
       rangeRate = 0.2;
-
-      if (!partyMems.includes(frankyInstance.target)) {
-        return frankyInstance;
-      }
-
-      scareAwayMobs();
+      await scareAwayMobs();
       return frankyInstance;
     }
   }
