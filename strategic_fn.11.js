@@ -10,15 +10,11 @@ const IGNORE_ABILITIES = ["stone"];
 function getMaxBlastRadius() {
   const classData = G.classes[character.ctype];
 
-  const allowedMainTypes = new Set(Object.keys(classData.mainhand ?? {}));
-  const allowedOffTypes = new Set(Object.keys(classData.offhand ?? {}));
+  const allowedMainTypes   = new Set(Object.keys(classData.mainhand   ?? {}));
+  const allowedOffTypes    = new Set(Object.keys(classData.offhand    ?? {}));
   const allowedDoubleTypes = new Set(Object.keys(classData.doublehand ?? {}));
 
-  const candidates = [
-    character.slots.mainhand,
-    character.slots.offhand,
-    ...character.items,
-  ]
+  const candidates = [character.slots.mainhand, character.slots.offhand, ...character.items]
     .filter(Boolean)
     .map((item) => {
       const info = item_info(item);
@@ -26,24 +22,19 @@ function getMaxBlastRadius() {
 
       return {
         item,
-        type: info.wtype ?? info.type,
+        type:  info.wtype ?? info.type,
         blast: info.blast ?? info.explosion ?? 0,
         level: info.level,
       };
-    });
+    })
+    .filter(Boolean);
 
-  const mainCandidates = candidates.filter(({ type }) =>
-    allowedMainTypes.has(type),
-  );
-  const offCandidates = candidates.filter(({ type }) =>
-    allowedOffTypes.has(type),
-  );
-  const doubleCandidates = candidates.filter(({ type }) =>
-    allowedDoubleTypes.has(type),
-  );
+  const mainCandidates   = candidates.filter(({ type }) => allowedMainTypes.has(type));
+  const offCandidates    = candidates.filter(({ type }) => allowedOffTypes.has(type));
+  const doubleCandidates = candidates.filter(({ type }) => allowedDoubleTypes.has(type));
 
   let bestBlast = doubleCandidates.reduce(
-    (best, { blast }) => Math.max(best, blast),
+    (accumulator, { blast }) => Math.max(accumulator, blast),
     0,
   );
 
@@ -77,13 +68,8 @@ function getRelevantPiercing(wtype) {
 
   if (!weaponData) return 0;
 
-  if (damageType === "physical") {
-    return weaponData.apiercing ?? 0;
-  }
-
-  if (damageType === "magical") {
-    return weaponData.rpiercing ?? 0;
-  }
+  if (damageType === "physical") return weaponData.apiercing ?? 0;
+  if (damageType === "magical")  return weaponData.rpiercing ?? 0;
 
   return 0;
 }
@@ -91,13 +77,8 @@ function getRelevantPiercing(wtype) {
 function getMobDefense(mob) {
   const damageType = G.classes[character.ctype]?.damage_type;
 
-  if (damageType === "physical") {
-    return mob.armor ?? 0;
-  }
-
-  if (damageType === "magical") {
-    return mob.resistance ?? 0;
-  }
+  if (damageType === "physical") return mob.armor      ?? 0;
+  if (damageType === "magical")  return mob.resistance ?? 0;
 
   return 0;
 }
@@ -105,22 +86,21 @@ function getMobDefense(mob) {
 function rawAttackMultiplier() {
   const mainStat = G.classes[character.ctype].main_stat;
 
-  if (character.ctype === "paladin")
-    return character.str / 20 + character.int / 40;
-  else return character[mainStat] / 20;
+  if (character.ctype === "paladin") return character.str / 20 + character.int / 40;
+
+  return character[mainStat] / 20;
 }
 
 function canOneShotWithWeapon(weaponInfo, targets) {
-  const classData = G.classes[character.ctype];
-  const damageType = classData.damage_type;
+  const classData    = G.classes[character.ctype];
+  const damageType   = classData.damage_type;
 
   const currentInfo = character.slots.mainhand
     ? item_info(character.slots.mainhand)
     : { attack: 0, name: null, wtype: null };
 
   const effectiveAttack =
-    character.attack +
-    (weaponInfo.attack - currentInfo.attack) * (rawAttackMultiplier() + 1);
+    character.attack + (weaponInfo.attack - currentInfo.attack) * (rawAttackMultiplier() + 1);
 
   let effectivePiercing =
     damageType === "physical" ? character.apiercing : character.rpiercing;
@@ -130,13 +110,10 @@ function canOneShotWithWeapon(weaponInfo, targets) {
   }
 
   const piercingMultiplier = damageType === "physical" ? 2 : 1;
-
-  const shotMultiplier =
-    targets.length >= 4 ? 0.5 : targets.length >= 2 ? 0.7 : 1;
+  const shotMultiplier     = targets.length >= 4 ? 0.5 : targets.length >= 2 ? 0.7 : 1;
 
   return targets.some((mob) => {
     const defense = getMobDefense(mob);
-
     const dmg =
       dps_multiplier(defense - effectivePiercing * piercingMultiplier) *
       effectiveAttack *
@@ -147,19 +124,19 @@ function canOneShotWithWeapon(weaponInfo, targets) {
   });
 }
 
-// Counting
 function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return 0;
-  if (
-    !["warrior", "priest", "paladin"].includes(character.ctype) &&
-    Object.values(parent.entities).some(
-      (entity) =>
-        distance(target, entity) < blastRadius &&
-        !entity.target &&
-        entity.type === "monster",
-    )
-  )
+
+  const hasUntargetedMonsterNearby = Object.values(parent.entities).some(
+    (entity) =>
+      entity.type === "monster" &&
+      distance(target, entity) < blastRadius &&
+      !entity.target,
+  );
+
+  if (!["warrior", "priest", "paladin"].includes(character.ctype) && hasUntargetedMonsterNearby) {
     return 0;
+  }
 
   return Object.values(parent.entities).filter(
     (entity) =>
@@ -174,18 +151,17 @@ function findInvBooster() {
 }
 
 function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
-  return (
-    Object.values(parent.entities).filter(
-      (entity) =>
-        parent.distance(target, entity) < blastRadius &&
-        calculateDamage(entity, character, false) > 1100 &&
-        entity.type === "monster" &&
-        !entity.target,
-    ).length > 0
+  return Object.values(parent.entities).some(
+    (entity) =>
+      entity.type === "monster" &&
+      !entity.target &&
+      parent.distance(target, entity) < blastRadius &&
+      calculateDamage(entity, character, false) > 1100,
   );
 }
 
 const EQUIP_IGNORE_MOBS = ["nerfedmummy"];
+
 function shouldWearLuckGear() {
   return Object.values(parent.entities).some(
     (mob) =>
@@ -216,23 +192,38 @@ function shouldWearExpGear() {
 
 // Ping compensation for normal attack
 function attackSpeedCompensate(
-  attackFrequencyBeforeComponsate,
-  attackFrequencyAfterComponsate = character.frequency,
+  attackFrequencyBeforeCompensate,
+  attackFrequencyAfterCompensate = character.frequency,
 ) {
-  if (attackFrequencyBeforeComponsate > attackFrequencyAfterComponsate) {
+  if (attackFrequencyBeforeCompensate > attackFrequencyAfterCompensate) {
     const compensateMs =
-      1000 / attackFrequencyAfterComponsate -
-      1000 / attackFrequencyBeforeComponsate;
+      1000 / attackFrequencyAfterCompensate - 1000 / attackFrequencyBeforeCompensate;
     reduce_cooldown("attack", compensateMs);
   }
 }
 
 // Class Items logic
+const MAGE_WEAK_MOB_TYPES = ["pinkgoo", "snowman", "wabbit", "crab"];
+
+function getMageMainhand(currentTarget, shouldUseBlaster, haveEnoughMobsToSplash) {
+  if (character.map === "crypt" && !currentTarget?.s?.frozen) return "froststaff";
+
+  const isWeakMob  = MAGE_WEAK_MOB_TYPES.includes(currentTarget?.mtype);
+  const isLowHpMob =
+    currentTarget?.max_hp < 2000 &&
+    (currentStrategy !== usePullStrategies || !haveEnoughMobsToSplash);
+
+  if (isWeakMob || isLowHpMob) return "pinkie";
+
+  if (currentStrategy === usePullStrategies && shouldUseBlaster) return "gstaff";
+
+  return "firestaff";
+}
+
 function calculateMageItems() {
-  const currentTarget = get_target();
-  const numberOfMobsAroundCurrentTarget =
-    numberOfMonsterAroundTarget(currentTarget);
-  const haveEnoughMobsToSplash =
+  const currentTarget                  = get_target();
+  const numberOfMobsAroundCurrentTarget = numberOfMonsterAroundTarget(currentTarget);
+  const haveEnoughMobsToSplash         =
     numberOfMobsAroundCurrentTarget >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON;
   const shouldUseBlaster =
     haveEnoughMobsToSplash &&
@@ -240,142 +231,124 @@ function calculateMageItems() {
     character.mp > G.skills["magiport"].mp + G.skills["blink"].mp;
 
   const feelingLucky = shouldWearLuckGear();
-  const feelingWise = shouldWearExpGear();
+  const feelingWise  = shouldWearExpGear();
 
   return {
-    mainhand:
-      character.map === "crypt" && !currentTarget?.s?.frozen
-        ? "froststaff"
-        : ["pinkgoo", "snowman", "wabbit", "crab"].includes(
-            currentTarget?.mtype,
-          ) ||
-          (currentTarget?.max_hp < 2000 &&
-            (currentStrategy !== usePullStrategies || !haveEnoughMobsToSplash))
-        ? "pinkie"
-        : currentStrategy === usePullStrategies
-        ? shouldUseBlaster
-          ? "gstaff" // or "sparkstaff"
-          : "firestaff"
-        : "firestaff",
+    mainhand: getMageMainhand(currentTarget, shouldUseBlaster, haveEnoughMobsToSplash),
     offhand:
       currentStrategy === usePullStrategies
         ? shouldUseBlaster
           ? undefined
           : "wbook1"
         : "wbook1",
-    helmet: feelingLucky ? "eears" : "gphelmet",
-    chest: "epyjamas",
-    pants: "starkillers",
-    shoes: "wingedboots",
-    gloves: "supermittens",
-    cape: "horsecapeg",
-    orb: feelingLucky ? "rabbitsfoot" : feelingWise ? "talkingskull" : "jacko",
-    amulet: feelingWise ? "spookyamulet" : "intamulet",
+    helmet:  feelingLucky ? "eears"       : "gphelmet",
+    chest:   "epyjamas",
+    pants:   "starkillers",
+    shoes:   "wingedboots",
+    gloves:  "supermittens",
+    cape:    "horsecapeg",
+    orb:     feelingLucky ? "rabbitsfoot" : feelingWise ? "talkingskull" : "jacko",
+    amulet:  feelingWise  ? "spookyamulet" : "intamulet",
   };
 }
 
 const STUN_FOCUS_LIST = ["crabxx", "grinch"];
+const WARRIOR_WEAK_MOB_TYPES = ["pinkgoo", "snowman", "wabbit"];
+
+function getWarriorHelmet(feelingLucky) {
+  if (feelingLucky)              return "oxhelmet";
+  if (character.map === "crypt") return "xhelmet";
+  return "fury";
+}
+
+function getWarriorMainhand(currentTarget, shouldUseBlaster) {
+  if (currentStrategy === usePullStrategies && shouldUseBlaster) return "vhammer";
+  if (currentTarget && STUN_FOCUS_LIST.includes(currentTarget.mtype)) return "xmace";
+  return "fireblade";
+}
+
+function getWarriorOffhand(shouldUseBlaster, feelingLucky) {
+  const hasA2InCrypt =
+    character.map === "crypt" &&
+    Object.values(parent.entities).some(
+      (mob) => mob.target === character.name && mob.mtype === "a2",
+    );
+
+  if (hasA2InCrypt || feelingLucky) return "mshield";
+  if (currentStrategy === usePullStrategies && shouldUseBlaster) return "ololipop";
+  return "fireblade";
+}
+
+function getWarriorAmulet(feelingLucky, isTanker) {
+  if (feelingLucky) return "spookyamulet";
+
+  const isBeingTargetedByMonster = Object.values(parent.entities)
+    .filter((entity) => entity.type === "monster")
+    .some((mob) => mob.target === character.name);
+
+  if ((isTanker && isBeingTargetedByMonster) || character.map === "crypt") return "snring";
+  return "stramulet";
+}
+
+function getWarriorChest(feelingLucky) {
+  if (feelingLucky)              return "cdragon";
+  if (character.map === "crypt") return "xarmor";
+  return "coat1";
+}
+
 function calculateWarriorItems() {
-  const currentTarget = get_target();
+  const currentTarget   = get_target();
   const shouldUseBlaster =
-    numberOfMonsterAroundTarget(currentTarget) >=
-      TARGET_TO_SWITCH_TO_BLASTER_WEAPON && !currentTarget["1hp"];
+    numberOfMonsterAroundTarget(currentTarget) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON &&
+    !currentTarget["1hp"];
 
   const feelingLucky = shouldWearLuckGear();
-  const feelingWise = shouldWearExpGear();
-  const isTanker =
-    isAssignedAsTanker() && avgDmgTaken(character, "physical") > 300;
+  const feelingWise  = shouldWearExpGear();
+  const isTanker     = isAssignedAsTanker() && avgDmgTaken(character, "physical") > 300;
 
-  if (
-    currentTarget &&
-    ["pinkgoo", "snowman", "wabbit"].includes(currentTarget.mtype)
-  )
+  if (currentTarget && WARRIOR_WEAK_MOB_TYPES.includes(currentTarget.mtype)) {
     return {
       mainhand: "rapier",
-      offhand: undefined,
-      orb: "rabbitsfoot",
-      amulet: "spookyamulet",
-      chest: "cdragon",
-      helmet: "oxhelmet",
+      offhand:  undefined,
+      orb:      "rabbitsfoot",
+      amulet:   "spookyamulet",
+      chest:    "cdragon",
+      helmet:   "oxhelmet",
     };
+  }
 
   return {
-    helmet: feelingLucky
-      ? "oxhelmet"
-      : character.map === "crypt"
-      ? "xhelmet"
-      : "fury",
-    mainhand:
-      currentStrategy === usePullStrategies && shouldUseBlaster
-        ? "vhammer"
-        : currentTarget && STUN_FOCUS_LIST.includes(currentTarget.mtype)
-        ? "xmace"
-        : "fireblade",
-    offhand:
-      (character.map === "crypt" &&
-        Object.values(parent.entities).some(
-          (mob) => mob.target === character.name && mob.mtype === "a2",
-        )) ||
-      feelingLucky
-        ? "mshield"
-        : currentStrategy === usePullStrategies && shouldUseBlaster
-        ? "ololipop"
-        : "fireblade",
-    amulet: feelingLucky
-      ? "spookyamulet"
-      : (isTanker &&
-          Object.values(parent.entities)
-            .filter((entity) => entity.type === "monster")
-            .some((mob) => mob.target === character.name)) ||
-        character.map === "crypt"
-      ? "snring"
-      : "stramulet",
-    orb: feelingLucky
-      ? "rabbitsfoot"
-      : feelingWise
-      ? "talkingskull"
-      : "orbofstr",
-    chest: feelingLucky
-      ? "cdragon"
-      : character.map === "crypt"
-      ? "xarmor"
-      : "coat1",
-    pants: isTanker ? "frankypants" : "fallen",
-    ring2:
-      currentTarget && currentTarget.armor > 125 ? "suckerpunch" : "strring",
+    helmet:  getWarriorHelmet(feelingLucky),
+    mainhand: getWarriorMainhand(currentTarget, shouldUseBlaster),
+    offhand:  getWarriorOffhand(shouldUseBlaster, feelingLucky),
+    amulet:   getWarriorAmulet(feelingLucky, isTanker),
+    orb:      feelingLucky ? "rabbitsfoot" : feelingWise ? "talkingskull" : "orbofstr",
+    chest:    getWarriorChest(feelingLucky),
+    pants:    isTanker ? "frankypants" : "fallen",
+    ring2:    currentTarget?.armor > 125 ? "suckerpunch" : "strring",
   };
 }
 
 const RANGER_INV_ITEMS = {
-  poucher: "pouchbow",
-  fireBow: "firebow",
+  poucher:  "pouchbow",
+  fireBow:  "firebow",
   crossBow: "crossbow",
 };
 
 function explosionScore(itemInfo, targets) {
   if (!itemInfo || !targets?.length) return 0;
 
-  const attack = itemInfo.attack || 0;
-  const explosion =
-    (character.explosion ?? 0) + (itemInfo.explosion_delta ?? 0);
+  const attack    = itemInfo.attack || 0;
+  const explosion = (character.explosion ?? 0) + (itemInfo.explosion_delta ?? 0);
 
-  return targets.reduce((sum, mob) => {
-    const cluster = numberOfMonsterAroundTarget(
-      mob,
-      explosion / 3.6 || BLAST_RADIUS,
-    );
-
-    return (
-      sum + attack + ((attack * explosion) / 100) * Math.max(0, cluster - 1)
-    );
+  return targets.reduce((accumulator, mob) => {
+    const cluster = numberOfMonsterAroundTarget(mob, explosion / 3.6 || BLAST_RADIUS);
+    return accumulator + attack + ((attack * explosion) / 100) * Math.max(0, cluster - 1);
   }, 0);
 }
 
 function chooseFireOrPouchForSplashing(targets) {
-  const currentBow = {
-    ...(item_info(character.slots.mainhand) ?? {}),
-    explosion_delta: 0,
-  };
+  const currentBow         = { ...(item_info(character.slots.mainhand) ?? {}), explosion_delta: 0 };
   const currentBowExplosion = currentBow.explosion ?? 0;
 
   const firebowSlot = findMaxLevelItem(RANGER_INV_ITEMS.fireBow);
@@ -395,93 +368,66 @@ function chooseFireOrPouchForSplashing(targets) {
       : undefined;
 
   if (!pouchInfo) return RANGER_INV_ITEMS.fireBow;
-  if (!fireInfo) return RANGER_INV_ITEMS.poucher;
+  if (!fireInfo)  return RANGER_INV_ITEMS.poucher;
 
-  if (pouchInfo.explosion_delta == null) {
-    pouchInfo.explosion_delta = pouchInfo.explosion - currentBowExplosion;
-  }
+  fireInfo.explosion_delta  = fireInfo.explosion_delta  ?? fireInfo.explosion  - currentBowExplosion;
+  pouchInfo.explosion_delta = pouchInfo.explosion_delta ?? pouchInfo.explosion - currentBowExplosion;
 
-  if (fireInfo.explosion_delta == null) {
-    fireInfo.explosion_delta = fireInfo.explosion - currentBowExplosion;
-  }
-
-  const fireScore = explosionScore(fireInfo, targets);
+  const fireScore  = explosionScore(fireInfo,  targets);
   const pouchScore = explosionScore(pouchInfo, targets);
 
-  return pouchScore > fireScore
-    ? RANGER_INV_ITEMS.poucher
-    : RANGER_INV_ITEMS.fireBow;
+  return pouchScore > fireScore ? RANGER_INV_ITEMS.poucher : RANGER_INV_ITEMS.fireBow;
 }
 
 function calculateRangerItems(target) {
-  // Sanitize input
-  const targets = !target ? [] : Array.isArray(target) ? target : [target];
-  const feelingLucky = shouldWearLuckGear();
-  const feelingWise = shouldWearExpGear();
+  const targets              = !target ? [] : Array.isArray(target) ? target : [target];
+  const feelingLucky         = shouldWearLuckGear();
+  const feelingWise          = shouldWearExpGear();
   const someTargetCooperative = targets.some((mob) => mob.cooperative);
 
-  // Start with current mainhand
-  let mainhand = character.slots.mainhand?.name;
-
+  let mainhand         = character.slots.mainhand?.name;
   const poucherAvailable = findMaxLevelItem(RANGER_INV_ITEMS.poucher) !== -1;
 
-  // Splashing equipment choice
-  if (targets.length)
-    if (
+  if (targets.length) {
+    const canSplash =
       (poucherAvailable || mainhand === RANGER_INV_ITEMS.poucher) &&
       currentStrategy === usePullStrategies &&
       targets.some(
         (mob) =>
           (mob.cluster_count ??
-            numberOfMonsterAroundTarget(
-              mob,
-              character.explosion / 3.6 || BLAST_RADIUS,
-            )) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
-      )
-    ) {
+            numberOfMonsterAroundTarget(mob, character.explosion / 3.6 || BLAST_RADIUS)) >=
+          TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
+      );
+
+    if (canSplash) {
       mainhand = chooseFireOrPouchForSplashing(targets);
     } else if (someTargetCooperative) {
       mainhand = RANGER_INV_ITEMS.fireBow;
-    }
-    // Check for one-shot possibility with other bows
-    else {
-      const current = character.slots.mainhand;
+    } else {
+      const current     = character.slots.mainhand;
       const currentInfo = current ? item_info(current) : { attack: 0 };
+
       const rangedWeapons = character.items
         .map((item, slot) => {
           if (!item) return null;
 
           const info = item_info(item);
-
-          if (
-            !["bow", "crossbow"].includes(info.wtype) ||
-            item.name === "cupid"
-          )
-            return null;
+          if (!["bow", "crossbow"].includes(info.wtype) || item.name === "cupid") return null;
 
           return {
             slot,
-            name: item.name,
+            name:        item.name,
             info,
             attackDelta: info.attack - currentInfo.attack,
-            rangeDelta: info.range - (currentInfo.range || 0),
+            rangeDelta:  info.range  - (currentInfo.range || 0),
           };
         })
         .filter(Boolean);
 
       if (current) {
         const info = item_info(current);
-        if (
-          ["bow", "crossbow"].includes(info.wtype) &&
-          current.name !== "cupid"
-        ) {
-          rangedWeapons.push({
-            slot: "mainhand",
-            name: current.name,
-            info,
-            attackDelta: 0,
-            rangeDelta: 0,
-          });
+        if (["bow", "crossbow"].includes(info.wtype) && current.name !== "cupid") {
+          rangedWeapons.push({ slot: "mainhand", name: current.name, info, attackDelta: 0, rangeDelta: 0 });
         }
       }
 
@@ -489,119 +435,98 @@ function calculateRangerItems(target) {
         if (lhs.info.wtype !== rhs.info.wtype) {
           return lhs.info.wtype === "crossbow" ? 1 : -1;
         }
-
-        return (
-          rhs.rangeDelta - lhs.rangeDelta || lhs.attackDelta - rhs.attackDelta
-        );
+        return rhs.rangeDelta - lhs.rangeDelta || lhs.attackDelta - rhs.attackDelta;
       });
 
-      const oneShotWeapon = rangedWeapons.find((weapon) =>
-        canOneShotWithWeapon(weapon.info, targets),
-      );
-
-      if (oneShotWeapon) {
-        mainhand = oneShotWeapon.name;
-      } else {
-        mainhand = RANGER_INV_ITEMS.fireBow;
-      }
+      const oneShotWeapon = rangedWeapons.find((weapon) => canOneShotWithWeapon(weapon.info, targets));
+      mainhand = oneShotWeapon ? oneShotWeapon.name : RANGER_INV_ITEMS.fireBow;
     }
+  }
 
   return {
-    helmet: feelingLucky ? "wcap" : "fury",
+    helmet:  feelingLucky ? "wcap"        : "fury",
     mainhand,
     offhand: targets.some((entity) => haveFormidableMonsterAroundTarget(entity))
       ? "t2quiver"
       : "alloyquiver",
-    orb: feelingLucky
-      ? "rabbitsfoot"
-      : feelingWise
-      ? "talkingskull"
-      : "orbofdex",
-    amulet: feelingWise ? "spookyamulet" : "dexamulet",
-    shoes: feelingLucky ? "wshoes" : "wingedboots",
-    gloves: feelingLucky ? "wgloves" : "supermittens",
+    orb:    feelingLucky ? "rabbitsfoot"  : feelingWise ? "talkingskull" : "orbofdex",
+    amulet: feelingWise  ? "spookyamulet" : "dexamulet",
+    shoes:  feelingLucky ? "wshoes"       : "wingedboots",
+    gloves: feelingLucky ? "wgloves"      : "supermittens",
   };
 }
 
-// function calculateCupidItems() {
-//   const haveLowHpMobsNearby = shouldWearLuckGear();
-//   return {
-//     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
-//   };
-// }
+function getPriestMainhand(target, currentTarget, feelingLucky) {
+  if (target && target.type !== "monster") return "lmace";
+
+  if (character.map === "crypt") {
+    return currentTarget?.s?.frozen ? "lmace" : "froststaff";
+  }
+
+  return feelingLucky ? "lmace" : "firestaff";
+}
+
+function getPriestOffhand(isTanking, feelingLucky) {
+  if (character.map === "crypt")        return "wbook1";
+  if (isTanking && character.s.burned)  return "wbookhs";
+  if (feelingLucky)                     return "mshield";
+
+  const facingMagicalMob = Object.values(parent.entities).some(
+    (mob) =>
+      mob.type === "monster" &&
+      mob.target === character.name &&
+      mob.damage_type === "magical",
+  );
+
+  if (isTanking || facingMagicalMob || character.fear) return "wbookhs";
+  return "wbook1";
+}
+
+function getPriestOrb(target, isTanking, feelingLucky, feelingWise) {
+  if (isTanking && character.s.burned) return "orba";
+  if (feelingLucky)                    return "rabbitsfoot";
+  if (target?.type !== "monster")      return "jacko";
+  if (feelingWise)                     return "talkingskull";
+  return "test_orb";
+}
 
 function calculatePriestItems(target) {
   const currentTarget = get_targeted_monster();
-  const isTanking = isAssignedAsTanker();
-  const feelingLucky = shouldWearLuckGear();
-  const feelingWise = shouldWearExpGear();
+  const isTanking     = isAssignedAsTanker();
+  const feelingLucky  = shouldWearLuckGear();
+  const feelingWise   = shouldWearExpGear();
 
   return {
-    mainhand:
-      target && target.type !== "monster"
-        ? "lmace"
-        : character.map === "crypt"
-        ? currentTarget && currentTarget.s["frozen"]
-          ? "lmace"
-          : "froststaff"
-        : feelingLucky
-        ? "lmace"
-        : "firestaff",
-    offhand:
-      character.map === "crypt"
-        ? "wbook1"
-        : isTanking && character.s.burned
-        ? "wbookhs"
-        : feelingLucky
-        ? "mshield"
-        : isTanking ||
-          Object.values(parent.entities).some(
-            (mob) =>
-              mob.type === "monster" &&
-              mob.target === character.name &&
-              mob.damage_type === "magical",
-          ) ||
-          character.fear
-        ? "wbookhs"
-        : "wbook1",
-    orb:
-      isTanking && character.s.burned
-        ? "orba"
-        : feelingLucky
-        ? "rabbitsfoot"
-        : target?.type !== "monster"
-        ? "jacko"
-        : feelingWise
-        ? "talkingskull"
-        : "test_orb",
-    gloves: "supermittens",
-    amulet: isTanking ? "t2stramulet" : "intamulet",
-    ring1: feelingLucky ? "ringhs" : "cring",
-    ring2: feelingLucky ? "ringhs" : "zapper",
-    cape: "angelwings",
+    mainhand: getPriestMainhand(target, currentTarget, feelingLucky),
+    offhand:  getPriestOffhand(isTanking, feelingLucky),
+    orb:      getPriestOrb(target, isTanking, feelingLucky, feelingWise),
+    gloves:   "supermittens",
+    amulet:   isTanking    ? "t2stramulet" : "intamulet",
+    ring1:    feelingLucky ? "ringhs"      : "cring",
+    ring2:    feelingLucky ? "ringhs"      : "zapper",
+    cape:     "angelwings",
   };
 }
 
 function calculateRogueItems(target) {
-  const feelingLucky = shouldWearLuckGear();
-  const fieryWeapon = "firestars";
+  const feelingLucky  = shouldWearLuckGear();
+  const fieryWeapon   = "firestars";
 
-  // Safely handle missing target
-  if (!target) {
-    return {
-      helmet: feelingLucky ? "wcap" : "fury",
-      mainhand: "daggerofthedead",
-      offhand: "daggerofthedead",
-      shoes: feelingLucky ? "wshoes" : "wingedboots",
-      gloves: feelingLucky ? "wgloves" : "supermittens",
-      amulet: feelingLucky ? "spookyamulet" : "dexamulet",
-      orb: feelingLucky ? "rabbitsfoot" : "orbofdex",
-      chest: "wattire",
-      pants: "wbreeches",
-    };
-  }
+  const baseItems = {
+    helmet:  feelingLucky ? "wcap"         : "fury",
+    mainhand: "daggerofthedead",
+    offhand:  "daggerofthedead",
+    shoes:   feelingLucky ? "wshoes"       : "wingedboots",
+    gloves:  feelingLucky ? "wgloves"      : "supermittens",
+    amulet:  feelingLucky ? "spookyamulet" : "dexamulet",
+    orb:     feelingLucky ? "rabbitsfoot"  : "orbofdex",
+    chest:   "wattire",
+    pants:   "wbreeches",
+  };
 
-  const targetStacks = target.s?.stack?.s ?? 0;
+  if (!target) return baseItems;
+
+  const targetStacks    = target.s?.stack?.s ?? 0;
   const fieryWeaponSlot = locate_item(fieryWeapon);
 
   const characterFireStars =
@@ -613,7 +538,7 @@ function calculateRogueItems(target) {
 
   const equipItemAttackOffset =
     (item_info(character.slots.offhand)?.attack ?? 0) -
-    (item_info(characterFireStars)?.attack ?? 0);
+    (item_info(characterFireStars)?.attack       ?? 0);
 
   const rogueBurnDmg = characterFireStars
     ? dps_multiplier((target.armor ?? 0) - (character.apiercing * 2 ?? 0)) *
@@ -627,60 +552,43 @@ function calculateRogueItems(target) {
     rogueBurnDmg > (target.s?.burned?.intensity ?? 0) || target.cooperative;
 
   return {
-    helmet: feelingLucky ? "wcap" : "fury",
-    mainhand: "daggerofthedead",
-    shoes: feelingLucky ? "wshoes" : "wingedboots",
-    gloves: feelingLucky ? "wgloves" : "supermittens",
+    ...baseItems,
     offhand: shouldEquipFireStar ? fieryWeapon : "daggerofthedead",
-    amulet: feelingLucky ? "spookyamulet" : "dexamulet",
-    orb: feelingLucky ? "rabbitsfoot" : "orbofdex",
-    chest: "wattire",
-    pants: "wbreeches",
   };
 }
 
 function calculateBestItems(characterClass = character.ctype) {
   switch (characterClass) {
-    case "mage":
-      return calculateMageItems();
-    case "warrior":
-      return calculateWarriorItems();
-    case "ranger":
-      return calculateRangerItems(get_target());
-    case "priest":
-      return calculatePriestItems(get_target());
-    default:
-      return {};
+    case "mage":    return calculateMageItems();
+    case "warrior": return calculateWarriorItems();
+    case "ranger":  return calculateRangerItems(get_target());
+    case "priest":  return calculatePriestItems(get_target());
+    default:        return {};
   }
 }
 
-// Equiping Items
+// Equipping Items
 function findMaxLevelItem(id, offset = 0) {
   const matches = character.items
     .map((item, slot) => (item?.name === id ? { ...item, slot } : null))
     .filter(Boolean)
-    .sort(
-      (lhs, rhs) => (rhs.level ?? 0) - (lhs.level ?? 0) || rhs.slot - lhs.slot,
-    );
+    .sort((lhs, rhs) => (rhs.level ?? 0) - (lhs.level ?? 0) || rhs.slot - lhs.slot);
 
   return matches[offset]?.slot ?? -1;
 }
 
-var isEquipingItems = false;
+let isEquipingItems = false;
 async function equipBatch(suggestedItems, forced = false) {
   if (
-    (character.cc > 130 ||
-      isEquipingItems ||
-      character.s.penalty_cd ||
-      isLooting) &&
+    (character.cc > 130 || isEquipingItems || character.s.penalty_cd || isLooting) &&
     !forced
   )
     return false;
 
   isEquipingItems = true;
 
-  const promises = [];
-  const currentBooster = findInvBooster();
+  const promises        = [];
+  const currentBooster  = findInvBooster();
 
   if ((!isLooting || forced) && currentBooster) {
     if (suggestedItems.booster && currentBooster !== suggestedItems.booster) {
@@ -693,14 +601,14 @@ async function equipBatch(suggestedItems, forced = false) {
     }
   }
 
+  const suggestedMainhandWtype = item_info({ name: suggestedItems["mainhand"] })?.wtype;
   if (
     suggestedItems["mainhand"] &&
-    G.classes[character.ctype].doublehand[
-      item_info({ name: suggestedItems["mainhand"] })?.wtype
-    ] &&
+    G.classes[character.ctype].doublehand[suggestedMainhandWtype] &&
     character.slots["offhand"]
-  )
+  ) {
     promises.push(unequip("offhand"));
+  }
 
   const usedCounts = {};
 
@@ -713,61 +621,57 @@ async function equipBatch(suggestedItems, forced = false) {
             character.slots[slot]?.level),
     )
     .map((slot) => {
-      const id = suggestedItems[slot];
+      const id    = suggestedItems[slot];
       const count = usedCounts[id] || 0;
-      const num = findMaxLevelItem(id, count); // pick nth item
-      usedCounts[id] = count + 1; // increment for next use
+      const num   = findMaxLevelItem(id, count);
+      usedCounts[id] = count + 1;
       return { slot, num };
     })
     .filter((equipInfo) => equipInfo.num >= 0);
 
   // Slice items to prevent penalty_cd from affecting attack cooldown
-  const msToNextAttack = ms_to_next_skill("attack");
-  const timeToNextAttack =
-    msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
-  const maxItemsToEquip = Math.max(
+  const msToNextAttack    = ms_to_next_skill("attack");
+  const timeToNextAttack  = msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
+  const maxItemsToEquip   = Math.max(
     0,
     Math.floor((timeToNextAttack - (character.s.penalty_cd?.ms ?? 0)) / 120),
   );
+
   if (itemSlots.length > maxItemsToEquip && !forced) {
     itemSlots.splice(maxItemsToEquip);
   }
 
   if (itemSlots.length) {
-    if (itemSlots.length <= 1)
+    if (itemSlots.length <= 1) {
       for (const item of itemSlots) promises.push(equip(item.num, item.slot));
-    else promises.push(equip_batch(itemSlots));
+    } else {
+      promises.push(equip_batch(itemSlots));
+    }
+
     return Promise.all(promises).finally(() => {
       isEquipingItems = false;
     });
-  } else {
-    isEquipingItems = false;
-    return false;
   }
+
+  isEquipingItems = false;
+  return false;
 }
 
 function calculateHeal(fromEntity, toEntity) {
   if (!fromEntity) return 0;
-  switch (fromEntity?.damage_type) {
+
+  const selfPiercing = fromEntity.name === character.name;
+
+  switch (fromEntity.damage_type) {
     case "magical":
       return (
         fromEntity.heal *
-        damage_multiplier(
-          toEntity.resistance -
-            (fromEntity.name === character.name
-              ? character.rpiercing / 2 ?? 0
-              : 0),
-        )
+        damage_multiplier(toEntity.resistance - (selfPiercing ? character.rpiercing / 2 ?? 0 : 0))
       );
     case "physical":
       return (
         fromEntity.attack *
-        damage_multiplier(
-          toEntity.armor -
-            (fromEntity.name === character.name
-              ? character.apiercing / 2 ?? 0
-              : 0),
-        )
+        damage_multiplier(toEntity.armor - (selfPiercing ? character.apiercing / 2 ?? 0 : 0))
       );
   }
 }
@@ -776,52 +680,50 @@ function calculateHeal(fromEntity, toEntity) {
 function calculateDamage(fromEntity, toEntity, recursion = true) {
   if (!fromEntity) return 0;
 
-  switch (fromEntity?.damage_type) {
-    case "magical":
-      return (
-        fromEntity.attack *
-          dps_multiplier(
-            toEntity.resistance -
-              (fromEntity.type === "monster"
-                ? G.monsters[fromEntity.mtype].rpiercing ?? 0
-                : 0) *
-                2,
-          ) *
-          fromEntity.frequency +
-        (fromEntity.reflection && recursion
-          ? toEntity.range > 100 &&
-            (toEntity.type === "monster"
+  switch (fromEntity.damage_type) {
+    case "magical": {
+      const monsterRpiercing =
+        fromEntity.type === "monster" ? G.monsters[fromEntity.mtype].rpiercing ?? 0 : 0;
+
+      const reflectionDmg =
+        fromEntity.reflection && recursion && toEntity.range > 100
+          ? (toEntity.type === "monster"
               ? G.monsters[toEntity.mtype].damage_type
               : G.classes[toEntity.ctype].damage_type) === "magical"
-            ? (calculateDamage(toEntity, fromEntity, false) *
-                (fromEntity.reflection ?? 0)) /
-              100
+            ? (calculateDamage(toEntity, fromEntity, false) * (fromEntity.reflection ?? 0)) / 100
             : 0
-          : 0)
-      );
-    case "physical":
+          : 0;
+
       return (
         fromEntity.attack *
-          dps_multiplier(
-            toEntity.armor -
-              (toEntity.s["hardshell"] ? G.conditions.hardshell.armor : 0) -
-              (fromEntity.type === "monster"
-                ? G.monsters[fromEntity.mtype].apiercing ?? 0
-                : 0) *
-                2,
-          ) *
+          dps_multiplier(toEntity.resistance - monsterRpiercing * 2) *
           fromEntity.frequency +
-        (fromEntity.dreturn && recursion
-          ? toEntity.range < 100 &&
-            (toEntity.type === "monster"
+        reflectionDmg
+      );
+    }
+
+    case "physical": {
+      const monsterApiercing =
+        fromEntity.type === "monster" ? G.monsters[fromEntity.mtype].apiercing ?? 0 : 0;
+      const hardshellArmor  = toEntity.s["hardshell"] ? G.conditions.hardshell.armor : 0;
+
+      const dreturnDmg =
+        fromEntity.dreturn && recursion && toEntity.range < 100
+          ? (toEntity.type === "monster"
               ? G.monsters[toEntity.mtype].damage_type
               : G.classes[toEntity.ctype].damage_type) === "physical"
-            ? (calculateDamage(toEntity, fromEntity, false) *
-                (fromEntity.dreturn ?? 0)) /
-              100
+            ? (calculateDamage(toEntity, fromEntity, false) * (fromEntity.dreturn ?? 0)) / 100
             : 0
-          : 0)
+          : 0;
+
+      return (
+        fromEntity.attack *
+          dps_multiplier(toEntity.armor - hardshellArmor - monsterApiercing * 2) *
+          fromEntity.frequency +
+        dreturnDmg
       );
+    }
+
     default:
       return fromEntity.attack * fromEntity.frequency;
   }
@@ -829,34 +731,36 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
 
 function listOfMonsterAttacking(characterEntity) {
   if (!characterEntity) return [];
+
   return Object.values(parent.entities).filter(
-    (entity) =>
-      entity.type === "monster" && entity.target === characterEntity.name,
+    (entity) => entity.type === "monster" && entity.target === characterEntity.name,
   );
 }
 
 function mobbingMultiplier(numberOfMobs) {
-  // return numberOfMobs < 5 ? 1.7 : numberOfMobs < 6 ? 1.8 : 2;
-
   return numberOfMobs < 3 ? 1 : 1.5;
 }
 
 function avgDmgTaken(characterEntity, dmgType = null) {
   if (!characterEntity) return 0;
-  const numberOfAttackingMobs = listOfMonsterAttacking(characterEntity).length;
+
   const listOfAttackingMobs = Object.values(parent.entities).filter(
     (mob) =>
       mob.target === characterEntity.name &&
-      mob.type === "monster" &&
+      mob.type   === "monster" &&
       (!dmgType || mob.damage_type === dmgType),
   );
 
-  // Burn Damage padding
+  // When dmgType filters the list, we still need total aggro count for the mobbing multiplier
+  const numberOfAttackingMobs = dmgType
+    ? listOfMonsterAttacking(characterEntity).length
+    : listOfAttackingMobs.length;
+
   const highestBurningMob = listOfAttackingMobs
     .filter((mob) => mob.abilities?.burn)
-    .reduce((prev, current) => {
-      if (!prev) return current;
-      return prev.attack > current.attack ? prev : current;
+    .reduce((accumulator, mob) => {
+      if (!accumulator) return mob;
+      return accumulator.attack > mob.attack ? accumulator : mob;
     }, undefined);
 
   const fireResist =
@@ -866,11 +770,9 @@ function avgDmgTaken(characterEntity, dmgType = null) {
   const burnPadding = highestBurningMob
     ? dps_multiplier(
         highestBurningMob.damage_type === "physical"
-          ? characterEntity.armor -
-              (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
+          ? characterEntity.armor      - (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
           : highestBurningMob.damage_type === "magical"
-          ? characterEntity.resistance -
-            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
+          ? characterEntity.resistance - (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
           : 1,
       ) *
       ((100 - fireResist) / 100) *
@@ -884,8 +786,7 @@ function avgDmgTaken(characterEntity, dmgType = null) {
 
   return (
     listOfAttackingMobs.reduce(
-      (accummulator, currentMob) =>
-        accummulator + calculateDamage(currentMob, characterEntity),
+      (accumulator, mob) => accumulator + calculateDamage(mob, characterEntity),
       0,
     ) *
       mobbingMultiplier(numberOfAttackingMobs) +
@@ -895,50 +796,45 @@ function avgDmgTaken(characterEntity, dmgType = null) {
 
 function avgPartyDmgTaken(partyList = partyMems, dmgType = null) {
   return partyList.reduce(
-    (accumulator, current) =>
-      accumulator + avgDmgTaken(get_player(current), dmgType),
+    (accumulator, member) => accumulator + avgDmgTaken(get_player(member), dmgType),
     0,
   );
 }
 
 function rotateLeader(partyList, newLeaderId) {
   const newLeaderIndex = partyList.indexOf(newLeaderId);
-  if (newLeaderIndex === -1) return partyList; // not found
-  return partyList
-    .slice(newLeaderIndex)
-    .concat(partyList.slice(0, newLeaderIndex));
+  if (newLeaderIndex === -1) return partyList;
+
+  return partyList.slice(newLeaderIndex).concat(partyList.slice(0, newLeaderIndex));
 }
 
 function assignRoles() {
   const currentTarget = get_targeted_monster();
-  if (
-    parent.S.franky?.live &&
-    ["franky", "nerfedmummy"].includes(currentTarget?.mtype)
-  ) {
-    TANKER = PRIEST;
-    partyMems = rotateLeader(partyMems, TANKER);
+
+  if (parent.S.franky?.live && ["franky", "nerfedmummy"].includes(currentTarget?.mtype)) {
+    TANKER     = PRIEST;
+    partyMems  = rotateLeader(partyMems, TANKER);
     return;
   }
 
   if (partyMems.includes(WARRIOR) && partyMems.includes(PRIEST)) {
-    const partyDmgTaken = avgPartyDmgTaken(partyMems);
-    const partyMagicalDmgTaken = avgPartyDmgTaken(partyMems, "physical");
+    const partyDmgTaken         = avgPartyDmgTaken(partyMems);
+    const partyPhysicalDmgTaken = avgPartyDmgTaken(partyMems, "physical");
+    const physicalDmgRatio      = partyPhysicalDmgTaken / partyDmgTaken;
 
-    // If more than half of taken DMG is magical, set our HEALER to be TANKER
-    const physicalDmgRatio = partyMagicalDmgTaken / partyDmgTaken;
-    TANKER = physicalDmgRatio <= 0.5 ? PRIEST : WARRIOR;
+    TANKER    = physicalDmgRatio <= 0.5 ? PRIEST : WARRIOR;
     partyMems = rotateLeader(partyMems, TANKER);
     return;
   }
 
   if (partyMems.includes(WARRIOR)) {
-    TANKER = WARRIOR;
+    TANKER    = WARRIOR;
     partyMems = rotateLeader(partyMems, TANKER);
     return;
   }
 
   if (partyMems.includes(PRIEST)) {
-    TANKER = PRIEST;
+    TANKER    = PRIEST;
     partyMems = rotateLeader(partyMems, TANKER);
     return;
   }
@@ -949,26 +845,15 @@ function isAssignedAsTanker() {
 }
 
 function getMonstersToCBurst() {
-  // 1. Party Data and Early Exit Preparation
-  const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
-  const partyTanker = get_entity(TANKER);
-  // Calculate the healer's effective power (Heal > Attack > 0)
-  const healerPower = partyHealer?.heal || partyHealer?.attack * 0.5 || 0;
+  const partyHealer  = get_entity(HEALER) ?? get_entity(RANGER);
+  const partyTanker  = get_entity(TANKER);
+  const healerPower  = partyHealer?.heal || partyHealer?.attack * 0.5 || 0;
 
   if (!partyHealer || !partyTanker) return [];
 
-  // Healer's effective healing output (with a 5% buffer)
-  const MAX_SAFE_DPS = healerPower * partyHealer.frequency * 0.95;
-  // The damage threshold for adding a new mob (with a 10% buffer)
+  const MAX_SAFE_DPS     = healerPower * partyHealer.frequency * 0.95;
   const NEW_MOB_DMG_LIMIT = healerPower * partyHealer.frequency * 0.9;
 
-  // 2. Identify and Filter Eligible Monsters
-  // This section filters the world for mobs that are:
-  // - A 'monster'
-  // - Within 'cburst' range
-  // - Safe for the tank (DPS < MAX_MOB_DPS)
-  // - Out of the mage's range (mob.range < character.range - 20)
-  // - Does NOT have any abilities in the WATCHOUT_ABILITIES list
   const eligibleMobs = Object.values(parent.entities)
     .filter(
       (mob) =>
@@ -976,54 +861,38 @@ function getMonstersToCBurst() {
         is_in_range(mob, "cburst") &&
         calculateDamage(mob, partyTanker) < MAX_MOB_DPS &&
         mob.range < character.range - 20 &&
-        !WATCHOUT_ABILITIES.some((skill) =>
-          Object.keys(mob.abilities ?? {}).includes(skill),
-        ),
+        !WATCHOUT_ABILITIES.some((skill) => Object.keys(mob.abilities ?? {}).includes(skill)),
     )
     .sort((lhs, rhs) => distance(character, rhs) - distance(character, lhs));
 
-  // 3. Iterative Selection Logic
   const selectedMobs = [];
-
-  // Initial State Variables
-  let currentPartyDmgRecieved = avgPartyDmgTaken(partyMems);
-  let tankerCurrentAggroCount = listOfMonsterAttacking(partyTanker).length;
+  let currentPartyDmgRecieved  = avgPartyDmgTaken(partyMems);
+  let tankerCurrentAggroCount  = listOfMonsterAttacking(partyTanker).length;
 
   for (const mob of eligibleMobs) {
-    // Stop adding mobs if the party is already taking too much damage
     if (currentPartyDmgRecieved >= MAX_SAFE_DPS) break;
 
-    // Check if the mob can be safely added:
-    if (
-      is_in_range(mob, "cburst") && // Check range again (safety/original code)
-      !mob.target && // Mob must be untargeted
+    const projectedDmg =
       currentPartyDmgRecieved +
-        calculateDamage(mob, partyTanker) *
-          mobbingMultiplier(tankerCurrentAggroCount + 1) <
-        NEW_MOB_DMG_LIMIT // Aggroing the mob must be within the safe limit
-    ) {
-      // Select the mob
+      calculateDamage(mob, partyTanker) * mobbingMultiplier(tankerCurrentAggroCount + 1);
+
+    if (is_in_range(mob, "cburst") && !mob.target && projectedDmg < NEW_MOB_DMG_LIMIT) {
       selectedMobs.push(mob);
 
-      // Update state variables for the next iteration
       const oldAggroMult = mobbingMultiplier(tankerCurrentAggroCount);
-      tankerCurrentAggroCount += 1;
+      tankerCurrentAggroCount++;
       const newAggroMult = mobbingMultiplier(tankerCurrentAggroCount);
 
-      // Scale previous DPS to the new multiplier context and add the new mob's contribution
-      // This ensures the damage calculation correctly accounts for the change
-      // in the mobbing multiplier when aggro count increases.
       currentPartyDmgRecieved =
         (currentPartyDmgRecieved * newAggroMult) / oldAggroMult +
         calculateDamage(mob, partyTanker) * newAggroMult;
     }
   }
 
-  // Return a ready to use list for mage to cburst, with 2 mp per target
   return selectedMobs.map((mob) => [mob, 2]);
 }
 
-isCleaving = false;
+let isCleaving = false;
 async function warriorCleave(currentStrategy) {
   const mobsList = Object.values(parent.entities).filter(
     (mob) =>
@@ -1032,7 +901,6 @@ async function warriorCleave(currentStrategy) {
   );
 
   if (
-    // character.s.sugarrush ||
     character.s.penalty_cd ||
     character.mp < G.skills["cleave"].mp + 280 ||
     is_on_cooldown("cleave") ||
@@ -1045,124 +913,103 @@ async function warriorCleave(currentStrategy) {
     return;
 
   isCleaving = true;
-  const promises = [];
 
-  // List monsters attacking the character
+  const promises          = [];
   const mobsTargetingSelf = listOfMonsterAttacking(character);
-  const magicalMobs = [],
-    physicalMobs = [],
-    pureMobs = [];
 
-  for (const mob of mobsTargetingSelf) {
-    if (mob.damage_type === "magical") magicalMobs.push(mob);
+  const magicalMobs  = [];
+  const physicalMobs = [];
+  const pureMobs     = [];
+
+  const categorizeMob = (mob) => {
+    if (mob.damage_type === "magical")  magicalMobs.push(mob);
     else if (mob.damage_type === "physical") physicalMobs.push(mob);
-    else if (mob.damage_type === "pure") pureMobs.push(mob);
-  }
+    else if (mob.damage_type === "pure")     pureMobs.push(mob);
+  };
 
-  // Get non-targeted monsters in cleave range
+  for (const mob of mobsTargetingSelf) categorizeMob(mob);
+
   const listOfNoTargetMonsterInRange = Object.values(parent.entities).filter(
-    (mob) => {
-      return (
-        distance(mob, character) <
-          G.skills["cleave"].range + character.xrange &&
-        !mob.target &&
-        mob.type === "monster" &&
-        mob.hp >
-          character.attack *
-            dps_multiplier(mob.armor - character.apiercing * 2) *
-            1.5 &&
-        mob.attack > 150
-      );
-    },
+    (mob) =>
+      mob.type   === "monster" &&
+      !mob.target &&
+      distance(mob, character) < G.skills["cleave"].range + character.xrange &&
+      mob.hp > character.attack * dps_multiplier(mob.armor - character.apiercing * 2) * 1.5 &&
+      mob.attack > 150,
   );
 
-  // Categorize additional mobs that would be cleaved
-  for (const mob of listOfNoTargetMonsterInRange) {
-    if (mob.damage_type === "magical") magicalMobs.push(mob);
-    else if (mob.damage_type === "physical") physicalMobs.push(mob);
-    else if (mob.damage_type === "pure") pureMobs.push(mob);
-  }
+  for (const mob of listOfNoTargetMonsterInRange) categorizeMob(mob);
 
-  // Check if cleaving would cause fear
   const isFeared =
-    magicalMobs.length > character.mcourage ||
-    physicalMobs.length > character.courage ||
-    pureMobs.length > character.pcourage;
+    magicalMobs.length  > character.mcourage ||
+    physicalMobs.length > character.courage   ||
+    pureMobs.length     > character.pcourage;
 
-  // Identify strong mobs that might be risky
   const formidableMob = listOfNoTargetMonsterInRange.some(
     (mob) => mob.attack * mob.frequency > MAX_MOB_DPS,
   );
 
-  // Calculate DPS after cleaving
-  const allMobs = [...magicalMobs, ...physicalMobs, ...pureMobs];
+  const allMobs       = [...magicalMobs, ...physicalMobs, ...pureMobs];
   const totalDpsTaken =
-    allMobs
-      .map((mob) => calculateDamage(mob, character) * mob.frequency)
-      .reduce((acc, dmg) => acc + dmg, 0) * mobbingMultiplier(allMobs.length);
+    allMobs.reduce((accumulator, mob) => accumulator + calculateDamage(mob, character) * mob.frequency, 0) *
+    mobbingMultiplier(allMobs.length);
 
-  // Check if cleaving is safe and beneficial
-  const healer = get_entity(HEALER) ?? get_entity(RANGER);
-  const healerPower = healer?.heal ?? healer?.attack ?? 0;
+  const healer        = get_entity(HEALER) ?? get_entity(RANGER);
+  const healerPower   = healer?.heal ?? healer?.attack ?? 0;
   const healThreshold = currentStrategy === "pull" ? healerPower * 0.9 : 0;
-  if (
-    (currentStrategy === "pull"
-      ? totalDpsTaken <= healThreshold ||
-        listOfNoTargetMonsterInRange.length === 0
-      : listOfNoTargetMonsterInRange.length === 0) &&
-    !allMobs.some(
-      (mob) =>
-        MELEE_IGNORE_LIST.includes(mob.mtype) ||
-        WATCHOUT_ABILITIES.some((skill) =>
-          Object.keys(mob.abilities ?? {}).includes(skill),
-        ),
-    ) &&
-    !listOfNoTargetMonsterInRange.some((mob) => mob.abilities?.burn) &&
-    !isFeared &&
-    !formidableMob &&
-    !isEquipingItems
-  ) {
+
+  const isSafeToAggro =
+    currentStrategy === "pull"
+      ? totalDpsTaken <= healThreshold || listOfNoTargetMonsterInRange.length === 0
+      : listOfNoTargetMonsterInRange.length === 0;
+
+  const hasRiskyMob = allMobs.some(
+    (mob) =>
+      MELEE_IGNORE_LIST.includes(mob.mtype) ||
+      WATCHOUT_ABILITIES.some((skill) => Object.keys(mob.abilities ?? {}).includes(skill)),
+  );
+
+  const hasBurningNonAggro = listOfNoTargetMonsterInRange.some((mob) => mob.abilities?.burn);
+
+  if (isSafeToAggro && !hasRiskyMob && !hasBurningNonAggro && !isFeared && !formidableMob && !isEquipingItems) {
     isEquipingItems = true;
     const warriorItems = calculateWarriorItems();
+
     promises.push(
-      // equipBatch({ mainhand: "bataxe" }),
       Promise.all([unequip("offhand"), equip(findMaxLevelItem("bataxe"))]),
       withTimeout(use_skill("cleave"), 2500).then(async () => {
         reduce_cooldown("cleave", 0.95 * character.ping);
-        await equipBatch(
-          {
-            mainhand: warriorItems.mainhand,
-            offhand: warriorItems.offhand,
-          },
-          true,
-        );
+        await equipBatch({ mainhand: warriorItems.mainhand, offhand: warriorItems.offhand }, true);
       }),
     );
   }
 
   return Promise.allSettled(promises).finally(() => {
-    isCleaving = false;
+    isCleaving      = false;
     isEquipingItems = false;
   });
 }
 
-isStomping = false;
+let isStomping = false;
 async function warriorStomp() {
+  const monstersInStompRange = Object.values(parent.entities).filter(
+    (mob) =>
+      mob.type === "monster" && distance(mob, character) < G.skills["stomp"].range,
+  );
+
   if (
     character.mp < G.skills["stomp"].mp ||
     is_on_cooldown("stomp") ||
-    Object.values(parent.entities).filter(
-      (mob) =>
-        mob.type === "monster" &&
-        distance(mob, character) < G.skills["stomp"].range,
-    ).length === 0 ||
+    monstersInStompRange.length === 0 ||
     isStomping
   )
     return;
 
   isStomping = true;
-  const promises = [];
+
+  const promises     = [];
   const warriorItems = calculateWarriorItems();
+
   promises.push(
     equipBatch({ mainhand: "basher", offhand: undefined }, true),
     use_skill("stomp").then(async () => {
@@ -1172,7 +1019,7 @@ async function warriorStomp() {
   );
 
   return Promise.allSettled(promises).finally(() => {
-    isStomping = false;
+    isStomping      = false;
     isEquipingItems = false;
   });
 }
@@ -1192,44 +1039,33 @@ function shouldAttack(target = get_target()) {
     return false;
   }
 
-  if (
-    target &&
-    target.attack > 600 &&
-    (!target.target || target.target === character.name)
-  ) {
-    const partyPriest = [...parent.party_list, ...partyMems]
+  if (target && target.attack > 600 && (!target.target || target.target === character.name)) {
+    const partyPriests = [...parent.party_list, ...partyMems]
       .map((id) => get_player(id))
       .filter((player) => player?.ctype === "priest");
-    return partyPriest.length > 0 || (partyHealer && !partyHealer.rip);
+
+    return partyPriests.length > 0 || (partyHealer && !partyHealer.rip);
   }
 
   return true;
 }
 
 async function scareAwayMobs() {
-  if (
-    (locate_item("jacko") !== -1 || character.slots["orb"].name === "jacko") &&
-    Object.values(parent.entities).some(
-      (mob) => mob?.target === character.name && mob?.type === "monster",
-    ) &&
-    !is_on_cooldown("scare") &&
-    character.mp > 100
-  ) {
-    return Promise.all([
-      equipBatch(
-        {
-          orb: "jacko",
-        },
-        true,
-      ),
-      use_skill("scare"),
-    ]);
+  const hasJackoAvailable =
+    locate_item("jacko") !== -1 || character.slots["orb"].name === "jacko";
+
+  const isMobTargetingMe = Object.values(parent.entities).some(
+    (mob) => mob?.target === character.name && mob?.type === "monster",
+  );
+
+  if (hasJackoAvailable && isMobTargetingMe && !is_on_cooldown("scare") && character.mp > 100) {
+    return Promise.all([equipBatch({ orb: "jacko" }, true), use_skill("scare")]);
   }
 }
 
-// New Temporal Surge Logic
 async function useTemporalSurge() {
   if (isAdvanceSmartMoving || smart.moving) return false;
+
   if (
     is_on_cooldown("temporalsurge") ||
     character.mp < G.skills["temporalsurge"].mp + 400 ||
@@ -1237,14 +1073,13 @@ async function useTemporalSurge() {
   )
     return false;
 
-  if (
-    findMaxLevelItem("orboftemporal") === -1 &&
-    character.slots.orb?.name !== "orboftemporal"
-  ) {
-    return false;
-  }
+  const hasTemporalOrb =
+    findMaxLevelItem("orboftemporal") !== -1 ||
+    character.slots.orb?.name === "orboftemporal";
 
-  const currentMap = character.map;
+  if (!hasTemporalOrb) return false;
+
+  const currentMap        = character.map;
   const temporalsurgeRange = 160;
 
   const isSpawnInRange = (boundary) => {
@@ -1259,10 +1094,10 @@ async function useTemporalSurge() {
 
     return (
       distance(character, {
-        map: currentMap,
-        x: (x1 + x2) / 2,
-        y: (y1 + y2) / 2,
-        awidth: Math.abs(x2 - x1),
+        map:     currentMap,
+        x:       (x1 + x2) / 2,
+        y:       (y1 + y2) / 2,
+        awidth:  Math.abs(x2 - x1),
         aheight: Math.abs(y2 - y1),
       }) < temporalsurgeRange
     );
@@ -1272,10 +1107,7 @@ async function useTemporalSurge() {
     if (Array.isArray(spawn.boundaries) && spawn.boundaries.length > 0) {
       return spawn.boundaries.some((boundary) => isSpawnInRange(boundary));
     }
-
-    if (spawn.boundary) {
-      return isSpawnInRange(spawn.boundary);
-    }
+    if (spawn.boundary) return isSpawnInRange(spawn.boundary);
   });
 
   const nearbySpawnWithSpawnMechanic = nearbySpawn.filter(
@@ -1283,6 +1115,7 @@ async function useTemporalSurge() {
   );
 
   const promises = [];
+
   if (nearbySpawn.length && nearbySpawnWithSpawnMechanic.length === 0) {
     if (character.slots.orb?.name !== "orboftemporal") {
       promises.push(equipBatch({ orb: "orboftemporal" }, true));
@@ -1295,7 +1128,6 @@ async function useTemporalSurge() {
   });
 }
 
-// Surge loop
 setInterval(async () => {
   await useTemporalSurge();
 }, 1000);
@@ -1303,15 +1135,14 @@ setInterval(async () => {
 class ProjectileManagement {
   constructor(socket) {
     this.socket = socket;
-    this.projectilesByTarget = new Map(); // name/ID -> Map(pid -> projectile)
-    this.pidToTarget = new Map(); // pid -> target for O(1) removals
+    this.projectilesByTarget = new Map(); // entityId -> Map(pid -> projectile)
+    this.pidToTarget         = new Map(); // pid -> entityId for O(1) removals
 
     this.init();
   }
 
   _calculateSingleHitDamage(from, to) {
-    const clone = { ...from, frequency: 1 };
-    return calculateDamage(clone, to, false);
+    return calculateDamage({ ...from, frequency: 1 }, to, false);
   }
 
   _onIncomingProjectile = (data) => {
@@ -1319,21 +1150,20 @@ class ProjectileManagement {
     if (data.source !== "attack" && data.source !== "heal") return;
     if (data.instant) return;
 
-    // Only consider projectiles that have a damage or heal value
     const rawValue = data.damage ?? data.heal;
     if (typeof rawValue !== "number") return;
 
-    const projectileActor = parent.entities[data.attacker];
+    const projectileActor  = parent.entities[data.attacker];
     const projectileTarget = parent.entities[data.target];
 
     const projectile = {
-      type: data.source, // "attack" | "heal"
+      type:     data.source, // "attack" | "heal"
       attacker: data.attacker,
-      eta: data.eta,
-      arrival: performance.now() + data.eta,
+      eta:      data.eta,
+      arrival:  performance.now() + data.eta,
     };
 
-    // damage as negative and heal as positive
+    // damage stored as negative, heal as positive
     if (projectileActor && projectileTarget) {
       projectile.value =
         data.damage != null
@@ -1345,15 +1175,11 @@ class ProjectileManagement {
 
     const { target, pid } = data;
 
-    // Init map for target if undefined
     if (!this.projectilesByTarget.has(target)) {
       this.projectilesByTarget.set(target, new Map());
     }
 
-    // Store projectile under target -> pid
     this.projectilesByTarget.get(target).set(pid, projectile);
-
-    // Optional but strongly recommended for O(1) removal later
     this.pidToTarget.set(pid, target);
   };
 
@@ -1366,9 +1192,7 @@ class ProjectileManagement {
     const targetMap = this.projectilesByTarget.get(target);
     if (targetMap) {
       targetMap.delete(data.pid);
-      if (targetMap.size === 0) {
-        this.projectilesByTarget.delete(target);
-      }
+      if (targetMap.size === 0) this.projectilesByTarget.delete(target);
     }
 
     this.pidToTarget.delete(data.pid);
@@ -1376,7 +1200,7 @@ class ProjectileManagement {
 
   _bindEvents() {
     this.socket.on("action", this._onIncomingProjectile);
-    this.socket.on("hit", this._onProjectileHit);
+    this.socket.on("hit",    this._onProjectileHit);
   }
 
   _cleanExpiredProjectile() {
@@ -1390,16 +1214,14 @@ class ProjectileManagement {
         }
       }
 
-      if (map.size === 0) {
-        this.projectilesByTarget.delete(target);
-      }
+      if (map.size === 0) this.projectilesByTarget.delete(target);
     }
   }
 
   cleanUp() {
     if (this.socket) {
       this.socket.off("action", this._onIncomingProjectile);
-      this.socket.off("hit", this._onProjectileHit);
+      this.socket.off("hit",    this._onProjectileHit);
     }
 
     if (this._cleanupInterval) {
@@ -1411,7 +1233,7 @@ class ProjectileManagement {
     this.pidToTarget.clear();
 
     this._initialized = false;
-    this.socket = null;
+    this.socket       = null;
   }
 
   getIncomingNumber(target) {
@@ -1419,25 +1241,19 @@ class ProjectileManagement {
     if (!map) return 0;
 
     let total = 0;
-    for (const projectile of map.values()) {
-      total += projectile.value;
-    }
+    for (const projectile of map.values()) total += projectile.value;
     return total;
   }
 
   init() {
-    if (!this.socket) return;
+    if (!this.socket || this._initialized) return;
 
-    // Prevent double init
-    if (this._initialized) return;
     this._initialized = true;
-
-    // Bind socket listeners
     this._bindEvents();
 
     this._cleanupInterval = setInterval(() => {
       this._cleanExpiredProjectile();
-    }, 500); // clear projectile once every 500ms
+    }, 500);
   }
 }
 
