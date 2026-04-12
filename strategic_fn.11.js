@@ -178,7 +178,7 @@ function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
     Object.values(parent.entities).filter(
       (entity) =>
         parent.distance(target, entity) < blastRadius &&
-        calculateDamage(target, character, false) > 1100 &&
+        calculateDamage(entity, character, false) > 1100 &&
         entity.type === "monster" &&
         !entity.target,
     ).length > 0
@@ -509,7 +509,7 @@ function calculateRangerItems(target) {
   return {
     helmet: feelingLucky ? "wcap" : "fury",
     mainhand,
-    offhand: haveFormidableMonsterAroundTarget(target)
+    offhand: targets.some((entity) => haveFormidableMonsterAroundTarget(entity))
       ? "t2quiver"
       : "alloyquiver",
     orb: feelingLucky
@@ -523,13 +523,12 @@ function calculateRangerItems(target) {
   };
 }
 
-function calculateCupidItems() {
-  const haveLowHpMobsNearby = shouldWearLuckGear();
-  return {
-    mainhand,
-    orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
-  };
-}
+// function calculateCupidItems() {
+//   const haveLowHpMobsNearby = shouldWearLuckGear();
+//   return {
+//     orb: haveLowHpMobsNearby ? "rabbitsfoot" : "orbofdex",
+//   };
+// }
 
 function calculatePriestItems(target) {
   const currentTarget = get_targeted_monster();
@@ -648,8 +647,6 @@ function calculateBestItems(characterClass = character.ctype) {
       return calculateWarriorItems();
     case "ranger":
       return calculateRangerItems(get_target());
-    case "cupid":
-      return calculateCupidItems();
     case "priest":
       return calculatePriestItems(get_target());
     default:
@@ -659,28 +656,14 @@ function calculateBestItems(characterClass = character.ctype) {
 
 // Equiping Items
 function findMaxLevelItem(id, offset = 0) {
-  let maxSlot = -1;
-  let maxLevel = 0;
-  const allItemOfId = [];
-  for (let iter = 0; iter < character.items.length; iter++) {
-    const currentItem = character.items[iter];
-    if (currentItem && currentItem.name === id) {
-      allItemOfId.push({ ...currentItem, slot: iter });
-    }
-    if (!(currentItem && currentItem.name === id)) continue;
-    if ((currentItem.level ?? 0) >= maxLevel) {
-      maxSlot = iter;
-      maxLevel = currentItem.level;
-    }
-  }
+  const matches = character.items
+    .map((item, slot) => (item?.name === id ? { ...item, slot } : null))
+    .filter(Boolean)
+    .sort(
+      (lhs, rhs) => (rhs.level ?? 0) - (lhs.level ?? 0) || rhs.slot - lhs.slot,
+    );
 
-  if (offset === 0) return maxSlot;
-  else {
-    return allItemOfId.sort((lhs, rhs) => {
-      if (rhs.level === lhs.level) return rhs.slot - lhs.slot;
-      return rhs.level - lhs.level;
-    })[offset]?.slot;
-  }
+  return matches[offset]?.slot ?? -1;
 }
 
 var isEquipingItems = false;
@@ -1140,7 +1123,6 @@ async function warriorCleave(currentStrategy) {
     !isEquipingItems
   ) {
     isEquipingItems = true;
-    isCleaving = true;
     const warriorItems = calculateWarriorItems();
     promises.push(
       // equipBatch({ mainhand: "bataxe" }),
@@ -1459,6 +1441,6 @@ class ProjectileManagement {
   }
 }
 
-if (!PROJECTILE_MANAGER && parent.socket) {
+if (typeof PROJECTILE_MANAGER === "undefined" && parent.socket) {
   var PROJECTILE_MANAGER = new ProjectileManagement(parent.socket);
 }
