@@ -1,10 +1,61 @@
 const MAX_TARGET = 10;
-const BLAST_RADIUS = character.blast / 3.6 || 17;
+const BLAST_DIVISOR = 3.6;
+const BLAST_RADIUS = getMaxBlastRadius() || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
 const MAX_MOB_DPS = 2500;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
 const WATCHOUT_ABILITIES = ["burn", "stone"];
 const IGNORE_ABILITIES = ["stone"];
+
+function getMaxBlastRadius() {
+  const classData = G.classes[character.ctype];
+
+  const allowedMainTypes = new Set(Object.keys(classData.mainhand ?? {}));
+  const allowedOffTypes = new Set(Object.keys(classData.offhand ?? {}));
+  const allowedDoubleTypes = new Set(Object.keys(classData.doublehand ?? {}));
+
+  const candidates = [
+    character.slots.mainhand,
+    character.slots.offhand,
+    ...character.items,
+  ]
+    .filter(Boolean)
+    .map((item) => {
+      const info = item_info(item);
+      if (!info?.level) return null;
+
+      return {
+        item,
+        type: info.wtype ?? info.type,
+        blast: info.blast ?? info.explosion ?? 0,
+        level: info.level,
+      };
+    });
+
+  const mainCandidates = candidates.filter(({ type }) =>
+    allowedMainTypes.has(type),
+  );
+  const offCandidates = candidates.filter(({ type }) =>
+    allowedOffTypes.has(type),
+  );
+  const doubleCandidates = candidates.filter(({ type }) =>
+    allowedDoubleTypes.has(type),
+  );
+
+  let bestBlast = doubleCandidates.reduce(
+    (best, { blast }) => Math.max(best, blast),
+    0,
+  );
+
+  for (const main of mainCandidates) {
+    for (const off of offCandidates) {
+      if (main.item === off.item) continue;
+      bestBlast = Math.max(bestBlast, main.blast + off.blast);
+    }
+  }
+
+  return bestBlast / BLAST_DIVISOR;
+}
 
 function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return [];
@@ -127,7 +178,7 @@ function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
     Object.values(parent.entities).filter(
       (entity) =>
         parent.distance(target, entity) < blastRadius &&
-        entity.attack > 1100 &&
+        calculateDamage(target, character, false) > 1100 &&
         entity.type === "monster" &&
         !entity.target,
     ).length > 0
@@ -458,6 +509,9 @@ function calculateRangerItems(target) {
   return {
     helmet: feelingLucky ? "wcap" : "fury",
     mainhand,
+    offhand: haveFormidableMonsterAroundTarget(target)
+      ? "t2quiver"
+      : "alloyquiver",
     orb: feelingLucky
       ? "rabbitsfoot"
       : feelingWise
