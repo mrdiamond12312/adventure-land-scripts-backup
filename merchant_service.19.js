@@ -136,7 +136,7 @@ var isLuringMobs = false;
 const trustedPartners = ["earthPriest", "earthWar"];
 
 async function lureMechaGnome() {
-  let nextDelay = 500;
+  let nextDelay = 1000;
 
   if (
     isLuringMobs ||
@@ -151,7 +151,7 @@ async function lureMechaGnome() {
     ) &&
       !parent.caracAL.siblings.includes(PRIEST))
   ) {
-    return;
+    return setTimeout(lureMechaGnome, nextDelay);
   }
   
   try {
