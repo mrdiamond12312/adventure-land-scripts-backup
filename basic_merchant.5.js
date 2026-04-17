@@ -284,7 +284,11 @@ async function goFishing() {
     character.real_y != fishingLocation.y
   ) {
     equipBroom();
-    await smart_move(fishingLocation);
+    await advanceSmartMove(fishingLocation, {
+      useBlink: false,
+      useMagiport: false,
+      exact: true,
+    });
   }
 
   if (character.mp > 120) {
@@ -345,7 +349,11 @@ async function goMining() {
     character.real_y != miningLocation.y
   ) {
     equipBroom();
-    await smart_move(miningLocation);
+    await advanceSmartMove(miningLocation, {
+      useBlink: false,
+      useMagiport: false,
+      exact: true,
+    });
   }
 
   if (character.mp > 120) {
