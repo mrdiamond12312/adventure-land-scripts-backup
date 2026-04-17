@@ -22,8 +22,8 @@ const IGNORE_BANK_SLOTS = ["gold", "items10"];
 const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
 
 const KEEP_THRESHOLD = {
-  bataxe: 20,
-  pinkie: 12,
+  bataxe: 60,
+  pinkie: 24,
   ecape: 20,
   firestars: 12,
   harbringer: 12,
