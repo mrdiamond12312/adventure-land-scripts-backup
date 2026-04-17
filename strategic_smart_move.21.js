@@ -325,7 +325,7 @@ class StrategicSmartMove {
     const door = this._findDoorTo(map);
 
     if (door) {
-      const distToDoor = distance(character, door);
+      const distToDoor = distance(character, { x: door.x, y: door.y });
 
       // If we are too far from the door, move there first
       if (distToDoor > 100) {
@@ -335,7 +335,7 @@ class StrategicSmartMove {
           )} units). Moving...`,
         );
         // Using the global smart_move or your local pathfinder
-        await smart_move(door);
+        await smart_move({ x: door.x, y: door.y });
       }
     }
 
