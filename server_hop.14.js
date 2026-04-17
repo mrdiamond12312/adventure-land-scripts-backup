@@ -18,9 +18,9 @@ const bosses = {
   crabxx: { type: "crabxx", threshold: 0.95, hoppable: 1 },
   dragold: { type: "dragold", threshold: 0.85, hoppable: 1 },
   pinkgoo: { type: "pinkgoo", threshold: 0.65, hoppable: 1 },
-  wabbit: { type: "wabbit", threshold: 0.5, hoppable: 1 },
+  // wabbit: { type: "wabbit", threshold: 0.5, hoppable: 1 },
 };
-const waitForEvent = [];
+const waitForEvent = ["wabbit"];
 
 const API = `https://aldata.earthiverse.ca/monsters/${[
   ...tankableBoss,
