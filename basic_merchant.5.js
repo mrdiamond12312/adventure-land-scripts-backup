@@ -591,19 +591,18 @@ function handle_death() {
 // Handler to buy from Ponty
 const ITEM_NEEDED = [
   "strring",
+  "intring",
+  "dexring",
   "dexearring",
   "bataxe",
   "pinkie",
   "ololipop",
-  "fireblade",
-  "firebow",
-  "firestaff",
   "jacko",
   "gcape",
   "carrot",
   "brownenvelope",
-  // "harbringer",
-  // "throwingstars",
+  "harbringer",
+  "throwingstars",
   "angelwings",
   "smoke",
 ];
