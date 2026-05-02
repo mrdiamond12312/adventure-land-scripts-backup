@@ -1326,7 +1326,7 @@ async function midasLooting(forced = false) {
 function suicide() {
   if (
     !character.rip &&
-    character.hp < Math.max(0.15 * character.max_hp, 2000) &&
+    character.hp < Math.max(0.15 * character.max_hp, 3500) &&
     (avgDmgTaken(character) > character.hp ||
       character.ping > 600 ||
       character.s.burned)
