@@ -25,6 +25,7 @@ const KEEP_THRESHOLD = {
   firestars: 12,
   harbringer: 12,
   oozingterror: 12,
+  pouchbow: 16,
 
   helmet: 3,
   pants: 3,
