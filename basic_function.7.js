@@ -1977,7 +1977,9 @@ async function changeToDailyEventTargets() {
       }
 
       if (distance(crabx, crabxxInstance) <= BLAST_RADIUS) {
-        if (!bestClusteredCrabx || currentCrabxHp > bestCrabxHp) {
+        const bestClusteredCrabxHp =
+          bestClusteredCrabx?.predictedHp ?? bestClusteredCrabx?.hp ?? 0;
+        if (!bestClusteredCrabx || currentCrabxHp > bestClusteredCrabxHp) {
           bestClusteredCrabx = crabx;
         }
       }
@@ -2001,14 +2003,25 @@ async function changeToDailyEventTargets() {
         bestCrabx || (crabxxInstance?.target ? crabxxInstance : undefined);
     }
 
-    if (
-      !isAssignedAsTanker() &&
-      crabxList.some(
-        (entity) => entity.s?.young && entity.target === character.name,
-      )
-    )
-      await scareAwayMobs();
+    const isTanker = isAssignedAsTanker();
+    const canAgitate =
+      isTanker &&
+      !is_on_cooldown("agitate") &&
+      character.mp > G.skills["agitate"].mp + 500;
 
+    const hasCrabxSpawnedByCrabxx = crabxList.some(
+      (entity) => entity.s?.young && entity.target === character.name,
+    );
+
+    if (hasCrabxSpawnedByCrabxx && (!isTanker || canAgitate)) {
+      const promisesToAwait = [];
+      promisesToAwait.push(scareAwayMobs());
+
+      if (canAgitate) {
+        promisesToAwait.push(use_skill("agitate"));
+      }
+      await Promise.all(promisesToAwait);
+    }
     changeToPullStrategies();
     change_target(targetCrab);
     return targetCrab;
