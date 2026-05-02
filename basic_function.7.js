@@ -1326,7 +1326,9 @@ async function midasLooting(forced = false) {
 function suicide() {
   if (
     !character.rip &&
-    character.hp < Math.max(0.15 * character.max_hp, 3500) &&
+    character.hp +
+      (PROJECTILE_MANAGER?.getIncomingNumber(character.name) ?? 0) <
+      Math.max(0.15 * character.max_hp, 3500) &&
     (avgDmgTaken(character) > character.hp ||
       character.ping > 600 ||
       character.s.burned)
