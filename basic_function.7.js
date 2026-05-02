@@ -1235,17 +1235,30 @@ async function midasLooting(forced = false) {
     .map((id) => get_player(id))
     .filter((player) => player && MIDAS_CHARACTER.includes(player.name));
 
+  const currentTarget = get_target();
+  let modifier = 1;
+
+  if (currentTarget && currentTarget.type === "monster") {
+    modifier = Math.max(5000 / currentTarget.hp, 1);
+  }
+  const lootingThreshold = LOOTING_LIMIT * modifier;
+
   try {
     if (MIDAS_CHARACTER.includes(character.name)) {
       if (
-        chests.length >= LOOTING_LIMIT ||
+        chests.length >= lootingThreshold ||
         ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) ||
         forced
       ) {
         isLooting = true;
         shouldReset = true;
 
-        if ((!smart.moving && !isAdvanceSmartMoving) || forced)
+        if (
+          (!smart.moving &&
+            !isAdvanceSmartMoving &&
+            ms_to_next_skill("attack")) ||
+          forced
+        )
           await withTimeout(
             equipBatch(
               {
@@ -1263,7 +1276,7 @@ async function midasLooting(forced = false) {
             500,
           );
 
-        let breakFlag = LOOTING_LIMIT * 2;
+        let breakFlag = lootingThreshold * 2;
         for (const chest of chests) {
           if (breakFlag-- <= 0) break;
           if (distance(chest, character) <= 800) {
@@ -1275,21 +1288,14 @@ async function midasLooting(forced = false) {
       !MIDAS_CHARACTER.includes(character.name) &&
       partyMidasUsers.length
     ) {
-      const currentTarget = get_target();
-      let modifier = 1;
-
-      if (currentTarget && currentTarget.type === "monster") {
-        modifier = Math.max(5000 / currentTarget.hp, 1);
-      }
-
       if (
-        chests.length >= LOOTING_LIMIT * modifier &&
+        chests.length >= lootingThreshold &&
         (smart.moving || isAdvanceSmartMoving || forced)
       ) {
         isLooting = true;
         shouldReset = true;
 
-        let breakFlag = LOOTING_LIMIT * 1.5 * modifier;
+        let breakFlag = lootingThreshold * 2;
         for (const chest of chests) {
           if (breakFlag-- <= 0) break;
 
