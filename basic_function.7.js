@@ -2119,7 +2119,7 @@ async function changeToDailyEventTargets() {
     for (id in parent.entities) {
       const currentCharacter = parent.entities[id];
 
-      if (currentCharacter.team === character.team || currentCharacter.rip || currentCharacter.hp <= 0 || currentCharacter)
+      if (currentCharacter.team === character.team || currentCharacter.rip || currentCharacter.hp <= 0)
         continue;
 
       const currentCharacterTarget = {
