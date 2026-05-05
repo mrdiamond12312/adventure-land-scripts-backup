@@ -160,16 +160,26 @@ class StrategicSmartMove {
    * Helper to find the door leading to a specific map from the current map
    * @param {*} map destination map id
    * @param {*} fromMap door search source map, defaults to character's current map
-   * @returns a door object with `map`, `x`, and `y` of the door leading to the destination map, or undefined if no such door exists
+   * @returns a closest door object with `map`, `x`, and `y` of the door leading to the destination map, or undefined if no such door exists
    */
   _findDoorTo(map, fromMap = character.map) {
     const doors = G.maps[fromMap].doors || [];
-    const door = doors.find((d) => d[4] === map);
-    if (!door) return undefined;
+
+    const closest = doors
+      .filter((d) => d[4] === map)
+      .sort(
+        (lhs, rhs) =>
+          distance(character, { x: lhs[0], y: lhs[1] }) -
+          distance(character, { x: rhs[0], y: rhs[1] }),
+      )
+      .shift(); // smallest distance first
+
+    if (!closest) return undefined;
+
     return {
-      map: door[4],
-      x: door[0],
-      y: door[1],
+      map: closest[4],
+      x: closest[0],
+      y: closest[1],
     };
   }
 
