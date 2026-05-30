@@ -2116,7 +2116,7 @@ async function changeToDailyEventTargets() {
       sqrDistance: undefined,
     };
 
-    for (id in parent.entities) {
+    for (const id in parent.entities) {
       const currentCharacter = parent.entities[id];
 
       if (currentCharacter.team === character.team || currentCharacter.rip || currentCharacter.hp <= 0)
