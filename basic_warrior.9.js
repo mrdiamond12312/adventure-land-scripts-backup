@@ -63,7 +63,7 @@ async function fight(target) {
           !MELEE_IGNORE_LIST.includes(entity.mtype) &&
           entity.target &&
           !haveFormidableMonsterAroundTarget(entity) &&
-          inRange(entity, 2) &&
+          inRange(entity, 5) &&
           !haveIgnoreMobAroundTarget(entity)
         );
       })
