@@ -135,17 +135,17 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = -1111;
 // var mapY = 132;
 
-// var map = "desertland";
-// var mapX = -800;
-// var mapY = -354;
+var map = "desertland";
+var mapX = -800;
+var mapY = -354;
 
 // var map = "level1";
 // var mapX = 50;
 // var mapY = 425;
 
-var map = "spookytown";
-var mapX = 255;
-var mapY = -1160;
+// var map = "spookytown";
+// var mapX = 255;
+// var mapY = -1160;
 
 // var map = "spookytown";
 // var mapX = 412;
@@ -174,9 +174,9 @@ var mapY = -1160;
 //   "turtle",
 //   "crabx",
 // ];
-// var mobsToFarm = ["plantoid"];
+var mobsToFarm = ["plantoid"];
 // var mobsToFarm = ["prat"];
-var mobsToFarm = ["mummy"];
+// var mobsToFarm = ["mummy"];
 // var mobsToFarm = ["jr", "booboo"];
 // var mobsToFarm = ["odino"];
 
