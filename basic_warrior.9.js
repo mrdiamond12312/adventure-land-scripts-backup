@@ -50,40 +50,41 @@ async function fight(target) {
   };
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
+  let altTarget = undefined;
+  const aggroedMobs = Object.values(parent.entities)
+    .filter((entity) => {
+      return (
+        entity.type === "monster" &&
+        !entity.s?.fullguardx &&
+        !MELEE_IGNORE_LIST.includes(entity.mtype) &&
+        entity.target &&
+        !haveFormidableMonsterAroundTarget(entity) &&
+        inRange(entity, 5) &&
+        !haveIgnoreMobAroundTarget(entity)
+      );
+    })
+    .map((mob) => {
+      mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
+      return mob;
+    })
+    .sort((lhs, rhs) => {
+      // Prioritize highest cluster count (using pre-calculated value)
+      if (lhs.cluster_count !== rhs.cluster_count) {
+        return rhs.cluster_count - lhs.cluster_count;
+      }
+
+      // Hit one with more HP
+      return rhs.hp - lhs.hp;
+    });
+
   if (
     typeof usePullStrategies === "function" &&
     currentStrategy === usePullStrategies &&
     !target?.mtype.includes("crabx")
   ) {
-    const aggroedMobs = Object.values(parent.entities)
-      .filter((entity) => {
-        return (
-          entity.type === "monster" &&
-          !entity.s?.fullguardx &&
-          !MELEE_IGNORE_LIST.includes(entity.mtype) &&
-          entity.target &&
-          !haveFormidableMonsterAroundTarget(entity) &&
-          inRange(entity, 5) &&
-          !haveIgnoreMobAroundTarget(entity)
-        );
-      })
-      .map((mob) => {
-        mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
-        return mob;
-      });
-
     if (aggroedMobs.length) {
-      const aoeMob = aggroedMobs
-        .sort((lhs, rhs) => {
-          // Prioritize highest cluster count (using pre-calculated value)
-          if (lhs.cluster_count !== rhs.cluster_count) {
-            return rhs.cluster_count - lhs.cluster_count;
-          }
-
-          // Hit one with more HP
-          return rhs.hp - lhs.hp;
-        })
-        .shift(); // Get the first of list (best for AOE)
+      const aoeMob = aggroedMobs[0]; // Get the first of list (best for AOE)
+       altTarget = aggroedMobs.filter(mob => mob !==aoeMob && inRange(mob))[0]; // Get another mob in AttackRange to attack if the AOE mob is out of range
 
       // Prioritize the AOE mob if it's better than the current target (or if the current is cooperative)
       const isAoeMobBetter =
@@ -115,19 +116,19 @@ async function fight(target) {
     promisesToAwait.push(currentStrategy(target));
   }
 
-  if (isAttackReady && inRange(target) && shouldAttack()) {
+  if (isAttackReady && shouldAttack()) {
     set_message("Attacking");
     // const xrangeUsed = distance(target, character) - character.range;
     // if (xrangeUsed > 0) character.xrange -= xrangeUsed;
     // Main attack execution
-    promisesToAwait.push(
-      attack(target)
-        .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeComponsate);
-          reduceCd("attack");
-        })
-        .catch((e) => attackErrorHandler(e, target)),
-    );
+      promisesToAwait.push(
+        attack(inRange(target) ? target : altTarget)
+          .then(() => {
+            attackSpeedCompensate(attackFrequencyBeforeComponsate);
+            reduceCd("attack");
+          })
+          .catch((e) => attackErrorHandler(e, target)),
+      );
 
     // Offhand swap logic: Use Candy Canes for farming
     const shouldUseCandyCanes =
