@@ -29,16 +29,15 @@ const homeLocation = { map: "main", x: -152, y: -137 };
 const haveAComputer = () =>
   locate_item("computer") !== -1 || locate_item("ancientcomputer") !== -1;
 
-function equipBroom() {
+async function equipBroom() {
   const currentWeapon = character.slots.mainhand;
   if (!currentWeapon || currentWeapon.name !== "broom") {
     const broom = findMaxLevelItem("broom");
-    if (broom === -1) retrieveBankItem("broom");
-    else
-      equipBatch({
-        mainhand: "broom",
-        offhand: "wbookhs",
-      });
+    if (broom === -1) await retrieveBankItem("broom");
+    return equipBatch({
+      mainhand: "broom",
+      offhand: "wbookhs",
+    });
   }
 }
 
@@ -104,7 +103,7 @@ async function holidayExchange() {
   if (!exchangableItem || smart.moving) return;
 
   if (get_nearest_npc()?.npc !== exchangableItem.npc && !haveAComputer()) {
-    equipBroom();
+    await equipBroom();
     await smart_move(find_npc(exchangableItem.npc));
   }
 
@@ -222,7 +221,7 @@ async function moveHome() {
 
   try {
     log("Moving back Town!");
-    equipBroom();
+    await equipBroom();
     await advanceSmartMove(homeLocation, {
       exact: true,
       useScare: isLuringMobs,
@@ -280,10 +279,11 @@ async function goFishing() {
     return;
 
   if (
-    character.real_x != fishingLocation.x &&
-    character.real_y != fishingLocation.y
+    character.real_x != fishingLocation.x ||
+    character.real_y != fishingLocation.y ||
+    character.map !== fishingLocation.map
   ) {
-    equipBroom();
+    await equipBroom();
     await advanceSmartMove(fishingLocation, {
       useBlink: false,
       useMagiport: false,
@@ -348,7 +348,7 @@ async function goMining() {
     character.real_x != miningLocation.x &&
     character.real_y != miningLocation.y
   ) {
-    equipBroom();
+    await equipBroom();
     await advanceSmartMove(miningLocation, {
       useBlink: false,
       useMagiport: false,
@@ -495,7 +495,7 @@ setInterval(async function () {
 
   if (character.moving && character.stand) {
     close_stand();
-    equipBroom();
+    await equipBroom();
   } else if (
     !character.moving &&
     !character.stand &&
