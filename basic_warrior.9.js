@@ -84,7 +84,9 @@ async function fight(target) {
   ) {
     if (aggroedMobs.length) {
       const aoeMob = aggroedMobs[0]; // Get the first of list (best for AOE)
-       altTarget = aggroedMobs.filter(mob => mob !==aoeMob && inRange(mob))[0]; // Get another mob in AttackRange to attack if the AOE mob is out of range
+      altTarget = aggroedMobs.filter(
+        (mob) => mob !== aoeMob && inRange(mob),
+      )[0]; // Get another mob in AttackRange to attack if the AOE mob is out of range
 
       // Prioritize the AOE mob if it's better than the current target (or if the current is cooperative)
       const isAoeMobBetter =
@@ -95,7 +97,6 @@ async function fight(target) {
       if (!target?.cooperative && isAoeMobBetter) {
         target = aoeMob;
       }
-      change_target(target);
     }
   }
 
@@ -121,14 +122,25 @@ async function fight(target) {
     // const xrangeUsed = distance(target, character) - character.range;
     // if (xrangeUsed > 0) character.xrange -= xrangeUsed;
     // Main attack execution
+    if (inRange(target)) {
       promisesToAwait.push(
-        attack(inRange(target) ? target : altTarget)
+        attack(target)
           .then(() => {
             attackSpeedCompensate(attackFrequencyBeforeComponsate);
             reduceCd("attack");
           })
           .catch((e) => attackErrorHandler(e, target)),
       );
+    } else if (altTarget) {
+      promisesToAwait.push(
+        attack(altTarget)
+          .then(() => {
+            attackSpeedCompensate(attackFrequencyBeforeComponsate);
+            reduceCd("attack");
+          })
+          .catch((e) => attackErrorHandler(e, altTarget)),
+      );
+    }
 
     // Offhand swap logic: Use Candy Canes for farming
     const shouldUseCandyCanes =
@@ -288,6 +300,9 @@ async function fight(target) {
   } catch (e) {
     console.error("Error while attacking", e);
   }
+
+  // --- Change global target  ---
+  change_target(target);
 }
 
 async function cleaveLoop() {
