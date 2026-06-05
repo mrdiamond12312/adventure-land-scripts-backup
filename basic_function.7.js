@@ -1632,13 +1632,13 @@ function serverCurrentlyHasLiveEvent() {
 }
 
 const RSPEED_DURATION = G.conditions["rspeed"].duration;
-const RSPEED_MARGIN = 5 * 60 * 1000; // 5 minutes
+const RSPEED_MARGIN = 2 * 60 * 1000; // 2 minutes
 
 const setRogueSpeedLastDeployment = () => {
   const last = get("rogueLastDeployed");
   const lastDate = last ? new Date(last) : null;
 
-  // If we recently deployed (still inside rspeed - 5m), DO NOT overwrite
+  // If we recently deployed (still inside rspeed - margin), DO NOT overwrite
   if (lastDate && mssince(lastDate) < RSPEED_DURATION - RSPEED_MARGIN) {
     return; // Too early to overwrite
   }
@@ -1763,23 +1763,23 @@ const DYNAMIC_PARTY_PRESETS = {
   },
 
   default: () => {
-    // const globalParty = get("currentParty");
-    // const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
+    const globalParty = get("currentParty");
+    const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
 
-    // if (
-    //   globalParty &&
-    //   globalParty.some((id) => knownTankers.includes(id)) &&
-    //   !serverCurrentlyHasLiveEvent()
-    // ) {
-    //   setRogueSpeedLastDeployment();
-    //   if (shouldDeployRogue()) {
-    //     return [WARRIOR, ROGUE, MAGE];
-    //   } else {
-    //     RANGER = RANGER1;
-    //     HEALER = RANGER;
-    //     return [WARRIOR, RANGER, MAGE];
-    //   }
-    // }
+    if (
+      globalParty &&
+      globalParty.some((id) => knownTankers.includes(id)) &&
+      !serverCurrentlyHasLiveEvent()
+    ) {
+      setRogueSpeedLastDeployment();
+      if (shouldDeployRogue()) {
+        return [WARRIOR, ROGUE, MAGE];
+      } else {
+        // RANGER = RANGER1;
+        HEALER = PRIEST;
+        return [WARRIOR, PRIEST, MAGE];
+      }
+    }
 
     HEALER = PRIEST;
     return [WARRIOR, PRIEST, MAGE];
