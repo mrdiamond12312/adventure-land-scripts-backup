@@ -313,7 +313,8 @@ async function goMining() {
     character.q.exchange ||
     character.c.mining ||
     character.c.fishing ||
-    is_on_cooldown("mining")
+    is_on_cooldown("mining") ||
+    onDuty
   )
     return;
 

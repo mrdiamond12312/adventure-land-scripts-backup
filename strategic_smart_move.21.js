@@ -558,6 +558,7 @@ class StrategicSmartMove {
         console.warn("magiport tick", session);
 
         const mageInfo = this.getMageInfo();
+
         if (
           mageInfo &&
           distance(toPosition, mageInfo) < 200 &&
@@ -587,7 +588,6 @@ class StrategicSmartMove {
             await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
           this.cleanUp();
           this.stopTownChanneling();
-          this.isDoingSomethingMagical = false;
           return;
         }
 
@@ -787,6 +787,7 @@ class StrategicSmartMove {
       this.watcherInterval = undefined;
     }
 
+    this.isDoingSomethingMagical = false;
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
     stop();
