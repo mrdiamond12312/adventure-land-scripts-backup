@@ -117,32 +117,22 @@ async function fight(target) {
     promisesToAwait.push(currentStrategy(target));
   }
 
-  if (isAttackReady && shouldAttack()) {
+  const targetToAttack = inRange(target) ? target : altTarget;
+  if (isAttackReady && targetToAttack && shouldAttack()) {
     set_message("Attacking");
     // const xrangeUsed = distance(target, character) - character.range;
     // if (xrangeUsed > 0) character.xrange -= xrangeUsed;
     // Main attack execution
-    if (inRange(target)) {
-      promisesToAwait.push(
-        attack(target)
-          .then(() => {
-            attackSpeedCompensate(attackFrequencyBeforeComponsate);
-            reduceCd("attack");
-          })
-          .catch((e) => attackErrorHandler(e, target)),
-      );
-    } else if (altTarget) {
-      promisesToAwait.push(
-        attack(altTarget)
-          .then(() => {
-            attackSpeedCompensate(attackFrequencyBeforeComponsate);
-            reduceCd("attack");
-          })
-          .catch((e) => attackErrorHandler(e, altTarget)),
-      );
-    }
+    promisesToAwait.push(
+      attack(targetToAttack)
+        .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeComponsate);
+          reduceCd("attack");
+        })
+        .catch((e) => attackErrorHandler(e, targetToAttack)),
+    );
 
-    // Offhand swap logic: Use Candy Canes for farming
+    // Offhand swap logic: Use Candy Canes for attacking
     const shouldUseCandyCanes =
       character.ping < 1000 &&
       !isCleaving &&
@@ -155,38 +145,43 @@ async function fight(target) {
     if (shouldUseCandyCanes) {
       const candycane1 = findMaxLevelItem("candycanesword");
       const candycane2 = findMaxLevelItem("candycanesword", 1);
+      const isFastAttacker = 1 / character.frequency < 0.6;
 
-      if (candycane1 !== -1 && candycane2 !== -1) {
+      if (candycane1 !== -1) {
         isEquipingItems = true;
-        const equipPromise = Promise.allSettled([
-          // Immediate equip
-          equip_batch([
-            { num: candycane1, slot: "mainhand" },
-            { num: candycane2, slot: "offhand" },
-          ]),
 
-          // Delayed re-equip
-          new Promise((resolve) => {
-            setTimeout(() => {
-              resolve(
-                equip_batch([
-                  {
-                    num: candycane1,
-                    slot: "mainhand",
-                  },
-                  {
-                    num: candycane2,
-                    slot: "offhand",
-                  },
-                ]),
-              );
-            }, 150);
-          }),
-        ]).finally(() => {
+        // To avoid penalty_cd, fast attackers only equip one candy cane, while slower attackers can attempt dual wield if they have two candy canes.
+        const immediateEquip = isFastAttacker
+          ? [{ num: candycane1, slot: "mainhand" }]
+          : [
+              { num: candycane1, slot: "mainhand" },
+              { num: candycane2, slot: "offhand" },
+            ];
+
+        const delayedEquip = isFastAttacker
+          ? [{ num: candycane1, slot: "mainhand" }]
+          : [
+              { num: candycane1, slot: "mainhand" },
+              { num: candycane2, slot: "offhand" },
+            ];
+
+        // Only attempt dual wield if second candy cane exists
+        if (!isFastAttacker && candycane2 === -1) {
           isEquipingItems = false;
-        });
+        } else {
+          const equipPromise = Promise.allSettled([
+            equip_batch(immediateEquip),
+            new Promise((resolve) => {
+              setTimeout(() => {
+                resolve(equip_batch(delayedEquip));
+              }, 150);
+            }),
+          ]).finally(() => {
+            isEquipingItems = false;
+          });
 
-        promisesToAwait.push(equipPromise);
+          promisesToAwait.push(equipPromise);
+        }
       }
     }
 
