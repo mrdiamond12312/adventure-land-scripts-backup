@@ -26,6 +26,8 @@ const KEEP_THRESHOLD = {
   harbringer: 12,
   oozingterror: 12,
   pouchbow: 16,
+  daggerofthedead: 16,
+  bowofthedead: 16,
 
   helmet: 3,
   pants: 3,
