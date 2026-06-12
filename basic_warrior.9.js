@@ -35,6 +35,8 @@ const bosses = {
   dragold: { type: "dragold", threshold: 0.99, hoppable: 1 },
 };
 
+const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
+
 // Main fight function
 async function fight(target) {
   const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
@@ -138,8 +140,10 @@ async function fight(target) {
       !isCleaving &&
       !isEquipingItems &&
       !character.s.sugarrush &&
-      (character.slots.offhand?.name === "fireblade" ||
-        character.slots.mainhand?.name === "fireblade") &&
+      (CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.offhand?.name) ||
+        CANDY_SWAP_WEAPON_ALLOW_LIST.includes(
+          character.slots.mainhand?.name,
+        )) &&
       character.slots.offhand?.name !== "mshield" &&
       character.cc < 100;
 
