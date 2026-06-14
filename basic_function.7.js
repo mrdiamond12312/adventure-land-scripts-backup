@@ -1545,7 +1545,7 @@ setTimeout(deployCharacters, 5000);
 setInterval(deployCharacters, 30000);
 
 setInterval(async () => {
-  // if (isMerchant()) return;
+  if (isMerchant()) return;
 
   const currentPartySize = parent.party_list.length;
   const serverCharacters = await getServerPlayers();
