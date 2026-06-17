@@ -35,6 +35,7 @@ async function fight(target) {
           entity.type === "monster" &&
           ([...partyMems, ...parent.party_list].includes(entity.target) ||
             (entity.cooperative && entity.target)) &&
+          !MELEE_IGNORE_LIST.includes(entity.mtype) &&
           inRange(entity),
       )
       .sort((lhs, rhs) => {

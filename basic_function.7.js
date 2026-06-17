@@ -739,6 +739,10 @@ async function buff() {
 }
 buff();
 
+function isMelee() {
+  return character.range < 75;
+}
+
 function getTarget() {
   const leader = get_entity(TANKER) ?? get_entity(partyMems[0]);
   const declared = getMonstersOnDeclares();
@@ -760,7 +764,8 @@ function getTarget() {
             entity.type === "monster" &&
             entity.target &&
             party.has(entity.target) &&
-            entity.target !== character.name,
+            entity.target !== character.name &&
+            (!isMelee() || !MELEE_IGNORE_LIST.includes(entity.mtype)),
         )
         .sort(
           (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
