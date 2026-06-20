@@ -45,7 +45,7 @@ async function hopToServer(serverRegion, serverIdentifier) {
 
     parent.caracAL.deploy(null, `SR_${serverRegion}${serverIdentifier}`);
   } else {
-    partyMems.forEach((id) => send_cm("loot-before-hopping"));
+    send_cm(partyMems, "loot-before-hopping");
     await midasLooting(true);
     await sleep(1000);
 

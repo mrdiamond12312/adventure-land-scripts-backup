@@ -296,7 +296,7 @@ async function zapperLoop() {
   const courageMap = {
     physical: { count: physicalAggroed.length, limit: character.courage },
     magical: { count: magicalAggroed.length, limit: character.mcourage },
-    pure: { count: pureAggroed, length, limit: character.pcourage },
+    pure: { count: pureAggroed.length, limit: character.pcourage },
   };
 
   const isTanker = isAssignedAsTanker();
