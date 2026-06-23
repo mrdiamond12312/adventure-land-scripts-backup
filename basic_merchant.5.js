@@ -134,6 +134,7 @@ async function exchangeSomething() {
     { name: "basketofeggs", quantity: 1 },
     { name: "seashell", quantity: 20, npc: "fisherman" },
     { name: "leather", quantity: 40, npc: "leathermerchant" },
+    { name: "gemfragment", quantity: 50, npc: "gemmerchant" },
   ];
   let slot = undefined;
   for (const item of itemName) {
@@ -184,31 +185,6 @@ async function exchangeSomething() {
         onDuty = true;
     }
   });
-}
-
-async function exchangeMines() {
-  const itemName = ["gemfragment"];
-  let slot = undefined;
-  itemName.map((name) => {
-    if (locate_item(name) !== -1) slot = locate_item(name);
-  });
-
-  if (slot && character.items[slot].q >= 50) {
-    if (
-      !smart.moving &&
-      !isAdvanceSmartMoving &&
-      character.map !== "tunnel" &&
-      !haveAComputer()
-    ) {
-      await smart_move(miningLocation);
-    }
-    await exchange(slot).catch((e) => {
-      switch (e.response) {
-        case "inventory_full":
-          onDuty = true;
-      }
-    });
-  }
 }
 
 async function moveHome() {
@@ -346,8 +322,9 @@ async function goMining() {
     return;
 
   if (
-    character.real_x != miningLocation.x &&
-    character.real_y != miningLocation.y
+    character.real_x != miningLocation.x ||
+    character.real_y != miningLocation.y ||
+    character.map !== miningLocation.map
   ) {
     await equipBroom();
     await advanceSmartMove(miningLocation, {
@@ -378,7 +355,7 @@ async function dismantleSomething() {
     character.c.mining ||
     character.c.fishing ||
     isSortingInventory ||
-    Math.max(character.ping) > 300
+    Math.max(...parent.pings) > 300
   )
     return;
 
@@ -557,11 +534,11 @@ setInterval(async function () {
 
   if (!is_on_cooldown("mining")) goMining();
   else if (!is_on_cooldown("fishing")) goFishing();
-  else if (
-    locate_item("gemfragment") !== -1 &&
-    character.items[locate_item("gemfragment")]?.q >= 50
-  )
-    exchangeMines();
+  // else if (
+  //   locate_item("gemfragment") !== -1 &&
+  //   character.items[locate_item("gemfragment")]?.q >= 50
+  // )
+  //   exchangeMines();
   else if (!character.c.mining && !character.c.fishing && !onDuty)
     await moveHome();
 

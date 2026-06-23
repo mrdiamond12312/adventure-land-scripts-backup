@@ -22,7 +22,7 @@ function getMaxBlastRadius() {
     .filter(Boolean)
     .map((item) => {
       const info = item_info(item);
-      if (!info?.level) return null;
+      if (info?.level == null) return null;
 
       return {
         item,

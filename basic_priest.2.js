@@ -17,7 +17,6 @@ if (parent.caracAL) {
 // Kiting & Global Config
 var originRangeRate = 0.5;
 var rangeRate = originRangeRate;
-const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 4);
 
 const reduceCd = (skillName) =>
   reduce_cooldown(skillName, Math.min(...parent.pings));

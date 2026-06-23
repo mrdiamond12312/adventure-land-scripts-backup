@@ -110,26 +110,31 @@ character.on("cm", async function ({ name, message }) {
 });
 
 async function openCryptInstance() {
-  onDuty = true;
-  if (locate_item("cryptkey") === -1) {
-    await retrieveBankItem("cryptkey");
-    await sleep(1000 + character.ping);
-
-    if (locate_item("cryptkey") === -1) {
+  try {
+    if (onDuty || isAdvanceSmartMoving || smart.moving) {
       return;
     }
+    
+    onDuty = true;
+    if (locate_item("cryptkey") === -1) {
+      await retrieveBankItem("cryptkey");
+      await sleep(1000 + character.ping);
+
+      if (locate_item("cryptkey") === -1) {
+        return;
+      }
+    }
+
+    await smart_move(CRYPT_DOOR);
+    await enter("crypt");
+
+    set("cryptInstance", character.in);
+    set("lastCryptInstance", new Date());
+    set("cryptDefeatedMobs", []);
+    set("lastSeenDefeatableCryptBoss", undefined);
+  } finally {
+    onDuty = false;
   }
-
-  await smart_move(CRYPT_DOOR);
-  await enter("crypt");
-
-  set("cryptInstance", character.in);
-  set("lastCryptInstance", new Date());
-  set("cryptDefeatedMobs", []);
-  set("lastSeenDefeatableCryptBoss", undefined);
-
-  onDuty = false;
-  return;
 }
 
 var isLuringMobs = false;
@@ -153,7 +158,7 @@ async function lureMechaGnome() {
   ) {
     return setTimeout(lureMechaGnome, nextDelay);
   }
-  
+
   try {
     // Global flags to prevent other tasks from interrupting
     onDuty = true;

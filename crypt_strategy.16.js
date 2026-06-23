@@ -94,9 +94,11 @@ async function useCryptStrategy(target) {
     if (nearestFormiddableBosses.length || nearestKillableBosses.length > 3) {
       log("Too dangerous");
       advanceSmartMove(
-        CRYPT_JUNCTION.sort(
-          (lhs, rhs) => distance(character, rhs) - distance(character, lhs),
-        ).pop(),
+        [...CRYPT_JUNCTION]
+          .sort(
+            (lhs, rhs) => distance(character, rhs) - distance(character, lhs),
+          )
+          .pop(),
       );
     } else {
       if (
