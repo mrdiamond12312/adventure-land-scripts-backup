@@ -28,6 +28,7 @@ const KEEP_THRESHOLD = {
   pouchbow: 16,
   daggerofthedead: 16,
   bowofthedead: 16,
+  gphelmet: 12,
 
   helmet: 3,
   pants: 3,

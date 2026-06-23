@@ -583,6 +583,7 @@ const ITEM_NEEDED = [
   "throwingstars",
   "angelwings",
   "smoke",
+  "gphelmet",
 ];
 
 function secondhandsHandler(events) {
