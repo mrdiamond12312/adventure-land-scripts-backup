@@ -1114,9 +1114,15 @@ async function warriorCleave(currentStrategy) {
   ) {
     isEquipingItems = true;
     const warriorItems = calculateWarriorItems();
+    const msToNextAttack = ms_to_next_skill("attack");
+    const cleaveSet = [
+      {num: findMaxLevelItem("bataxe"), slot: "mainhand"},
+    ]
+
+    if (msToNextAttack > 320) cleaveSet.push({num: findMaxLevelItem("mpxamulet"), slot: "amulet"});
 
     promises.push(
-      Promise.all([unequip("offhand"), equip(findMaxLevelItem("bataxe"))]),
+      Promise.all([unequip("offhand"), equip_batch(cleaveSet)]),
       withTimeout(use_skill("cleave"), 2500).then(async () => {
         reduce_cooldown("cleave", 0.95 * character.ping);
         await equipBatch(
