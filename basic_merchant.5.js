@@ -451,13 +451,16 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   }
 
   if (isEnoughIngredients) {
+    const hasComputer = haveAComputer();
+
     if (
-      get_nearest_npc()?.name !== "Leo" &&
-      !haveAComputer() &&
-      !smart.moving &&
-      !isAdvanceSmartMoving
+      (!hasComputer &&
+        get_nearest_npc()?.name !== "Leo" &&
+        !smart.moving &&
+        !isAdvanceSmartMoving) ||
+      (hasComputer && character.map.includes("bank"))
     ) {
-      await smart_move(place);
+      await advanceSmartMove(place, { useBlink: false, useMagiport: false });
     }
 
     for (let trial = 0; trial < craftQuantity; trial++) await auto_craft(item);
