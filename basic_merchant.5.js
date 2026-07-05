@@ -614,20 +614,20 @@ setInterval(() => {
   parent.socket.emit("secondhands");
 }, 12000);
 
-setInterval(() => {
-  const blade = ITEMS_HIGHEST_LEVEL["blade"];
-  const quantity = blade?.quantity ?? 0; // # of blades at highest level
-  const level = blade?.level ?? 0; // that highest level
-  const count = blade?.count ?? 0; // total blades owned
+// setInterval(() => {
+//   const blade = ITEMS_HIGHEST_LEVEL["blade"];
+//   const quantity = blade?.quantity ?? 0; // # of blades at highest level
+//   const level = blade?.level ?? 0; // that highest level
+//   const count = blade?.count ?? 0; // total blades owned
 
-  const haveEnoughHighLevel = quantity > 1 && level > 8;
-  const haveEnoughTotal = count >= 60;
+//   const haveEnoughHighLevel = quantity > 1 && level > 8;
+//   const haveEnoughTotal = count >= 60;
 
-  if (
-    !isInvFull(5) &&
-    (haveAComputer() || character.map === "main") &&
-    !(haveEnoughHighLevel || haveEnoughTotal)
-  ) {
-    buy("blade", character.esize - 7);
-  }
-}, 2000);
+//   if (
+//     !isInvFull(5) &&
+//     (haveAComputer() || character.map === "main") &&
+//     !(haveEnoughHighLevel || haveEnoughTotal)
+//   ) {
+//     buy("blade", character.esize - 7);
+//   }
+// }, 2000);
