@@ -619,8 +619,9 @@ setInterval(() => {
     !isInvFull(5) &&
     (haveAComputer() || character.map === "main") &&
     !(
-      (ITEMS_HIGHEST_LEVEL.staff?.quantity ?? 0) > 1 &&
-      (ITEMS_HIGHEST_LEVEL.staff?.level ?? 0) > 8
+      (ITEMS_HIGHEST_LEVEL["blade"]?.quantity ?? 0) > 1 &&
+      (ITEMS_HIGHEST_LEVEL["blade"]?.level ?? 0) > 8 &&
+      (ITEMS_HIGHEST_LEVEL["blade"]?.count ?? 0) < 60
     )
   ) {
     buy("blade", character.esize - 7);
