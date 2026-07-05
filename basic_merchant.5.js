@@ -615,14 +615,18 @@ setInterval(() => {
 }, 12000);
 
 setInterval(() => {
+  const blade = ITEMS_HIGHEST_LEVEL["blade"];
+  const quantity = blade?.quantity ?? 0; // # of blades at highest level
+  const level = blade?.level ?? 0; // that highest level
+  const count = blade?.count ?? 0; // total blades owned
+
+  const haveEnoughHighLevel = quantity > 1 && level > 8;
+  const haveEnoughTotal = count >= 60;
+
   if (
     !isInvFull(5) &&
     (haveAComputer() || character.map === "main") &&
-    !(
-      (ITEMS_HIGHEST_LEVEL["blade"]?.quantity ?? 0) > 1 &&
-      (ITEMS_HIGHEST_LEVEL["blade"]?.level ?? 0) > 8 &&
-      (ITEMS_HIGHEST_LEVEL["blade"]?.count ?? 0) < 60
-    )
+    !(haveEnoughHighLevel || haveEnoughTotal)
   ) {
     buy("blade", character.esize - 7);
   }
