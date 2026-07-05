@@ -623,6 +623,6 @@ setInterval(() => {
       (ITEMS_HIGHEST_LEVEL.staff?.level ?? 0) > 8
     )
   ) {
-    buy("sword", character.esize - 7);
+    buy("blade", character.esize - 7);
   }
 }, 2000);
