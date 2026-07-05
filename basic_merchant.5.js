@@ -614,17 +614,15 @@ setInterval(() => {
   parent.socket.emit("secondhands");
 }, 12000);
 
-// setInterval(() => {
-//   if (
-//     !isInvFull(5) &&
-//     character.map === "main" &&
-//     !(
-//       (ITEMS_HIGHEST_LEVEL.staff?.quantity ?? 0) > 3 &&
-//       (ITEMS_HIGHEST_LEVEL.staff?.level ?? 0) > 7
-//     )
-//   ) {
-//     for (let i = 0; i < 42 - character.items.filter((i) => i).length - 5; i++) {
-//       buy("staff");
-//     }
-//   }
-// }, 2000);
+setInterval(() => {
+  if (
+    !isInvFull(5) &&
+    (haveAComputer() || character.map === "main") &&
+    !(
+      (ITEMS_HIGHEST_LEVEL.staff?.quantity ?? 0) > 1 &&
+      (ITEMS_HIGHEST_LEVEL.staff?.level ?? 0) > 8
+    )
+  ) {
+    buy("sword", character.esize - 7);
+  }
+}, 2000);

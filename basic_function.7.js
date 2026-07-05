@@ -337,7 +337,7 @@ var IGNORE = [
   // avoid upgrading for selling
   "cape",
   "carrotsword",
-  ...BUYABLE,
+  ...BUYABLE.filter((id) => id === "blade"),
 ];
 
 const STORE_ABLE = [
