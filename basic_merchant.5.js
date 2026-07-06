@@ -216,7 +216,6 @@ async function moveHome() {
 
   try {
     log("Moving back Town!");
-    await equipBroom();
     await advanceSmartMove(homeLocation, {
       exact: true,
       useScare: isLuringMobs,
@@ -514,7 +513,7 @@ setInterval(async function () {
 
   await withTimeout(
     Promise.allSettled([
-      equipBatch(calculateMerchantEquipments()),
+      !shouldGoChilling() && equipBatch(calculateMerchantEquipments()),
       compoundInv(),
       upgradeInv(),
       exchangeSomething(),
