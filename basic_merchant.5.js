@@ -41,6 +41,25 @@ async function equipBroom() {
   }
 }
 
+async function calculateMerchantEquipments() {
+  return {
+    helmet: "eear",
+    mainhand: isDraggingMobs ? "dartgun" : "broom",
+    offhand: isDraggingMobs ? "quiver" : "wbookhs",
+    amulet: "warmscarf",
+    orb: "jacko",
+    chest: "tshirt4",
+    pants: "pants",
+    ring1: "solitaire",
+    ring2: "dexring",
+    shoes: "eslippers",
+    gloves: "gloves1",
+    belt: "sbelt",
+    earring1: "dexearring",
+    earring2: "dexearring",
+  };
+}
+
 function shouldGoChilling() {
   return (
     (!is_on_cooldown("fishing") &&
@@ -495,6 +514,7 @@ setInterval(async function () {
 
   await withTimeout(
     Promise.allSettled([
+      equipBatch(calculateMerchantEquipments()),
       compoundInv(),
       upgradeInv(),
       exchangeSomething(),

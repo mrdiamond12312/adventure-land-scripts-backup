@@ -114,7 +114,7 @@ async function openCryptInstance() {
     if (onDuty || isAdvanceSmartMoving || smart.moving) {
       return;
     }
-    
+
     onDuty = true;
     if (locate_item("cryptkey") === -1) {
       await retrieveBankItem("cryptkey");
@@ -138,6 +138,7 @@ async function openCryptInstance() {
 }
 
 var isLuringMobs = false;
+var isDraggingMobs = false;
 const trustedPartners = ["earthPriest", "earthWar"];
 
 async function lureMechaGnome() {
