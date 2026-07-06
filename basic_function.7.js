@@ -337,7 +337,7 @@ var IGNORE = [
   // avoid upgrading for selling
   "cape",
   "carrotsword",
-  ...BUYABLE, 
+  ...BUYABLE,
   // .filter((id) => id !== "blade"),
 ];
 
@@ -1090,7 +1090,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   setTimeout(hitAndRun, Math.max(moveTime, 200));
 }
-hitAndRun();
+if (!isMerchant()) hitAndRun();
 
 const HEAL_IGNORE = ["Geoffriel"];
 
