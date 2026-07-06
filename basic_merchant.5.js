@@ -41,7 +41,7 @@ async function equipBroom() {
   }
 }
 
-async function calculateMerchantEquipments() {
+function calculateMerchantEquipments() {
   return {
     helmet: "eear",
     mainhand: isDraggingMobs ? "dartgun" : "broom",
