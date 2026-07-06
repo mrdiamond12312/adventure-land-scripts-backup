@@ -410,6 +410,7 @@ function retrieveMaxItemsLevel() {
  */
 function groupItemsByLevel(items) {
   return items.reduce((acc, item) => {
+    if (item.l) return acc; // skip locked items
     (acc[item.level] = acc[item.level] ?? []).push(item);
     return acc;
   }, {});
@@ -467,7 +468,9 @@ async function retrievedBankItemToUpgrade() {
     RETRIEVE_HISTORY.shift();
   }
 
-  let desiredItems = getItemBankSlots(desiredItemId, true);
+  let desiredItems = getItemBankSlots(desiredItemId, true).filter(
+    (item) => !item.l,
+  );
   const keep = getKeepThreshold(desiredItemId);
   desiredItems = desiredItems.slice(0, desiredItems.length - keep);
 
@@ -577,7 +580,7 @@ async function upgradeInv() {
 
   for (let i = 0; i < character.items.length; i++) {
     const item = character.items[i];
-    if (!item) continue;
+    if (!item || item.l) continue;
     if (IGNORE.includes(item.name)) continue;
     if (!item_info(item).upgrade) continue;
 
@@ -656,6 +659,7 @@ async function bankStoreRoutine() {
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => {
       if (!item) return false;
+      if (item.l) return false; // skip locked items
       const isRare = item_grade(item) >= 2;
       const isHighLevel =
         item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
