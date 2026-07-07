@@ -1220,7 +1220,7 @@ async function scareAwayMobs() {
   ) {
     return Promise.all([
       equipBatch({ orb: "jacko" }, true),
-      use_skill("scare"),
+      use_skill("scare").then(() => reduce_cooldown("scare", 0.95 * character.ping)),
     ]);
   }
 }
