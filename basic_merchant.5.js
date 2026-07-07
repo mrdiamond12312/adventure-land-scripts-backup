@@ -210,7 +210,8 @@ async function moveHome() {
   if (
     distance(character, homeLocation) < 150 ||
     smart.moving ||
-    isAdvanceSmartMoving
+    isAdvanceSmartMoving ||
+    isDraggingMobs
   )
     return;
 
