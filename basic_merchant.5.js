@@ -511,6 +511,13 @@ setInterval(async function () {
     retrieveBankItem("computer");
   }
 
+  if (
+    character.hp < character.max_hp - 1000 &&
+    (!get_entity(PRIEST) || distance(character, get_entity(PRIEST)) > 150)
+  ) {
+    send_cm(PRIEST, "party_heal");
+  }
+
   await withTimeout(
     Promise.allSettled([
       !shouldGoChilling() && equipBatch(calculateMerchantEquipments()),
