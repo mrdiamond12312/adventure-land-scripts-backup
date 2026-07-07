@@ -43,15 +43,15 @@ async function equipBroom() {
 
 function calculateMerchantEquipments() {
   return {
-    helmet: isDraggingMobs ? "eear" : "xhelmet",
+    helmet: isDraggingMobs ? "xhelmet" : "eear",
     mainhand: isDraggingMobs ? "dartgun" : "broom",
     offhand: isDraggingMobs ? "quiver" : "wbookhs",
-    amulet: isDraggingMobs ? "warmscarf" : "t2intamulet",
+    amulet: isDraggingMobs ? "t2intamulet" : "warmscarf",
     orb: "jacko",
     chest: "tshirt4",
     pants: "pants",
     ring1: "solitaire",
-    ring2: isDraggingMobs ? "dexring" : "armorring",
+    ring2: isDraggingMobs ?  "armorring" :"dexring" ,
     shoes: "eslippers",
     gloves: "gloves1",
     belt: "sbelt",
