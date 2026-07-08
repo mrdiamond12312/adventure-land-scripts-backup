@@ -156,7 +156,7 @@ var mapY = -301;
 //   "turtle",
 //   "crabx",
 // ];
-var mobsToFarm = ["plantoid"];
+var mobsToFarm = ["ent", "plantoid"];
 // var mobsToFarm = ["prat"];
 // var mobsToFarm = ["mummy"];
 // var mobsToFarm = ["jr", "booboo"];
