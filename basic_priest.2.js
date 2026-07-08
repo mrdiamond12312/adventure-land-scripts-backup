@@ -179,11 +179,11 @@ async function priestBuff() {
         const middleY = (buffee.y + character.y) / 2;
         if (can_move_to(middleX, middleY)) move(middleX, middleY);
         else if (can_move_to(buffee.x, buffee.y)) move(buffee.x, buffee.y);
-        else
-          advanceSmartMove(
-            { map: character.map, x: buffee.x, y: buffee.y },
-            { smartmoveDebug: true },
-          );
+        // else
+        //   advanceSmartMove(
+        //     { map: character.map, x: buffee.x, y: buffee.y },
+        //     { smartmoveDebug: true },
+        //   );
         set_message(`Moving to ${buffee.name}`);
         continue;
       }
