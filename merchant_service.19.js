@@ -272,21 +272,39 @@ async function ensureDartgun() {
   await equipBatch(calculateMerchantEquipments());
 }
 
-async function positionAtEntAimPoint(ent, dartgunRange) {
-  const dx = ENT_AIM_POINT.x - ent.x;
-  const dy = ENT_AIM_POINT.y - ent.y;
-  const len = Math.sqrt(dx * dx + dy * dy);
-  if (len === 0) return;
+async function positionAtEntAimPoint(entId, dartgunRange) {
+  let ent = parent.entities[entId];
 
-  const standPoint = {
-    x: ent.x + (dx / len) * dartgunRange,
-    y: ent.y + (dy / len) * dartgunRange,
-  };
-  await move(standPoint.x, standPoint.y).catch(() => smart_move(standPoint));
+  // Re-derive the stand point every tick (not just once) since the ent can drift
+  // before we're in position, and keep retrying until we're actually there.
+  while (ent) {
+    const dx = ENT_AIM_POINT.x - ent.x;
+    const dy = ENT_AIM_POINT.y - ent.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) break;
+
+    const standPoint = {
+      x: ent.x + (dx / len) * dartgunRange,
+      y: ent.y + (dy / len) * dartgunRange,
+    };
+
+    if (distance(character, standPoint) < 20) break;
+
+    if (!isMyPriestOnline()) {
+      throw new Error("Priest went offline mid-lure — aborting.");
+    }
+
+    await move(standPoint.x, standPoint.y).catch(() => smart_move(standPoint));
+    await sleep(ENT_TICK);
+    ent = parent.entities[entId];
+  }
+
+  if (!ent) throw new Error("Ent disappeared before positioning — lure aborted.");
 }
 
-async function aggroEnt(ent, dartgunRange) {
-  while (ent.target !== character.name) {
+async function aggroEnt(entId, dartgunRange) {
+  let ent = parent.entities[entId];
+  while (ent && ent.target !== character.name) {
     if (!isMyPriestOnline()) {
       throw new Error("Priest went offline mid-lure — aborting.");
     }
@@ -301,7 +319,10 @@ async function aggroEnt(ent, dartgunRange) {
       ).catch(() => {});
     }
     await sleep(ENT_TICK);
+    ent = parent.entities[entId];
   }
+
+  if (!ent) throw new Error("Ent disappeared before aggro — lure aborted.");
 }
 
 async function walkEntToSpawn(entId) {
@@ -384,13 +405,13 @@ async function dragEnt() {
     await ensureDartgun();
     const dartgunRange = character.range + character.xrange * 0.8;
 
-    await advanceSmartMove("ent");
+    await advanceSmartMove({ ...ENT_FIRST_ANCHOR, map: ENT_LURE_MAP });
 
     const ent = get_nearest_monster({ type: "ent" });
     if (!ent) throw new Error("No Ent found!");
 
-    await positionAtEntAimPoint(ent, dartgunRange);
-    await aggroEnt(ent, dartgunRange);
+    await positionAtEntAimPoint(ent.id, dartgunRange);
+    await aggroEnt(ent.id, dartgunRange);
     await walkEntToSpawn(ent.id);
 
     nextDelay = 90_000; // lured successfully, give it a while before going again
