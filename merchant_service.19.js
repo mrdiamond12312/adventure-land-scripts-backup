@@ -296,8 +296,8 @@ async function aggroEnt(ent, dartgunRange) {
       await attack(ent).catch(() => {});
     } else if (d > dartgunRange) {
       await move(
-        character.x + (ent.x - character.x) * 0.1,
-        character.y + (ent.y - character.y) * 0.1,
+        character.x + (ent.x - character.x) * 0.2,
+        character.y + (ent.y - character.y) * 0.2,
       ).catch(() => {});
     }
     await sleep(ENT_TICK);
