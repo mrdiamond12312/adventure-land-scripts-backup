@@ -987,12 +987,12 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   // --- 5. Desired destination based on current orbit angle ---
   let new_x, new_y;
   if (isTankerHoldingFarmMob && !isNearDefaultSpot) {
-    // Far from spot: measure the hold distance from the center instead of the target,
-    // shrinking it as the mob outpaces the tanker — holding a fixed offset from a
-    // faster mob is pointless, so just camp closer to home the more it out-paces you.
-    const holdRadius = (rangeRadius + extendedRadius) / speedRate;
-    new_x = mapX - holdRadius * cosA;
-    new_y = mapY - holdRadius * sinA;
+    // Far from spot: measure the hold distance from the mob itself (angle already points
+    // from the mob toward the spot), widening it as the mob outpaces the tanker — the
+    // faster it is, the bigger a lead toward home the tanker needs to actually kite it back.
+    const holdRadius = (rangeRadius + extendedRadius) * speedRate;
+    new_x = target.x + holdRadius * cosA;
+    new_y = target.y + holdRadius * sinA;
   } else {
     new_x = orbitCenter.x + (rangeRadius + extendedRadius) * cosA;
     new_y = orbitCenter.y + (rangeRadius + extendedRadius) * sinA;
