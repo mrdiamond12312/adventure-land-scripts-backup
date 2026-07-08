@@ -13,6 +13,7 @@ if (parent.caracAL) {
       syncBankData();
       bankLoop();
       lureMechaGnome();
+      dragEnt();
     });
 } else {
   load_code(10);

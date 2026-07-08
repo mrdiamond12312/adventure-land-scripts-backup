@@ -175,12 +175,26 @@ async function mainLoop() {
 
     // Save location data for other characters/storage once high level
     if (character.max_mp > G.skills["magiport"].mp * 1.5) {
+      // Observer flag for the merchant's ent lure: is an ent already engaged
+      // with the party near the farm spawn? (avoids double-luring)
+      const partyNames = new Set([...partyMems, partyMerchant]);
+      const entTargetingParty = Object.values(parent.entities).some(
+        (entity) =>
+          entity &&
+          entity.type === "monster" &&
+          entity.mtype === "ent" &&
+          entity.target &&
+          partyNames.has(entity.target) &&
+          distance(entity, { x: mapX, y: mapY }) < 300,
+      );
+
       set("mageLocation", {
         mp: character.mp,
         map: character.map,
         x: character.x,
         y: character.y,
         time: Date.now(),
+        entTargetingParty,
       });
     }
 
