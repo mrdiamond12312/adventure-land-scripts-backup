@@ -976,7 +976,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   // to keep repositioning — otherwise the mob closes the gap before the tanker
   // finishes each step, and it ends up looking stuck in place.
   const speedRate = isTankerHoldingFarmMob
-    ? Math.max(1, (target.speed ?? character.speed) / character.speed)
+    ? Math.max(1, (target.charage ?? target.speed ?? character.speed) / character.speed)
     : 1;
   const orbitRadius = (rangeRadius + extendedRadius) * speedRate;
 
