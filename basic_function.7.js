@@ -968,17 +968,21 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     mobsToFarm.includes(target.mtype);
   const isNearDefaultSpot =
     isTankerHoldingFarmMob &&
-    distance(character, { x: mapX, y: mapY }) <=
+    distance(target, { x: mapX, y: mapY }) <=
       character.range + character.xrange;
   const orbitCenter = isNearDefaultSpot ? { x: mapX, y: mapY } : target;
 
-  // Ratio of the mob's speed to the tanker's own — used only for the walk-toward-center phase below.
-  const speedRate = isTankerHoldingFarmMob
-    ? Math.max(
-        1,
-        (target.charge ?? target.speed ?? character.speed) / character.speed,
-      )
-    : 1;
+  // Ratio of the mob's speed to the tanker's own. The destination is anchored at the
+  // mob's own moving position only while still walking it toward the spot (far case) —
+  // once orbitCenter switches to the fixed spot, there's nothing fast-moving to buffer for.
+  const speedRate =
+    isTankerHoldingFarmMob && !isNearDefaultSpot
+      ? Math.max(
+          1,
+          (target.charge ?? target.speed ?? character.speed) /
+            character.speed,
+        )
+      : 1;
 
   // --- 5. Desired destination based on current orbit angle ---
   let new_x, new_y;
