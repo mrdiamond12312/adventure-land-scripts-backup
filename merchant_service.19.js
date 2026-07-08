@@ -265,10 +265,7 @@ async function ensureDartgun() {
   if (findMaxLevelItem("dartgun") === -1) await retrieveBankItem("dartgun");
   if (findMaxLevelItem("quiver") === -1) await retrieveBankItem("quiver");
 
-  // One-time equip so character.range/xrange reflect the dartgun+quiver for the
-  // range calc right below — the merchant mainLoop keeps them equipped for the
-  // rest of the drag via calculateMerchantEquipments()/isDraggingMobs.
-  await equipBatch({ mainhand: "dartgun", offhand: "quiver" });
+  await equipBatch(calculateMerchantEquipments());
 }
 
 async function positionAtEntAimPoint(ent, dartgunRange) {
