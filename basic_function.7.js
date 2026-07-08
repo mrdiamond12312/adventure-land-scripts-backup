@@ -1041,9 +1041,10 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   if (
     isAssignedAsTanker() &&
-    distance(character, { map, x: mapX, y: mapY }) < 200
+    target.type === "monster" &&
+    mobsToFarm.includes(target.mtype)
   ) {
-    // Near default spawn: hold position between the target and spawn instead of orbiting further
+    // Fighting a farmed mob: hold position between the target and spawn instead of orbiting further
     angle = Math.atan2(mapY - target.y, mapX - target.x);
   } else {
     angle += rotationStep;

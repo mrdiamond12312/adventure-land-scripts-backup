@@ -137,6 +137,10 @@ async function openCryptInstance() {
   }
 }
 
+function isMyPriestOnline() {
+  return parent.caracAL.siblings.includes(PRIEST);
+}
+
 var isLuringMobs = false;
 var isDraggingMobs = false;
 const trustedPartners = ["earthPriest", "earthWar"];
@@ -155,7 +159,7 @@ async function lureMechaGnome() {
       parent.party_list &&
       trustedPartners.some((name) => parent.party_list.includes(name))
     ) &&
-      !parent.caracAL.siblings.includes(PRIEST))
+      !isMyPriestOnline())
   ) {
     return setTimeout(lureMechaGnome, nextDelay);
   }
@@ -283,6 +287,10 @@ async function positionAtEntAimPoint(ent, dartgunRange) {
 
 async function aggroEnt(ent, dartgunRange) {
   while (ent.target !== character.name) {
+    if (!isMyPriestOnline()) {
+      throw new Error("Priest went offline mid-lure — aborting.");
+    }
+
     const d = distance(character, ent);
     if (!is_on_cooldown("attack") && d <= dartgunRange) {
       await attack(ent).catch(() => {});
@@ -314,10 +322,13 @@ async function walkEntToSpawn(entId) {
       arrived = true;
     });
 
-  await new Promise((resolve) => {
+  await new Promise((resolve, reject) => {
     const step = async () => {
       const ent = parent.entities[entId];
       if (arrived || !ent || character.rip) return resolve();
+      if (!isMyPriestOnline()) {
+        return reject(new Error("Priest went offline mid-lure — aborting."));
+      }
 
       const d = distance(character, ent);
       if (
@@ -355,7 +366,7 @@ async function dragEnt() {
     smart.moving ||
     shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
-    !parent.caracAL.siblings.includes(PRIEST) ||
+    !isMyPriestOnline() ||
     isEntAlreadyEngagedAtSpawn()
   ) {
     return setTimeout(dragEnt, nextDelay);
