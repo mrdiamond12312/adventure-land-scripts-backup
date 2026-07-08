@@ -972,17 +972,27 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
       character.range + character.xrange;
   const orbitCenter = isNearDefaultSpot ? { x: mapX, y: mapY } : target;
 
-  // If the mob outpaces the tanker, widen the orbit radius so there's enough buffer
-  // to keep repositioning — otherwise the mob closes the gap before the tanker
-  // finishes each step, and it ends up looking stuck in place.
+  // Ratio of the mob's speed to the tanker's own — used only for the walk-toward-center phase below.
   const speedRate = isTankerHoldingFarmMob
-    ? Math.max(1, (target.charage ?? target.speed ?? character.speed) / character.speed)
+    ? Math.max(
+        1,
+        (target.charge ?? target.speed ?? character.speed) / character.speed,
+      )
     : 1;
-  const orbitRadius = (rangeRadius + extendedRadius) * speedRate;
 
   // --- 5. Desired destination based on current orbit angle ---
-  let new_x = orbitCenter.x + orbitRadius * cosA;
-  let new_y = orbitCenter.y + orbitRadius * sinA;
+  let new_x, new_y;
+  if (isTankerHoldingFarmMob && !isNearDefaultSpot) {
+    // Far from spot: measure the hold distance from the center instead of the target,
+    // shrinking it as the mob outpaces the tanker — holding a fixed offset from a
+    // faster mob is pointless, so just camp closer to home the more it out-paces you.
+    const holdRadius = (rangeRadius + extendedRadius) / speedRate;
+    new_x = mapX - holdRadius * cosA;
+    new_y = mapY - holdRadius * sinA;
+  } else {
+    new_x = orbitCenter.x + (rangeRadius + extendedRadius) * cosA;
+    new_y = orbitCenter.y + (rangeRadius + extendedRadius) * sinA;
+  }
 
   // --- 6. Smooth micro-rotation when close to target ---
   if (flipCooldown > 9) {
@@ -1022,8 +1032,10 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     }
     for (let i = 1; i <= 48; i++) {
       const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
-      const alt_x = orbitCenter.x + orbitRadius * Math.cos(adjustedAngle);
-      const alt_y = orbitCenter.y + orbitRadius * Math.sin(adjustedAngle);
+      const alt_x =
+        orbitCenter.x + (rangeRadius + extendedRadius) * Math.cos(adjustedAngle);
+      const alt_y =
+        orbitCenter.y + (rangeRadius + extendedRadius) * Math.sin(adjustedAngle);
 
       if (can_move_to(alt_x, alt_y)) {
         angle = adjustedAngle;
@@ -1061,7 +1073,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     return setTimeout(hitAndRun, loopInterval);
   }
 
-  const radiusTotal = orbitRadius;
+  const radiusTotal = rangeRadius + extendedRadius;
   const rotationStep =
     flipRotation *
     Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
