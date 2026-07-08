@@ -961,9 +961,28 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     }
   }
 
+  // Tanker holding a farmed mob near the default spot: orbit the spot itself, not the target
+  const isTankerHoldingFarmMob =
+    isAssignedAsTanker() &&
+    target.type === "monster" &&
+    mobsToFarm.includes(target.mtype);
+  const isNearDefaultSpot =
+    isTankerHoldingFarmMob &&
+    distance(character, { x: mapX, y: mapY }) <=
+      character.range + character.xrange;
+  const orbitCenter = isNearDefaultSpot ? { x: mapX, y: mapY } : target;
+
+  // If the mob outpaces the tanker, widen the orbit radius so there's enough buffer
+  // to keep repositioning — otherwise the mob closes the gap before the tanker
+  // finishes each step, and it ends up looking stuck in place.
+  const speedRate = isTankerHoldingFarmMob
+    ? Math.max(1, (target.speed ?? character.speed) / character.speed)
+    : 1;
+  const orbitRadius = (rangeRadius + extendedRadius) * speedRate;
+
   // --- 5. Desired destination based on current orbit angle ---
-  let new_x = target.x + (rangeRadius + extendedRadius) * cosA;
-  let new_y = target.y + (rangeRadius + extendedRadius) * sinA;
+  let new_x = orbitCenter.x + orbitRadius * cosA;
+  let new_y = orbitCenter.y + orbitRadius * sinA;
 
   // --- 6. Smooth micro-rotation when close to target ---
   if (flipCooldown > 9) {
@@ -985,6 +1004,17 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   let destinationX, destinationY;
 
   if (!can_move_to(new_x, new_y)) {
+    // Tanker holding a farmed mob: path there instead of sweeping for an angular alt-spot
+    if (isTankerHoldingFarmMob) {
+      smartmoveDebug = true;
+      await advanceSmartMove(
+        { x: new_x, y: new_y, map: character.map },
+        { useScare: false },
+      );
+      smartmoveDebug = false;
+      return setTimeout(hitAndRun, loopInterval);
+    }
+
     // Try small angular adjustments in the current flip direction
     if (flipRotationCooldown < 0) {
       flipRotation *= -1;
@@ -992,10 +1022,8 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     }
     for (let i = 1; i <= 48; i++) {
       const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
-      const alt_x =
-        target.x + (rangeRadius + extendedRadius) * Math.cos(adjustedAngle);
-      const alt_y =
-        target.y + (rangeRadius + extendedRadius) * Math.sin(adjustedAngle);
+      const alt_x = orbitCenter.x + orbitRadius * Math.cos(adjustedAngle);
+      const alt_y = orbitCenter.y + orbitRadius * Math.sin(adjustedAngle);
 
       if (can_move_to(alt_x, alt_y)) {
         angle = adjustedAngle;
@@ -1033,20 +1061,17 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     return setTimeout(hitAndRun, loopInterval);
   }
 
-  const radiusTotal = rangeRadius + extendedRadius;
+  const radiusTotal = orbitRadius;
   const rotationStep =
     flipRotation *
     Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
     2;
 
-  if (
-    isAssignedAsTanker() &&
-    target.type === "monster" &&
-    mobsToFarm.includes(target.mtype)
-  ) {
-    // Fighting a farmed mob: hold position between the target and spawn instead of orbiting further
+  if (isTankerHoldingFarmMob && !isNearDefaultSpot) {
+    // Far from the spot: hold position between the target and spawn instead of orbiting further
     angle = Math.atan2(mapY - target.y, mapX - target.x);
   } else {
+    // Near the spot (or not tanking a farmed mob): orbit normally, around orbitCenter
     angle += rotationStep;
   }
 

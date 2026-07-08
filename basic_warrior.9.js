@@ -235,7 +235,7 @@ async function fight(target) {
         [...partyMems, partyMerchant].some(
           (ally) => ally !== character.name && mob.target === ally,
         ) &&
-        calculateDamage(mob, character) < 1800 && // Warrior can take the damage
+        calculateDamage(mob, character) < 3000 && // Warrior can take the damage
         !mob.cooperative &&
         is_in_range(mob, "taunt"),
     );
