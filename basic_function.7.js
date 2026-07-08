@@ -613,13 +613,18 @@ function arrayShuffle(array) {
 
 function getMonstersOnDeclares() {
   // if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
-  for (monster of ["grinch"]) {
+  for (const monster of ["grinch"]) {
     if (get_nearest_monster({ type: monster })) {
       return get_nearest_monster({ type: monster });
     }
   }
 
-  for (monster of mobsToFarm) {
+  // The merchant is actively dragging this mob type in from elsewhere (see dragEnt
+  // in merchant_service.19.js) — don't declare it until it's actually arrived.
+  const luringMobType = get("luringMobType");
+
+  for (const monster of mobsToFarm) {
+    if (monster === luringMobType) continue;
     if (get_nearest_monster({ type: monster })) {
       return get_nearest_monster({ type: monster });
     }

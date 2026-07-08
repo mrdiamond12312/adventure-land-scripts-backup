@@ -376,6 +376,10 @@ async function dragEnt() {
     onDuty = true;
     isLuringMobs = true;
     isDraggingMobs = true;
+    // Tell the rest of the party we're actively dragging this in — see
+    // getMonstersOnDeclares() in basic_function.7.js, which skips declaring it
+    // as a farm target while it's still being walked in from elsewhere.
+    set("luringMobType", "ent");
 
     await ensureDartgun();
     const dartgunRange = character.range + character.xrange * 0.8;
@@ -397,6 +401,7 @@ async function dragEnt() {
     isDraggingMobs = false;
     isLuringMobs = false;
     onDuty = false;
+    set("luringMobType", undefined);
     setTimeout(dragEnt, nextDelay);
   }
 }
