@@ -355,7 +355,7 @@ async function dragEnt() {
     smart.moving ||
     shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
-    !get_entity(PRIEST) ||
+    !parent.caracAL.siblings.includes(PRIEST) ||
     isEntAlreadyEngagedAtSpawn()
   ) {
     return setTimeout(dragEnt, nextDelay);
