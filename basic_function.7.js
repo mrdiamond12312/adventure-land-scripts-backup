@@ -812,7 +812,7 @@ function getLoopInterval() {
 
   return ms_to_next_skill("attack") <= dynamicInterval
     ? Math.max(ms_to_next_skill("attack"), 1)
-    : dynamicInterval ?? frequencyInterval;
+    : (dynamicInterval ?? frequencyInterval);
 }
 
 function ms_to_next_skill(skill) {
@@ -1316,11 +1316,14 @@ setInterval(async function () {
           (currentTarget.real_y + character.real_y) / 2,
         );
       else
-        await smartMove({
-          map: character.map,
-          x: currentTarget.real_x,
-          y: currentTarget.real_y,
-        });
+        await advanceSmartMove(
+          {
+            map: character.map,
+            x: currentTarget.real_x,
+            y: currentTarget.real_y,
+          },
+          { useScare: ![TANKER, PRIEST].includes(character.name) },
+        );
     } else {
       if (can_move_to(currentTarget.x, currentTarget.y))
         await move(
@@ -2025,7 +2028,7 @@ async function changeToDailyEventTargets() {
     else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
     else change_target(snowmanInstance);
 
-    return grinchInstance ?? snowmanInstance.s?.fullguardx
+    return (grinchInstance ?? snowmanInstance.s?.fullguardx)
       ? beeToAttack
       : snowmanInstance;
   }
