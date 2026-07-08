@@ -25,7 +25,6 @@ var TANKER =
 
 const MIDAS_CHARACTER = [MAGE, "CrownPriest"];
 
-// var partyCodeSlot = [4, 15, 3, 5];
 const CODE_SLOTS = {
   MoohThatCow: {
     homeServer: "EUII",
@@ -61,21 +60,6 @@ const CODE_SLOTS = {
   },
 };
 
-var partyCodeSlot = [9, 2, 4, 5];
-// var caracALPartyCodeSlot = [
-//   "adventure-land-scripts-backup/basic_mage.4.js",
-//   "adventure-land-scripts-backup/solo_ranger.15.js",
-//   "adventure-land-scripts-backup/basic_archer.3.js",
-//   "adventure-land-scripts-backup/basic_merchant.5.js",
-// ];
-var caracALPartyCodeSlot = [
-  "adventure-land-scripts-backup/basic_warrior.9.js",
-  "adventure-land-scripts-backup/basic_priest.2.js",
-  "adventure-land-scripts-backup/basic_mage.4.js",
-  "adventure-land-scripts-backup/basic_merchant.5.js",
-];
-// var partyCodeSlot = [2, 4, 15, 5];
-
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
 
@@ -94,8 +78,6 @@ const spacial = 16;
 // Monsters selector
 var min_xp = 100;
 var max_att = 2000;
-var bossOffset = 0.99;
-var boss = ["mrpumpkin", "mrgreen"];
 
 // Ignore mob with high d-return
 const MELEE_IGNORE_LIST = ["porcupine"];
@@ -136,8 +118,8 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapY = 132;
 
 var map = "desertland";
-var mapX = -800;
-var mapY = -354;
+var mapX = -794;
+var mapY = -301;
 
 // var map = "level1";
 // var mapX = 50;
@@ -215,17 +197,6 @@ function getTotalQuantityOf(item) {
       accummulator + (current && current.name === item ? current.q || 1 : 0)
     );
   }, 0);
-}
-
-function filterCompoundableAndStackable() {
-  const inv = character.items;
-  const res = Array.from({ length: inv.length }, (_, i) => i + 0).filter(
-    (i) =>
-      inv[i] &&
-      (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name),
-  );
-  return res;
 }
 
 // Strategic functions
@@ -408,7 +379,6 @@ const STORE_ABLE = [
   "gslime",
   "frogt",
   "forscroll",
-  "feather0",
   "essenceofnature",
   "essenceoffrost",
   "essenceoffire",
@@ -836,7 +806,7 @@ function getTarget() {
 const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
-    (breakpoint) => Math.max((1 / character.frequency) * 1000) / breakpoint,
+    (breakpoint) => ((1 / character.frequency) * 1000) / breakpoint,
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
@@ -860,23 +830,6 @@ async function leaveJail() {
     });
   }
 }
-
-/**
- *
- * @param {*} theta -- current angle from target and character
- * @param {*} width -- width of hitbox border
- * @param {*} height -- height of hitbox border
- * @returns -- extra distance allow by attack range
- */
-// function extraDistanceWithinHitbox(theta, width, height) {
-//   let halfW = width / 2;
-//   let halfH = height / 2;
-
-//   let dx = Math.abs(halfW / Math.cos(theta)); // Distance to vertical boundary of hitbox
-//   let dy = Math.abs(halfH / Math.sin(theta)); // Distance to horizontal boundary of hitbox
-
-//   return Math.min(dx, dy); // Extra range from mob's hitbox
-// }
 
 function extraDistanceWithinHitbox(target) {
   if (!target) return 0;
@@ -1081,7 +1034,15 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
     2;
 
-  angle += rotationStep;
+  if (
+    isAssignedAsTanker() &&
+    distance(character, { map, x: mapX, y: mapY }) < 200
+  ) {
+    // Near default spawn: hold position between the target and spawn instead of orbiting further
+    angle = Math.atan2(mapY - target.y, mapX - target.x);
+  } else {
+    angle += rotationStep;
+  }
 
   const moveTime =
     (distance(character, { x: destinationX, y: destinationY }) /
@@ -1180,46 +1141,8 @@ function handle_death() {
   setTimeout(respawn, 15000);
 }
 
-// BOSS fight functions
-function targetBoss(boss) {
-  const target = get_nearest_monster({ type: boss });
-  if (target) change_target(target);
-}
-
 function sleep(delay) {
   return new Promise((resolve) => setTimeout(resolve, delay));
-}
-
-function shouldGoToBoss(mboss) {
-  return (
-    !boss.includes(getTarget()?.mtype) &&
-    parent.S[mboss] &&
-    parent.S[mboss].live &&
-    ((parent.S[mboss].hp < bossOffset * parent.S[mboss].max_hp &&
-      parent.S[mboss].target !== null &&
-      !partyMems.includes(parent.S[mboss].target)) ||
-      mboss === "snowman")
-  );
-}
-
-function goToBoss() {
-  for (i in boss) {
-    if (shouldGoToBoss(boss[i])) {
-      log("Attempting boss");
-      stop("move");
-      change_target();
-      smartmoveDebug = false;
-      if (!smart.moving && !isAdvanceSmartMoving)
-        advanceSmartMove(parent.S[boss[i]])
-          .then(() => targetBoss(boss[i]))
-          .catch((e) => {
-            use_skill("use_town");
-            change_target();
-          });
-      return true;
-    }
-  }
-  return false;
 }
 
 const LOOTING_LIMIT = 15;

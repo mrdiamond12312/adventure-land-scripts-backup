@@ -194,9 +194,6 @@ setInterval(async function () {
 
   let target = getRangerTarget() || getTarget();
 
-  //// BOSSES
-  if (goToBoss()) return;
-
   //// EVENTS
   target = (await changeToDailyEventTargets()) ?? getRangerTarget();
 

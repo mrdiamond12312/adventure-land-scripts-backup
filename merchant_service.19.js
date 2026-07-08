@@ -224,6 +224,170 @@ async function lureMechaGnome() {
   }
 }
 
+async function dragEnt() {
+  let equipping = false;
+  const ensureDartgun = async () => {
+    if (character.slots.mainhand?.name === "dartgun" || equipping) return;
+    equipping = true;
+    try {
+      let slot = findMaxLevelItem("dartgun");
+      if (slot === -1 || slot == null) {
+        await retrieveBankItem("dartgun");
+        slot = findMaxLevelItem("dartgun");
+      }
+      if (slot === -1 || slot == null) throw new Error("No dartgun available!");
+      await equip(slot);
+    } finally {
+      equipping = false;
+    }
+  };
+
+  const LURE_DESTINATION = { x: mapX, y: mapY, map: "desertland" };
+  const AIM_POINT = { x: -75, y: -1897 };
+  const FIRST_ANCHOR = { x: 136, y: -1836 };
+  const SCARE_BUFFER = 1.5;
+  const TICK = 10;
+
+  let dartgunRange; // scoped locally instead of implicit global
+
+  if (
+    isLuringMobs ||
+    onDuty ||
+    isAdvanceSmartMoving ||
+    smart.moving ||
+    shouldGoChilling()
+  ) {
+    return;
+  }
+
+  try {
+    onDuty = true;
+    isLuringMobs = true;
+    isDraggingMobs = true;
+
+    // --- 1. First equip, then define the range ---
+    await ensureDartgun();
+    dartgunRange = character.range + character.xrange * 0.8;
+
+    // --- 2. Go to the ents ---
+    await advanceSmartMove("ent");
+
+    let ent = get_nearest_monster({ type: "ent" });
+    const entId = ent.id;
+    if (!ent) throw new Error("No Ent found!");
+
+    // --- 2b. Position at dartgunRange, on the AIM_POINT side of the ent ---
+    const dx = AIM_POINT.x - ent.x;
+    const dy = AIM_POINT.y - ent.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+
+    if (len > 0) {
+      const standPoint = {
+        x: ent.x + (dx / len) * dartgunRange,
+        y: ent.y + (dy / len) * dartgunRange,
+      };
+      await move(standPoint.x, standPoint.y).catch(() =>
+        smart_move(standPoint),
+      );
+    }
+
+    // --- 3. Aggro (loop UNTIL it targets us) ---
+    while (!ent.rip && ent.target !== character.name) {
+      const d = distance(character, ent);
+      if (!is_on_cooldown("attack") && d <= dartgunRange) {
+        await attack(ent).catch(() => {});
+      } else if (d > dartgunRange) {
+        await move(
+          character.x + (ent.x - character.x) * 0.1,
+          character.y + (ent.y - character.y) * 0.1,
+        ).catch(() => {});
+      }
+      await sleep(TICK);
+    }
+    if (ent.dead) throw new Error("Ent died before aggro — lure aborted.");
+
+    // --- 4. Kite it to the destination ---
+    isAdvanceSmartMoving = true;
+    let arrived = false;
+    const waypoints = [
+      FIRST_ANCHOR,
+      { x: 196, y: -1641 },
+      { x: 199, y: -1125 },
+      { x: 85, y: -1035 },
+      { x: -187, y: -620 },
+      { x: -496, y: -620 },
+      { x: -757, y: -302 },
+    ];
+
+    //move(FIRST_ANCHOR.x, FIRST_ANCHOR.y) .then(() => advanceSmartMove(LURE_DESTINATION, { useScare: false, useMagiport: false, useBlink: false, speed: 500 })) .then(() => { arrived = true; isAdvanceSmartMoving = false; });
+
+    waypoints
+      .reduce(
+        (p, { x, y }) =>
+          p.then(() =>
+            move(x, y).catch((e) => {
+              console.warn("move failed", x, y, e);
+              throw e;
+            }),
+          ),
+        Promise.resolve(),
+      )
+      .then(() => {
+        arrived = true;
+        isAdvanceSmartMoving = false;
+      });
+
+    // --- 5. While walking: heal + scare + re-aggro ---
+    // cruise(24);
+    await new Promise((resolve) => {
+      const step = async () => {
+        const ent = parent.entities[entId];
+        if (arrived || !ent || character.rip) {
+          console.warn("breaking the loop");
+          return resolve();
+        }
+        const d = distance(character, ent);
+        console.warn(d);
+        if (
+          d < G.monsters.ent.range * SCARE_BUFFER &&
+          !ms_to_next_skill("scare")
+        ) {
+          console.warn("scaring ent!");
+          await withTimeout(use_skill("scare"), 300)
+            .then(() => reduce_cooldown("scare", character.ping * 0.95))
+            .catch((e) => console.warn(e, "scare"));
+        }
+
+        if (
+          !ent.target &&
+          d <= character.range + character.xrange * 0.1 &&
+          d > character.range * 0.85 &&
+          !is_on_cooldown("attack")
+        ) {
+          await withTimeout(attack(ent), 300).catch((e) =>
+            console.warn(e, "attack"),
+          );
+        }
+
+        setTimeout(step, TICK);
+      };
+      step();
+    });
+
+    console.warn("loop ended", arrived, ent?.id);
+    if (ent.rip) game_log("Ent died mid-lure.", "orange");
+    else game_log("Lure complete!", "green");
+  } catch (e) {
+    console.warn(`Lure failed: ${e.message}`, "red");
+  } finally {
+    isDraggingMobs = false;
+    isLuringMobs = false;
+    isAdvanceSmartMoving = false;
+    onDuty = false;
+    // cruise(500);
+  }
+}
+
 if (!parent.caracAL) {
   lureMechaGnome();
 }
