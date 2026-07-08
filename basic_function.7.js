@@ -1017,6 +1017,11 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     const dy = destinationY - character.real_y;
     const dist = Math.sqrt(dx * dx + dy * dy);
 
+    // Already at the desired spot — skip the redundant move() call
+    if (dist < 5) {
+      return setTimeout(hitAndRun, loopInterval);
+    }
+
     if (dist > maxStep) {
       const scale = maxStep / dist;
       destinationX = character.real_x + dx * scale;
