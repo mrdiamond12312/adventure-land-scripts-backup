@@ -411,7 +411,8 @@ async function dragEnt() {
     await ensureDartgun();
     const dartgunRange = character.range + character.xrange * 0.8;
 
-    await advanceSmartMove({ ...ENT_FIRST_ANCHOR, map: ENT_LURE_MAP });
+    // await advanceSmartMove({ ...ENT_FIRST_ANCHOR, map: ENT_LURE_MAP });
+    await advanceSmartMove("ent");
 
     const ent = get_nearest_monster({ type: "ent" });
     if (!ent) throw new Error("No Ent found!");
