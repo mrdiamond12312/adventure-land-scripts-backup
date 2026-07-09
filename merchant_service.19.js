@@ -329,53 +329,57 @@ async function aggroEnt(entId, dartgunRange) {
 
 async function walkEntToSpawn(entId) {
   let arrived = false;
+  let aborted = false;
 
-  getEntWaypoints()
-    .reduce(
-      (currentPromiseChain, { x: nextX, y: nextY }) =>
-        currentPromiseChain.then(() =>
-          move(nextX, nextY).catch((e) => {
-            console.warn("move failed", nextX, nextY, e);
-            throw e;
-          }),
-        ),
-      Promise.resolve(),
-    )
-    .then(() => {
-      arrived = true;
+  // Runs concurrently with the step loop below; checks `aborted` before each leg
+  // so it stops issuing move() calls once the lure ends instead of continuing to
+  // walk stale waypoints in the background.
+  const walkPromise = (async () => {
+    for (const { x: nextX, y: nextY } of getEntWaypoints()) {
+      if (aborted) return;
+      await move(nextX, nextY).catch((e) => {
+        console.warn("move failed", nextX, nextY, e);
+        throw e;
+      });
+    }
+    arrived = true;
+  })().catch(() => {});
+
+  try {
+    await new Promise((resolve, reject) => {
+      const step = async () => {
+        const ent = parent.entities[entId];
+        if (arrived || !ent || character.rip) return resolve();
+        if (!isMyPriestOnline()) {
+          return reject(new Error("Priest went offline mid-lure — aborting."));
+        }
+
+        const d = distance(character, ent);
+        if (
+          d < G.monsters.ent.range * ENT_SCARE_BUFFER &&
+          !ms_to_next_skill("scare")
+        ) {
+          await withTimeout(use_skill("scare"), 300)
+            .then(() => reduce_cooldown("scare", character.ping * 0.95))
+            .catch(() => {});
+        }
+
+        if (
+          !ent.target &&
+          d <= character.range + character.xrange * 0.1 &&
+          d > character.range * 0.85 &&
+          !is_on_cooldown("attack")
+        ) {
+          await withTimeout(attack(ent), 300).catch(() => {});
+        }
+
+        setTimeout(step, ENT_TICK);
+      };
+      step();
     });
-
-  await new Promise((resolve, reject) => {
-    const step = async () => {
-      const ent = parent.entities[entId];
-      if (arrived || !ent || character.rip) return resolve();
-      if (!isMyPriestOnline()) {
-        return reject(new Error("Priest went offline mid-lure — aborting."));
-      }
-
-      const d = distance(character, ent);
-      if (
-        d < G.monsters.ent.range * ENT_SCARE_BUFFER &&
-        !ms_to_next_skill("scare")
-      ) {
-        await withTimeout(use_skill("scare"), 300)
-          .then(() => reduce_cooldown("scare", character.ping * 0.95))
-          .catch(() => {});
-      }
-
-      if (
-        !ent.target &&
-        d <= character.range + character.xrange * 0.1 &&
-        d > character.range * 0.85 &&
-        !is_on_cooldown("attack")
-      ) {
-        await withTimeout(attack(ent), 300).catch(() => {});
-      }
-
-      setTimeout(step, ENT_TICK);
-    };
-    step();
-  });
+  } finally {
+    aborted = true;
+  }
 }
 
 async function dragEnt() {
@@ -416,10 +420,10 @@ async function dragEnt() {
     await aggroEnt(ent.id, dartgunRange);
     await walkEntToSpawn(ent.id);
 
-    nextDelay = 5_000; // lured successfully, give it a while before going again
+    nextDelay = 15_000; // lured successfully, give it a while before going again
   } catch (e) {
     console.warn(`Ent lure failed: ${e.message}`);
-    nextDelay = 12_000;
+    nextDelay = 15_000;
   } finally {
     isDraggingMobs = false;
     isLuringMobs = false;
