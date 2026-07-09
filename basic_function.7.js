@@ -847,19 +847,21 @@ const FRANKY_PREFER_SPOT = {
   y: 8,
   map: "level2w",
 };
-async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
-  const loopInterval = Math.max(200, getLoopInterval());
-  const rangeRadius = character.range * rangeRateFn;
-  const extendedRadius = character.xrange * 0.5;
+function withFixedSpot(target, spot) {
+  return {
+    ...target,
+    x: spot.x,
+    y: spot.y,
+    real_x: spot.x,
+    real_y: spot.y,
+    going_x: spot.x,
+    going_y: spot.y,
+  };
+}
 
-  if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
-  if (!target || smart.moving || isAdvanceSmartMoving) {
-    angle = undefined;
-    lastKitingTargetId = undefined;
-    return setTimeout(hitAndRun, loopInterval);
-  }
-
-  // FRANKY strategy: stuck to the corner of the map
+// Per-mtype overrides: some mobs get kited around a fixed spot instead of their own
+// (moving) position — a corner of the map for FRANKY, the spawn center for CRABXX.
+async function resolveKiteTarget(target) {
   if (
     target.type === "monster" &&
     ["franky", "nerfedmummy"].includes(target.mtype) &&
@@ -875,58 +877,48 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
       });
       smartmoveDebug = false;
     }
-
-    target = {
-      ...target,
-      x: FRANKY_PREFER_SPOT.x,
-      y: FRANKY_PREFER_SPOT.y,
-      real_x: FRANKY_PREFER_SPOT.x,
-      real_y: FRANKY_PREFER_SPOT.y,
-      going_x: FRANKY_PREFER_SPOT.x,
-      going_y: FRANKY_PREFER_SPOT.y,
-    };
+    return withFixedSpot(target, FRANKY_PREFER_SPOT);
   }
 
-  // CRABXX strategy: orbit the TANKER around the center of spawn
   if (
     target?.type === "monster" &&
     target.mtype.includes("crabx") &&
     isAssignedAsTanker()
   ) {
-    const crabxxSpawn = getMonsterSpawns("crabxx")[0];
-    target = {
-      ...target,
-      x: crabxxSpawn.x,
-      y: crabxxSpawn.y,
-      real_x: crabxxSpawn.x,
-      real_y: crabxxSpawn.y,
-      going_x: crabxxSpawn.x,
-      going_y: crabxxSpawn.y,
-    };
+    return withFixedSpot(target, getMonsterSpawns("crabxx")[0]);
   }
 
-  if (
-    character.ctype === "warrior" &&
-    distance(character, target) > character.range * 0.35 &&
-    distance(character, target) < rangeRadius + extendedRadius
-  ) {
-    const allEntities = Object.values(parent.entities);
-    const noAggro = allEntities
-      .filter((entity) => entity.type === "monster")
-      .every((mob) => mob.target !== character.name || mob["1hp"]);
-    const noNearbyPlayers = allEntities
-      .filter((entity) => entity.type === "character" && !entity.moving)
-      .every((char) => distance(character, char) >= 8);
+  return target;
+}
 
-    if (noAggro && noNearbyPlayers) {
-      const dx = character.real_x - target.real_x;
-      const dy = character.real_y - target.real_y;
-      angle = Math.atan2(dy, dx);
-      return setTimeout(hitAndRun, loopInterval);
-    }
-  }
+// Warrior sitting just outside melee range of its own target, with nothing else
+// aggroed on it and no other player nearby: hold still and turn to face it
+// instead of orbiting, so it doesn't wander off pulling extra aggro.
+function shouldHoldWarriorPosition(target, radiusTotal) {
+  if (character.ctype !== "warrior") return false;
 
-  // Reset angle when switching or losing target
+  const dist = distance(character, target);
+  if (dist <= character.range * 0.35 || dist >= radiusTotal) return false;
+
+  const allEntities = Object.values(parent.entities);
+  const noAggro = allEntities
+    .filter((entity) => entity.type === "monster")
+    .every((mob) => mob.target !== character.name || mob["1hp"]);
+  const noNearbyPlayers = allEntities
+    .filter((entity) => entity.type === "character" && !entity.moving)
+    .every((char) => distance(character, char) >= 8);
+
+  return noAggro && noNearbyPlayers;
+}
+
+function faceTarget(target) {
+  const dx = character.real_x - target.real_x;
+  const dy = character.real_y - target.real_y;
+  angle = Math.atan2(dy, dx);
+}
+
+// Resets/initializes the kiting angle when the target changed (or on first tick).
+function updateKitingAngle(target) {
   const lastTarget = parent.entities[lastKitingTargetId];
   const targetChanged =
     !lastTarget ||
@@ -936,17 +928,12 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   lastKitingTargetId = target.id;
 
-  // --- 2. Initialize angle if needed ---
-  if (!angle) {
-    const dx = character.real_x - target.real_x;
-    const dy = character.real_y - target.real_y;
-    angle = Math.atan2(dy, dx);
-  }
+  if (!angle) faceTarget(target);
+}
 
-  const cosA = Math.cos(angle);
-  const sinA = Math.sin(angle);
-
-  // --- 3. Track recent movement to detect being stuck ---
+// Flips the orbit direction if we haven't actually moved much over the last
+// few ticks (e.g. wedged against a wall) — nudges the angle by 90° to break out.
+function trackStuckMovement() {
   movementHistory.push({ x: character.real_x, y: character.real_y });
   if (movementHistory.length > 5) movementHistory.shift();
 
@@ -958,150 +945,183 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   const averageMovement = totalMovement / movementHistory.length;
-  if (averageMovement < stuckThreshold) {
-    if (flipRotationCooldown <= 0) {
-      flipRotation *= -1;
-      flipRotationCooldown = 4;
-      angle += (flipRotation * Math.PI) / 2; // turn 90°
-    }
+  if (averageMovement < stuckThreshold && flipRotationCooldown <= 0) {
+    flipRotation *= -1;
+    flipRotationCooldown = 4;
+    angle += (flipRotation * Math.PI) / 2; // turn 90°
   }
+}
 
-  // Tanker holding a farmed mob near the default spot: orbit the spot itself, not the target
+// Tanker holding a farmed mob near the default spot orbits the spot itself rather
+// than the (moving) mob; far from the spot, it instead walks the mob home, with a
+// lead distance that widens the faster the mob outpaces the tanker's own speed.
+function getFarmMobOrbit(target) {
   const isTankerHoldingFarmMob =
     isAssignedAsTanker() &&
     target.type === "monster" &&
+    target.target === character.name &&
     mobsToFarm.includes(target.mtype);
   const isNearDefaultSpot =
     isTankerHoldingFarmMob &&
     distance(target, { x: mapX, y: mapY }) <=
       character.range + character.xrange;
   const orbitCenter = isNearDefaultSpot ? { x: mapX, y: mapY } : target;
-
-  // Ratio of the mob's speed to the tanker's own. The destination is anchored at the
-  // mob's own moving position only while still walking it toward the spot (far case) —
-  // once orbitCenter switches to the fixed spot, there's nothing fast-moving to buffer for.
   const speedRate =
     isTankerHoldingFarmMob && !isNearDefaultSpot
       ? Math.max(
           1,
-          (target.charge ?? target.speed ?? character.speed) /
-            character.speed,
+          (target.charge ?? target.speed ?? character.speed) / character.speed,
         )
       : 1;
 
-  // --- 5. Desired destination based on current orbit angle ---
-  let new_x, new_y;
-  if (isTankerHoldingFarmMob && !isNearDefaultSpot) {
-    // Far from spot: measure the hold distance from the mob itself (angle already points
-    // from the mob toward the spot), widening it as the mob outpaces the tanker — the
-    // faster it is, the bigger a lead toward home the tanker needs to actually kite it back.
-    const holdRadius = (rangeRadius + extendedRadius) * speedRate;
-    new_x = target.x + holdRadius * cosA;
-    new_y = target.y + holdRadius * sinA;
-  } else {
-    new_x = orbitCenter.x + (rangeRadius + extendedRadius) * cosA;
-    new_y = orbitCenter.y + (rangeRadius + extendedRadius) * sinA;
-  }
+  return { isTankerHoldingFarmMob, isNearDefaultSpot, orbitCenter, speedRate };
+}
 
-  // --- 6. Smooth micro-rotation when close to target ---
+function getOrbitDestination(target, orbit, radiusTotal, cosA, sinA) {
+  if (orbit.isTankerHoldingFarmMob && !orbit.isNearDefaultSpot) {
+    const holdRadius = radiusTotal * orbit.speedRate;
+    return { x: target.x + holdRadius * cosA, y: target.y + holdRadius * sinA };
+  }
+  return {
+    x: orbit.orbitCenter.x + radiusTotal * cosA,
+    y: orbit.orbitCenter.y + radiusTotal * sinA,
+  };
+}
+
+// Subtle orbit shift applied every ~10 ticks while right on top of the target,
+// so the kite doesn't settle into a perfectly static holding pattern.
+function applyMicroRotation(target, rangeRateFn) {
   if (flipCooldown > 9) {
     const closeToTarget =
       distance(character, target) <=
       (character.range + character.xrange) * 0.1 * rangeRateFn;
 
-    if (closeToTarget) {
-      angle += (flipRotation * Math.PI) / 16; // subtle orbit shift
-    }
+    if (closeToTarget) angle += (flipRotation * Math.PI) / 16;
 
     flipCooldown = 0;
   }
 
   flipCooldown++;
   flipRotationCooldown--;
+}
 
-  // --- 7. Collision handling and alternative movement path ---
-  let destinationX, destinationY;
+// Returns the actual point to move to: the desired orbit spot if reachable, an
+// alternative point swept around the same radius if not, or null if a farm-mob
+// tanker instead needs a full smart-move to path around the obstacle.
+async function resolveDestination(desired, orbit, radiusTotal) {
+  if (can_move_to(desired.x, desired.y)) return desired;
 
-  if (!can_move_to(new_x, new_y)) {
-    // Tanker holding a farmed mob: path there instead of sweeping for an angular alt-spot
-    if (isTankerHoldingFarmMob) {
-      smartmoveDebug = true;
-      await advanceSmartMove(
-        { x: new_x, y: new_y, map: character.map },
-        { useScare: false },
-      );
-      smartmoveDebug = false;
-      return setTimeout(hitAndRun, loopInterval);
-    }
-
-    // Try small angular adjustments in the current flip direction
-    if (flipRotationCooldown < 0) {
-      flipRotation *= -1;
-      flipRotationCooldown = 6;
-    }
-    for (let i = 1; i <= 48; i++) {
-      const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
-      const alt_x =
-        orbitCenter.x + (rangeRadius + extendedRadius) * Math.cos(adjustedAngle);
-      const alt_y =
-        orbitCenter.y + (rangeRadius + extendedRadius) * Math.sin(adjustedAngle);
-
-      if (can_move_to(alt_x, alt_y)) {
-        angle = adjustedAngle;
-        destinationX = alt_x;
-        destinationY = alt_y;
-        break;
-      }
-    }
-  } else {
-    destinationX = new_x;
-    destinationY = new_y;
+  if (orbit.isTankerHoldingFarmMob) {
+    smartmoveDebug = true;
+    await advanceSmartMove(
+      { x: desired.x, y: desired.y, map: character.map },
+      { useScare: false },
+    );
+    smartmoveDebug = false;
+    return null;
   }
 
-  // --- 8. Execute movement or retry later ---
-  if (destinationX !== undefined && destinationY !== undefined) {
-    const maxStep = (character.speed * 500) / 1000;
-
-    const dx = destinationX - character.real_x;
-    const dy = destinationY - character.real_y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    // Already at the desired spot — skip the redundant move() call
-    if (dist < 5) {
-      return setTimeout(hitAndRun, loopInterval);
+  if (flipRotationCooldown < 0) {
+    flipRotation *= -1;
+    flipRotationCooldown = 6;
+  }
+  for (let i = 1; i <= 48; i++) {
+    const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
+    const alt = {
+      x: orbit.orbitCenter.x + radiusTotal * Math.cos(adjustedAngle),
+      y: orbit.orbitCenter.y + radiusTotal * Math.sin(adjustedAngle),
+    };
+    if (can_move_to(alt.x, alt.y)) {
+      angle = adjustedAngle;
+      return alt;
     }
+  }
+  return null;
+}
 
-    if (dist > maxStep) {
-      const scale = maxStep / dist;
-      destinationX = character.real_x + dx * scale;
-      destinationY = character.real_y + dy * scale;
-    }
+// Steps toward the destination (clamped to one loop's worth of travel) and returns
+// the point actually moved to, or null if already close enough to skip the move().
+function moveTowardDestination(destination) {
+  const maxStep = (character.speed * 500) / 1000;
+  const dx = destination.x - character.real_x;
+  const dy = destination.y - character.real_y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 3) return null;
 
-    move(destinationX, destinationY);
-  } else {
-    return setTimeout(hitAndRun, loopInterval);
+  let { x, y } = destination;
+  if (dist > maxStep) {
+    const scale = maxStep / dist;
+    x = character.real_x + dx * scale;
+    y = character.real_y + dy * scale;
   }
 
-  const radiusTotal = rangeRadius + extendedRadius;
+  move(x, y);
+  return { x, y };
+}
+
+// Advances the orbit angle for next tick — walks straight home while far with a
+// farmed mob in tow, otherwise keeps sweeping around the orbit center as usual.
+function advanceOrbitAngle(target, orbit, radiusTotal, loopInterval) {
+  if (orbit.isTankerHoldingFarmMob && !orbit.isNearDefaultSpot) {
+    angle = Math.atan2(mapY - target.y, mapX - target.x);
+    return;
+  }
+
   const rotationStep =
     flipRotation *
     Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
     2;
+  angle += rotationStep;
+}
 
-  if (isTankerHoldingFarmMob && !isNearDefaultSpot) {
-    // Far from the spot: hold position between the target and spawn instead of orbiting further
-    angle = Math.atan2(mapY - target.y, mapX - target.x);
-  } else {
-    // Near the spot (or not tanking a farmed mob): orbit normally, around orbitCenter
-    angle += rotationStep;
+async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
+  const loopInterval = Math.max(200, getLoopInterval());
+  const radiusTotal = character.range * rangeRateFn + character.xrange * 0.5;
+  let nextDelay = loopInterval;
+
+  if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
+  if (!target || smart.moving || isAdvanceSmartMoving) {
+    angle = undefined;
+    lastKitingTargetId = undefined;
+    return setTimeout(hitAndRun, loopInterval);
   }
 
-  const moveTime =
-    (distance(character, { x: destinationX, y: destinationY }) /
-      character.speed) *
-    1000;
+  try {
+    target = await resolveKiteTarget(target);
 
-  setTimeout(hitAndRun, Math.max(moveTime, 200));
+    if (shouldHoldWarriorPosition(target, radiusTotal)) {
+      faceTarget(target);
+      return;
+    }
+
+    updateKitingAngle(target);
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+
+    trackStuckMovement(); // may perturb `angle`, but cosA/sinA above stay from before the flip
+
+    const orbit = getFarmMobOrbit(target);
+    const desired = getOrbitDestination(target, orbit, radiusTotal, cosA, sinA);
+    applyMicroRotation(target, rangeRateFn);
+
+    const destination = await resolveDestination(desired, orbit, radiusTotal);
+    if (!destination) return;
+
+    const moved = moveTowardDestination(destination);
+    if (!moved) return;
+
+    advanceOrbitAngle(target, orbit, radiusTotal, loopInterval);
+    nextDelay = Math.max(
+      (distance(character, moved) / character.speed) * 1000,
+      200,
+    );
+  } catch (e) {
+    console.error(e);
+    angle = undefined;
+    lastKitingTargetId = undefined;
+  } finally {
+    setTimeout(hitAndRun, nextDelay);
+  }
 }
 if (!isMerchant()) hitAndRun();
 

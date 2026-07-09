@@ -386,10 +386,10 @@ async function mainLoop() {
         !get("cryptInstance") && isPartyLeaderOrAlone && isFarFromFarmingSpot;
 
       if (needsToEnterCrypt) {
-        advanceSmartMove(CRYPT_STARTING_LOCATION);
+        await advanceSmartMove(CRYPT_STARTING_LOCATION);
       } else if (needsToMoveToFarmLocation) {
         changeToNormalStrategies(); // Ensure correct strategy is set before move
-        advanceSmartMove({
+        await advanceSmartMove({
           map,
           x: mapX,
           y: mapY,
