@@ -236,7 +236,7 @@ const ENT_AIM_POINT = { x: -75, y: -1897 };
 const ENT_FIRST_ANCHOR = { x: 136, y: -1836 };
 const ENT_SCARE_BUFFER = 1.5;
 const ENT_TICK = 10;
-const MAX_ENT = 2; // party can engage up to this many ents at once near spawn
+const MAX_ENT = 3; // party can engage up to this many ents at once near spawn
 
 function getEntLureDestination() {
   return { x: mapX, y: mapY, map: ENT_LURE_MAP };
