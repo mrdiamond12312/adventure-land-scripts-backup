@@ -317,10 +317,10 @@ async function cleaveLoop() {
     }
   } catch (e) {
     console.log("Error while cleaving: ", e);
+  } finally {
+    // Cleave loop runs on its own dedicated timer
+    setTimeout(cleaveLoop, Math.max(ms_to_next_skill("cleave"), 100));
   }
-
-  // Cleave loop runs on its own dedicated timer
-  setTimeout(cleaveLoop, Math.max(ms_to_next_skill("cleave"), 100));
 }
 
 if (!parent.caracAL) cleaveLoop();
@@ -386,10 +386,10 @@ async function mainLoop() {
         !get("cryptInstance") && isPartyLeaderOrAlone && isFarFromFarmingSpot;
 
       if (needsToEnterCrypt) {
-        await advanceSmartMove(CRYPT_STARTING_LOCATION);
+        advanceSmartMove(CRYPT_STARTING_LOCATION);
       } else if (needsToMoveToFarmLocation) {
         changeToNormalStrategies(); // Ensure correct strategy is set before move
-        await advanceSmartMove({
+        advanceSmartMove({
           map,
           x: mapX,
           y: mapY,
@@ -404,10 +404,10 @@ async function mainLoop() {
     if (e.cause !== "smart_move" && e.cause !== "death") {
       console.error(e);
     }
+  } finally {
+    // Schedule the next loop execution
+    setTimeout(mainLoop, getLoopInterval());
   }
-
-  // Schedule the next loop execution
-  setTimeout(mainLoop, getLoopInterval());
 }
 
 if (!parent.caracAL) mainLoop();

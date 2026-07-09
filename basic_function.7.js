@@ -118,8 +118,8 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapY = 132;
 
 var map = "desertland";
-var mapX = -794;
-var mapY = -301;
+var mapX = -840.75;
+var mapY = -340.75;
 
 // var map = "level1";
 // var mapX = 50;

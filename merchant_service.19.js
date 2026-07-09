@@ -236,6 +236,7 @@ const ENT_AIM_POINT = { x: -75, y: -1897 };
 const ENT_FIRST_ANCHOR = { x: 136, y: -1836 };
 const ENT_SCARE_BUFFER = 1.5;
 const ENT_TICK = 10;
+const MAX_ENT = 2; // party can engage up to this many ents at once near spawn
 
 function getEntLureDestination() {
   return { x: mapX, y: mapY, map: ENT_LURE_MAP };
@@ -253,15 +254,15 @@ function getEntWaypoints() {
   ];
 }
 
-// The mage sits near spawn and reports whether an ent is already engaged with the
-// party there (see mageLocation.entTargetingParty in basic_mage.4.js) — avoids
-// starting a second lure while one is already in progress at home.
-function isEntAlreadyEngagedAtSpawn() {
+// The mage sits near spawn and reports how many ents are already engaged with the
+// party there (see mageLocation.entsTargetingPartyCount in basic_mage.4.js) —
+// avoids luring past MAX_ENT concurrent ents at home.
+function hasMaxEntsEngagedAtSpawn() {
   const mageInfo = get("mageLocation");
   return !!(
     mageInfo &&
     Date.now() - mageInfo.time < 15_000 &&
-    mageInfo.entTargetingParty
+    mageInfo.entsTargetingPartyCount >= MAX_ENT
   );
 }
 
@@ -388,7 +389,7 @@ async function dragEnt() {
     shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
     !isMyPriestOnline() ||
-    isEntAlreadyEngagedAtSpawn()
+    hasMaxEntsEngagedAtSpawn()
   ) {
     return setTimeout(dragEnt, nextDelay);
   }
