@@ -300,7 +300,8 @@ async function positionAtEntAimPoint(entId, dartgunRange) {
     ent = parent.entities[entId];
   }
 
-  if (!ent) throw new Error("Ent disappeared before positioning — lure aborted.");
+  if (!ent)
+    throw new Error("Ent disappeared before positioning — lure aborted.");
 }
 
 async function aggroEnt(entId, dartgunRange) {
@@ -415,7 +416,7 @@ async function dragEnt() {
     await aggroEnt(ent.id, dartgunRange);
     await walkEntToSpawn(ent.id);
 
-    nextDelay = 90_000; // lured successfully, give it a while before going again
+    nextDelay = 30_000; // lured successfully, give it a while before going again
   } catch (e) {
     console.warn(`Ent lure failed: ${e.message}`);
     nextDelay = 30_000;
