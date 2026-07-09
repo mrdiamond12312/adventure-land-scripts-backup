@@ -1765,23 +1765,23 @@ const DYNAMIC_PARTY_PRESETS = {
   },
 
   default: () => {
-    const globalParty = get("currentParty");
-    const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
+    // const globalParty = get("currentParty");
+    // const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
 
-    if (
-      globalParty &&
-      globalParty.some((id) => knownTankers.includes(id)) &&
-      !serverCurrentlyHasLiveEvent()
-    ) {
-      setRogueSpeedLastDeployment();
-      if (shouldDeployRogue()) {
-        return [WARRIOR, ROGUE, MAGE];
-      } else {
-        // RANGER = RANGER1;
-        HEALER = PRIEST;
-        return [WARRIOR, PRIEST, MAGE];
-      }
-    }
+    // if (
+    //   globalParty &&
+    //   globalParty.some((id) => knownTankers.includes(id)) &&
+    //   !serverCurrentlyHasLiveEvent()
+    // ) {
+    //   setRogueSpeedLastDeployment();
+    //   if (shouldDeployRogue()) {
+    //     return [WARRIOR, ROGUE, MAGE];
+    //   } else {
+    //     // RANGER = RANGER1;
+    //     HEALER = PRIEST;
+    //     return [WARRIOR, PRIEST, MAGE];
+    //   }
+    // }
 
     HEALER = PRIEST;
     return [WARRIOR, PRIEST, MAGE];
