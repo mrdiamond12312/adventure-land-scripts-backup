@@ -532,13 +532,17 @@ async function sortInv() {
   // Snapshot items with their original slot
   const inv = character.items.map((item, slot) => ({ item, slot }));
 
-  // Sorting name -> level -> slot order -> null
+  // Sorting name -> level -> slot order -> null -> locked (locked always last)
   inv.sort((lhs, rhs) => {
     const lhsItem = lhs.item;
     const rhsItem = rhs.item;
 
+    const lhsLocked = !!lhsItem?.l;
+    const rhsLocked = !!rhsItem?.l;
+    if (lhsLocked !== rhsLocked) return lhsLocked ? 1 : -1; // locked last
+
     if (!lhsItem && !rhsItem) return 0;
-    if (!lhsItem) return 1; // nulls last
+    if (!lhsItem) return 1; // nulls last (among unlocked)
     if (!rhsItem) return -1;
 
     const nameOrder = lhsItem.name.localeCompare(rhsItem.name);
