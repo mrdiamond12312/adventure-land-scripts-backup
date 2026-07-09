@@ -82,12 +82,15 @@ async function fight(target) {
       )[0]; // Get another mob in AttackRange to attack if the AOE mob is out of range
 
       // Prioritize the AOE mob if it's better than the current target (or if the current is cooperative)
-      const isAoeMobBetter =
-        aoeMob &&
-        mobsToFarm.findIndex((id) => id === aoeMob.mtype) <=
-          mobsToFarm.findIndex((id) => id === target?.mtype);
+      // const isAoeMobBetter =
+      //   aoeMob &&
+      //   mobsToFarm.findIndex((id) => id === aoeMob.mtype) <=
+      //     mobsToFarm.findIndex((id) => id === target?.mtype);
 
-      if (!target?.cooperative && isAoeMobBetter) {
+      if (
+        !target?.cooperative
+        // && isAoeMobBetter
+      ) {
         target = aoeMob;
       }
     }
