@@ -555,30 +555,42 @@ async function sortInv() {
     return lhs.slot - rhs.slot;
   });
 
-  // Create a mapping from target slot → original slot
-  const promises = [];
-  const usedSlots = new Set();
+  // targetOrigSlot[i] = the original slot of the item that should end up at position i.
+  // Tracked by original slot rather than item identity so duplicate `null` slots
+  // (indistinguishable by value) still resolve to a valid, distinct permutation.
+  const targetOrigSlot = inv.map((entry) => entry.slot);
 
-  for (let index = 0; index < inv.length; index++) {
-    const desired = inv[index];
-    const targetItem = character.items[index];
+  // Decompose the permutation into cycles. Swaps *within* a cycle are inherently
+  // sequential (each one depends on where the previous swap left things), but
+  // separate cycles don't touch any of the same slots, so they're dispatched in
+  // parallel via Promise.all instead of one big sequential chain for everything.
+  const visited = new Array(inv.length).fill(false);
+  const cyclePromises = [];
 
-    // skip if already correct
-    if (desired.item === targetItem) continue;
+  for (let start = 0; start < inv.length; start++) {
+    if (visited[start]) continue;
 
-    // find the specific matching slot by identity
-    const fromSlot = character.items.findIndex(
-      (x, idx) => x === desired.item && !usedSlots.has(idx),
-    );
-
-    if (fromSlot !== -1 && fromSlot !== index) {
-      usedSlots.add(fromSlot);
-      usedSlots.add(index);
-      promises.push(swap(fromSlot, index));
+    const cycle = [];
+    let slot = start;
+    while (!visited[slot]) {
+      visited[slot] = true;
+      cycle.push(slot);
+      slot = targetOrigSlot[slot];
     }
+
+    if (cycle.length < 2) continue; // already in place
+
+    cyclePromises.push(
+      cycle
+        .slice(0, -1)
+        .reduce(
+          (chain, fromSlot, i) => chain.then(() => swap(fromSlot, cycle[i + 1])),
+          Promise.resolve(),
+        ),
+    );
   }
 
-  return Promise.all(promises).finally(() => {
+  return Promise.all(cyclePromises).finally(() => {
     isSortingInventory = false;
   });
 }
