@@ -232,16 +232,19 @@ async function fight(target) {
 
   if (canTaunt && isHealerAlive) {
     // --- If Mobs targeting allies
-    const mobsTargetingAlly = Object.values(parent.entities).find(
-      (mob) =>
-        mob.type === "monster" &&
-        [...partyMems, partyMerchant].some(
-          (ally) => ally !== character.name && mob.target === ally,
-        ) &&
-        calculateDamage(mob, character) < 3000 && // Warrior can take the damage
-        !mob.cooperative &&
-        is_in_range(mob, "taunt"),
-    );
+    const mobsTargetingAlly = Object.values(parent.entities)
+      .filter(
+        (entity) =>
+          entity.type === "monster" &&
+          [...partyMems, partyMerchant].some(
+            (ally) => ally !== character.name && entity.target === ally,
+          ) &&
+          calculateDamage(entity, character) < 3000 && // Warrior can take the damage
+          !entity.cooperative &&
+          is_in_range(entity, "taunt"),
+      )
+      .sort((lhs, rhs) => rhs.attack - lhs.attack)
+      .shift();
 
     if (mobsTargetingAlly) {
       promisesToAwait.push(
