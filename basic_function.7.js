@@ -584,7 +584,8 @@ async function sortInv() {
       cycle
         .slice(0, -1)
         .reduce(
-          (chain, fromSlot, i) => chain.then(() => swap(fromSlot, cycle[i + 1])),
+          (chain, fromSlot, i) =>
+            chain.then(() => swap(fromSlot, cycle[i + 1])),
           Promise.resolve(),
         ),
     );
@@ -1031,7 +1032,7 @@ async function resolveDestination(desired, orbit, radiusTotal) {
     smartmoveDebug = true;
     await advanceSmartMove(
       { x: desired.x, y: desired.y, map: character.map },
-      { useScare: false },
+      { useScare: false, speed: 200 },
     );
     smartmoveDebug = false;
     return null;
