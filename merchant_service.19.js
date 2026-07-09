@@ -379,7 +379,7 @@ async function walkEntToSpawn(entId) {
 }
 
 async function dragEnt() {
-  let nextDelay = 15_000;
+  let nextDelay = 10_000;
 
   if (
     map !== ENT_LURE_MAP ||
@@ -416,10 +416,10 @@ async function dragEnt() {
     await aggroEnt(ent.id, dartgunRange);
     await walkEntToSpawn(ent.id);
 
-    nextDelay = 30_000; // lured successfully, give it a while before going again
+    nextDelay = 5_000; // lured successfully, give it a while before going again
   } catch (e) {
     console.warn(`Ent lure failed: ${e.message}`);
-    nextDelay = 30_000;
+    nextDelay = 12_000;
   } finally {
     isDraggingMobs = false;
     isLuringMobs = false;
