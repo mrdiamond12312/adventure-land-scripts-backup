@@ -23,6 +23,10 @@ if (parent.caracAL) {
 // Global Vars
 var onDuty = false;
 var isExeing = false;
+// Set when an exchange fails with inventory_full; makes the emergency banking
+// below run even if isInvFull() reads false. Cleared after the bank trip —
+// unlike the old `onDuty = true` hack, this can't leak the shared duty lock.
+var invJammed = false;
 
 const fishingLocation = { map: "main", x: -1367, y: -82 };
 const miningLocation = { map: "tunnel", x: -279, y: -148 };
@@ -130,7 +134,7 @@ async function holidayExchange() {
   return exchange(locate_item(exchangableItem.name)).catch((e) => {
     switch (e.response) {
       case "inventory_full":
-        onDuty = true;
+        invJammed = true;
     }
   });
 }
@@ -158,7 +162,11 @@ async function exchangeSomething() {
   ];
   let slot = undefined;
   for (const item of itemName) {
-    if (getItemBankSlots(item.name).length && locate_item(item.name) === -1) {
+    if (
+      !onDuty &&
+      getItemBankSlots(item.name).length &&
+      locate_item(item.name) === -1
+    ) {
       await retrieveBankItem(item.name);
     }
 
@@ -169,6 +177,7 @@ async function exchangeSomething() {
       if (
         item.npc &&
         !haveAComputer() &&
+        !onDuty &&
         !isAdvanceSmartMoving &&
         !smart.moving
       ) {
@@ -202,7 +211,7 @@ async function exchangeSomething() {
   return exchange(slot).catch((e) => {
     switch (e.response) {
       case "inventory_full":
-        onDuty = true;
+        invJammed = true;
     }
   });
 }
@@ -231,8 +240,6 @@ async function moveHome() {
       await town();
     }
     console.warn("movehome error:", e);
-  } finally {
-    onDuty = false;
   }
 }
 
@@ -243,7 +250,8 @@ async function goFishing() {
     isAdvanceSmartMoving ||
     character.c.mining ||
     character.c.fishing ||
-    is_on_cooldown("fishing")
+    is_on_cooldown("fishing") ||
+    onDuty
   )
     return;
 
@@ -572,15 +580,26 @@ setInterval(async function () {
   else if (!character.c.mining && !character.c.fishing && !onDuty)
     await moveHome();
 
-  if (isInvFull() && !isAdvanceSmartMoving && !smart.moving) {
+  if (
+    (isInvFull() || invJammed) &&
+    !isAdvanceSmartMoving &&
+    !smart.moving
+  ) {
     onDuty = true;
-    await bankStoreRoutine();
-    onDuty = false;
+    try {
+      await bankStoreRoutine();
+      invJammed = false;
+    } finally {
+      onDuty = false;
+    }
   }
 }, 750);
 
 setInterval(function () {
-  onDuty = false;
+  // Recovery for a leaked onDuty (a duty that threw without resetting) — but
+  // never yank it away from an active lure/drag, whose movement would get
+  // hijacked by bankLoop and friends the moment the flag drops.
+  if (!isLuringMobs && !isDraggingMobs) onDuty = false;
   use_skill("mluck", character);
 }, 300000);
 
