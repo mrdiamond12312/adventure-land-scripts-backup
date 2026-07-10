@@ -345,11 +345,20 @@ async function walkEntToSpawn(entId) {
     arrived = true;
   })().catch(() => {});
 
+  let handoffDeadline;
+
   try {
     await new Promise((resolve, reject) => {
       const step = async () => {
         const ent = parent.entities[entId];
-        if (arrived || !ent || character.rip) return resolve();
+        if (!ent || character.rip) return resolve();
+        if (arrived) {
+          // At the end of dragging path, hold the aggro if no one pick up the aggro yet
+          // for up to 10 seconds
+          handoffDeadline ??= Date.now() + 10_000;
+          const handedOff = ent.target && ent.target !== character.name;
+          if (handedOff || Date.now() > handoffDeadline) return resolve();
+        }
         if (!isMyPriestOnline()) {
           return reject(new Error("Priest went offline mid-lure — aborting."));
         }
