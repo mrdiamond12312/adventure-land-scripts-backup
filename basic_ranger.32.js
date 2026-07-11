@@ -28,8 +28,14 @@ const reduceCd = (skillName) =>
 const tryMultiShot = async (skill, entityList) => {
   if (entityList.length === 0) return false;
   set_message(`${skill} Shooting`);
+  // Snapshot at fire time: cupid<->bow swaps change frequency mid-tick, and
+  // the attack cooldown must be timed with the frequency the shot went out at.
+  const attackFrequencyBeforeCompensate = character.frequency;
   return use_skill(skill, entityList)
-    .then(() => reduceCd("attack"))
+    .then(() => {
+      attackSpeedCompensate(attackFrequencyBeforeCompensate);
+      reduceCd("attack");
+    })
     .catch((e) => attackErrorHandler(e));
 };
 
@@ -37,6 +43,7 @@ const inRange = (entity) =>
   distance(entity, character) < character.range + character.xrange * 0.5;
 
 async function fight(target) {
+  const attackFrequencyBeforeCompensate = character.frequency;
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
   const canMultiShot = !character.fear;
@@ -156,7 +163,10 @@ async function fight(target) {
     else if (!isCupid)
       promisesToAwait.push(
         use_skill("attack", target)
-          .then(() => reduceCd("attack"))
+          .then(() => {
+            attackSpeedCompensate(attackFrequencyBeforeCompensate);
+            reduceCd("attack");
+          })
           .catch((e) => attackErrorHandler(e)),
       );
     // Base case for Cupid: both attack and currentStrategy
@@ -164,7 +174,10 @@ async function fight(target) {
       promisesToAwait.push(
         currentStrategy(target),
         use_skill("attack", target)
-          .then(() => reduceCd("attack"))
+          .then(() => {
+            attackSpeedCompensate(attackFrequencyBeforeCompensate);
+            reduceCd("attack");
+          })
           .catch((e) => attackErrorHandler(e)),
       );
   }
@@ -209,6 +222,7 @@ async function fight(target) {
 
 // Cupid Logic :cow2:
 async function cupidHeal(playersToHeal) {
+  const attackFrequencyBeforeCompensate = character.frequency;
   const isAttackOnCD = ms_to_next_skill("attack") > 0 || character.s.penalty_cd;
   const hasCupid =
     locate_item("cupid") !== -1 || character.slots.mainhand?.name === "cupid";
@@ -272,9 +286,10 @@ async function cupidHeal(playersToHeal) {
         set_message("Single Cupid");
         log(`Healing ${healingTarget.name}`);
         promisesToAwait.push(
-          use_skill("attack", healingTarget).then(
-            () => reduceCd("attack"), // Use reduceCd
-          ),
+          use_skill("attack", healingTarget).then(() => {
+            attackSpeedCompensate(attackFrequencyBeforeCompensate);
+            reduceCd("attack");
+          }),
         );
       }
     }

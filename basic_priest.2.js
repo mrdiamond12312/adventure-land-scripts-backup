@@ -24,6 +24,9 @@ const reduceCd = (skillName) =>
 // Combat Logic
 
 async function fight(target, isDeterminedToHeal = false) {
+  // Snapshot for attackSpeedCompensate: weapon swaps mid-tick change frequency,
+  // and the attack cooldown must be timed with the frequency at fire time.
+  const attackFrequencyBeforeCompensate = character.frequency;
   const partyDmgRecieved = avgPartyDmgTaken(partyMems);
   const characterBufferedRange = character.range + character.xrange;
   const prioritizedCharacter = prioritizedNames();
@@ -137,7 +140,10 @@ async function fight(target, isDeterminedToHeal = false) {
     set_message("Attacking");
     promisesToAwait.push(
       attack(target)
-        .then(() => reduceCd("attack"))
+        .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeCompensate);
+          reduceCd("attack");
+        })
         .catch((e) => attackErrorHandler(e)),
     );
   }
@@ -151,6 +157,9 @@ async function fight(target, isDeterminedToHeal = false) {
 }
 
 async function priestBuff() {
+  // Heals run on the attack cooldown (gated on ms_to_next_skill("attack")
+  // below), so they need the same frequency compensation as attacks.
+  const attackFrequencyBeforeCompensate = character.frequency;
   const promises = [];
 
   // Heal Logic
@@ -190,7 +199,12 @@ async function priestBuff() {
 
       if (dist < bufferedRange && isAttackReady) {
         set_message(`Heal ${buffee.name}`);
-        promises.push(use_skill("heal", buffee).then(() => reduceCd("heal")));
+        promises.push(
+          use_skill("heal", buffee).then(() => {
+            attackSpeedCompensate(attackFrequencyBeforeCompensate);
+            reduceCd("heal");
+          }),
+        );
         break;
       }
     }
