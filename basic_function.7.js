@@ -1578,9 +1578,11 @@ setInterval(async () => {
     whitelistPartyMembers.some((whitelisted) => whitelisted.name === member),
   );
 
+  const myMemberList = [...partyMems, partyMerchant];
+
   const characterNotInOutsiderParty = serverCharacters.filter(
     (char) =>
-      [...partyMems, partyMerchant].includes(char) &&
+      myMemberList.includes(char) &&
       !partyWhitelistRegex.some((regex) => regex.test(char.party)),
   );
 
@@ -1606,9 +1608,9 @@ setInterval(async () => {
     else disconnect();
   }
 
-  if (partyMems.some((id) => !parent.party_list.includes(id))) {
+  if (myMemberList.some((id) => !parent.party_list.includes(id))) {
     if (character.name === partyMems[0]) {
-      partyMems.forEach((member) => {
+      myMemberList.forEach((member) => {
         send_party_invite(member);
       });
     }
