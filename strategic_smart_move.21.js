@@ -516,7 +516,9 @@ class StrategicSmartMove {
 
     if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
       try {
-        await this.useTownWithRetry();
+        if (toPosition.map && this.isStandablePoint(toPosition)) {
+          await this.useTownWithRetry();
+        }
       } finally {
         this.cleanUp();
       }
