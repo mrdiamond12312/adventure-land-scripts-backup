@@ -22,6 +22,11 @@ const reduceCd = (skillName) =>
   reduce_cooldown(skillName, Math.min(...parent.pings));
 
 async function fight(target) {
+  // Snapshot for attackSpeedCompensate: blaster's attack speed modifier means
+  // frequency can change mid-tick when weapons swap, and the attack cooldown
+  // must be timed with the frequency the shot was actually fired at.
+  const attackFrequencyBeforeCompensate = character.frequency;
+
   if (
     currentStrategy === usePullStrategies &&
     !target?.mtype.includes("crabx")
@@ -117,7 +122,10 @@ async function fight(target) {
     promisesToAwait.push(
       // currentStrategy(target),
       attack(target)
-        .then(() => reduceCd("attack"))
+        .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeCompensate);
+          reduceCd("attack");
+        })
         .catch((e) => {
           attackErrorHandler(e);
         }),
