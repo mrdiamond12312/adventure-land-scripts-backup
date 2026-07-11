@@ -56,7 +56,7 @@ function calculateMerchantEquipments() {
     chest: "tshirt4",
     pants: "pants",
     ring1: "solitaire",
-    ring2: isDraggingMobs ?  "armorring" :"dexring" ,
+    ring2: isDraggingMobs ? "armorring" : "dexring",
     shoes: "eslippers",
     gloves: "gloves1",
     belt: "sbelt",
@@ -503,7 +503,7 @@ setInterval(async function () {
 
   if (character.moving && character.stand) {
     close_stand();
-    await equipBroom();
+    await equipBatch(calculateMerchantEquipments());
   } else if (
     !character.moving &&
     !character.stand &&
@@ -580,11 +580,7 @@ setInterval(async function () {
   else if (!character.c.mining && !character.c.fishing && !onDuty)
     await moveHome();
 
-  if (
-    (isInvFull() || invJammed) &&
-    !isAdvanceSmartMoving &&
-    !smart.moving
-  ) {
+  if ((isInvFull() || invJammed) && !isAdvanceSmartMoving && !smart.moving) {
     onDuty = true;
     try {
       await bankStoreRoutine();
