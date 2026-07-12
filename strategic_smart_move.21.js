@@ -573,26 +573,31 @@ class StrategicSmartMove {
           !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
         ) {
           this.isDoingSomethingMagical = true;
-          if (character.ctype === "rogue" && character.s.invis) {
-            await stop("invis");
-          }
+          try {
+            if (character.ctype === "rogue" && character.s.invis) {
+              await stop("invis");
+            }
 
-          console.warn(`Whoosh! #${session}`);
-          send_cm(MAGE, "magiport");
-          stop();
-          await sleep(1500);
-          if (
-            this.pathfinder.canWalkPath(
-              character.map,
-              character.x,
-              character.y,
-              toPosition.x,
-              toPosition.y,
+            console.warn(`Whoosh! #${session}`);
+            send_cm(MAGE, "magiport");
+            stop();
+            await sleep(1500);
+            if (
+              this.pathfinder.canWalkPath(
+                character.map,
+                character.x,
+                character.y,
+                toPosition.x,
+                toPosition.y,
+              )
             )
-          )
-            await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
-          this.cleanUp();
-          this.stopTownChanneling();
+              await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
+          } catch (e) {
+            console.warn(`Magiport branch failed #${session}:`, e);
+          } finally {
+            this.cleanUp();
+            this.stopTownChanneling();
+          }
           return;
         }
 
