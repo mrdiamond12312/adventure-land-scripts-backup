@@ -587,7 +587,7 @@ async function upgradeInv() {
     const itemGrade = item_grade(item);
     const highestLevel = ITEMS_HIGHEST_LEVEL[item.name];
     const overLeveled =
-      (item.level > maxUpgrade || itemGrade >= 2) &&
+      // (item.level > maxUpgrade || itemGrade >= 2) &&
       item.level >= (highestLevel?.level ?? 0);
     const haveEnoughToSpare =
       highestLevel &&
