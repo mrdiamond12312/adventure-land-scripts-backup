@@ -270,7 +270,10 @@ async function ensureDartgun() {
   if (findMaxLevelItem("dartgun") === -1) await retrieveBankItem("dartgun");
   if (findMaxLevelItem("quiver") === -1) await retrieveBankItem("quiver");
 
-  await equipBatch(calculateMerchantEquipments());
+  await withTimeout(
+    equipBatch(calculateMerchantEquipments()),
+    Math.max(300, character.ping),
+  );
 }
 
 async function positionAtEntAimPoint(entId, dartgunRange) {
