@@ -391,6 +391,7 @@ class StrategicSmartMove {
    * @param {boolean} extraOptions.useScare - whether to scare away mobs during smart moving, default: true
    * @param {Function} extraOptions.stopWatcher - a function that returns a boolean to determine whether to stop smart moving, default: undefined
    * @param {number} extraOptions.speed - the speed to use for pathfinding, set to a very big number to disable use_town, default: character's speed
+   * @param {boolean} extraOptions.useTown - whether to town back to the map's first spawn when no path is found, default: true. Set false when towning is worse than not moving (e.g. a tanker holding mobs)
    */
   async smartMove(toPosition, extraOptions = {}) {
     // Stop any existing smart move
@@ -410,6 +411,7 @@ class StrategicSmartMove {
       stopWatcher: undefined,
       wait: 0,
       speed: Math.max(character.speed, 40),
+      useTown: true,
       exact: false,
       smartmoveDebug: false, // to set the global var smartmoveDebug
       ...extraOptions,
@@ -516,7 +518,11 @@ class StrategicSmartMove {
 
     if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
       try {
-        if (toPosition.map && this.isStandablePoint(toPosition)) {
+        if (
+          options.useTown &&
+          toPosition.map &&
+          this.isStandablePoint(toPosition)
+        ) {
           await this.useTownWithRetry();
         }
       } finally {

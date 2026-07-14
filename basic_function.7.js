@@ -1032,7 +1032,7 @@ async function resolveDestination(desired, orbit, radiusTotal) {
     smartmoveDebug = true;
     await advanceSmartMove(
       { x: desired.x, y: desired.y, map: character.map },
-      { useScare: false, speed: 200 },
+      { useScare: false, speed: 200, useTown: false },
     );
     smartmoveDebug = false;
     return null;
