@@ -250,6 +250,7 @@ function getEntWaypoints() {
     { x: 85, y: -1035 },
     { x: -187, y: -620 },
     { x: -496, y: -620 },
+    { x: -829, y: -266 },
     getEntLureDestination(),
   ];
 }
