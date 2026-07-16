@@ -157,6 +157,33 @@ class StrategicSmartMove {
   }
 
   /**
+   * Helper to find the door leading to a specific map from the current map
+   * @param {*} map destination map id
+   * @param {*} fromMap door search source map, defaults to character's current map
+   * @returns a closest door object with `map`, `x`, and `y` of the door leading to the destination map, or undefined if no such door exists
+   */
+  _findDoorTo(map, fromMap = character.map) {
+    const doors = G.maps[fromMap].doors || [];
+
+    const closest = doors
+      .filter((d) => d[4] === map)
+      .sort(
+        (lhs, rhs) =>
+          distance(character, { x: lhs[0], y: lhs[1] }) -
+          distance(character, { x: rhs[0], y: rhs[1] }),
+      )
+      .shift(); // smallest distance first
+
+    if (!closest) return undefined;
+
+    return {
+      map: closest[4],
+      x: closest[0],
+      y: closest[1],
+    };
+  }
+
+  /**
    * Now using alpathfinder's isWalkable to check if the coordinate is standable
    */
   isStandablePoint(position) {
@@ -305,6 +332,23 @@ class StrategicSmartMove {
   }
 
   async transport(map, spawn) {
+    const door = this._findDoorTo(map);
+
+    if (door) {
+      const distToDoor = distance(character, { x: door.x, y: door.y });
+
+      // If we are too far from the door, move there first
+      if (distToDoor > 100) {
+        console.warn(
+          `Too far from door to ${map} (${Math.round(
+            distToDoor,
+          )} units). Moving...`,
+        );
+        // Using the global smart_move or your local pathfinder
+        await smart_move({ x: door.x, y: door.y });
+      }
+    }
+
     const waitPromise = this.waitForNewMap();
     parent.socket.emit("transport", { to: map, s: spawn });
     parent.push_deferred("transport");
@@ -316,6 +360,29 @@ class StrategicSmartMove {
     }
   }
 
+  // async transport(map, spawn) {
+  //   const waitPromise = this.waitForNewMap();
+  //   parent.socket.emit("transport", { to: map, s: spawn });
+
+  //   const catchPromise = parent.push_deferred("transport").catch(async (e) => {
+  //     if (e.response === "transport_cant_reach") {
+  //       const door = this._findDoorTo(map);
+  //       if (door) {
+  //         await smart_move(door.x, door.y);
+  //         await this.transport(map, spawn);
+  //       }
+  //     }
+  //   });
+
+  //   try {
+  //     await waitPromise;
+  //   } catch (error) {
+  //     console.warn("Transport timeout! Current map:", character.map);
+  //   }
+
+  //   await catchPromise;
+  // }
+
   /**
    * @param {string | Object} toPosition - the monster id or map or coordinates object to move to
    * @param {*} extraOptions - extra settings
@@ -324,11 +391,13 @@ class StrategicSmartMove {
    * @param {boolean} extraOptions.useScare - whether to scare away mobs during smart moving, default: true
    * @param {Function} extraOptions.stopWatcher - a function that returns a boolean to determine whether to stop smart moving, default: undefined
    * @param {number} extraOptions.speed - the speed to use for pathfinding, set to a very big number to disable use_town, default: character's speed
+   * @param {boolean} extraOptions.useTown - whether to town back to the map's first spawn when no path is found, default: true. Set false when towning is worse than not moving (e.g. a tanker holding mobs)
    */
   async smartMove(toPosition, extraOptions = {}) {
     // Stop any existing smart move
     if (this.isSmartMoving) {
       this.cleanUp();
+      this.stopTownChanneling();
     }
 
     console.warn(toPosition);
@@ -342,6 +411,7 @@ class StrategicSmartMove {
       stopWatcher: undefined,
       wait: 0,
       speed: Math.max(character.speed, 40),
+      useTown: true,
       exact: false,
       smartmoveDebug: false, // to set the global var smartmoveDebug
       ...extraOptions,
@@ -440,19 +510,28 @@ class StrategicSmartMove {
       }
     }
 
-    if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
-      await this.useTownWithRetry();
-      this.cleanUp();
-      throw new Error(
-        `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
-      );
-    }
-
     this.smartMoveSession = (this.smartMoveSession || 0) + 1;
     const session = this.smartMoveSession;
     isAdvanceSmartMoving = true;
     this.isSmartMoving = true;
     smartmoveDebug = options.smartmoveDebug;
+
+    if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
+      try {
+        if (
+          options.useTown &&
+          toPosition.map &&
+          this.isStandablePoint(toPosition)
+        ) {
+          await this.useTownWithRetry();
+        }
+      } finally {
+        this.cleanUp();
+      }
+      throw new Error(
+        `Unable to find path from ${character.map},${character.x},${character.y} to ${toPosition.map},${toPosition.x},${toPosition.y}`,
+      );
+    }
 
     if (options.wait) {
       await sleep(options.wait);
@@ -490,6 +569,7 @@ class StrategicSmartMove {
         console.warn("magiport tick", session);
 
         const mageInfo = this.getMageInfo();
+
         if (
           mageInfo &&
           distance(toPosition, mageInfo) < 200 &&
@@ -499,27 +579,31 @@ class StrategicSmartMove {
           !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
         ) {
           this.isDoingSomethingMagical = true;
-          if (character.ctype === "rogue" && character.s.invis) {
-            await stop("invis");
-          }
-          
-          console.warn(`Whoosh! #${session}`);
-          send_cm(MAGE, "magiport");
-          stop();
-          await sleep(1500);
-          if (
-            this.pathfinder.canWalkPath(
-              character.map,
-              character.x,
-              character.y,
-              toPosition.x,
-              toPosition.y,
+          try {
+            if (character.ctype === "rogue" && character.s.invis) {
+              await stop("invis");
+            }
+
+            console.warn(`Whoosh! #${session}`);
+            send_cm(MAGE, "magiport");
+            stop();
+            await sleep(1500);
+            if (
+              this.pathfinder.canWalkPath(
+                character.map,
+                character.x,
+                character.y,
+                toPosition.x,
+                toPosition.y,
+              )
             )
-          )
-            await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
-          this.cleanUp();
-          this.stopTownChanneling();
-          this.isDoingSomethingMagical = false;
+              await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
+          } catch (e) {
+            console.warn(`Magiport branch failed #${session}:`, e);
+          } finally {
+            this.cleanUp();
+            this.stopTownChanneling();
+          }
           return;
         }
 
@@ -612,10 +696,11 @@ class StrategicSmartMove {
             await sleep(250);
             await move(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
             segmentIndex = lastIndex + 1;
-            this.isDoingSomethingMagical = false;
           }
         } catch (e) {
-          console.log("Error while blinking:", e);
+          console.warn("Error while blinking:", e);
+        } finally {
+          this.isDoingSomethingMagical = false;
         }
 
         if (session !== this.smartMoveSession || !this.isSmartMoving) return;
@@ -718,9 +803,11 @@ class StrategicSmartMove {
       this.watcherInterval = undefined;
     }
 
+    this.isDoingSomethingMagical = false;
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
     stop();
+    console.warn("Clean up called for session", this.smartMoveSession);
   }
 }
 

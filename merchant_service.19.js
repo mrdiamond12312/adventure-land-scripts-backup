@@ -3,73 +3,52 @@ character.on("cm", async function ({ name, message }) {
     return;
   }
 
-  switch (message) {
-    case "inv_ok":
-      onDuty = false;
-      break;
-  }
-
-  if (!onDuty) {
-    onDuty = true;
-  } else return;
+  if (onDuty) return;
+  onDuty = true;
 
   try {
     equipBroom();
 
     switch (message.msg) {
       case "inv_full":
-        log(`Go collecting ${name} compoundables at ${message.map}`);
-        await advanceSmartMove({
-          ...message,
-        });
+        console.warn(`Go collecting ${name} compoundables at ${message.map}`);
+        await advanceSmartMove(message);
         send_cm(name, "inv_full_merchant_near");
         await sleep(5000);
         break;
 
       case "buy_mana":
-        log(`Buying some mana potions for ${name}`);
-        if (isInvFull()) {
-          if (!smart.moving) await smart_move(bankPosition);
-          if (character.map === "bank") bank_store(0);
-        }
+        console.warn(`Buying some mana potions for ${name}`);
         if (locate_item("mpot1") === -1) {
           await advanceSmartMove({ map: "main", x: 56, y: -122 });
           await buy("mpot1", 9899);
         }
-        await advanceSmartMove({
-          ...message,
-        });
+        await advanceSmartMove(message);
         await send_item(name, locate_item("mpot1"), 10000);
         send_cm(name, "buy_mana_merchant_near");
         await sleep(5000);
         break;
 
       case "buy_hp":
-        log(`Buying some health potions for ${name}`);
+        console.warn(`Buying some health potions for ${name}`);
         if (isInvFull()) {
-          if (!smart.moving) await smart_move(bankPosition);
-          if (character.map === "bank") bank_store(0);
+          await bankStoreRoutine();
         }
         if (locate_item("hpot1") === -1) {
           await advanceSmartMove({ map: "main", x: 56, y: -122 });
           await buy("hpot1", 9899);
         }
-        await advanceSmartMove({
-          ...message,
-        });
+        await advanceSmartMove(message);
         await send_item(name, locate_item("hpot1"), 10000);
         send_cm(name, "buy_hp_merchant_near");
         await sleep(5000);
         break;
 
       case "buff_mluck":
-        await advanceSmartMove({
-          ...message,
-        });
+        await advanceSmartMove(message);
         if (!is_on_cooldown("mluck") && character.mp > 20) {
           use_skill("mluck", get_entity(name));
         }
-        onDuty = false;
         break;
 
       case "elixir": {
@@ -77,7 +56,7 @@ character.on("cm", async function ({ name, message }) {
         if (locate_item(elixirToDeliver) === -1) {
           const merchantThatSellNeededElixir =
             findVendorMerchantOf(elixirToDeliver);
-          if (getItemBankSlots(elixirToDeliver).length) {
+          if (getItemBankSlots(elixirToDeliver, true).length) {
             await retrieveBankItem(message.elixir);
           } else if (merchantThatSellNeededElixir) {
             if (!haveAComputer())
@@ -103,7 +82,7 @@ character.on("cm", async function ({ name, message }) {
 
       case "xptome":
         if (!partyMems.includes(name)) break;
-        log(`Buying Tome of Protection for ${name}`);
+        console.warn(`Buying Tome of Protection for ${name}`);
 
         if (locate_item("xptome") === -1) {
           await retrieveBankItem("xptome");
@@ -118,14 +97,12 @@ character.on("cm", async function ({ name, message }) {
           break;
         }
 
-        await advanceSmartMove({
-          ...message,
-        });
+        await advanceSmartMove(message);
         await send_item(name, locate_item("xptome"), 1);
         break;
 
       default:
-        log(`Unidentified '${message.msg}'`);
+        console.warn(`Unidentified '${message.msg}'`);
     }
   } finally {
     onDuty = false;
@@ -133,32 +110,44 @@ character.on("cm", async function ({ name, message }) {
 });
 
 async function openCryptInstance() {
-  onDuty = true;
-  if (locate_item("cryptkey") === -1) {
-    await retrieveBankItem("cryptkey");
-    await sleep(1000 + character.ping);
-
-    if (locate_item("cryptkey") === -1) {
+  try {
+    if (onDuty || isAdvanceSmartMoving || smart.moving) {
       return;
     }
+
+    onDuty = true;
+    if (locate_item("cryptkey") === -1) {
+      await retrieveBankItem("cryptkey");
+      await sleep(1000 + character.ping);
+
+      if (locate_item("cryptkey") === -1) {
+        return;
+      }
+    }
+
+    await smart_move(CRYPT_DOOR);
+    await enter("crypt");
+
+    set("cryptInstance", character.in);
+    set("lastCryptInstance", new Date());
+    set("cryptDefeatedMobs", []);
+    set("lastSeenDefeatableCryptBoss", undefined);
+  } finally {
+    onDuty = false;
   }
+}
 
-  await smart_move(CRYPT_DOOR);
-  await enter("crypt");
-
-  set("cryptInstance", character.in);
-  set("lastCryptInstance", new Date());
-  set("cryptDefeatedMobs", []);
-  set("lastSeenDefeatableCryptBoss", undefined);
-
-  onDuty = false;
-  return;
+function isMyPriestOnline() {
+  return parent.caracAL.siblings.includes(PRIEST);
 }
 
 var isLuringMobs = false;
+var isDraggingMobs = false;
 const trustedPartners = ["earthPriest", "earthWar"];
 
 async function lureMechaGnome() {
+  let nextDelay = 1000;
+
   if (
     isLuringMobs ||
     onDuty ||
@@ -170,26 +159,16 @@ async function lureMechaGnome() {
       parent.party_list &&
       trustedPartners.some((name) => parent.party_list.includes(name))
     ) &&
-      !parent.caracAL.siblings.includes(PRIEST))
+      !isMyPriestOnline())
   ) {
-    console.log("lureMechaGnome blocked by:", {
-      isLuringMobs,
-      onDuty,
-      isAdvanceSmartMoving,
-      smart: smart.moving,
-      chilling: shouldGoChilling(),
-      liveEvent: serverCurrentlyHasLiveEvent(),
-    });
-    return setTimeout(lureMechaGnome, 500);
+    return setTimeout(lureMechaGnome, nextDelay);
   }
 
-  // Global flags to prevent other tasks from interrupting
-  onDuty = true;
-  isLuringMobs = true; // Prevent scareAwayMobs
-
-  let nextDelay = 500;
-
   try {
+    // Global flags to prevent other tasks from interrupting
+    onDuty = true;
+    isLuringMobs = true; // Prevent scareAwayMobs
+
     await advanceSmartMove({ map: "cyberland" });
     await sleep(character.ping);
 
@@ -249,6 +228,226 @@ async function lureMechaGnome() {
   }
 }
 
+//// Ent luring — runs as its own scheduler, same shape as lureMechaGnome above.
+// Ents are very tanky and effectively never die while being dragged, so there's
+// no dead/alive branching here — the lure either completes or gets aborted on error.
+const ENT_LURE_MAP = "desertland";
+const ENT_AIM_POINT = { x: -75, y: -1897 };
+const ENT_FIRST_ANCHOR = { x: 136, y: -1836 };
+const ENT_SCARE_BUFFER = 1.5;
+const ENT_TICK = 10;
+const MAX_ENT = 3; // party can engage up to this many ents at once near spawn
+
+function getEntLureDestination() {
+  return { x: mapX, y: mapY, map: ENT_LURE_MAP };
+}
+
+function getEntWaypoints() {
+  return [
+    ENT_FIRST_ANCHOR,
+    { x: 196, y: -1641 },
+    { x: 199, y: -1125 },
+    { x: 85, y: -1035 },
+    { x: -187, y: -620 },
+    { x: -496, y: -620 },
+    { x: -829, y: -266 },
+    getEntLureDestination(),
+  ];
+}
+
+// The mage sits near spawn and reports how many ents are already engaged with the
+// party there (see mageLocation.entsTargetingPartyCount in basic_mage.4.js) —
+// avoids luring past MAX_ENT concurrent ents at home.
+function hasMaxEntsEngagedAtSpawn() {
+  const mageInfo = get("mageLocation");
+  return !!(
+    mageInfo &&
+    Date.now() - mageInfo.time < 15_000 &&
+    mageInfo.entsTargetingPartyCount >= MAX_ENT
+  );
+}
+
+async function ensureDartgun() {
+  if (findMaxLevelItem("dartgun") === -1) await retrieveBankItem("dartgun");
+  if (findMaxLevelItem("quiver") === -1) await retrieveBankItem("quiver");
+
+  await withTimeout(
+    equipBatch(calculateMerchantEquipments()),
+    Math.max(300, character.ping),
+  );
+}
+
+async function positionAtEntAimPoint(entId, dartgunRange) {
+  let ent = parent.entities[entId];
+
+  // Re-derive the stand point every tick (not just once) since the ent can drift
+  // before we're in position, and keep retrying until we're actually there.
+  while (ent) {
+    const dx = ENT_AIM_POINT.x - ent.x;
+    const dy = ENT_AIM_POINT.y - ent.y;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) break;
+
+    const standPoint = {
+      x: ent.x + (dx / len) * dartgunRange,
+      y: ent.y + (dy / len) * dartgunRange,
+    };
+
+    if (distance(character, standPoint) < 20) break;
+
+    if (!isMyPriestOnline()) {
+      throw new Error("Priest went offline mid-lure — aborting.");
+    }
+
+    await move(standPoint.x, standPoint.y).catch(() => smart_move(standPoint));
+    await sleep(ENT_TICK);
+    ent = parent.entities[entId];
+  }
+
+  if (!ent)
+    throw new Error("Ent disappeared before positioning — lure aborted.");
+}
+
+async function aggroEnt(entId, dartgunRange) {
+  let ent = parent.entities[entId];
+  while (ent && ent.target !== character.name) {
+    if (!isMyPriestOnline()) {
+      throw new Error("Priest went offline mid-lure — aborting.");
+    }
+
+    const d = distance(character, ent);
+    if (!is_on_cooldown("attack") && d <= dartgunRange) {
+      await attack(ent).catch(() => {});
+    } else if (d > dartgunRange) {
+      await move(
+        character.x + (ent.x - character.x) * 0.2,
+        character.y + (ent.y - character.y) * 0.2,
+      ).catch(() => {});
+    }
+    await sleep(ENT_TICK);
+    ent = parent.entities[entId];
+  }
+
+  if (!ent) throw new Error("Ent disappeared before aggro — lure aborted.");
+}
+
+async function walkEntToSpawn(entId) {
+  let arrived = false;
+  let aborted = false;
+
+  // Runs concurrently with the step loop below; checks `aborted` before each leg
+  // so it stops issuing move() calls once the lure ends instead of continuing to
+  // walk stale waypoints in the background.
+  const walkPromise = (async () => {
+    for (const { x: nextX, y: nextY } of getEntWaypoints()) {
+      if (aborted) return;
+      await move(nextX, nextY).catch((e) => {
+        console.warn("move failed", nextX, nextY, e);
+        throw e;
+      });
+    }
+    arrived = true;
+  })().catch(() => {});
+
+  let handoffDeadline;
+
+  try {
+    await new Promise((resolve, reject) => {
+      const step = async () => {
+        const ent = parent.entities[entId];
+        if (!ent || character.rip) return resolve();
+        if (arrived) {
+          // At the end of dragging path, hold the aggro if no one pick up the aggro yet
+          // for up to 10 seconds
+          handoffDeadline ??= Date.now() + 10_000;
+          const handedOff = ent.target && ent.target !== character.name;
+          if (handedOff || Date.now() > handoffDeadline) return resolve();
+        }
+        if (!isMyPriestOnline()) {
+          return reject(new Error("Priest went offline mid-lure — aborting."));
+        }
+
+        const d = distance(character, ent);
+        if (
+          d < G.monsters.ent.range * ENT_SCARE_BUFFER &&
+          !ms_to_next_skill("scare")
+        ) {
+          await withTimeout(use_skill("scare"), 300)
+            .then(() => reduce_cooldown("scare", character.ping * 0.95))
+            .catch(() => {});
+        }
+
+        if (
+          !ent.target &&
+          d <= character.range + character.xrange * 0.1 &&
+          d > character.range * 0.85 &&
+          !is_on_cooldown("attack")
+        ) {
+          await withTimeout(attack(ent), 300).catch(() => {});
+        }
+
+        setTimeout(step, ENT_TICK);
+      };
+      step();
+    });
+  } finally {
+    aborted = true;
+  }
+}
+
+async function dragEnt() {
+  let nextDelay = 10_000;
+
+  if (
+    map !== ENT_LURE_MAP ||
+    isLuringMobs ||
+    onDuty ||
+    isAdvanceSmartMoving ||
+    smart.moving ||
+    shouldGoChilling() ||
+    serverCurrentlyHasLiveEvent() ||
+    !isMyPriestOnline() ||
+    hasMaxEntsEngagedAtSpawn()
+  ) {
+    return setTimeout(dragEnt, nextDelay);
+  }
+
+  try {
+    onDuty = true;
+    isLuringMobs = true;
+    isDraggingMobs = true;
+    // Tell the rest of the party we're actively dragging this in — see
+    // getMonstersOnDeclares() in basic_function.7.js, which skips declaring it
+    // as a farm target while it's still being walked in from elsewhere.
+    set("luringMobType", "ent");
+
+    await ensureDartgun();
+    const dartgunRange = character.range + character.xrange * 0.8;
+
+    // await advanceSmartMove({ ...ENT_FIRST_ANCHOR, map: ENT_LURE_MAP });
+    await advanceSmartMove("ent");
+
+    const ent = get_nearest_monster({ type: "ent" });
+    if (!ent) throw new Error("No Ent found!");
+
+    await positionAtEntAimPoint(ent.id, dartgunRange);
+    await aggroEnt(ent.id, dartgunRange);
+    await walkEntToSpawn(ent.id);
+
+    nextDelay = 15_000; // lured successfully, give it a while before going again
+  } catch (e) {
+    console.warn(`Ent lure failed: ${e.message}`);
+    nextDelay = 15_000;
+  } finally {
+    isDraggingMobs = false;
+    isLuringMobs = false;
+    onDuty = false;
+    set("luringMobType", undefined);
+    setTimeout(dragEnt, nextDelay);
+  }
+}
+
 if (!parent.caracAL) {
   lureMechaGnome();
+  dragEnt();
 }

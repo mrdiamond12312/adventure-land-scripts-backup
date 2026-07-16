@@ -17,12 +17,16 @@ if (parent.caracAL) {
 // Kiting
 var originRangeRate = 0.4;
 rangeRate = originRangeRate;
-const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 4);
 
 const reduceCd = (skillName) =>
   reduce_cooldown(skillName, Math.min(...parent.pings));
 
 async function fight(target) {
+  // Snapshot for attackSpeedCompensate: blaster's attack speed modifier means
+  // frequency can change mid-tick when weapons swap, and the attack cooldown
+  // must be timed with the frequency the shot was actually fired at.
+  const attackFrequencyBeforeCompensate = character.frequency;
+
   if (
     currentStrategy === usePullStrategies &&
     !target?.mtype.includes("crabx")
@@ -118,7 +122,10 @@ async function fight(target) {
     promisesToAwait.push(
       // currentStrategy(target),
       attack(target)
-        .then(() => reduceCd("attack"))
+        .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeCompensate);
+          reduceCd("attack");
+        })
         .catch((e) => {
           attackErrorHandler(e);
         }),
@@ -176,12 +183,27 @@ async function mainLoop() {
 
     // Save location data for other characters/storage once high level
     if (character.max_mp > G.skills["magiport"].mp * 1.5) {
+      // Observer count for the merchant's ent lure: how many ents are already
+      // engaged with the party near the farm spawn? (avoids double-luring)
+      const { party_list } = parent;
+      const partyNames = new Set([...partyMems, partyMerchant, ...party_list]);
+      const entsTargetingPartyCount = Object.values(parent.entities).filter(
+        (entity) =>
+          entity &&
+          entity.type === "monster" &&
+          entity.mtype === "ent" &&
+          entity.target &&
+          partyNames.has(entity.target) &&
+          distance(entity, { x: mapX, y: mapY }) < 300,
+      ).length;
+
       set("mageLocation", {
         mp: character.mp,
         map: character.map,
         x: character.x,
         y: character.y,
         time: Date.now(),
+        entsTargetingPartyCount,
       });
     }
 

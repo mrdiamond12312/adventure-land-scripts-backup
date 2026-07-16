@@ -20,6 +20,9 @@ var originRangeRate = 0.95;
 rangeRate = originRangeRate;
 
 async function fight(target) {
+  // Snapshot for attackSpeedCompensate: weapon swaps mid-tick change frequency,
+  // and the attack cooldown must be timed with the frequency at fire time.
+  const attackFrequencyBeforeCompensate = character.frequency;
   const inRange = (entity) =>
     distance(entity, character) < character.range + character.xrange;
   const isAttackReady =
@@ -35,6 +38,7 @@ async function fight(target) {
           entity.type === "monster" &&
           ([...partyMems, ...parent.party_list].includes(entity.target) ||
             (entity.cooperative && entity.target)) &&
+          !MELEE_IGNORE_LIST.includes(entity.mtype) &&
           inRange(entity),
       )
       .sort((lhs, rhs) => {
@@ -69,7 +73,10 @@ async function fight(target) {
     }
     promisesToAwait.push(
       withTimeout(attack(target), 2500)
-        .then(() => reduce_cooldown("attack", Math.min(...parent.pings)))
+        .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeCompensate);
+          reduce_cooldown("attack", Math.min(...parent.pings));
+        })
         .catch((e) => {
           attackErrorHandler(e);
         }),

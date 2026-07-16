@@ -18,6 +18,7 @@ const bosses = {
   crabxx: { type: "crabxx", threshold: 0.95, hoppable: 1 },
   dragold: { type: "dragold", threshold: 0.85, hoppable: 1 },
   pinkgoo: { type: "pinkgoo", threshold: 0.65, hoppable: 1 },
+  // wabbit: { type: "wabbit", threshold: 0.5, hoppable: 1 },
 };
 const waitForEvent = ["wabbit"];
 
@@ -44,7 +45,7 @@ async function hopToServer(serverRegion, serverIdentifier) {
 
     parent.caracAL.deploy(null, `SR_${serverRegion}${serverIdentifier}`);
   } else {
-    partyMems.forEach((id) => send_cm("loot-before-hopping"));
+    send_cm(partyMems, "loot-before-hopping");
     await midasLooting(true);
     await sleep(1000);
 

@@ -13,6 +13,7 @@ if (parent.caracAL) {
       syncBankData();
       bankLoop();
       lureMechaGnome();
+      dragEnt();
     });
 } else {
   load_code(10);
@@ -22,6 +23,10 @@ if (parent.caracAL) {
 // Global Vars
 var onDuty = false;
 var isExeing = false;
+// Set when an exchange fails with inventory_full; makes the emergency banking
+// below run even if isInvFull() reads false. Cleared after the bank trip —
+// unlike the old `onDuty = true` hack, this can't leak the shared duty lock.
+var invJammed = false;
 
 const fishingLocation = { map: "main", x: -1367, y: -82 };
 const miningLocation = { map: "tunnel", x: -279, y: -148 };
@@ -29,17 +34,35 @@ const homeLocation = { map: "main", x: -152, y: -137 };
 const haveAComputer = () =>
   locate_item("computer") !== -1 || locate_item("ancientcomputer") !== -1;
 
-function equipBroom() {
+async function equipBroom() {
   const currentWeapon = character.slots.mainhand;
   if (!currentWeapon || currentWeapon.name !== "broom") {
     const broom = findMaxLevelItem("broom");
-    if (broom === -1) retrieveBankItem("broom");
-    else
-      equipBatch({
-        mainhand: "broom",
-        offhand: "wbookhs",
-      });
+    if (broom === -1) await retrieveBankItem("broom");
+    return equipBatch({
+      mainhand: "broom",
+      offhand: "wbookhs",
+    });
   }
+}
+
+function calculateMerchantEquipments() {
+  return {
+    helmet: isDraggingMobs ? "xhelmet" : "eear",
+    mainhand: isDraggingMobs ? "dartgun" : "broom",
+    offhand: isDraggingMobs ? "quiver" : "wbookhs",
+    amulet: isDraggingMobs ? "t2intamulet" : "warmscarf",
+    orb: "jacko",
+    chest: "tshirt4",
+    pants: "pants",
+    ring1: "solitaire",
+    ring2: isDraggingMobs ? "armorring" : "dexring",
+    shoes: "eslippers",
+    gloves: "gloves1",
+    belt: "sbelt",
+    earring1: "dexearring",
+    earring2: "dexearring",
+  };
 }
 
 function shouldGoChilling() {
@@ -93,7 +116,7 @@ async function holidayExchange() {
   const exchangableItem = holidayItems.find((item) => {
     const itemName = item.name;
     const slot = locate_item(itemName);
-    if (slot === -1 && getItemBankSlots(itemName).length) {
+    if (slot === -1 && getItemBankSlots(itemName, true).length) {
       retrieveBankItem(itemName);
     }
 
@@ -104,14 +127,14 @@ async function holidayExchange() {
   if (!exchangableItem || smart.moving) return;
 
   if (get_nearest_npc()?.npc !== exchangableItem.npc && !haveAComputer()) {
-    equipBroom();
+    await equipBroom();
     await smart_move(find_npc(exchangableItem.npc));
   }
 
   return exchange(locate_item(exchangableItem.name)).catch((e) => {
     switch (e.response) {
       case "inventory_full":
-        onDuty = true;
+        invJammed = true;
     }
   });
 }
@@ -134,10 +157,16 @@ async function exchangeSomething() {
     { name: "candypop", quantity: 10 },
     { name: "basketofeggs", quantity: 1 },
     { name: "seashell", quantity: 20, npc: "fisherman" },
+    { name: "leather", quantity: 40, npc: "leathermerchant" },
+    { name: "gemfragment", quantity: 50, npc: "gemmerchant" },
   ];
   let slot = undefined;
   for (const item of itemName) {
-    if (getItemBankSlots(item.name).length && locate_item(item.name) === -1) {
+    if (
+      !onDuty &&
+      getItemBankSlots(item.name).length &&
+      locate_item(item.name) === -1
+    ) {
       await retrieveBankItem(item.name);
     }
 
@@ -148,6 +177,7 @@ async function exchangeSomething() {
       if (
         item.npc &&
         !haveAComputer() &&
+        !onDuty &&
         !isAdvanceSmartMoving &&
         !smart.moving
       ) {
@@ -181,63 +211,35 @@ async function exchangeSomething() {
   return exchange(slot).catch((e) => {
     switch (e.response) {
       case "inventory_full":
-        onDuty = true;
+        invJammed = true;
     }
   });
-}
-
-async function exchangeMines() {
-  const itemName = ["gemfragment"];
-  let slot = undefined;
-  itemName.map((name) => {
-    if (locate_item(name) !== -1) slot = locate_item(name);
-  });
-
-  if (slot && character.items[slot].q >= 50) {
-    if (
-      !smart.moving &&
-      !isAdvanceSmartMoving &&
-      character.map !== "tunnel" &&
-      !haveAComputer()
-    ) {
-      await smart_move(miningLocation);
-    }
-    await exchange(slot).catch((e) => {
-      switch (e.response) {
-        case "inventory_full":
-          onDuty = true;
-      }
-    });
-  }
 }
 
 async function moveHome() {
-  try {
-    if (
-      distance(character, homeLocation) < 150 ||
-      smart.moving ||
-      isAdvanceSmartMoving
-    )
-      return;
+  if (
+    distance(character, homeLocation) < 150 ||
+    smart.moving ||
+    isAdvanceSmartMoving ||
+    isDraggingMobs
+  )
+    return;
 
+  try {
     log("Moving back Town!");
-    equipBroom();
     await advanceSmartMove(homeLocation, {
       exact: true,
       useScare: isLuringMobs,
     });
 
     if (locate_item("stand0") === -1 && !haveAComputer()) {
-      retrieveBankItem("stand0");
+      await retrieveBankItem("stand0");
     }
   } catch (e) {
     if (e?.reason === "failed" && e.failed) {
       await town();
     }
-
     console.warn("movehome error:", e);
-  } finally {
-    onDuty = false;
   }
 }
 
@@ -248,7 +250,8 @@ async function goFishing() {
     isAdvanceSmartMoving ||
     character.c.mining ||
     character.c.fishing ||
-    is_on_cooldown("fishing")
+    is_on_cooldown("fishing") ||
+    onDuty
   )
     return;
 
@@ -280,11 +283,16 @@ async function goFishing() {
     return;
 
   if (
-    character.real_x != fishingLocation.x &&
-    character.real_y != fishingLocation.y
+    character.real_x != fishingLocation.x ||
+    character.real_y != fishingLocation.y ||
+    character.map !== fishingLocation.map
   ) {
-    equipBroom();
-    await smart_move(fishingLocation);
+    await equipBroom();
+    await advanceSmartMove(fishingLocation, {
+      useBlink: false,
+      useMagiport: false,
+      exact: true,
+    });
   }
 
   if (character.mp > 120) {
@@ -309,12 +317,13 @@ async function goMining() {
     character.q.exchange ||
     character.c.mining ||
     character.c.fishing ||
-    is_on_cooldown("mining")
+    is_on_cooldown("mining") ||
+    onDuty
   )
     return;
 
   const pickaxeItemId = "pickaxe";
-  const availablePickaxesInBank = getItemBankSlots(pickaxeItemId);
+  const availablePickaxesInBank = getItemBankSlots(pickaxeItemId, true);
 
   if (
     availablePickaxesInBank.length > 0 &&
@@ -341,11 +350,16 @@ async function goMining() {
     return;
 
   if (
-    character.real_x != miningLocation.x &&
-    character.real_y != miningLocation.y
+    character.real_x != miningLocation.x ||
+    character.real_y != miningLocation.y ||
+    character.map !== miningLocation.map
   ) {
-    equipBroom();
-    await smart_move(miningLocation);
+    await equipBroom();
+    await advanceSmartMove(miningLocation, {
+      useBlink: false,
+      useMagiport: false,
+      exact: true,
+    });
   }
 
   if (character.mp > 120) {
@@ -369,7 +383,7 @@ async function dismantleSomething() {
     character.c.mining ||
     character.c.fishing ||
     isSortingInventory ||
-    Math.max(character.ping) > 300
+    Math.max(...parent.pings) > 300
   )
     return;
 
@@ -405,7 +419,9 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   const isEnoughIngredients = G.craft[item].items.every(([quantity, name]) => {
     quantity = quantity * craftQuantity;
     const slots = character.items.filter((item) => item && item.name === name);
-    const bankSlots = getItemBankSlots(name).filter((item) => !item.level);
+    const bankSlots = getItemBankSlots(name, true).filter(
+      (item) => !item.level,
+    );
 
     const totalQuantityOfSlotItem = slots.reduce(
       (accumulator, current) => accumulator + (current.q ?? 1),
@@ -433,13 +449,16 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
       }
     }
 
-    if (numberOfItemMissing > 0 && totalQuantityOfBankItem) {
-      for (let count = 0; count < numberOfItemMissing; count++) {
-        fromBank.push(name);
+    if (numberOfItemMissing > 0 && totalQuantityOfBankItem > 0) {
+      for (const bankItem of bankSlots) {
+        if (numberOfItemMissing <= 0) break;
 
-        if (bankSlots[count] && bankSlots[count].q) {
-          numberOfItemMissing -= bankSlots[count].q;
-        }
+        const available = bankItem.q ?? 1;
+        const takeAmount = Math.min(available, numberOfItemMissing);
+
+        fromBank.push({ name, level: bankItem.level });
+
+        numberOfItemMissing -= takeAmount;
       }
     }
 
@@ -455,18 +474,20 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 
   if (fromBank.length && isEnoughIngredients) {
     for (const item of fromBank) {
-      await retrieveBankItem(item);
+      await retrieveBankItem(item.name);
     }
   }
 
   if (isEnoughIngredients) {
+    const hasComputer = haveAComputer();
+
     if (
-      get_nearest_npc()?.name !== "Leo" &&
-      !haveAComputer() &&
+      !isAdvanceSmartMoving &&
       !smart.moving &&
-      !isAdvanceSmartMoving
+      ((!hasComputer && get_nearest_npc()?.name !== "Leo") ||
+        (hasComputer && character.map.includes("bank")))
     ) {
-      await smart_move(place);
+      await advanceSmartMove(place, { useBlink: false, useMagiport: false });
     }
 
     for (let trial = 0; trial < craftQuantity; trial++) await auto_craft(item);
@@ -482,7 +503,7 @@ setInterval(async function () {
 
   if (character.moving && character.stand) {
     close_stand();
-    equipBroom();
+    await equipBatch(calculateMerchantEquipments());
   } else if (
     !character.moving &&
     !character.stand &&
@@ -496,34 +517,42 @@ setInterval(async function () {
   await sortInv();
 
   const computerSlot = locate_item("computer");
-  if (computerSlot === -1 && getItemBankSlots("computer").length) {
+  if (computerSlot === -1 && getItemBankSlots("computer", true).length) {
     retrieveBankItem("computer");
+  }
+
+  if (
+    character.hp < character.max_hp - 1000 &&
+    (!get_entity(PRIEST) || distance(character, get_entity(PRIEST)) > 150)
+  ) {
+    send_cm(PRIEST, "party_heal");
   }
 
   await withTimeout(
     Promise.allSettled([
+      !shouldGoChilling() && equipBatch(calculateMerchantEquipments()),
       compoundInv(),
       upgradeInv(),
       exchangeSomething(),
       holidayExchange(),
       dismantleSomething(),
-      craft("xbox"),
-      craft("basketofeggs"),
+      craft("xbox", 1, homeLocation),
       craft("orba", 1, homeLocation),
       craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
       craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
       craft("wingedboots", character.esize - 8, { map: "main", x: -2, y: 295 }),
       craft("pouchbow", character.esize - 8, { map: "main", x: -2, y: 295 }),
-      craft("elixirdex1", 10, { map: "main", x: -2, y: 295 }),
-      craft("elixirdex2", 10, { map: "main", x: -2, y: 295 }),
-      craft("elixirint1", 10, { map: "main", x: -2, y: 295 }),
-      craft("elixirint2", 10, { map: "main", x: -2, y: 295 }),
-      craft("elixirstr1", 10, { map: "main", x: -2, y: 295 }),
-      craft("elixirstr2", 10, { map: "main", x: -2, y: 295 }),
-      craft("elixirvit1", 10, { map: "main", x: -2, y: 295 }),
-      craft("elixirvit2", 10, { map: "main", x: -2, y: 295 }),
+      craft("elixirdex1", 1, { map: "main", x: -2, y: 295 }),
+      craft("elixirdex2", 1, { map: "main", x: -2, y: 295 }),
+      craft("elixirint1", 1, { map: "main", x: -2, y: 295 }),
+      craft("elixirint2", 1, { map: "main", x: -2, y: 295 }),
+      craft("elixirstr1", 1, { map: "main", x: -2, y: 295 }),
+      craft("elixirstr2", 1, { map: "main", x: -2, y: 295 }),
+      craft("elixirvit1", 1, { map: "main", x: -2, y: 295 }),
+      craft("elixirvit2", 1, { map: "main", x: -2, y: 295 }),
       // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
+      craft("basketofeggs", 1, homeLocation),
       !isSortingInventory &&
         Promise.all(
           Array.from({ length: 42 }, (_, i) => i)
@@ -543,36 +572,36 @@ setInterval(async function () {
 
   if (!is_on_cooldown("mining")) goMining();
   else if (!is_on_cooldown("fishing")) goFishing();
-  else if (
-    locate_item("gemfragment") !== -1 &&
-    character.items[locate_item("gemfragment")]?.q >= 50
-  )
-    exchangeMines();
+  // else if (
+  //   locate_item("gemfragment") !== -1 &&
+  //   character.items[locate_item("gemfragment")]?.q >= 50
+  // )
+  //   exchangeMines();
   else if (!character.c.mining && !character.c.fishing && !onDuty)
     await moveHome();
 
-  if (isInvFull() && !isAdvanceSmartMoving && !smart.moving) {
+  if ((isInvFull() || invJammed) && !isAdvanceSmartMoving && !smart.moving) {
     onDuty = true;
-    await advanceSmartMove(bankPosition);
-    if (character.map === "bank") {
-      try {
-        character.items
-          .filter((item) => item && !item.l && !IGNORE.includes(item.name))
-          .map((item, index) => {
-            bank_store(index);
-          });
-      } catch (e) {
-        console.error(e);
-      }
+    try {
+      await bankStoreRoutine();
+      invJammed = false;
+    } finally {
+      onDuty = false;
     }
-    onDuty = false;
   }
 }, 750);
 
 setInterval(function () {
-  onDuty = false;
+  // Recovery for a leaked onDuty (a duty that threw without resetting) — but
+  // never yank it away from an active lure/drag, whose movement would get
+  // hijacked by bankLoop and friends the moment the flag drops.
+  if (!isLuringMobs && !isDraggingMobs) onDuty = false;
   use_skill("mluck", character);
 }, 300000);
+
+// setInterval(() => {
+//   if (character.moving) parent.socket.emit("emotion", { name: "drop_egg" });
+// }, 2000);
 
 function on_party_invite(name) {
   if (name === partyMems[0]) accept_party_invite(name);
@@ -585,13 +614,12 @@ function handle_death() {
 // Handler to buy from Ponty
 const ITEM_NEEDED = [
   "strring",
+  // "intring",
+  // "dexring",
   "dexearring",
   "bataxe",
+  "pinkie",
   "ololipop",
-  "fireblade",
-  "firebow",
-  "firestaff",
-  "firestars",
   "jacko",
   "gcape",
   "carrot",
@@ -600,6 +628,7 @@ const ITEM_NEEDED = [
   "throwingstars",
   "angelwings",
   "smoke",
+  "gphelmet",
 ];
 
 function secondhandsHandler(events) {
@@ -631,16 +660,19 @@ setInterval(() => {
 }, 12000);
 
 // setInterval(() => {
+//   const blade = ITEMS_HIGHEST_LEVEL["blade"];
+//   const quantity = blade?.quantity ?? 0; // # of blades at highest level
+//   const level = blade?.level ?? 0; // that highest level
+//   const count = blade?.count ?? 0; // total blades owned
+
+//   const haveEnoughHighLevel = quantity > 1 && level > 8;
+//   const haveEnoughTotal = count >= 60;
+
 //   if (
 //     !isInvFull(5) &&
-//     character.map === "main" &&
-//     !(
-//       (ITEMS_HIGHEST_LEVEL.staff?.quantity ?? 0) > 3 &&
-//       (ITEMS_HIGHEST_LEVEL.staff?.level ?? 0) > 7
-//     )
+//     (haveAComputer() || character.map === "main") &&
+//     !(haveEnoughHighLevel || haveEnoughTotal)
 //   ) {
-//     for (let i = 0; i < 42 - character.items.filter((i) => i).length - 5; i++) {
-//       buy("staff");
-//     }
+//     buy("blade", character.esize - 7);
 //   }
 // }, 2000);

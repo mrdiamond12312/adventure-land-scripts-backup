@@ -26,14 +26,7 @@ if (parent.caracAL) {
 const originRangeRate = 0.9;
 rangeRate = originRangeRate;
 
-const bosses = {
-  icegolem: { type: "icegolem", threshold: 0.7, hoppable: 0.999 },
-  franky: { type: "franky", threshold: 0.7, hoppable: 0.965 },
-  mrpumpkin: { type: "mrpumpkin", threshold: 0.7, hoppable: 0.95 },
-  mrgreen: { type: "mrgreen", threshold: 0.7, hoppable: 0.95 },
-  crabxx: { type: "crabxx", threshold: 0.95, hoppable: 0.9999 },
-  dragold: { type: "dragold", threshold: 0.99, hoppable: 1 },
-};
+const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
 
 // Main fight function
 async function fight(target) {
@@ -50,51 +43,56 @@ async function fight(target) {
   };
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
+  let altTarget = undefined;
+  const aggroedMobs = Object.values(parent.entities)
+    .filter((entity) => {
+      return (
+        entity.type === "monster" &&
+        !entity.s?.fullguardx &&
+        !MELEE_IGNORE_LIST.includes(entity.mtype) &&
+        entity.target &&
+        !haveFormidableMonsterAroundTarget(entity) &&
+        inRange(entity, 5) &&
+        !haveIgnoreMobAroundTarget(entity)
+      );
+    })
+    .map((mob) => {
+      mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
+      return mob;
+    })
+    .sort((lhs, rhs) => {
+      // Prioritize highest cluster count (using pre-calculated value)
+      if (lhs.cluster_count !== rhs.cluster_count) {
+        return rhs.cluster_count - lhs.cluster_count;
+      }
+
+      // Hit one with more HP
+      return rhs.hp - lhs.hp;
+    });
+
   if (
     typeof usePullStrategies === "function" &&
     currentStrategy === usePullStrategies &&
     !target?.mtype.includes("crabx")
   ) {
-    const aggroedMobs = Object.values(parent.entities)
-      .filter((entity) => {
-        return (
-          entity.type === "monster" &&
-          !entity.s?.fullguardx &&
-          !MELEE_IGNORE_LIST.includes(entity.mtype) &&
-          entity.target &&
-          !haveFormidableMonsterAroundTarget(entity) &&
-          inRange(entity, 2) &&
-          !haveIgnoreMobAroundTarget(entity)
-        );
-      })
-      .map((mob) => {
-        mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
-        return mob;
-      });
-
     if (aggroedMobs.length) {
-      const aoeMob = aggroedMobs
-        .sort((lhs, rhs) => {
-          // Prioritize highest cluster count (using pre-calculated value)
-          if (lhs.cluster_count !== rhs.cluster_count) {
-            return rhs.cluster_count - lhs.cluster_count;
-          }
-
-          // Hit one with more HP
-          return rhs.hp - lhs.hp;
-        })
-        .shift(); // Get the first of list (best for AOE)
+      const aoeMob = aggroedMobs[0]; // Get the first of list (best for AOE)
+      altTarget = aggroedMobs.filter(
+        (mob) => mob !== aoeMob && inRange(mob),
+      )[0]; // Get another mob in AttackRange to attack if the AOE mob is out of range
 
       // Prioritize the AOE mob if it's better than the current target (or if the current is cooperative)
-      const isAoeMobBetter =
-        aoeMob &&
-        mobsToFarm.findIndex((id) => id === aoeMob.mtype) <=
-          mobsToFarm.findIndex((id) => id === target?.mtype);
+      // const isAoeMobBetter =
+      //   aoeMob &&
+      //   mobsToFarm.findIndex((id) => id === aoeMob.mtype) <=
+      //     mobsToFarm.findIndex((id) => id === target?.mtype);
 
-      if (!target?.cooperative && isAoeMobBetter) {
+      if (
+        !target?.cooperative
+        // && isAoeMobBetter
+      ) {
         target = aoeMob;
       }
-      change_target(target);
     }
   }
 
@@ -115,65 +113,74 @@ async function fight(target) {
     promisesToAwait.push(currentStrategy(target));
   }
 
-  if (isAttackReady && inRange(target) && shouldAttack()) {
+  const targetToAttack = inRange(target) ? target : altTarget;
+  if (isAttackReady && targetToAttack && shouldAttack()) {
     set_message("Attacking");
     // const xrangeUsed = distance(target, character) - character.range;
     // if (xrangeUsed > 0) character.xrange -= xrangeUsed;
     // Main attack execution
     promisesToAwait.push(
-      attack(target)
+      attack(targetToAttack)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeComponsate);
           reduceCd("attack");
         })
-        .catch((e) => attackErrorHandler(e, target)),
+        .catch((e) => attackErrorHandler(e, targetToAttack)),
     );
 
-    // Offhand swap logic: Use Candy Canes for farming
+    // Offhand swap logic: Use Candy Canes for attacking
     const shouldUseCandyCanes =
       character.ping < 1000 &&
       !isCleaving &&
+      !isEquipingItems &&
       !character.s.sugarrush &&
-      (character.slots.offhand?.name === "fireblade" ||
-        character.slots.mainhand?.name === "fireblade") &&
+      (CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.offhand?.name) ||
+        CANDY_SWAP_WEAPON_ALLOW_LIST.includes(
+          character.slots.mainhand?.name,
+        )) &&
       character.slots.offhand?.name !== "mshield" &&
       character.cc < 100;
 
     if (shouldUseCandyCanes) {
       const candycane1 = findMaxLevelItem("candycanesword");
       const candycane2 = findMaxLevelItem("candycanesword", 1);
+      const isFastAttacker = 1 / character.frequency < 0.6;
 
-      if (candycane1 !== -1 && candycane2 !== -1) {
+      if (candycane1 !== -1) {
         isEquipingItems = true;
-        const equipPromise = Promise.allSettled([
-          // Immediate equip
-          equip_batch([
-            { num: candycane1, slot: "mainhand" },
-            { num: candycane2, slot: "offhand" },
-          ]),
 
-          // Delayed re-equip
-          new Promise((resolve) => {
-            setTimeout(() => {
-              resolve(
-                equip_batch([
-                  {
-                    num: candycane1,
-                    slot: "mainhand",
-                  },
-                  {
-                    num: candycane2,
-                    slot: "offhand",
-                  },
-                ]),
-              );
-            }, 150);
-          }),
-        ]).finally(() => {
+        // To avoid penalty_cd, fast attackers only equip one candy cane, while slower attackers can attempt dual wield if they have two candy canes.
+        const immediateEquip = isFastAttacker
+          ? [{ num: candycane1, slot: "mainhand" }]
+          : [
+              { num: candycane1, slot: "mainhand" },
+              { num: candycane2, slot: "offhand" },
+            ];
+
+        const delayedEquip = isFastAttacker
+          ? [{ num: candycane1, slot: "mainhand" }]
+          : [
+              { num: candycane1, slot: "mainhand" },
+              { num: candycane2, slot: "offhand" },
+            ];
+
+        // Only attempt dual wield if second candy cane exists
+        if (!isFastAttacker && candycane2 === -1) {
           isEquipingItems = false;
-        });
+        } else {
+          const equipPromise = Promise.allSettled([
+            equip_batch(immediateEquip),
+            new Promise((resolve) => {
+              setTimeout(() => {
+                resolve(equip_batch(delayedEquip));
+              }, 150);
+            }),
+          ]).finally(() => {
+            isEquipingItems = false;
+          });
 
-        promisesToAwait.push(equipPromise);
+          promisesToAwait.push(equipPromise);
+        }
       }
     }
 
@@ -225,16 +232,19 @@ async function fight(target) {
 
   if (canTaunt && isHealerAlive) {
     // --- If Mobs targeting allies
-    const mobsTargetingAlly = Object.values(parent.entities).find(
-      (mob) =>
-        mob.type === "monster" &&
-        [...partyMems, partyMerchant].some(
-          (ally) => ally !== character.name && mob.target === ally,
-        ) &&
-        calculateDamage(mob, character) < 1800 && // Warrior can take the damage
-        !mob.cooperative &&
-        is_in_range(mob, "taunt"),
-    );
+    const mobsTargetingAlly = Object.values(parent.entities)
+      .filter(
+        (entity) =>
+          entity.type === "monster" &&
+          [...partyMems, partyMerchant].some(
+            (ally) => ally !== character.name && entity.target === ally,
+          ) &&
+          calculateDamage(entity, character) < 3000 && // Warrior can take the damage
+          !entity.cooperative &&
+          is_in_range(entity, "taunt"),
+      )
+      .sort((lhs, rhs) => rhs.attack - lhs.attack)
+      .shift();
 
     if (mobsTargetingAlly) {
       promisesToAwait.push(
@@ -271,7 +281,7 @@ async function fight(target) {
     !is_on_cooldown("scare") && character.mp > 100 && character.cc < 100;
 
   if (character.fear || (isDangerouslyLow && isOverwhelmed && isReadyToScare)) {
-    scareAwayMobs();
+    promisesToAwait.push(scareAwayMobs());
   }
 
   // --- Kiting Rate Adjustment ---
@@ -287,6 +297,9 @@ async function fight(target) {
   } catch (e) {
     console.error("Error while attacking", e);
   }
+
+  // --- Change global target  ---
+  change_target(target);
 }
 
 async function cleaveLoop() {
@@ -310,10 +323,10 @@ async function cleaveLoop() {
     }
   } catch (e) {
     console.log("Error while cleaving: ", e);
+  } finally {
+    // Cleave loop runs on its own dedicated timer
+    setTimeout(cleaveLoop, Math.max(ms_to_next_skill("cleave"), 100));
   }
-
-  // Cleave loop runs on its own dedicated timer
-  setTimeout(cleaveLoop, Math.max(ms_to_next_skill("cleave"), 100));
 }
 
 if (!parent.caracAL) cleaveLoop();
@@ -397,10 +410,10 @@ async function mainLoop() {
     if (e.cause !== "smart_move" && e.cause !== "death") {
       console.error(e);
     }
+  } finally {
+    // Schedule the next loop execution
+    setTimeout(mainLoop, getLoopInterval());
   }
-
-  // Schedule the next loop execution
-  setTimeout(mainLoop, getLoopInterval());
 }
 
 if (!parent.caracAL) mainLoop();

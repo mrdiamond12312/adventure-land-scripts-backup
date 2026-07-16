@@ -17,7 +17,6 @@ if (parent.caracAL) {
 // Kiting & Global Config
 var originRangeRate = 0.5;
 var rangeRate = originRangeRate;
-const loopInterval = Math.floor(((1 / character.frequency) * 1000) / 4);
 
 const reduceCd = (skillName) =>
   reduce_cooldown(skillName, Math.min(...parent.pings));
@@ -25,6 +24,9 @@ const reduceCd = (skillName) =>
 // Combat Logic
 
 async function fight(target, isDeterminedToHeal = false) {
+  // Snapshot for attackSpeedCompensate: weapon swaps mid-tick change frequency,
+  // and the attack cooldown must be timed with the frequency at fire time.
+  const attackFrequencyBeforeCompensate = character.frequency;
   const partyDmgRecieved = avgPartyDmgTaken(partyMems);
   const characterBufferedRange = character.range + character.xrange;
   const prioritizedCharacter = prioritizedNames();
@@ -138,7 +140,10 @@ async function fight(target, isDeterminedToHeal = false) {
     set_message("Attacking");
     promisesToAwait.push(
       attack(target)
-        .then(() => reduceCd("attack"))
+        .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeCompensate);
+          reduceCd("attack");
+        })
         .catch((e) => attackErrorHandler(e)),
     );
   }
@@ -152,6 +157,9 @@ async function fight(target, isDeterminedToHeal = false) {
 }
 
 async function priestBuff() {
+  // Heals run on the attack cooldown (gated on ms_to_next_skill("attack")
+  // below), so they need the same frequency compensation as attacks.
+  const attackFrequencyBeforeCompensate = character.frequency;
   const promises = [];
 
   // Heal Logic
@@ -180,18 +188,23 @@ async function priestBuff() {
         const middleY = (buffee.y + character.y) / 2;
         if (can_move_to(middleX, middleY)) move(middleX, middleY);
         else if (can_move_to(buffee.x, buffee.y)) move(buffee.x, buffee.y);
-        else
-          advanceSmartMove(
-            { map: character.map, x: buffee.x, y: buffee.y },
-            { smartmoveDebug: true },
-          );
+        // else
+        //   advanceSmartMove(
+        //     { map: character.map, x: buffee.x, y: buffee.y },
+        //     { smartmoveDebug: true },
+        //   );
         set_message(`Moving to ${buffee.name}`);
         continue;
       }
 
       if (dist < bufferedRange && isAttackReady) {
         set_message(`Heal ${buffee.name}`);
-        promises.push(use_skill("heal", buffee).then(() => reduceCd("heal")));
+        promises.push(
+          use_skill("heal", buffee).then(() => {
+            attackSpeedCompensate(attackFrequencyBeforeCompensate);
+            reduceCd("heal");
+          }),
+        );
         break;
       }
     }
@@ -296,7 +309,7 @@ async function zapperLoop() {
   const courageMap = {
     physical: { count: physicalAggroed.length, limit: character.courage },
     magical: { count: magicalAggroed.length, limit: character.mcourage },
-    pure: { count: pureAggroed, length, limit: character.pcourage },
+    pure: { count: pureAggroed.length, limit: character.pcourage },
   };
 
   const isTanker = isAssignedAsTanker();

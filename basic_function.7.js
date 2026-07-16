@@ -25,7 +25,6 @@ var TANKER =
 
 const MIDAS_CHARACTER = [MAGE, "CrownPriest"];
 
-// var partyCodeSlot = [4, 15, 3, 5];
 const CODE_SLOTS = {
   MoohThatCow: {
     homeServer: "EUII",
@@ -61,21 +60,6 @@ const CODE_SLOTS = {
   },
 };
 
-var partyCodeSlot = [9, 2, 4, 5];
-// var caracALPartyCodeSlot = [
-//   "adventure-land-scripts-backup/basic_mage.4.js",
-//   "adventure-land-scripts-backup/solo_ranger.15.js",
-//   "adventure-land-scripts-backup/basic_archer.3.js",
-//   "adventure-land-scripts-backup/basic_merchant.5.js",
-// ];
-var caracALPartyCodeSlot = [
-  "adventure-land-scripts-backup/basic_warrior.9.js",
-  "adventure-land-scripts-backup/basic_priest.2.js",
-  "adventure-land-scripts-backup/basic_mage.4.js",
-  "adventure-land-scripts-backup/basic_merchant.5.js",
-];
-// var partyCodeSlot = [2, 4, 15, 5];
-
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
 
@@ -94,8 +78,6 @@ const spacial = 16;
 // Monsters selector
 var min_xp = 100;
 var max_att = 2000;
-var bossOffset = 0.99;
-var boss = ["mrpumpkin", "mrgreen"];
 
 // Ignore mob with high d-return
 const MELEE_IGNORE_LIST = ["porcupine"];
@@ -107,9 +89,9 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // var mapX = -289;
 // var mapY = -188;
 
-var map = "winterland";
-var mapX = 423;
-var mapY = -2614;
+// var map = "winterland";
+// var mapX = 423;
+// var mapY = -2614;
 
 // var map = "desertland";
 // var mapX = 223;
@@ -135,9 +117,9 @@ var mapY = -2614;
 // var mapX = -1111;
 // var mapY = 132;
 
-// var map = "desertland";
-// var mapX = -800;
-// var mapY = -354;
+var map = "desertland";
+var mapX = -840.75;
+var mapY = -340.75;
 
 // var map = "level1";
 // var mapX = 50;
@@ -157,7 +139,7 @@ var mapY = -2614;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-var mobsToFarm = ["phoenix", "stompy", "wolf"];
+// var mobsToFarm = ["phoenix", "stompy", "wolf"];
 // var mobsToFarm = ["fireroamer"];
 // var mobsToFarm = ["grinch", "phoenix", "mole"];
 
@@ -174,7 +156,7 @@ var mobsToFarm = ["phoenix", "stompy", "wolf"];
 //   "turtle",
 //   "crabx",
 // ];
-// var mobsToFarm = ["plantoid"];
+var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 // var mobsToFarm = ["prat"];
 // var mobsToFarm = ["mummy"];
 // var mobsToFarm = ["jr", "booboo"];
@@ -215,17 +197,6 @@ function getTotalQuantityOf(item) {
       accummulator + (current && current.name === item ? current.q || 1 : 0)
     );
   }, 0);
-}
-
-function filterCompoundableAndStackable() {
-  const inv = character.items;
-  const res = Array.from({ length: inv.length }, (_, i) => i + 0).filter(
-    (i) =>
-      inv[i] &&
-      (item_info(inv[i]).compound || inv[i].q) &&
-      !["hpot1", "mpot1"].includes(inv[i].name),
-  );
-  return res;
 }
 
 // Strategic functions
@@ -321,7 +292,6 @@ var IGNORE = [
   "orboffrost",
   "orbofplague",
   "orbofresolve",
-  "gphelmet",
   "snring",
   // "bowofthedead",
   // "daggerofthedead",
@@ -332,7 +302,14 @@ var IGNORE = [
   "supermittens",
   // "horsecapeg",
   "throwingstars",
+  "computer",
+  "ancientcomputer",
+
+  // avoid upgrading for selling
+  "cape",
+  "carrotsword",
   ...BUYABLE,
+  // .filter((id) => id !== "blade"),
 ];
 
 const STORE_ABLE = [
@@ -346,6 +323,15 @@ const STORE_ABLE = [
   "x7",
   "x8",
   "xbox",
+  "egg0",
+  "egg1",
+  "egg2",
+  "egg3",
+  "egg4",
+  "egg5",
+  "egg6",
+  "egg7",
+  "egg8",
   "essenceofether",
   "spidersilk",
   "feather0",
@@ -360,9 +346,9 @@ const STORE_ABLE = [
   "hotchocolate",
   "gum",
   "essenceofgreed",
+  "mbones",
   "elixirint0",
   "elixirdex0",
-  "egg5",
   "cscroll2",
   "cryptkey",
   "cake",
@@ -393,7 +379,6 @@ const STORE_ABLE = [
   "gslime",
   "frogt",
   "forscroll",
-  "feather0",
   "essenceofnature",
   "essenceoffrost",
   "essenceoffire",
@@ -420,7 +405,9 @@ const STORE_ABLE = [
   "mysterybox",
   "weaponbox",
   "armorbox",
+
   "fury",
+  "snring",
 ];
 
 const SALE_ABLE = [
@@ -436,7 +423,6 @@ const SALE_ABLE = [
   "snowball",
   "carrotsword",
   "shield",
-  // "wcap",
   // "wshoes",
   "wgloves",
   "wbreeches",
@@ -456,7 +442,6 @@ const SALE_ABLE = [
   "hpbelt",
   "hpamulet",
   "phelmet",
-  "gphelmet",
   "ringsj",
   "hhelmet",
   "hgloves",
@@ -467,9 +452,11 @@ const SALE_ABLE = [
   "hboots",
   "sword",
   "spear",
+  "cape",
   // Easter's loots
   // "eears",
-  // "eslippers",
+  "eslippers",
+  "epyjamas",
 
   //Christmas loots
   // "xmashat",
@@ -545,13 +532,17 @@ async function sortInv() {
   // Snapshot items with their original slot
   const inv = character.items.map((item, slot) => ({ item, slot }));
 
-  // Sorting name -> level -> slot order -> null
+  // Sorting name -> level -> slot order -> null -> locked (locked always last)
   inv.sort((lhs, rhs) => {
     const lhsItem = lhs.item;
     const rhsItem = rhs.item;
 
+    const lhsLocked = !!lhsItem?.l;
+    const rhsLocked = !!rhsItem?.l;
+    if (lhsLocked !== rhsLocked) return lhsLocked ? 1 : -1; // locked last
+
     if (!lhsItem && !rhsItem) return 0;
-    if (!lhsItem) return 1; // nulls last
+    if (!lhsItem) return 1; // nulls last (among unlocked)
     if (!rhsItem) return -1;
 
     const nameOrder = lhsItem.name.localeCompare(rhsItem.name);
@@ -564,30 +555,43 @@ async function sortInv() {
     return lhs.slot - rhs.slot;
   });
 
-  // Create a mapping from target slot → original slot
-  const promises = [];
-  const usedSlots = new Set();
+  // targetOrigSlot[i] = the original slot of the item that should end up at position i.
+  // Tracked by original slot rather than item identity so duplicate `null` slots
+  // (indistinguishable by value) still resolve to a valid, distinct permutation.
+  const targetOrigSlot = inv.map((entry) => entry.slot);
 
-  for (let index = 0; index < inv.length; index++) {
-    const desired = inv[index];
-    const targetItem = character.items[index];
+  // Decompose the permutation into cycles. Swaps *within* a cycle are inherently
+  // sequential (each one depends on where the previous swap left things), but
+  // separate cycles don't touch any of the same slots, so they're dispatched in
+  // parallel via Promise.all instead of one big sequential chain for everything.
+  const visited = new Array(inv.length).fill(false);
+  const cyclePromises = [];
 
-    // skip if already correct
-    if (desired.item === targetItem) continue;
+  for (let start = 0; start < inv.length; start++) {
+    if (visited[start]) continue;
 
-    // find the specific matching slot by identity
-    const fromSlot = character.items.findIndex(
-      (x, idx) => x === desired.item && !usedSlots.has(idx),
-    );
-
-    if (fromSlot !== -1 && fromSlot !== index) {
-      usedSlots.add(fromSlot);
-      usedSlots.add(index);
-      promises.push(swap(fromSlot, index));
+    const cycle = [];
+    let slot = start;
+    while (!visited[slot]) {
+      visited[slot] = true;
+      cycle.push(slot);
+      slot = targetOrigSlot[slot];
     }
+
+    if (cycle.length < 2) continue; // already in place
+
+    cyclePromises.push(
+      cycle
+        .slice(0, -1)
+        .reduce(
+          (chain, fromSlot, i) =>
+            chain.then(() => swap(fromSlot, cycle[i + 1])),
+          Promise.resolve(),
+        ),
+    );
   }
 
-  return Promise.all(promises).finally(() => {
+  return Promise.all(cyclePromises).finally(() => {
     isSortingInventory = false;
   });
 }
@@ -626,13 +630,18 @@ function arrayShuffle(array) {
 
 function getMonstersOnDeclares() {
   // if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
-  for (monster of ["grinch"]) {
+  for (const monster of ["grinch"]) {
     if (get_nearest_monster({ type: monster })) {
       return get_nearest_monster({ type: monster });
     }
   }
 
-  for (monster of mobsToFarm) {
+  // The merchant is actively dragging this mob type in from elsewhere (see dragEnt
+  // in merchant_service.19.js) — don't declare it until it's actually arrived.
+  const luringMobType = get("luringMobType");
+
+  for (const monster of mobsToFarm) {
+    if (monster === luringMobType) continue;
     if (get_nearest_monster({ type: monster })) {
       return get_nearest_monster({ type: monster });
     }
@@ -721,6 +730,10 @@ async function buff() {
 }
 buff();
 
+function isMelee() {
+  return character.range < 75;
+}
+
 function getTarget() {
   const leader = get_entity(TANKER) ?? get_entity(partyMems[0]);
   const declared = getMonstersOnDeclares();
@@ -742,7 +755,8 @@ function getTarget() {
             entity.type === "monster" &&
             entity.target &&
             party.has(entity.target) &&
-            entity.target !== character.name,
+            entity.target !== character.name &&
+            (!isMelee() || !MELEE_IGNORE_LIST.includes(entity.mtype)),
         )
         .sort(
           (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
@@ -814,13 +828,13 @@ function getTarget() {
 const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
-    (breakpoint) => Math.max((1 / character.frequency) * 1000) / breakpoint,
+    (breakpoint) => ((1 / character.frequency) * 1000) / breakpoint,
   ).find((loopInterval) => loopInterval > 250);
   const frequencyInterval = (1 / character.frequency) * 1000;
 
   return ms_to_next_skill("attack") <= dynamicInterval
     ? Math.max(ms_to_next_skill("attack"), 1)
-    : dynamicInterval ?? frequencyInterval;
+    : (dynamicInterval ?? frequencyInterval);
 }
 
 function ms_to_next_skill(skill) {
@@ -839,23 +853,6 @@ async function leaveJail() {
   }
 }
 
-/**
- *
- * @param {*} theta -- current angle from target and character
- * @param {*} width -- width of hitbox border
- * @param {*} height -- height of hitbox border
- * @returns -- extra distance allow by attack range
- */
-// function extraDistanceWithinHitbox(theta, width, height) {
-//   let halfW = width / 2;
-//   let halfH = height / 2;
-
-//   let dx = Math.abs(halfW / Math.cos(theta)); // Distance to vertical boundary of hitbox
-//   let dy = Math.abs(halfH / Math.sin(theta)); // Distance to horizontal boundary of hitbox
-
-//   return Math.min(dx, dy); // Extra range from mob's hitbox
-// }
-
 function extraDistanceWithinHitbox(target) {
   if (!target) return 0;
   return Math.min(get_height(target) / 2, get_width(target) / 2) / 2;
@@ -867,19 +864,21 @@ const FRANKY_PREFER_SPOT = {
   y: 8,
   map: "level2w",
 };
-async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
-  const loopInterval = Math.max(200, getLoopInterval());
-  const rangeRadius = character.range * rangeRateFn;
-  const extendedRadius = character.xrange * 0.5;
+function withFixedSpot(target, spot) {
+  return {
+    ...target,
+    x: spot.x,
+    y: spot.y,
+    real_x: spot.x,
+    real_y: spot.y,
+    going_x: spot.x,
+    going_y: spot.y,
+  };
+}
 
-  if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
-  if (!target || smart.moving || isAdvanceSmartMoving) {
-    angle = undefined;
-    lastKitingTargetId = undefined;
-    return setTimeout(hitAndRun, loopInterval);
-  }
-
-  // FRANKY strategy: stuck to the corner of the map
+// Per-mtype overrides: some mobs get kited around a fixed spot instead of their own
+// (moving) position — a corner of the map for FRANKY, the spawn center for CRABXX.
+async function resolveKiteTarget(target) {
   if (
     target.type === "monster" &&
     ["franky", "nerfedmummy"].includes(target.mtype) &&
@@ -895,58 +894,48 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
       });
       smartmoveDebug = false;
     }
-
-    target = {
-      ...target,
-      x: 11,
-      y: 8,
-      real_x: 11,
-      real_y: 8,
-      going_x: 11,
-      going_y: 8,
-    };
+    return withFixedSpot(target, FRANKY_PREFER_SPOT);
   }
 
-  // CRABXX strategy: orbit the TANKER around the center of spawn
   if (
     target?.type === "monster" &&
     target.mtype.includes("crabx") &&
     isAssignedAsTanker()
   ) {
-    const crabxxSpawn = getMonsterSpawns("crabxx")[0];
-    target = {
-      ...target,
-      x: crabxxSpawn.x,
-      y: crabxxSpawn.y,
-      real_x: crabxxSpawn.x,
-      real_y: crabxxSpawn.y,
-      going_x: crabxxSpawn.x,
-      going_y: crabxxSpawn.y,
-    };
+    return withFixedSpot(target, getMonsterSpawns("crabxx")[0]);
   }
 
-  if (
-    character.ctype === "warrior" &&
-    distance(character, target) > character.range * 0.35 &&
-    distance(character, target) < rangeRadius + extendedRadius
-  ) {
-    const allEntities = Object.values(parent.entities);
-    const noAggro = allEntities
-      .filter((entity) => entity.type === "monster")
-      .every((mob) => mob.target !== character.name || mob["1hp"]);
-    const noNearbyPlayers = allEntities
-      .filter((entity) => entity.type === "character" && !entity.moving)
-      .every((char) => distance(character, char) >= 8);
+  return target;
+}
 
-    if (noAggro && noNearbyPlayers) {
-      const dx = character.real_x - target.real_x;
-      const dy = character.real_y - target.real_y;
-      angle = Math.atan2(dy, dx);
-      return setTimeout(hitAndRun, loopInterval);
-    }
-  }
+// Warrior sitting just outside melee range of its own target, with nothing else
+// aggroed on it and no other player nearby: hold still and turn to face it
+// instead of orbiting, so it doesn't wander off pulling extra aggro.
+function shouldHoldWarriorPosition(target, radiusTotal) {
+  if (character.ctype !== "warrior") return false;
 
-  // Reset angle when switching or losing target
+  const dist = distance(character, target);
+  if (dist <= character.range * 0.35 || dist >= radiusTotal) return false;
+
+  const allEntities = Object.values(parent.entities);
+  const noAggro = allEntities
+    .filter((entity) => entity.type === "monster")
+    .every((mob) => mob.target !== character.name || mob["1hp"]);
+  const noNearbyPlayers = allEntities
+    .filter((entity) => entity.type === "character" && !entity.moving)
+    .every((char) => distance(character, char) >= 8);
+
+  return noAggro && noNearbyPlayers;
+}
+
+function faceTarget(target) {
+  const dx = character.real_x - target.real_x;
+  const dy = character.real_y - target.real_y;
+  angle = Math.atan2(dy, dx);
+}
+
+// Resets/initializes the kiting angle when the target changed (or on first tick).
+function updateKitingAngle(target) {
   const lastTarget = parent.entities[lastKitingTargetId];
   const targetChanged =
     !lastTarget ||
@@ -956,17 +945,12 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   lastKitingTargetId = target.id;
 
-  // --- 2. Initialize angle if needed ---
-  if (!angle) {
-    const dx = character.real_x - target.real_x;
-    const dy = character.real_y - target.real_y;
-    angle = Math.atan2(dy, dx);
-  }
+  if (!angle) faceTarget(target);
+}
 
-  const cosA = Math.cos(angle);
-  const sinA = Math.sin(angle);
-
-  // --- 3. Track recent movement to detect being stuck ---
+// Flips the orbit direction if we haven't actually moved much over the last
+// few ticks (e.g. wedged against a wall) — nudges the angle by 90° to break out.
+function trackStuckMovement() {
   movementHistory.push({ x: character.real_x, y: character.real_y });
   if (movementHistory.length > 5) movementHistory.shift();
 
@@ -978,97 +962,185 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   }
 
   const averageMovement = totalMovement / movementHistory.length;
-  if (averageMovement < stuckThreshold) {
-    if (flipRotationCooldown <= 0) {
-      flipRotation *= -1;
-      flipRotationCooldown = 4;
-      angle += (flipRotation * Math.PI) / 2; // turn 90°
-    }
+  if (averageMovement < stuckThreshold && flipRotationCooldown <= 0) {
+    flipRotation *= -1;
+    flipRotationCooldown = 4;
+    angle += (flipRotation * Math.PI) / 2; // turn 90°
   }
+}
 
-  // --- 5. Desired destination based on current orbit angle ---
-  let new_x = target.x + (rangeRadius + extendedRadius) * cosA;
-  let new_y = target.y + (rangeRadius + extendedRadius) * sinA;
+// Tanker holding a farmed mob near the default spot orbits the spot itself rather
+// than the (moving) mob; far from the spot, it instead walks the mob home, with a
+// lead distance that widens the faster the mob outpaces the tanker's own speed.
+function getFarmMobOrbit(target) {
+  const isTankerHoldingFarmMob =
+    isAssignedAsTanker() &&
+    target.type === "monster" &&
+    target.target === character.name &&
+    mobsToFarm.includes(target.mtype);
+  const isNearDefaultSpot =
+    isTankerHoldingFarmMob &&
+    distance(target, { x: mapX, y: mapY }) <=
+      character.range + character.xrange;
+  const orbitCenter = isNearDefaultSpot ? { x: mapX, y: mapY } : target;
+  const speedRate =
+    isTankerHoldingFarmMob && !isNearDefaultSpot
+      ? Math.max(
+          1,
+          (target.charge ?? target.speed ?? character.speed) / character.speed,
+        )
+      : 1;
 
-  // --- 6. Smooth micro-rotation when close to target ---
+  return { isTankerHoldingFarmMob, isNearDefaultSpot, orbitCenter, speedRate };
+}
+
+function getOrbitDestination(target, orbit, radiusTotal, cosA, sinA) {
+  if (orbit.isTankerHoldingFarmMob && !orbit.isNearDefaultSpot) {
+    const holdRadius = radiusTotal * orbit.speedRate;
+    return { x: target.x + holdRadius * cosA, y: target.y + holdRadius * sinA };
+  }
+  return {
+    x: orbit.orbitCenter.x + radiusTotal * cosA,
+    y: orbit.orbitCenter.y + radiusTotal * sinA,
+  };
+}
+
+// Subtle orbit shift applied every ~10 ticks while right on top of the target,
+// so the kite doesn't settle into a perfectly static holding pattern.
+function applyMicroRotation(target, rangeRateFn) {
   if (flipCooldown > 9) {
     const closeToTarget =
       distance(character, target) <=
       (character.range + character.xrange) * 0.1 * rangeRateFn;
 
-    if (closeToTarget) {
-      angle += (flipRotation * Math.PI) / 16; // subtle orbit shift
-    }
+    if (closeToTarget) angle += (flipRotation * Math.PI) / 16;
 
     flipCooldown = 0;
   }
 
   flipCooldown++;
   flipRotationCooldown--;
+}
 
-  // --- 7. Collision handling and alternative movement path ---
-  let destinationX, destinationY;
+// Returns the actual point to move to: the desired orbit spot if reachable, an
+// alternative point swept around the same radius if not, or null if a farm-mob
+// tanker instead needs a full smart-move to path around the obstacle.
+async function resolveDestination(desired, orbit, radiusTotal) {
+  if (can_move_to(desired.x, desired.y)) return desired;
 
-  if (!can_move_to(new_x, new_y)) {
-    // Try small angular adjustments in the current flip direction
-    if (flipRotationCooldown < 0) {
-      flipRotation *= -1;
-      flipRotationCooldown = 6;
-    }
-    for (let i = 1; i <= 48; i++) {
-      const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
-      const alt_x =
-        target.x + (rangeRadius + extendedRadius) * Math.cos(adjustedAngle);
-      const alt_y =
-        target.y + (rangeRadius + extendedRadius) * Math.sin(adjustedAngle);
-
-      if (can_move_to(alt_x, alt_y)) {
-        angle = adjustedAngle;
-        destinationX = alt_x;
-        destinationY = alt_y;
-        break;
-      }
-    }
-  } else {
-    destinationX = new_x;
-    destinationY = new_y;
+  if (orbit.isTankerHoldingFarmMob) {
+    smartmoveDebug = true;
+    await advanceSmartMove(
+      { x: desired.x, y: desired.y, map: character.map },
+      { useScare: false, speed: 200, useTown: false },
+    );
+    smartmoveDebug = false;
+    return null;
   }
 
-  // --- 8. Execute movement or retry later ---
-  if (destinationX !== undefined && destinationY !== undefined) {
-    const maxStep = (character.speed * 500) / 1000;
-
-    const dx = destinationX - character.real_x;
-    const dy = destinationY - character.real_y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    if (dist > maxStep) {
-      const scale = maxStep / dist;
-      destinationX = character.real_x + dx * scale;
-      destinationY = character.real_y + dy * scale;
+  if (flipRotationCooldown < 0) {
+    flipRotation *= -1;
+    flipRotationCooldown = 6;
+  }
+  for (let i = 1; i <= 48; i++) {
+    const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
+    const alt = {
+      x: orbit.orbitCenter.x + radiusTotal * Math.cos(adjustedAngle),
+      y: orbit.orbitCenter.y + radiusTotal * Math.sin(adjustedAngle),
+    };
+    if (can_move_to(alt.x, alt.y)) {
+      angle = adjustedAngle;
+      return alt;
     }
+  }
+  return null;
+}
 
-    move(destinationX, destinationY);
-  } else {
-    return setTimeout(hitAndRun, loopInterval);
+// Steps toward the destination (clamped to one loop's worth of travel) and returns
+// the point actually moved to, or null if already close enough to skip the move().
+function moveTowardDestination(destination) {
+  const maxStep = (character.speed * 500) / 1000;
+  const dx = destination.x - character.real_x;
+  const dy = destination.y - character.real_y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 3) return null;
+
+  let { x, y } = destination;
+  if (dist > maxStep) {
+    const scale = maxStep / dist;
+    x = character.real_x + dx * scale;
+    y = character.real_y + dy * scale;
   }
 
-  const radiusTotal = rangeRadius + extendedRadius;
+  move(x, y);
+  return { x, y };
+}
+
+// Advances the orbit angle for next tick — walks straight home while far with a
+// farmed mob in tow, otherwise keeps sweeping around the orbit center as usual.
+function advanceOrbitAngle(target, orbit, radiusTotal, loopInterval) {
+  if (orbit.isTankerHoldingFarmMob && !orbit.isNearDefaultSpot) {
+    angle = Math.atan2(mapY - target.y, mapX - target.x);
+    return;
+  }
+
   const rotationStep =
     flipRotation *
     Math.asin((character.speed * loopInterval) / 1000 / 2 / radiusTotal) *
     2;
-
   angle += rotationStep;
-
-  const moveTime =
-    (distance(character, { x: destinationX, y: destinationY }) /
-      character.speed) *
-    1000;
-
-  setTimeout(hitAndRun, Math.max(moveTime, 200));
 }
-hitAndRun();
+
+async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
+  const loopInterval = Math.max(200, getLoopInterval());
+  const radiusTotal = character.range * rangeRateFn + character.xrange * 0.5;
+  let nextDelay = loopInterval;
+
+  if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
+  if (!target || smart.moving || isAdvanceSmartMoving) {
+    angle = undefined;
+    lastKitingTargetId = undefined;
+    return setTimeout(hitAndRun, loopInterval);
+  }
+
+  try {
+    target = await resolveKiteTarget(target);
+
+    if (shouldHoldWarriorPosition(target, radiusTotal)) {
+      faceTarget(target);
+      return;
+    }
+
+    updateKitingAngle(target);
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+
+    trackStuckMovement(); // may perturb `angle`, but cosA/sinA above stay from before the flip
+
+    const orbit = getFarmMobOrbit(target);
+    const desired = getOrbitDestination(target, orbit, radiusTotal, cosA, sinA);
+    applyMicroRotation(target, rangeRateFn);
+
+    const destination = await resolveDestination(desired, orbit, radiusTotal);
+    if (!destination) return;
+
+    const moved = moveTowardDestination(destination);
+    if (!moved) return;
+
+    advanceOrbitAngle(target, orbit, radiusTotal, loopInterval);
+    nextDelay = Math.max(
+      (distance(character, moved) / character.speed) * 1000,
+      200,
+    );
+  } catch (e) {
+    console.error(e);
+    angle = undefined;
+    lastKitingTargetId = undefined;
+  } finally {
+    setTimeout(hitAndRun, nextDelay);
+  }
+}
+if (!isMerchant()) hitAndRun();
 
 const HEAL_IGNORE = ["Geoffriel"];
 
@@ -1158,46 +1230,8 @@ function handle_death() {
   setTimeout(respawn, 15000);
 }
 
-// BOSS fight functions
-function targetBoss(boss) {
-  const target = get_nearest_monster({ type: boss });
-  if (target) change_target(target);
-}
-
 function sleep(delay) {
   return new Promise((resolve) => setTimeout(resolve, delay));
-}
-
-function shouldGoToBoss(mboss) {
-  return (
-    !boss.includes(getTarget()?.mtype) &&
-    parent.S[mboss] &&
-    parent.S[mboss].live &&
-    ((parent.S[mboss].hp < bossOffset * parent.S[mboss].max_hp &&
-      parent.S[mboss].target !== null &&
-      !partyMems.includes(parent.S[mboss].target)) ||
-      mboss === "snowman")
-  );
-}
-
-function goToBoss() {
-  for (i in boss) {
-    if (shouldGoToBoss(boss[i])) {
-      log("Attempting boss");
-      stop("move");
-      change_target();
-      smartmoveDebug = false;
-      if (!smart.moving && !isAdvanceSmartMoving)
-        advanceSmartMove(parent.S[boss[i]])
-          .then(() => targetBoss(boss[i]))
-          .catch((e) => {
-            use_skill("use_town");
-            change_target();
-          });
-      return true;
-    }
-  }
-  return false;
 }
 
 const LOOTING_LIMIT = 15;
@@ -1217,17 +1251,30 @@ async function midasLooting(forced = false) {
     .map((id) => get_player(id))
     .filter((player) => player && MIDAS_CHARACTER.includes(player.name));
 
+  const currentTarget = get_target();
+  let modifier = 1;
+
+  if (currentTarget && currentTarget.type === "monster") {
+    modifier = Math.max(5000 / currentTarget.hp, 1);
+  }
+  const lootingThreshold = LOOTING_LIMIT * modifier;
+
   try {
     if (MIDAS_CHARACTER.includes(character.name)) {
       if (
-        chests.length >= LOOTING_LIMIT ||
+        chests.length >= lootingThreshold ||
         ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) ||
         forced
       ) {
         isLooting = true;
         shouldReset = true;
 
-        if ((!smart.moving && !isAdvanceSmartMoving) || forced)
+        if (
+          (!smart.moving &&
+            !isAdvanceSmartMoving &&
+            ms_to_next_skill("attack")) ||
+          forced
+        )
           await withTimeout(
             equipBatch(
               {
@@ -1245,7 +1292,7 @@ async function midasLooting(forced = false) {
             500,
           );
 
-        let breakFlag = LOOTING_LIMIT * 2;
+        let breakFlag = lootingThreshold * 2;
         for (const chest of chests) {
           if (breakFlag-- <= 0) break;
           if (distance(chest, character) <= 800) {
@@ -1257,21 +1304,14 @@ async function midasLooting(forced = false) {
       !MIDAS_CHARACTER.includes(character.name) &&
       partyMidasUsers.length
     ) {
-      const currentTarget = get_target();
-      let modifier = 1;
-
-      if (currentTarget && currentTarget.type === "monster") {
-        modifier = Math.max(5000 / currentTarget.hp, 1);
-      }
-
       if (
-        chests.length >= LOOTING_LIMIT * modifier &&
+        chests.length >= lootingThreshold &&
         (smart.moving || isAdvanceSmartMoving || forced)
       ) {
         isLooting = true;
         shouldReset = true;
 
-        let breakFlag = LOOTING_LIMIT * 1.5 * modifier;
+        let breakFlag = lootingThreshold * 2;
         for (const chest of chests) {
           if (breakFlag-- <= 0) break;
 
@@ -1302,7 +1342,9 @@ async function midasLooting(forced = false) {
 function suicide() {
   if (
     !character.rip &&
-    character.hp < Math.max(0.15 * character.max_hp, 2000) &&
+    character.hp +
+      (PROJECTILE_MANAGER?.getIncomingNumber(character.name) ?? 0) <
+      Math.max(0.15 * character.max_hp, 3500) &&
     (avgDmgTaken(character) > character.hp ||
       character.ping > 600 ||
       character.s.burned)
@@ -1357,11 +1399,14 @@ setInterval(async function () {
           (currentTarget.real_y + character.real_y) / 2,
         );
       else
-        await smartMove({
-          map: character.map,
-          x: currentTarget.real_x,
-          y: currentTarget.real_y,
-        });
+        await advanceSmartMove(
+          {
+            map: character.map,
+            x: currentTarget.real_x,
+            y: currentTarget.real_y,
+          },
+          { useScare: ![TANKER, PRIEST].includes(character.name) },
+        );
     } else {
       if (can_move_to(currentTarget.x, currentTarget.y))
         await move(
@@ -1427,7 +1472,7 @@ setInterval(async function () {
   }
 
   // Inventory check and potions
-  if (isInvFull(6)) {
+  if (isInvFull(4)) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
   } else if (
@@ -1533,9 +1578,11 @@ setInterval(async () => {
     whitelistPartyMembers.some((whitelisted) => whitelisted.name === member),
   );
 
+  const myMemberList = [...partyMems, partyMerchant];
+
   const characterNotInOutsiderParty = serverCharacters.filter(
     (char) =>
-      [...partyMems, partyMerchant].includes(char) &&
+      myMemberList.includes(char) &&
       !partyWhitelistRegex.some((regex) => regex.test(char.party)),
   );
 
@@ -1561,9 +1608,9 @@ setInterval(async () => {
     else disconnect();
   }
 
-  if (partyMems.some((id) => !parent.party_list.includes(id))) {
+  if (myMemberList.some((id) => !parent.party_list.includes(id))) {
     if (character.name === partyMems[0]) {
-      partyMems.forEach((member) => {
+      myMemberList.forEach((member) => {
         send_party_invite(member);
       });
     }
@@ -1606,13 +1653,13 @@ function serverCurrentlyHasLiveEvent() {
 }
 
 const RSPEED_DURATION = G.conditions["rspeed"].duration;
-const RSPEED_MARGIN = 5 * 60 * 1000; // 5 minutes
+const RSPEED_MARGIN = 2 * 60 * 1000; // 2 minutes
 
 const setRogueSpeedLastDeployment = () => {
   const last = get("rogueLastDeployed");
   const lastDate = last ? new Date(last) : null;
 
-  // If we recently deployed (still inside rspeed - 5m), DO NOT overwrite
+  // If we recently deployed (still inside rspeed - margin), DO NOT overwrite
   if (lastDate && mssince(lastDate) < RSPEED_DURATION - RSPEED_MARGIN) {
     return; // Too early to overwrite
   }
@@ -1705,30 +1752,55 @@ const DYNAMIC_PARTY_PRESETS = {
       return [WARRIOR, RANGER, MAGE];
     },
   },
-  snowman: () => {
-    RANGER = RANGER1;
-    HEALER = RANGER;
-    return [WARRIOR, RANGER, MAGE];
+  wabbit: {
+    USI: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [ROGUE, RANGER, MAGE];
+    },
+    USIII: [MAGE, RANGER, PRIEST],
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
+    default: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
+  },
+  snowman: {
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
+    default: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, MAGE];
+    },
   },
 
   default: () => {
-    const globalParty = get("currentParty");
-    const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
+    // const globalParty = get("currentParty");
+    // const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
 
-    if (
-      globalParty &&
-      globalParty.some((id) => knownTankers.includes(id)) &&
-      !serverCurrentlyHasLiveEvent()
-    ) {
-      setRogueSpeedLastDeployment();
-      if (shouldDeployRogue()) {
-        return [WARRIOR, ROGUE, MAGE];
-      } else {
-        RANGER = RANGER1;
-        HEALER = RANGER;
-        return [WARRIOR, RANGER, MAGE];
-      }
-    }
+    // if (
+    //   globalParty &&
+    //   globalParty.some((id) => knownTankers.includes(id)) &&
+    //   !serverCurrentlyHasLiveEvent()
+    // ) {
+    //   setRogueSpeedLastDeployment();
+    //   if (shouldDeployRogue()) {
+    //     return [WARRIOR, ROGUE, MAGE];
+    //   } else {
+    //     // RANGER = RANGER1;
+    //     HEALER = PRIEST;
+    //     return [WARRIOR, PRIEST, MAGE];
+    //   }
+    // }
 
     HEALER = PRIEST;
     return [WARRIOR, PRIEST, MAGE];
@@ -1934,7 +2006,9 @@ async function changeToDailyEventTargets() {
       }
 
       if (distance(crabx, crabxxInstance) <= BLAST_RADIUS) {
-        if (!bestClusteredCrabx || currentCrabxHp > bestCrabxHp) {
+        const bestClusteredCrabxHp =
+          bestClusteredCrabx?.predictedHp ?? bestClusteredCrabx?.hp ?? 0;
+        if (!bestClusteredCrabx || currentCrabxHp > bestClusteredCrabxHp) {
           bestClusteredCrabx = crabx;
         }
       }
@@ -1958,14 +2032,25 @@ async function changeToDailyEventTargets() {
         bestCrabx || (crabxxInstance?.target ? crabxxInstance : undefined);
     }
 
-    if (
-      !isAssignedAsTanker() &&
-      crabxList.some(
-        (entity) => entity.s?.young && entity.target === character.name,
-      )
-    )
-      await scareAwayMobs();
+    const isTanker = isAssignedAsTanker();
+    const canAgitate =
+      isTanker &&
+      !is_on_cooldown("agitate") &&
+      character.mp > G.skills["agitate"].mp + 500;
 
+    const hasCrabxSpawnedByCrabxx = crabxList.some(
+      (entity) => entity.s?.young && entity.target === character.name,
+    );
+
+    if (hasCrabxSpawnedByCrabxx && (!isTanker || canAgitate)) {
+      const promisesToAwait = [];
+      promisesToAwait.push(scareAwayMobs());
+
+      if (canAgitate) {
+        promisesToAwait.push(use_skill("agitate"));
+      }
+      await Promise.all(promisesToAwait);
+    }
     changeToPullStrategies();
     change_target(targetCrab);
     return targetCrab;
@@ -1986,12 +2071,7 @@ async function changeToDailyEventTargets() {
 
     if (frankyInstance) {
       rangeRate = 0.2;
-
-      if (!partyMems.includes(frankyInstance.target)) {
-        return frankyInstance;
-      }
-
-      scareAwayMobs();
+      await scareAwayMobs();
       return frankyInstance;
     }
   }
@@ -2033,7 +2113,7 @@ async function changeToDailyEventTargets() {
     else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
     else change_target(snowmanInstance);
 
-    return grinchInstance ?? snowmanInstance.s?.fullguardx
+    return (grinchInstance ?? snowmanInstance.s?.fullguardx)
       ? beeToAttack
       : snowmanInstance;
   }
@@ -2057,10 +2137,14 @@ async function changeToDailyEventTargets() {
       sqrDistance: undefined,
     };
 
-    for (id in parent.entities) {
+    for (const id in parent.entities) {
       const currentCharacter = parent.entities[id];
 
-      if (currentCharacter.team === character.team || currentCharacter.rip)
+      if (
+        currentCharacter.team === character.team ||
+        currentCharacter.rip ||
+        currentCharacter.hp <= 0
+      )
         continue;
 
       const currentCharacterTarget = {
@@ -2087,7 +2171,7 @@ async function changeToDailyEventTargets() {
   }
 
   if (parent.S.wabbit?.live) {
-    changeToNormalStrategies();
+    changeToPullStrategies();
     if (character.range < 100) rangeRate = 0.1;
     else rangeRate = 0.4;
     const wabbitInstance = get_nearest_monster({ type: "wabbit" });
