@@ -138,7 +138,8 @@ async function openCryptInstance() {
 }
 
 function isMyPriestOnline() {
-  return parent.caracAL.siblings.includes(PRIEST);
+  if (parent.caracAL) return !!parent.caracAL.siblings?.includes(PRIEST);
+  return !!get_active_characters()[PRIEST];
 }
 
 var isLuringMobs = false;
@@ -398,21 +399,21 @@ async function walkEntToSpawn(entId) {
 async function dragEnt() {
   let nextDelay = 10_000;
 
-  if (
-    map !== ENT_LURE_MAP ||
-    isLuringMobs ||
-    onDuty ||
-    isAdvanceSmartMoving ||
-    smart.moving ||
-    shouldGoChilling() ||
-    serverCurrentlyHasLiveEvent() ||
-    !isMyPriestOnline() ||
-    hasMaxEntsEngagedAtSpawn()
-  ) {
-    return setTimeout(dragEnt, nextDelay);
-  }
-
   try {
+    if (
+      map !== ENT_LURE_MAP ||
+      isLuringMobs ||
+      onDuty ||
+      isAdvanceSmartMoving ||
+      smart.moving ||
+      shouldGoChilling() ||
+      serverCurrentlyHasLiveEvent() ||
+      !isMyPriestOnline() ||
+      hasMaxEntsEngagedAtSpawn()
+    ) {
+      return;
+    }
+
     onDuty = true;
     isLuringMobs = true;
     isDraggingMobs = true;
