@@ -1,5 +1,41 @@
 const MAGIPORT_IGNORE_LIST = ["bank", "bank_u", "bank_b", "jail"];
 
+/** Tunables used across the smartMove implementation */
+const SMART_MOVE_CONFIG = Object.freeze({
+  // Pathing / walk loop
+  MIN_PATHING_SPEED: 40, // floor for pathfinding speed so slow characters still consider town routes
+  ARRIVED_DISTANCE: 10, // already close enough to the destination, skip the move entirely
+  MAGICAL_WAIT_MS: 500, // walk loop poll while a blink/magiport is in flight
+
+  // Magiport (_magiportCheck)
+  MAGIPORT_CHECK_INTERVAL_MS: 1000,
+  MAGIPORT_MAGE_NEAR_DEST_DISTANCE: 200, // mage counts as "parked at the destination" within this
+  MAGIPORT_MIN_WORTH_DISTANCE: 100, // closer than this to the mage, walking is cheaper than a port
+  MAGIPORT_MP_RESERVE_CASTS: 2, // mage keeps mp for this many magiport casts (the other fighters)
+  MAGIPORT_INFO_MAX_AGE_MS: 15_000, // mageLocation snapshots older than this are stale
+  MAGIPORT_LANDING_WAIT_MS: 1500, // wait after send_cm before checking whether the port landed
+  MAGIPORT_ARRIVAL_DISTANCE: 300, // landed within this of the destination = the port worked
+
+  // Blink (_blinkCheck and the in-path blink segment)
+  BLINK_CHECK_INTERVAL_MS: 1000,
+  BLINK_MIN_WORTH_DISTANCE: 200, // shorter jumps than this aren't worth the mp/cooldown
+  BLINK_SETTLE_MS: 250, // wait after blink before correcting position with move()
+  BLINK_MP_WAIT_TIMEOUT_MS: 15_000, // how long a blink path segment waits for mp/cooldown
+  BLINK_SETTLE_PING_RATE: 0.7, // in-path blink settles for ping * this before the next segment
+
+  // Scare / stop watcher
+  SCARE_INTERVAL_MS: 1000,
+  STOP_WATCHER_INTERVAL_MS: 500,
+
+  // Transport / town
+  TRANSPORT_DOOR_NEAR_DISTANCE: 100, // farther than this from the door, walk up to it first
+  NEW_MAP_TIMEOUT_MS: 5000, // waitForNewMap default timeout
+  TOWN_MAX_RETRIES: 5,
+  TOWN_RETRY_DELAY_MS: 300,
+  TOWN_SPAWN_ARRIVAL_DISTANCE: 100, // landed within this of spawn 0 = the town worked
+  TOWN_CHANNEL_TIMEOUT_MS: 5000, // how long to wait for the town channel to finish
+});
+
 class StrategicSmartMove {
   constructor() {
     this.pathfinder = parent.caracAL.ALPathfinder;
@@ -101,10 +137,13 @@ class StrategicSmartMove {
   /**
    * Use town to teleport back to the first spawn of the map with retries
    * @param {Object} [options={}] - Optional configuration.
-   * @param {number} [options.maxRetries=5] - Maximum number of retry attempts.
-   * @param {number} [options.retryDelay=300] - Delay (ms) between retries.
+   * @param {number} [options.maxRetries=SMART_MOVE_CONFIG.TOWN_MAX_RETRIES] - Maximum number of retry attempts.
+   * @param {number} [options.retryDelay=SMART_MOVE_CONFIG.TOWN_RETRY_DELAY_MS] - Delay (ms) between retries.
    */
-  async useTownWithRetry({ maxRetries = 5, retryDelay = 300 } = {}) {
+  async useTownWithRetry({
+    maxRetries = SMART_MOVE_CONFIG.TOWN_MAX_RETRIES,
+    retryDelay = SMART_MOVE_CONFIG.TOWN_RETRY_DELAY_MS,
+  } = {}) {
     let attempts = 0;
     let mapData = parent.G.maps[character.map];
 
@@ -115,7 +154,7 @@ class StrategicSmartMove {
       await town();
       await waitUntil(() => {
         return !character.c.town;
-      }, 5000);
+      }, SMART_MOVE_CONFIG.TOWN_CHANNEL_TIMEOUT_MS);
       await sleep(retryDelay);
       if (mapData.spawns?.length) {
         if (
@@ -123,7 +162,7 @@ class StrategicSmartMove {
             map: character.map,
             x: mapData.spawns[0][0],
             y: mapData.spawns[0][1],
-          }) > 100
+          }) > SMART_MOVE_CONFIG.TOWN_SPAWN_ARRIVAL_DISTANCE
         ) {
           continue;
         }
@@ -190,10 +229,14 @@ class StrategicSmartMove {
     if (
       mageInfo &&
       mageInfo.map === toPosition.map &&
-      distance(toPosition, mageInfo) < 200 &&
-      distance(character, mageInfo) >= 100 &&
-      mageInfo.mp > parent.G.skills["magiport"].mp * 2 &&
-      mageInfo.time > Date.now() - 15_000 &&
+      distance(toPosition, mageInfo) <
+        SMART_MOVE_CONFIG.MAGIPORT_MAGE_NEAR_DEST_DISTANCE &&
+      distance(character, mageInfo) >=
+        SMART_MOVE_CONFIG.MAGIPORT_MIN_WORTH_DISTANCE &&
+      mageInfo.mp >
+        parent.G.skills["magiport"].mp *
+          SMART_MOVE_CONFIG.MAGIPORT_MP_RESERVE_CASTS &&
+      mageInfo.time > Date.now() - SMART_MOVE_CONFIG.MAGIPORT_INFO_MAX_AGE_MS &&
       !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
     ) {
       this.isDoingSomethingMagical = true;
@@ -205,11 +248,12 @@ class StrategicSmartMove {
         console.warn(`Whoosh! #${session}`);
         send_cm(MAGE, "magiport");
         stop();
-        await sleep(1500);
+        await sleep(SMART_MOVE_CONFIG.MAGIPORT_LANDING_WAIT_MS);
 
         if (
           character.map === toPosition.map &&
-          distance(character, toPosition) < 300
+          distance(character, toPosition) <
+            SMART_MOVE_CONFIG.MAGIPORT_ARRIVAL_DISTANCE
         ) {
           if (
             this.pathfinder.canWalkPath(
@@ -238,7 +282,7 @@ class StrategicSmartMove {
     if (session !== this.smartMoveSession || !this.isSmartMoving) return;
     this.magiportLoop = setTimeout(
       () => this._magiportCheck(session, toPosition),
-      1000,
+      SMART_MOVE_CONFIG.MAGIPORT_CHECK_INTERVAL_MS,
     );
   }
 
@@ -299,7 +343,7 @@ class StrategicSmartMove {
         );
         this.blinkLoop = setTimeout(
           () => this._blinkCheck(session, pathFindingResult, progress),
-          1000,
+          SMART_MOVE_CONFIG.BLINK_CHECK_INTERVAL_MS,
         );
         return;
       }
@@ -310,8 +354,11 @@ class StrategicSmartMove {
         blinkLocation &&
         !is_on_cooldown("blink") &&
         character.mp >
-          parent.G.skills["blink"].mp + parent.G.skills["magiport"].mp * 2 && // reserve to magiport the other 2 fighters
-        distance(character, { x: blinkLocation.x, y: blinkLocation.y }) > 200
+          parent.G.skills["blink"].mp +
+            parent.G.skills["magiport"].mp *
+              SMART_MOVE_CONFIG.MAGIPORT_MP_RESERVE_CASTS && // reserve to magiport the other fighters
+        distance(character, { x: blinkLocation.x, y: blinkLocation.y }) >
+          SMART_MOVE_CONFIG.BLINK_MIN_WORTH_DISTANCE
       ) {
         console.warn(
           `Blinking to ${blinkSegment.map} (${blinkSegment.x}, ${blinkSegment.y})`,
@@ -319,7 +366,7 @@ class StrategicSmartMove {
         this.isDoingSomethingMagical = true;
         this.stopTownChanneling();
         await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
-        await sleep(250);
+        await sleep(SMART_MOVE_CONFIG.BLINK_SETTLE_MS);
         await move(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
         progress.segmentIndex = lastIndex + 1;
       }
@@ -332,11 +379,11 @@ class StrategicSmartMove {
     if (session !== this.smartMoveSession || !this.isSmartMoving) return;
     this.blinkLoop = setTimeout(
       () => this._blinkCheck(session, pathFindingResult, progress),
-      1000,
+      SMART_MOVE_CONFIG.BLINK_CHECK_INTERVAL_MS,
     );
   }
 
-  waitForNewMap(timeout = 5000) {
+  waitForNewMap(timeout = SMART_MOVE_CONFIG.NEW_MAP_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         parent.socket.off("new_map", handler);
@@ -359,7 +406,7 @@ class StrategicSmartMove {
       const distToDoor = distance(character, { x: door.x, y: door.y });
 
       // If we are too far from the door, move there first
-      if (distToDoor > 100) {
+      if (distToDoor > SMART_MOVE_CONFIG.TRANSPORT_DOOR_NEAR_DISTANCE) {
         console.warn(
           `Too far from door to ${map} (${Math.round(
             distToDoor,
@@ -408,7 +455,7 @@ class StrategicSmartMove {
       useScare: true,
       stopWatcher: undefined,
       wait: 0,
-      speed: Math.max(character.speed, 40),
+      speed: Math.max(character.speed, SMART_MOVE_CONFIG.MIN_PATHING_SPEED),
       useTown: true,
       exact: false,
       smartmoveDebug: false, // to set the global var smartmoveDebug
@@ -478,7 +525,8 @@ class StrategicSmartMove {
         );
       }
 
-      if (distance(toPosition, character) < 10) return;
+      if (distance(toPosition, character) < SMART_MOVE_CONFIG.ARRIVED_DISTANCE)
+        return;
 
       pathFindingResult = this.pathfinderGetPath(toPosition, options.speed);
 
@@ -554,7 +602,7 @@ class StrategicSmartMove {
           }
 
           await scareAwayMobs();
-        }, 1000);
+        }, SMART_MOVE_CONFIG.SCARE_INTERVAL_MS);
       }
     } catch (e) {
       console.warn("Code's not ready");
@@ -593,7 +641,7 @@ class StrategicSmartMove {
 
         if (!this.isSmartMoving || session !== this.smartMoveSession)
           clearInterval(this.watcherInterval);
-      }, 500);
+      }, SMART_MOVE_CONFIG.STOP_WATCHER_INTERVAL_MS);
     }
 
     try {
@@ -601,7 +649,7 @@ class StrategicSmartMove {
         if (!this.isSmartMoving || session !== this.smartMoveSession) break;
 
         if (this.isDoingSomethingMagical) {
-          await sleep(500);
+          await sleep(SMART_MOVE_CONFIG.MAGICAL_WAIT_MS);
           continue;
         }
 
@@ -637,12 +685,17 @@ class StrategicSmartMove {
 
         if (segment.method === "blink" && character.ctype === "mage") {
           if (!this.hasMpToBlink()) {
-            await waitUntil(() => this.hasMpToBlink(), 15_000);
+            await waitUntil(
+              () => this.hasMpToBlink(),
+              SMART_MOVE_CONFIG.BLINK_MP_WAIT_TIMEOUT_MS,
+            );
           }
 
           if (this.hasMpToBlink() && character.map === segment.map) {
             await use_skill("blink", [segment.x, segment.y]);
-            await sleep(character.ping * 0.7);
+            await sleep(
+              character.ping * SMART_MOVE_CONFIG.BLINK_SETTLE_PING_RATE,
+            );
             progress.segmentIndex++;
             continue;
           }
