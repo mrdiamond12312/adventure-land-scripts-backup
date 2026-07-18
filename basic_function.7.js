@@ -1392,7 +1392,11 @@ setInterval(async function () {
             x: currentTarget.real_x,
             y: currentTarget.real_y,
           },
-          { useScare: ![TANKER, PRIEST].includes(character.name) },
+          {
+            useScare: ![TANKER, PRIEST].includes(character.name),
+            useTown: false,
+            speed: 200,
+          },
         );
     } else {
       if (can_move_to(currentTarget.x, currentTarget.y))
