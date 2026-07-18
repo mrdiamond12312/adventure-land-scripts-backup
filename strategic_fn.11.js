@@ -3,6 +3,7 @@ const BLAST_DIVISOR = 3.6;
 const BLAST_RADIUS = getMaxBlastRadius() || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
 const MAX_MOB_DPS = 2500;
+const EQUIP_PENALTY_MS = 120;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
 const WATCHOUT_ABILITIES = ["burn", "stone"];
 const IGNORE_ABILITIES = ["stone"];
@@ -332,7 +333,7 @@ function calculateWarriorItems() {
   const currentTarget = get_target();
   const shouldUseBlaster =
     numberOfMonsterAroundTarget(currentTarget) >=
-      TARGET_TO_SWITCH_TO_BLASTER_WEAPON && !currentTarget["1hp"];
+      TARGET_TO_SWITCH_TO_BLASTER_WEAPON && !currentTarget?.["1hp"];
 
   const feelingLucky = shouldWearLuckGear();
   const feelingWise = shouldWearExpGear();
@@ -362,7 +363,7 @@ function calculateWarriorItems() {
         : "orbofstr",
     chest: getWarriorChest(feelingLucky),
     pants: isTanker ? "frankypants" : "fallen",
-    ring2: currentTarget?.armor > 150 ? "suckerpunch" : "strring",
+    ring1: currentTarget?.armor > 150 ? "suckerpunch" : "strring",
     ring2: currentTarget?.armor > 125 ? "suckerpunch" : "strring",
   };
 }
@@ -400,29 +401,24 @@ function chooseFireOrPouchForSplashing(targets) {
   };
   const currentBowExplosion = currentBow.explosion ?? 0;
 
-  const firebowSlot = findMaxLevelItem(RANGER_INV_ITEMS.fireBow);
-  const fireInfo =
-    currentBow?.id === RANGER_INV_ITEMS.fireBow
-      ? currentBow
-      : firebowSlot !== -1
-        ? item_info(character.items[firebowSlot])
-        : undefined;
+  const resolveBowInfo = (id) => {
+    if (currentBow.id === id) return currentBow;
 
-  const pouchbowSlot = findMaxLevelItem(RANGER_INV_ITEMS.poucher);
-  const pouchInfo =
-    currentBow?.id === RANGER_INV_ITEMS.poucher
-      ? currentBow
-      : pouchbowSlot !== -1
-        ? item_info(character.items[pouchbowSlot])
-        : undefined;
+    const slot = findMaxLevelItem(id);
+    if (slot === -1) return undefined;
+
+    const info = item_info(character.items[slot]);
+    return {
+      ...info,
+      explosion_delta: (info.explosion ?? 0) - currentBowExplosion,
+    };
+  };
+
+  const fireInfo = resolveBowInfo(RANGER_INV_ITEMS.fireBow);
+  const pouchInfo = resolveBowInfo(RANGER_INV_ITEMS.poucher);
 
   if (!pouchInfo) return RANGER_INV_ITEMS.fireBow;
   if (!fireInfo) return RANGER_INV_ITEMS.poucher;
-
-  fireInfo.explosion_delta =
-    fireInfo.explosion_delta ?? fireInfo.explosion - currentBowExplosion;
-  pouchInfo.explosion_delta =
-    pouchInfo.explosion_delta ?? pouchInfo.explosion - currentBowExplosion;
 
   const fireScore = explosionScore(fireInfo, targets);
   const pouchScore = explosionScore(pouchInfo, targets);
@@ -617,7 +613,7 @@ function calculateRogueItems(target) {
     (item_info(characterFireStars)?.attack ?? 0);
 
   const rogueBurnDmg = characterFireStars
-    ? dps_multiplier((target.armor ?? 0) - (character.apiercing * 2 ?? 0)) *
+    ? dps_multiplier((target.armor ?? 0) - (character.apiercing ?? 0) * 2) *
       ((100 - (target.firesistance ?? 0)) / 100) *
       1.5 *
       (character.attack - equipItemAttackOffset + targetStacks) *
@@ -676,16 +672,24 @@ async function equipBatch(suggestedItems, forced = false) {
   const promises = [];
   const currentBooster = findInvBooster();
 
+  let didShiftBooster = false;
   if ((!isLooting || forced) && currentBooster) {
-    if (suggestedItems.booster && currentBooster !== suggestedItems.booster) {
-      promises.push(shift(locate_item(currentBooster), suggestedItems.booster));
-      delete suggestedItems.booster;
+    if (suggestedItems.booster) {
+      if (currentBooster !== suggestedItems.booster) {
+        promises.push(
+          shift(locate_item(currentBooster), suggestedItems.booster),
+        );
+        didShiftBooster = true;
+      }
     } else if (currentBooster !== "luckbooster" && shouldWearLuckGear()) {
       promises.push(shift(locate_item(currentBooster), "luckbooster"));
+      didShiftBooster = true;
     } else if (currentBooster !== "xpbooster") {
       promises.push(shift(locate_item(currentBooster), "xpbooster"));
+      didShiftBooster = true;
     }
   }
+  delete suggestedItems.booster;
 
   const suggestedMainhandWtype = item_info({
     name: suggestedItems["mainhand"],
@@ -723,27 +727,34 @@ async function equipBatch(suggestedItems, forced = false) {
     msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
   const currentPenalty = character.s.penalty_cd?.ms ?? 0;
   const equipLatency = Math.min(character.ping / 2, 100);
-  const penaltyBudget = timeToNextAttack - currentPenalty - equipLatency;
-  const maxItemsToEquip = Math.max(0, Math.floor(penaltyBudget / 120));
+  const penaltyBudget =
+    timeToNextAttack -
+    currentPenalty -
+    equipLatency -
+    (didShiftBooster ? EQUIP_PENALTY_MS : 0);
+  const maxItemsToEquip = Math.max(
+    0,
+    Math.floor(penaltyBudget / EQUIP_PENALTY_MS),
+  );
 
   if (itemSlots.length > maxItemsToEquip && !forced) {
     itemSlots.splice(maxItemsToEquip);
   }
 
-  if (itemSlots.length) {
-    if (itemSlots.length <= 1) {
-      for (const item of itemSlots) promises.push(equip(item.num, item.slot));
-    } else {
-      promises.push(equip_batch(itemSlots));
-    }
-
-    return Promise.all(promises).finally(() => {
-      isEquipingItems = false;
-    });
+  if (itemSlots.length <= 1) {
+    for (const item of itemSlots) promises.push(equip(item.num, item.slot));
+  } else {
+    promises.push(equip_batch(itemSlots));
   }
 
-  isEquipingItems = false;
-  return false;
+  if (!promises.length) {
+    isEquipingItems = false;
+    return false;
+  }
+
+  return Promise.all(promises).finally(() => {
+    isEquipingItems = false;
+  });
 }
 
 function calculateHeal(fromEntity, toEntity) {
@@ -757,14 +768,14 @@ function calculateHeal(fromEntity, toEntity) {
         fromEntity.heal *
         damage_multiplier(
           toEntity.resistance -
-            (selfPiercing ? (character.rpiercing / 2 ?? 0) : 0),
+            (selfPiercing ? (character.rpiercing ?? 0) / 2 : 0),
         )
       );
     case "physical":
       return (
         fromEntity.attack *
         damage_multiplier(
-          toEntity.armor - (selfPiercing ? (character.apiercing / 2 ?? 0) : 0),
+          toEntity.armor - (selfPiercing ? (character.apiercing ?? 0) / 2 : 0),
         )
       );
   }
@@ -846,6 +857,22 @@ function listOfMonsterAttacking(characterEntity) {
 
 function mobbingMultiplier(numberOfMobs) {
   return numberOfMobs < 3 ? 1 : 1.5;
+}
+
+function healerHps(healer = get_entity(HEALER) ?? get_entity(RANGER)) {
+  if (!healer) return 0;
+
+  const healPerHit = healer.heal || (healer.attack ?? 0) * 0.5;
+  return healPerHit * healer.frequency;
+}
+
+function totalMobDps(mobs, toEntity = character) {
+  return (
+    mobs.reduce(
+      (accumulator, mob) => accumulator + calculateDamage(mob, toEntity),
+      0,
+    ) * mobbingMultiplier(mobs.length)
+  );
 }
 
 function avgDmgTaken(characterEntity, dmgType = null) {
@@ -962,12 +989,12 @@ function isAssignedAsTanker() {
 function getMonstersToCBurst() {
   const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
   const partyTanker = get_entity(TANKER);
-  const healerPower = partyHealer?.heal || partyHealer?.attack * 0.5 || 0;
 
   if (!partyHealer || !partyTanker) return [];
 
-  const MAX_SAFE_DPS = healerPower * partyHealer.frequency * 0.95;
-  const NEW_MOB_DMG_LIMIT = healerPower * partyHealer.frequency * 0.9;
+  const healerHealPerSecond = healerHps(partyHealer);
+  const MAX_SAFE_DPS = healerHealPerSecond * 0.95;
+  const NEW_MOB_DMG_LIMIT = healerHealPerSecond * 0.9;
 
   const eligibleMobs = Object.values(parent.entities)
     .filter(
@@ -1075,16 +1102,9 @@ async function warriorCleave(currentStrategy) {
   );
 
   const allMobs = [...magicalMobs, ...physicalMobs, ...pureMobs];
-  const totalDpsTaken =
-    allMobs.reduce(
-      (accumulator, mob) =>
-        accumulator + calculateDamage(mob, character) * mob.frequency,
-      0,
-    ) * mobbingMultiplier(allMobs.length);
+  const totalDpsTaken = totalMobDps(allMobs);
 
-  const healer = get_entity(HEALER) ?? get_entity(RANGER);
-  const healerPower = healer?.heal ?? healer?.attack ?? 0;
-  const healThreshold = currentStrategy === "pull" ? healerPower * 0.9 : 0;
+  const healThreshold = currentStrategy === "pull" ? healerHps() * 0.9 : 0;
 
   const isSafeToAggro =
     currentStrategy === "pull"
@@ -1134,7 +1154,8 @@ async function warriorCleave(currentStrategy) {
 
   return Promise.allSettled(promises).finally(() => {
     isCleaving = false;
-    isEquipingItems = false;
+    // Only release the flag if the aggro branch above claimed it
+    if (promises.length) isEquipingItems = false;
   });
 }
 
@@ -1169,7 +1190,6 @@ async function warriorStomp() {
 
   return Promise.allSettled(promises).finally(() => {
     isStomping = false;
-    isEquipingItems = false;
   });
 }
 
@@ -1205,7 +1225,7 @@ function shouldAttack(target = get_target()) {
 
 async function scareAwayMobs() {
   const hasJackoAvailable =
-    locate_item("jacko") !== -1 || character.slots["orb"].name === "jacko";
+    locate_item("jacko") !== -1 || character.slots["orb"]?.name === "jacko";
 
   const isMobTargetingMe = Object.values(parent.entities).some(
     (mob) => mob?.target === character.name && mob?.type === "monster",
