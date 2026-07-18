@@ -358,8 +358,8 @@ function calculateWarriorItems() {
     orb: feelingLucky
       ? "rabbitsfoot"
       : feelingWise
-      ? "talkingskull"
-      : "orbofstr",
+        ? "talkingskull"
+        : "orbofstr",
     chest: getWarriorChest(feelingLucky),
     pants: isTanker ? "frankypants" : "fallen",
     ring2: currentTarget?.armor > 150 ? "suckerpunch" : "strring",
@@ -405,16 +405,16 @@ function chooseFireOrPouchForSplashing(targets) {
     currentBow?.id === RANGER_INV_ITEMS.fireBow
       ? currentBow
       : firebowSlot !== -1
-      ? item_info(character.items[firebowSlot])
-      : undefined;
+        ? item_info(character.items[firebowSlot])
+        : undefined;
 
   const pouchbowSlot = findMaxLevelItem(RANGER_INV_ITEMS.poucher);
   const pouchInfo =
     currentBow?.id === RANGER_INV_ITEMS.poucher
       ? currentBow
       : pouchbowSlot !== -1
-      ? item_info(character.items[pouchbowSlot])
-      : undefined;
+        ? item_info(character.items[pouchbowSlot])
+        : undefined;
 
   if (!pouchInfo) return RANGER_INV_ITEMS.fireBow;
   if (!fireInfo) return RANGER_INV_ITEMS.poucher;
@@ -524,8 +524,8 @@ function calculateRangerItems(target) {
     orb: feelingLucky
       ? "rabbitsfoot"
       : feelingWise
-      ? "talkingskull"
-      : "orbofdex",
+        ? "talkingskull"
+        : "orbofdex",
     amulet: feelingWise ? "spookyamulet" : "dexamulet",
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
@@ -609,8 +609,8 @@ function calculateRogueItems(target) {
     fieryWeaponSlot !== -1
       ? character.items[fieryWeaponSlot]
       : character.slots.offhand?.name === fieryWeapon
-      ? character.slots.offhand
-      : undefined;
+        ? character.slots.offhand
+        : undefined;
 
   const equipItemAttackOffset =
     (item_info(character.slots.offhand)?.attack ?? 0) -
@@ -721,10 +721,10 @@ async function equipBatch(suggestedItems, forced = false) {
   const msToNextAttack = ms_to_next_skill("attack");
   const timeToNextAttack =
     msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
-  const maxItemsToEquip = Math.max(
-    0,
-    Math.floor((timeToNextAttack - (character.s.penalty_cd?.ms ?? 0)) / 120),
-  );
+  const currentPenalty = character.s.penalty_cd?.ms ?? 0;
+  const equipLatency = Math.min(character.ping / 2, 100);
+  const penaltyBudget = timeToNextAttack - currentPenalty - equipLatency;
+  const maxItemsToEquip = Math.max(0, Math.floor(penaltyBudget / 120));
 
   if (itemSlots.length > maxItemsToEquip && !forced) {
     itemSlots.splice(maxItemsToEquip);
@@ -757,14 +757,14 @@ function calculateHeal(fromEntity, toEntity) {
         fromEntity.heal *
         damage_multiplier(
           toEntity.resistance -
-            (selfPiercing ? character.rpiercing / 2 ?? 0 : 0),
+            (selfPiercing ? (character.rpiercing / 2 ?? 0) : 0),
         )
       );
     case "physical":
       return (
         fromEntity.attack *
         damage_multiplier(
-          toEntity.armor - (selfPiercing ? character.apiercing / 2 ?? 0 : 0),
+          toEntity.armor - (selfPiercing ? (character.apiercing / 2 ?? 0) : 0),
         )
       );
   }
@@ -778,7 +778,7 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
     case "magical": {
       const monsterRpiercing =
         fromEntity.type === "monster"
-          ? G.monsters[fromEntity.mtype].rpiercing ?? 0
+          ? (G.monsters[fromEntity.mtype].rpiercing ?? 0)
           : 0;
 
       const reflectionDmg =
@@ -803,7 +803,7 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
     case "physical": {
       const monsterApiercing =
         fromEntity.type === "monster"
-          ? G.monsters[fromEntity.mtype].apiercing ?? 0
+          ? (G.monsters[fromEntity.mtype].apiercing ?? 0)
           : 0;
       const hardshellArmor = toEntity.s["hardshell"]
         ? G.conditions.hardshell.armor
@@ -880,9 +880,9 @@ function avgDmgTaken(characterEntity, dmgType = null) {
           ? characterEntity.armor -
               (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
           : highestBurningMob.damage_type === "magical"
-          ? characterEntity.resistance -
-            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
-          : 1,
+            ? characterEntity.resistance -
+              (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
+            : 1,
       ) *
       ((100 - fireResist) / 100) *
       (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
@@ -890,7 +890,7 @@ function avgDmgTaken(characterEntity, dmgType = null) {
     : 0;
 
   const currentBurnIntensity = highestBurningMob
-    ? characterEntity.s.burned?.intensity ?? 0
+    ? (characterEntity.s.burned?.intensity ?? 0)
     : 0;
 
   return (
@@ -1115,11 +1115,10 @@ async function warriorCleave(currentStrategy) {
     isEquipingItems = true;
     const warriorItems = calculateWarriorItems();
     const msToNextAttack = ms_to_next_skill("attack");
-    const cleaveSet = [
-      {num: findMaxLevelItem("bataxe"), slot: "mainhand"},
-    ]
+    const cleaveSet = [{ num: findMaxLevelItem("bataxe"), slot: "mainhand" }];
 
-    if (msToNextAttack > 320) cleaveSet.push({num: findMaxLevelItem("mpxamulet"), slot: "amulet"});
+    if (msToNextAttack > 320)
+      cleaveSet.push({ num: findMaxLevelItem("mpxamulet"), slot: "amulet" });
 
     promises.push(
       Promise.all([unequip("offhand"), equip_batch(cleaveSet)]),
@@ -1220,7 +1219,9 @@ async function scareAwayMobs() {
   ) {
     return Promise.all([
       equipBatch({ orb: "jacko" }, true),
-      use_skill("scare").then(() => reduce_cooldown("scare", 0.95 * character.ping)),
+      use_skill("scare").then(() =>
+        reduce_cooldown("scare", 0.95 * character.ping),
+      ),
     ]);
   }
 }
