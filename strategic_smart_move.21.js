@@ -8,7 +8,7 @@ const SMART_MOVE_CONFIG = Object.freeze({
   MAGICAL_WAIT_MS: 500, // walk loop poll while a blink/magiport is in flight
 
   // Magiport (_magiportCheck)
-  MAGIPORT_CHECK_INTERVAL_MS: 1000,
+  MAGIPORT_CHECK_INTERVAL_MS: 200,
   MAGIPORT_MAGE_NEAR_DEST_DISTANCE: 200, // mage counts as "parked at the destination" within this
   MAGIPORT_MIN_WORTH_DISTANCE: 100, // closer than this to the mage, walking is cheaper than a port
   MAGIPORT_MP_RESERVE_CASTS: 2, // mage keeps mp for this many magiport casts (the other fighters)
@@ -17,7 +17,7 @@ const SMART_MOVE_CONFIG = Object.freeze({
   MAGIPORT_ARRIVAL_DISTANCE: 300, // landed within this of the destination = the port worked
 
   // Blink (_blinkCheck and the in-path blink segment)
-  BLINK_CHECK_INTERVAL_MS: 1000,
+  BLINK_CHECK_INTERVAL_MS: 200,
   BLINK_MIN_WORTH_DISTANCE: 200, // shorter jumps than this aren't worth the mp/cooldown
   BLINK_SETTLE_MS: 250, // wait after blink before correcting position with move()
   BLINK_MP_WAIT_TIMEOUT_MS: 15_000, // how long a blink path segment waits for mp/cooldown
