@@ -675,60 +675,47 @@ async function waitUntil(fn, timeout = 10_000, interval = 100) {
   }
 }
 
-async function buff() {
+function pickRestoreSkill() {
+  const isChanneling =
+    character.c.town || character.c.fishing || character.c.mining;
+
+  const shouldRestoreHp =
+    character.hp / character.max_hp < character.mp / character.max_mp ||
+    (character.hp < character.max_hp * 0.6 && character.mp > 1000);
+
+  const stat = shouldRestoreHp ? "hp" : "mp";
+  const missing = character[`max_${stat}`] - character[stat];
+  const regenMissing = stat === "hp" ? 50 : 100;
+
+  if (missing > 500 && !is_on_cooldown(`use_${stat}`) && !isChanneling)
+    return `use_${stat}`;
+  if (missing > regenMissing && !is_on_cooldown(`regen_${stat}`))
+    return `regen_${stat}`;
+
+  return undefined;
+}
+
+async function potionLoop() {
   try {
-    const isChanneling =
-      character.c.town || character.c.fishing || character.c.mining;
-    const minPing = Math.min(...parent.pings);
-    const adjustPotionsCooldown = () => {
+    const skillToUse = pickRestoreSkill();
+
+    if (skillToUse) {
+      await withTimeout(use_skill(skillToUse));
+
+      const minPing = Math.min(...parent.pings);
       reduce_cooldown("use_mp", minPing);
       reduce_cooldown("use_hp", minPing);
-    };
-
-    if (
-      character.hp / character.max_hp < character.mp / character.max_mp ||
-      (character.hp < character.max_hp * 0.6 && character.mp > 1000)
-    ) {
-      if (
-        character.hp < character.max_hp - 500 &&
-        !is_on_cooldown("use_hp") &&
-        !isChanneling
-      ) {
-        await withTimeout(use_skill("use_hp"), 500);
-        adjustPotionsCooldown();
-      } else if (
-        character.hp < character.max_hp - 50 &&
-        !is_on_cooldown("regen_hp")
-      ) {
-        await withTimeout(use_skill("regen_hp"), 500);
-        adjustPotionsCooldown();
-      }
-    } else {
-      if (
-        character.mp < character.max_mp - 500 &&
-        !is_on_cooldown("use_mp") &&
-        !isChanneling
-      ) {
-        await withTimeout(use_skill("use_mp"), 500);
-        adjustPotionsCooldown();
-      } else if (
-        character.mp < character.max_mp - 100 &&
-        !is_on_cooldown("regen_mp")
-      ) {
-        await withTimeout(use_skill("regen_mp"), 500);
-        adjustPotionsCooldown();
-      }
     }
   } catch (e) {}
   setTimeout(
-    buff,
+    potionLoop,
     Math.min(
       Math.max(ms_to_next_skill("use_mp"), 5),
       Math.max(ms_to_next_skill("use_hp"), 5),
     ),
   );
 }
-buff();
+potionLoop();
 
 function isMelee() {
   return character.range < 75;
