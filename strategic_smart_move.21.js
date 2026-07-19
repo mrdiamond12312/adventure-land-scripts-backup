@@ -6,6 +6,7 @@ const SMART_MOVE_CONFIG = Object.freeze({
   MIN_PATHING_SPEED: 40, // floor for pathfinding speed so slow characters still consider town routes
   ARRIVED_DISTANCE: 10, // already close enough to the destination, skip the move entirely
   MAGICAL_WAIT_MS: 500, // walk loop poll while a blink/magiport is in flight
+  LOOP_DEBUG: false,
 
   // Magiport (_magiportCheck)
   MAGIPORT_CHECK_INTERVAL_MS: 200,
@@ -222,7 +223,7 @@ class StrategicSmartMove {
   async _magiportCheck(session, toPosition) {
     if (session !== this.smartMoveSession) return;
 
-    console.warn("magiport tick", session);
+    if (SMART_MOVE_CONFIG.LOOP_DEBUG) console.warn("magiport tick", session);
 
     const mageInfo = this.getMageInfo();
 
@@ -302,6 +303,8 @@ class StrategicSmartMove {
       clearTimeout(this.blinkLoop);
       return;
     }
+
+    if (SMART_MOVE_CONFIG.LOOP_DEBUG) console.warn("blink tick", session);
 
     let lastIndex = progress.segmentIndex;
     const currentMap = character.map;
@@ -632,6 +635,7 @@ class StrategicSmartMove {
 
     if (options.stopWatcher) {
       this.watcherInterval = setInterval(() => {
+        if (SMART_MOVE_CONFIG.LOOP_DEBUG) console.warn("watcher tick", session);
         if (options.stopWatcher()) {
           stop();
           this.isSmartMoving = false;
