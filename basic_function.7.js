@@ -406,9 +406,13 @@ const STORE_ABLE = [
   "mysterybox",
   "weaponbox",
   "armorbox",
-
   "fury",
   "snring",
+  "starkillers",
+  "northstar",
+  "orboftemporal",
+  "networkcard",
+  "electronics",
 ];
 
 const SALE_ABLE = [
