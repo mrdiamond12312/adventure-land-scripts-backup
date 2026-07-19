@@ -362,7 +362,8 @@ function calculateWarriorItems() {
         ? "talkingskull"
         : "orbofstr",
     chest: getWarriorChest(feelingLucky),
-    pants: isTanker ? "frankypants" : "fallen",
+    // pants: isTanker ? "frankypants" : "fallen",
+    pants: "fallen",
     ring1: currentTarget?.armor > 150 ? "suckerpunch" : "strring",
     ring2: currentTarget?.armor > 125 ? "suckerpunch" : "strring",
   };
