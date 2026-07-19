@@ -310,6 +310,7 @@ var IGNORE = [
   "northstar",
   "fallen",
   "fury",
+  "starkillers",
 
   // avoid upgrading for selling
   "cape",
