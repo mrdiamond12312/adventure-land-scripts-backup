@@ -308,6 +308,7 @@ var IGNORE = [
   // avoid upgrading for selling
   "cape",
   "carrotsword",
+  "xgloves",
   ...BUYABLE,
   // .filter((id) => id !== "blade"),
 ];

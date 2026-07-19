@@ -23,12 +23,19 @@ const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
 
 const KEEP_THRESHOLD = {
   firestars: 12,
-  harbringer: 12,
+  harbringer: 16,
   oozingterror: 12,
   pouchbow: 16,
   daggerofthedead: 16,
   bowofthedead: 16,
   gphelmet: 12,
+
+  // lifted later
+  fury: 32,
+  starkillers: 32,
+  northstar: 10,
+  orboftemporal: 9,
+  t2quiver: 16,
 
   helmet: 3,
   pants: 3,
@@ -532,8 +539,8 @@ async function compoundInv() {
       (itemInfo.grades[0] > 0
         ? itemInfo.grades[0]
         : itemGrade >= 2
-        ? 0
-        : itemInfo.grades[0] + 2);
+          ? 0
+          : itemInfo.grades[0] + 2);
     const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
 
     // Skip if we don't have enough of this item yet

@@ -152,6 +152,7 @@ async function exchangeSomething() {
     { name: "candycane", quantity: 1 },
     { name: "greenenvelope", quantity: 1 },
     { name: "brownenvelope", quantity: 1 },
+    { name: "xbox", quantity: 1 },
     { name: "goldenegg", quantity: 1 },
     { name: "5bucks", quantity: 1 },
     { name: "candypop", quantity: 10 },
