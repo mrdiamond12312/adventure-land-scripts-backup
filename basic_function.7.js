@@ -300,10 +300,16 @@ var IGNORE = [
   "staffofthedead",
   "swordofthedead",
   "supermittens",
+
   // "horsecapeg",
   "throwingstars",
   "computer",
   "ancientcomputer",
+
+  // avoid for manually upgrade/compound
+  "northstar",
+  "fallen",
+  "fury",
 
   // avoid upgrading for selling
   "cape",
