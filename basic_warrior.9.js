@@ -27,6 +27,27 @@ const originRangeRate = 0.9;
 rangeRate = originRangeRate;
 
 const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
+const CANDY_SWAP_FALLBACK_DELAY_MS = 150; // used when no projectile speed can be resolved
+
+/**
+ * ETA (ms) of the character's attack projectile against the target
+ * @param {Object} target - the entity the attack was fired at
+ * @returns {number} delay in ms (>= 0)
+ */
+function projectileEtaMs(target) {
+  const projectileKey =
+    item_info(character.slots.mainhand)?.projectile ||
+    G.classes[character.ctype].projectile;
+  const projectileSpeed = G.projectiles[projectileKey]?.speed;
+
+  if (!projectileSpeed || !target) return CANDY_SWAP_FALLBACK_DELAY_MS;
+
+  return Math.max(
+    20,
+    (distance(character, target) / projectileSpeed) * 1000 -
+      character.ping / 2,
+  );
+}
 
 // Main fight function
 async function fight(target) {
@@ -173,7 +194,7 @@ async function fight(target) {
             new Promise((resolve) => {
               setTimeout(() => {
                 resolve(equip_batch(delayedEquip));
-              }, 150);
+              }, projectileEtaMs(targetToAttack));
             }),
           ]).finally(() => {
             isEquipingItems = false;
