@@ -1681,7 +1681,7 @@ function serverCurrentlyHasLiveEvent() {
 }
 
 const RSPEED_DURATION = G.conditions["rspeed"].duration;
-const RSPEED_MARGIN = 2 * 60 * 1000; // 2 minutes
+const RSPEED_MARGIN = 0.75 * 60 * 1000; // 45 seconds
 
 const setRogueSpeedLastDeployment = () => {
   const last = get("rogueLastDeployed");
@@ -1696,7 +1696,20 @@ const setRogueSpeedLastDeployment = () => {
   set("rogueLastDeployed", new Date());
 };
 
+const ENT_FIELD_MAX_FOR_ROGUE = 2;
+const ENT_FIELD_STALE_MS = 15 * 1000;
+
 const shouldDeployRogue = () => {
+  // Check if it's safe to deploy rogue in place of the priest while farming ents
+  const mageLocation = get("mageLocation");
+  if (
+    !mageLocation ||
+    mssince(new Date(mageLocation.time)) > ENT_FIELD_STALE_MS ||
+    mageLocation.entsTargetingPartyCount > ENT_FIELD_MAX_FOR_ROGUE
+  ) {
+    return false;
+  }
+
   const last = get("rogueLastDeployed");
   const lastDate = last ? new Date(last) : null;
 
@@ -1812,23 +1825,23 @@ const DYNAMIC_PARTY_PRESETS = {
   },
 
   default: () => {
-    // const globalParty = get("currentParty");
-    // const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
+    const globalParty = get("currentParty");
+    const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
 
-    // if (
-    //   globalParty &&
-    //   globalParty.some((id) => knownTankers.includes(id)) &&
-    //   !serverCurrentlyHasLiveEvent()
-    // ) {
-    //   setRogueSpeedLastDeployment();
-    //   if (shouldDeployRogue()) {
-    //     return [WARRIOR, ROGUE, MAGE];
-    //   } else {
-    //     // RANGER = RANGER1;
-    //     HEALER = PRIEST;
-    //     return [WARRIOR, PRIEST, MAGE];
-    //   }
-    // }
+    if (
+      globalParty &&
+      globalParty.some((id) => knownTankers.includes(id)) &&
+      !serverCurrentlyHasLiveEvent()
+    ) {
+      setRogueSpeedLastDeployment();
+      if (shouldDeployRogue()) {
+        return [WARRIOR, ROGUE, MAGE];
+      } else {
+        // RANGER = RANGER1;
+        HEALER = PRIEST;
+        return [WARRIOR, PRIEST, MAGE];
+      }
+    }
 
     HEALER = PRIEST;
     return [WARRIOR, PRIEST, MAGE];
