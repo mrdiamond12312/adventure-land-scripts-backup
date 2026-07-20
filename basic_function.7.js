@@ -920,11 +920,31 @@ function shouldHoldWarriorPosition(target, radiusTotal) {
   const noAggro = allEntities
     .filter((entity) => entity.type === "monster")
     .every((mob) => mob.target !== character.name || mob["1hp"]);
-  const noNearbyPlayers = allEntities
-    .filter((entity) => entity.type === "character" && !entity.moving)
-    .every((char) => distance(character, char) >= 8);
+  const noStackRisk = allEntities
+    .filter((entity) => entity.type === "character")
+    .every((char) => !canStackWith(char));
 
-  return noAggro && noNearbyPlayers;
+  return noAggro && noStackRisk;
+}
+
+// Combo hits splash onto related players (party/team/account/coop, or anyone in
+// PvP) sharing the victim's 6x6px grid cell. Box instead of raw cell hash so we
+// don't sit on a boundary.
+const STACK_CELL = 6;
+function canStackWith(other) {
+  if (other.id === character.id || other.rip || other.hp <= 0) return false;
+  if (Math.abs(character.real_x - other.real_x) >= STACK_CELL) return false;
+  if (Math.abs(character.real_y - other.real_y) >= STACK_CELL) return false;
+
+  // PvP zone: relation is ignored, any overlapping player can stack.
+  if (typeof is_pvp === "function" && is_pvp()) return true;
+
+  return (
+    (other.owner && other.owner === character.owner) ||
+    (other.team && other.team === character.team) ||
+    other.cooperative ||
+    prioritizedNames().includes(other.name)
+  );
 }
 
 function faceTarget(target) {
@@ -1186,6 +1206,11 @@ function getPlayersToHeal() {
 
       if (entity.type === "monster" || entity.citizen) return false;
       if (HEAL_IGNORE.includes(entity.name)) return false;
+
+      if (entity.name !== character.name) {
+        if (character.team && entity.team !== character.team) return false;
+        if (is_pvp() && !prioritizedNamesList.has(entity.name)) return false;
+      }
 
       return shouldHeal(entity);
     })
