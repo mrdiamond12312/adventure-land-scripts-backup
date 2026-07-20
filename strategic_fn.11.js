@@ -4,6 +4,7 @@ const BLAST_RADIUS = getMaxBlastRadius() || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
 const MAX_MOB_DPS = 2500;
 const EQUIP_PENALTY_MS = 120;
+const SHIFT_PENALTY_MS = 240;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
 const WATCHOUT_ABILITIES = ["burn", "stone"];
 const IGNORE_ABILITIES = ["stone"];
@@ -673,22 +674,30 @@ async function equipBatch(suggestedItems, forced = false) {
   const promises = [];
   const currentBooster = findInvBooster();
 
-  let didShiftBooster = false;
+  // Budget of penalty_cd we can spend before the next attack comes off cooldown
+  const msToNextAttack = ms_to_next_skill("attack");
+  const timeToNextAttack =
+    msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
+  const currentPenalty = character.s.penalty_cd?.ms ?? 0;
+  const equipLatency = Math.min(character.ping / 2, 100);
+  let penaltyBudget = timeToNextAttack - currentPenalty - equipLatency;
+
+  let targetBooster = null;
   if ((!isLooting || forced) && currentBooster) {
     if (suggestedItems.booster) {
-      if (currentBooster !== suggestedItems.booster) {
-        promises.push(
-          shift(locate_item(currentBooster), suggestedItems.booster),
-        );
-        didShiftBooster = true;
-      }
+      if (currentBooster !== suggestedItems.booster)
+        targetBooster = suggestedItems.booster;
     } else if (currentBooster !== "luckbooster" && shouldWearLuckGear()) {
-      promises.push(shift(locate_item(currentBooster), "luckbooster"));
-      didShiftBooster = true;
-    } else if (currentBooster !== "xpbooster") {
-      promises.push(shift(locate_item(currentBooster), "xpbooster"));
-      didShiftBooster = true;
+      targetBooster = "luckbooster";
+    } else if (currentBooster !== "xpbooster" && !shouldWearLuckGear()) {
+      targetBooster = "xpbooster";
     }
+  }
+  // Shifting a booster costs more penalty than a regular equip — only pay for
+  // it when there's room in the budget, or when the caller forces the swap
+  if (targetBooster && (forced || penaltyBudget >= SHIFT_PENALTY_MS)) {
+    promises.push(shift(locate_item(currentBooster), targetBooster));
+    penaltyBudget -= SHIFT_PENALTY_MS;
   }
   delete suggestedItems.booster;
 
@@ -723,16 +732,6 @@ async function equipBatch(suggestedItems, forced = false) {
     .filter((equipInfo) => equipInfo.num >= 0);
 
   // Slice items to prevent penalty_cd from affecting attack cooldown
-  const msToNextAttack = ms_to_next_skill("attack");
-  const timeToNextAttack =
-    msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
-  const currentPenalty = character.s.penalty_cd?.ms ?? 0;
-  const equipLatency = Math.min(character.ping / 2, 100);
-  const penaltyBudget =
-    timeToNextAttack -
-    currentPenalty -
-    equipLatency -
-    (didShiftBooster ? EQUIP_PENALTY_MS : 0);
   const maxItemsToEquip = Math.max(
     0,
     Math.floor(penaltyBudget / EQUIP_PENALTY_MS),
