@@ -44,8 +44,7 @@ function projectileEtaMs(target) {
 
   return Math.max(
     20,
-    (distance(character, target) / projectileSpeed) * 1000 -
-      character.ping / 2,
+    (simple_distance(character, target) / projectileSpeed) * 1000 + 7,
   );
 }
 
