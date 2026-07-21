@@ -541,8 +541,7 @@ function getPriestMainhand(target, currentTarget, feelingLucky) {
 }
 
 function getPriestOffhand(isTanking, feelingLucky) {
-  if (character.map === "crypt") return "wbook1";
-  if (isTanking && character.s.burned) return "wbookhs";
+  if (character.map === "crypt") return "exoarm";
   if (feelingLucky) return "mshield";
 
   const facingMagicalMob = Object.values(parent.entities).some(
@@ -553,7 +552,7 @@ function getPriestOffhand(isTanking, feelingLucky) {
   );
 
   if (isTanking || facingMagicalMob || character.fear) return "wbookhs";
-  return "wbook1";
+  return "exoarm";
 }
 
 function getPriestOrb(target, isTanking, feelingLucky, feelingWise) {
