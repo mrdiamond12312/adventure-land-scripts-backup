@@ -270,7 +270,7 @@ function hasMaxEntsEngagedAtSpawn() {
 
 async function ensureDartgun() {
   if (findMaxLevelItem("dartgun") === -1) await retrieveBankItem("dartgun");
-  if (findMaxLevelItem("quiver") === -1) await retrieveBankItem("quiver");
+  if (findMaxLevelItem("t2quiver") === -1) await retrieveBankItem("t2quiver");
 
   await withTimeout(
     equipBatch(calculateMerchantEquipments()),
