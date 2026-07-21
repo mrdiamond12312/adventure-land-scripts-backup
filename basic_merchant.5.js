@@ -50,7 +50,7 @@ function calculateMerchantEquipments() {
   return {
     helmet: isLuringMobs ? "xhelmet" : "eear",
     mainhand: isDraggingMobs ? "dartgun" : "broom",
-    offhand: isDraggingMobs ? "quiver" : "wbookhs",
+    offhand: isDraggingMobs ? "t2quiver" : "wbookhs",
     amulet: isLuringMobs ? "t2intamulet" : "warmscarf",
     orb: "jacko",
     chest: "tshirt4",

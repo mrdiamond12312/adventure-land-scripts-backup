@@ -28,6 +28,8 @@ const KEEP_THRESHOLD = {
   pouchbow: 16,
   daggerofthedead: 16,
   bowofthedead: 16,
+  froststaff: 8, 
+  frankypants: 8,
   gphelmet: 12,
 
   // lifted later
