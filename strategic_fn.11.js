@@ -544,7 +544,7 @@ function getPriestMainhand(target, currentTarget, feelingLucky) {
   }
 
   // Guard until the end of next attack
-  const graceMs = ms_to_next_skill('attack') + 1000 / character.frequency;
+  const graceMs = ms_to_next_skill("attack") + 1000 / character.frequency;
   if (now - priestLastHealMainhandAt < graceMs) {
     return "lmace";
   }
@@ -1148,7 +1148,6 @@ async function warriorCleave(currentStrategy) {
     !isEquipingItems
   ) {
     isEquipingItems = true;
-    const warriorItems = calculateWarriorItems();
     const msToNextAttack = ms_to_next_skill("attack");
     const cleaveSet = [{ num: findMaxLevelItem("bataxe"), slot: "mainhand" }];
 
@@ -1158,6 +1157,7 @@ async function warriorCleave(currentStrategy) {
     promises.push(
       Promise.all([unequip("offhand"), equip_batch(cleaveSet)]),
       withTimeout(use_skill("cleave"), 2500).then(async () => {
+        const warriorItems = calculateWarriorItems();
         reduce_cooldown("cleave", 0.95 * character.ping);
         await equipBatch(
           { mainhand: warriorItems.mainhand, offhand: warriorItems.offhand },
@@ -1193,11 +1193,11 @@ async function warriorStomp() {
   isStomping = true;
 
   const promises = [];
-  const warriorItems = calculateWarriorItems();
 
   promises.push(
     equipBatch({ mainhand: "basher", offhand: undefined }, true),
     use_skill("stomp").then(async () => {
+      const warriorItems = calculateWarriorItems();
       reduce_cooldown("stomp", 0.95 * character.ping);
       await equipBatch(warriorItems, true);
     }),
