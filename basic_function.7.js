@@ -427,7 +427,6 @@ const SALE_ABLE = [
   "vgloves",
   "mcape",
   "wbook0",
-  "quiver",
   "santasbelt",
   "mushroomstaff",
   "slimestaff",
@@ -1696,7 +1695,7 @@ const setRogueSpeedLastDeployment = () => {
   set("rogueLastDeployed", new Date());
 };
 
-const ENT_FIELD_MAX_FOR_ROGUE = 2;
+const ENT_FIELD_MAX_FOR_ROGUE = 1;
 const ENT_FIELD_STALE_MS = 15 * 1000;
 
 const shouldDeployRogue = () => {
