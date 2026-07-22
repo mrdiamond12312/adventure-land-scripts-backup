@@ -48,6 +48,68 @@ function projectileEtaMs(target) {
   );
 }
 
+/**
+ * Momentarily swaps to candy cane(s) for the landing hit, then swaps back to
+ * the warrior's real weapon after the projectile connects.
+ * @param {Object} targetToAttack - the entity being attacked
+ * @returns {Promise|undefined} the equip promise, or undefined if not swapping
+ */
+function maybeCandySwap(targetToAttack) {
+  const characterAtkCycleMs = 1000 / character.frequency;
+  const shouldUseCandyCanes =
+    character.ping < 1000 &&
+    !isCleaving &&
+    !isEquipingItems &&
+    characterAtkCycleMs > 250 + character.ping &&
+    // !character.s.sugarrush &&
+    (CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.offhand?.name) ||
+      CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.mainhand?.name)) &&
+    character.slots.offhand?.name !== "mshield" &&
+    character.cc < 100;
+
+  if (!shouldUseCandyCanes) return;
+
+  const candycane1 = findMaxLevelItem("candycanesword");
+  const candycane2 = findMaxLevelItem("candycanesword", 1);
+  const isFastAttacker = characterAtkCycleMs < 600;
+
+  // To avoid penalty_cd, fast attackers only swap the mainhand; slower
+  // attackers dual-wield candy canes when a second one is available.
+  const buildEquip = (mainhand, offhand) =>
+    isFastAttacker
+      ? [{ num: mainhand, slot: "mainhand" }]
+      : [
+          { num: mainhand, slot: "mainhand" },
+          { num: offhand, slot: "offhand" },
+        ];
+
+  const canCandySwap =
+    candycane1 !== -1 && (isFastAttacker || candycane2 !== -1);
+  if (!canCandySwap) return;
+
+  isEquipingItems = true;
+
+  const swapBackAfterHit = async () => {
+    await sleep(projectileEtaMs(targetToAttack));
+    const warriorItems = calculateWarriorItems();
+    const mainhand = findMaxLevelItem(warriorItems.mainhand);
+    const offhand = findMaxLevelItem(warriorItems.offhand);
+    return equip_batch(
+      buildEquip(
+        mainhand === -1 ? candycane1 : mainhand,
+        offhand === -1 ? candycane2 : offhand,
+      ),
+    );
+  };
+
+  return Promise.allSettled([
+    equip_batch(buildEquip(candycane1, candycane2)),
+    swapBackAfterHit(),
+  ]).finally(() => {
+    isEquipingItems = false;
+  });
+}
+
 // Main fight function
 async function fight(target) {
   const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
@@ -148,63 +210,8 @@ async function fight(target) {
         .catch((e) => attackErrorHandler(e, targetToAttack)),
     );
 
-    // Offhand swap logic: Use Candy Canes for attacking
-    const characterAtkCycleMs = 1000 / character.frequency;
-    const shouldUseCandyCanes =
-      character.ping < 1000 &&
-      !isCleaving &&
-      !isEquipingItems &&
-      characterAtkCycleMs > 250 + character.ping &&
-      // !character.s.sugarrush &&
-      (CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.offhand?.name) ||
-        CANDY_SWAP_WEAPON_ALLOW_LIST.includes(
-          character.slots.mainhand?.name,
-        )) &&
-      character.slots.offhand?.name !== "mshield" &&
-      character.cc < 100;
-
-    if (shouldUseCandyCanes) {
-      const candycane1 = findMaxLevelItem("candycanesword");
-      const candycane2 = findMaxLevelItem("candycanesword", 1);
-      const isFastAttacker = characterAtkCycleMs < 600;
-
-      if (candycane1 !== -1) {
-        isEquipingItems = true;
-
-        // To avoid penalty_cd, fast attackers only equip one candy cane, while slower attackers can attempt dual wield if they have two candy canes.
-        const immediateEquip = isFastAttacker
-          ? [{ num: candycane1, slot: "mainhand" }]
-          : [
-              { num: candycane1, slot: "mainhand" },
-              { num: candycane2, slot: "offhand" },
-            ];
-
-        const delayedEquip = isFastAttacker
-          ? [{ num: candycane1, slot: "mainhand" }]
-          : [
-              { num: candycane1, slot: "mainhand" },
-              { num: candycane2, slot: "offhand" },
-            ];
-
-        // Only attempt dual wield if second candy cane exists
-        if (!isFastAttacker && candycane2 === -1) {
-          isEquipingItems = false;
-        } else {
-          const equipPromise = Promise.allSettled([
-            equip_batch(immediateEquip),
-            new Promise((resolve) => {
-              setTimeout(() => {
-                resolve(equip_batch(delayedEquip));
-              }, projectileEtaMs(targetToAttack));
-            }),
-          ]).finally(() => {
-            isEquipingItems = false;
-          });
-
-          promisesToAwait.push(equipPromise);
-        }
-      }
-    }
+    const candySwap = maybeCandySwap(targetToAttack);
+    if (candySwap) promisesToAwait.push(candySwap);
 
     // Warcry check (placed here to potentially benefit from a new attack)
     const canWarcry =
