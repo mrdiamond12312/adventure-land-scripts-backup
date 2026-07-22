@@ -530,8 +530,23 @@ function calculateRangerItems(target) {
   };
 }
 
+// Keep the heal mace equipped for a short grace window after the last time we
+// wanted it, so a healee that another player tops up doesn't make us flicker
+// the wand back and forth (each swap also costs EQUIP_PENALTY_MS).
+const PRIEST_HEAL_MAINHAND_GRACE_MS = 500;
+let priestLastHealMainhandAt = 0;
+
 function getPriestMainhand(target, currentTarget, feelingLucky) {
-  if (target && target.type !== "monster") return "lmace";
+  const now = Date.now();
+
+  if (target && target.type !== "monster") {
+    priestLastHealMainhandAt = now;
+    return "lmace";
+  }
+
+  if (now - priestLastHealMainhandAt < PRIEST_HEAL_MAINHAND_GRACE_MS) {
+    return "lmace";
+  }
 
   if (character.map === "crypt") {
     return currentTarget?.s?.frozen ? "lmace" : "froststaff";
