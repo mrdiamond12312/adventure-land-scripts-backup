@@ -149,11 +149,13 @@ async function fight(target) {
     );
 
     // Offhand swap logic: Use Candy Canes for attacking
+    const characterAtkCycleMs = 1000 / character.frequency;
     const shouldUseCandyCanes =
       character.ping < 1000 &&
       !isCleaving &&
       !isEquipingItems &&
-      !character.s.sugarrush &&
+      characterAtkCycleMs > 250 + character.ping &&
+      // !character.s.sugarrush &&
       (CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.offhand?.name) ||
         CANDY_SWAP_WEAPON_ALLOW_LIST.includes(
           character.slots.mainhand?.name,
@@ -164,7 +166,7 @@ async function fight(target) {
     if (shouldUseCandyCanes) {
       const candycane1 = findMaxLevelItem("candycanesword");
       const candycane2 = findMaxLevelItem("candycanesword", 1);
-      const isFastAttacker = 1 / character.frequency < 0.6;
+      const isFastAttacker = characterAtkCycleMs < 600;
 
       if (candycane1 !== -1) {
         isEquipingItems = true;
