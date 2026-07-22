@@ -89,18 +89,18 @@ function maybeCandySwap(targetToAttack) {
 
   isEquipingItems = true;
 
-  const swapBackAfterHit = async () => {
-    await sleep(projectileEtaMs(targetToAttack));
-    const warriorItems = calculateWarriorItems();
-    const mainhand = findMaxLevelItem(warriorItems.mainhand);
-    const offhand = findMaxLevelItem(warriorItems.offhand);
-    return equip_batch(
-      buildEquip(
-        mainhand === -1 ? candycane1 : mainhand,
-        offhand === -1 ? candycane2 : offhand,
-      ),
-    );
-  };
+  const swapBackAfterHit = () =>
+    Promise.resolve(sleep(projectileEtaMs(targetToAttack))).then(() => {
+      const warriorItems = calculateWarriorItems();
+      const mainhand = findMaxLevelItem(warriorItems.mainhand);
+      const offhand = findMaxLevelItem(warriorItems.offhand);
+      return equip_batch(
+        buildEquip(
+          mainhand === -1 ? candycane1 : mainhand,
+          offhand === -1 ? candycane2 : offhand,
+        ),
+      );
+    });
 
   return Promise.allSettled([
     equip_batch(buildEquip(candycane1, candycane2)),
