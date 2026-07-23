@@ -581,6 +581,24 @@ function getPriestOrb(target, isTanking, feelingLucky, feelingWise) {
   return "test_orb";
 }
 
+function getPriestAmulet(isTanking, feelingLucky, feelingWise) {
+  if (feelingLucky || (feelingWise && !isTanking)) return "spookyamulet";
+
+  // Re-equip sanguine to (re)apply its aura whenever we own or already wear one
+  // and the buff is missing or about to expire; otherwise let it fall through.
+  const haveSanguine =
+    locate_item("sanguine") !== -1 ||
+    character.slots.amulet?.name === "sanguine";
+  if (
+    haveSanguine &&
+    (!character.s.sanguine || character.s.sanguine.ms < 10000)
+  ) {
+    return "sanguine";
+  }
+
+  return isTanking ? "t2stramulet" : "intamulet";
+}
+
 function calculatePriestItems(target) {
   const currentTarget = get_targeted_monster();
   const isTanking = isAssignedAsTanker();
@@ -592,7 +610,7 @@ function calculatePriestItems(target) {
     offhand: getPriestOffhand(isTanking, feelingLucky),
     orb: getPriestOrb(target, isTanking, feelingLucky, feelingWise),
     gloves: "supermittens",
-    amulet: isTanking ? "t2stramulet" : "intamulet",
+    amulet: getPriestAmulet(isTanking, feelingLucky, feelingWise),
     ring1: feelingLucky ? "ringhs" : "cring",
     ring2: feelingLucky ? "ringhs" : "zapper",
     cape: "angelwings",
