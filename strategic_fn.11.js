@@ -324,9 +324,9 @@ function getWarriorAmulet(feelingLucky, isTanker) {
   return "stramulet";
 }
 
-function getWarriorChest(feelingLucky) {
+function getWarriorChest(feelingLucky, isTanker) {
   if (feelingLucky) return "cdragon";
-  if (character.map === "crypt") return "xarmor";
+  if (character.map === "crypt" || isTanker) return "vattire";
   return "coat1";
 }
 
@@ -362,7 +362,7 @@ function calculateWarriorItems() {
       : feelingWise
         ? "talkingskull"
         : "orbofstr",
-    chest: getWarriorChest(feelingLucky),
+    chest: getWarriorChest(feelingLucky, isTanker),
     // pants: isTanker ? "frankypants" : "fallen",
     pants: "fallen",
     ring1: currentTarget?.armor > 99 ? "suckerpunch" : "strring",
@@ -530,24 +530,26 @@ function calculateRangerItems(target) {
   };
 }
 
-// Keep the heal mace equipped for a short grace window after the last time we
-// wanted it, so a healee that another player tops up doesn't make us flicker
-// the wand back and forth (each swap also costs EQUIP_PENALTY_MS).
-let priestLastHealMainhandAt = 0;
+// Keep the priest's heal-oriented gear equipped for a short grace window after
+// the last time a healee was targeted, so a healee that another player tops up
+// doesn't make us flicker heal/offense gear back and forth (each swap also
+// costs EQUIP_PENALTY_MS). Shared by the mainhand and orb because both key off
+// the same heal-target signal within the same tick.
+let priestLastHealGearAt = 0;
 
-function getPriestMainhand(target, currentTarget, feelingLucky) {
-  const now = Date.now();
-
+function isPriestInHealGraceWindow(target) {
   if (target && target.type !== "monster") {
-    priestLastHealMainhandAt = now;
-    return "lmace";
+    priestLastHealGearAt = Date.now();
+    return true;
   }
 
   // Guard until the end of next attack
   const graceMs = ms_to_next_skill("attack") + 1000 / character.frequency;
-  if (now - priestLastHealMainhandAt < graceMs) {
-    return "lmace";
-  }
+  return Date.now() - priestLastHealGearAt < graceMs;
+}
+
+function getPriestMainhand(target, currentTarget, feelingLucky) {
+  if (isPriestInHealGraceWindow(target)) return "lmace";
 
   if (character.map === "crypt") {
     return currentTarget?.s?.frozen ? "lmace" : "froststaff";
@@ -574,8 +576,8 @@ function getPriestOffhand(isTanking, feelingLucky) {
 function getPriestOrb(target, isTanking, feelingLucky, feelingWise) {
   if (isTanking && character.s.burned) return "orba";
   if (feelingLucky) return "rabbitsfoot";
-  if (target?.type !== "monster") return "jacko";
   if (feelingWise) return "talkingskull";
+  if (isPriestInHealGraceWindow(target)) return "jacko";
   return "test_orb";
 }
 
