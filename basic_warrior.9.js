@@ -94,13 +94,27 @@ function maybeCandySwap(targetToAttack) {
       setTimeout(() => {
         const warriorItems = calculateWarriorItems();
         const mainhand = findMaxLevelItem(warriorItems.mainhand);
-        const offhand = findMaxLevelItem(warriorItems.offhand);
+        const mainhandNum = mainhand === -1 ? candycane1 : mainhand;
+
+        // Double-handed mainhand
+        if (!warriorItems.offhand) {
+          resolve(
+            Promise.all([
+              unequip("offhand"),
+              equip_batch([{ num: mainhandNum, slot: "mainhand" }]),
+            ]),
+          );
+          return;
+        }
+
+        // If offhand === mainhand, better use the a different slot
+        const offhand =
+          warriorItems.offhand === warriorItems.mainhand
+            ? findMaxLevelItem(warriorItems.offhand, 1)
+            : findMaxLevelItem(warriorItems.offhand);
         resolve(
           equip_batch(
-            buildEquip(
-              mainhand === -1 ? candycane1 : mainhand,
-              offhand === -1 ? candycane2 : offhand,
-            ),
+            buildEquip(mainhandNum, offhand === -1 ? candycane2 : offhand),
           ),
         );
       }, projectileEtaMs(targetToAttack));
