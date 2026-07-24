@@ -222,8 +222,14 @@ async function fight(target) {
     promisesToAwait.push(
       attack(targetToAttack)
         .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeComponsate);
+          const before = attackFrequencyBeforeComponsate;
+          const now = Date.now();
+          attackSpeedCompensate(before);
           reduceCd("attack");
+          console.warn(
+            `ATK dt=${now - (parent.__lastAtk || now)} expected=${(1000 / before) | 0} cd=${ms_to_next_skill("attack")} refunded=${before > character.frequency}`,
+          );
+          parent.__lastAtk = now;
         })
         .catch((e) => attackErrorHandler(e, targetToAttack)),
     );
