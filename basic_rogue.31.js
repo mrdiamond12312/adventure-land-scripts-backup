@@ -19,6 +19,12 @@ if (parent.caracAL) {
 var originRangeRate = 0.95;
 rangeRate = originRangeRate;
 
+const reduceCd = (skillName, isPingBased = true) =>
+  reduce_cooldown(
+    skillName,
+    isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
+  );
+
 async function fight(target) {
   // Snapshot for attackSpeedCompensate: weapon swaps mid-tick change frequency,
   // and the attack cooldown must be timed with the frequency at fire time.
@@ -67,15 +73,13 @@ async function fight(target) {
 
   if (isAttackReady && inRange(target) && shouldAttack()) {
     if (!ms_to_next_skill("invis")) {
-      use_skill("invis").then(() =>
-        reduce_cooldown("invis", Math.min(...parent.pings)),
-      );
+      use_skill("invis").then(() => reduceCd("invis"));
     }
     promisesToAwait.push(
       withTimeout(attack(target), 2500)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduce_cooldown("attack", Math.min(...parent.pings));
+          reduceCd("attack", false);
         })
         .catch((e) => {
           attackErrorHandler(e);
@@ -138,7 +142,7 @@ async function fuaLoop() {
       if (skillToBeUsed) {
         promisesToAwait.push(
           use_skill(skillToBeUsed, currentTarget).then(() =>
-            reduce_cooldown(skillToBeUsed, Math.min(...parent.pings)),
+            reduceCd(skillToBeUsed),
           ),
         );
       }

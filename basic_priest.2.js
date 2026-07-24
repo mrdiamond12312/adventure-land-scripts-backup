@@ -18,8 +18,11 @@ if (parent.caracAL) {
 var originRangeRate = 0.5;
 var rangeRate = originRangeRate;
 
-const reduceCd = (skillName) =>
-  reduce_cooldown(skillName, Math.min(...parent.pings));
+const reduceCd = (skillName, isPingBased = true) =>
+  reduce_cooldown(
+    skillName,
+    isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
+  );
 
 // Combat Logic
 
@@ -142,7 +145,7 @@ async function fight(target, isDeterminedToHeal = false) {
       attack(target)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduceCd("attack");
+          reduceCd("attack", false);
         })
         .catch((e) => attackErrorHandler(e)),
     );

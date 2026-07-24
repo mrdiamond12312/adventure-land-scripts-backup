@@ -96,27 +96,29 @@ function maybeCandySwap(targetToAttack) {
         const mainhand = findMaxLevelItem(warriorItems.mainhand);
         const mainhandNum = mainhand === -1 ? candycane1 : mainhand;
 
-        // Double-handed mainhand
+        let equipPromise;
         if (!warriorItems.offhand) {
-          resolve(
-            Promise.all([
-              unequip("offhand"),
-              equip_batch([{ num: mainhandNum, slot: "mainhand" }]),
-            ]),
+          // Double-handed mainhand: empty the offhand.
+          equipPromise = Promise.all([
+            unequip("offhand"),
+            equip_batch([{ num: mainhandNum, slot: "mainhand" }]),
+          ]);
+        } else {
+          // If offhand === mainhand, use a different inventory slot.
+          const offhand =
+            warriorItems.offhand === warriorItems.mainhand
+              ? findMaxLevelItem(warriorItems.offhand, 1)
+              : findMaxLevelItem(warriorItems.offhand);
+          equipPromise = equip_batch(
+            buildEquip(mainhandNum, offhand === -1 ? candycane2 : offhand),
           );
-          return;
         }
 
-        // If offhand === mainhand, better use the a different slot
-        const offhand =
-          warriorItems.offhand === warriorItems.mainhand
-            ? findMaxLevelItem(warriorItems.offhand, 1)
-            : findMaxLevelItem(warriorItems.offhand);
-        resolve(
-          equip_batch(
-            buildEquip(mainhandNum, offhand === -1 ? candycane2 : offhand),
-          ),
-        );
+        // The swap back re-bases next_skill.attack to the real weapon's cooldown
+        // (server does this on every equip that changes attack_ms), which wipes
+        // the ping reduction from the attack's .then. Re-apply it here, after the
+        // authoritative correction, so the ping shave actually sticks.
+        resolve(equipPromise.then(() => reduceCd("attack", false)));
       }, projectileEtaMs(targetToAttack));
     });
 
@@ -222,14 +224,11 @@ async function fight(target) {
     promisesToAwait.push(
       attack(targetToAttack)
         .then(() => {
-          const before = attackFrequencyBeforeComponsate;
-          const now = Date.now();
-          attackSpeedCompensate(before);
-          reduceCd("attack");
-          console.warn(
-            `ATK dt=${now - (parent.__lastAtk || now)} expected=${(1000 / before) | 0} cd=${ms_to_next_skill("attack")} refunded=${before > character.frequency}`,
-          );
-          parent.__lastAtk = now;
+          attackSpeedCompensate(attackFrequencyBeforeComponsate);
+          // Full-RTT reduction (character.ping): next_skill.attack lands ~1 ping
+          // after this call, and the two ping/2 legs cancel, so Math.min(pings)
+          // under-compensates and attacks land late whenever ping exceeds its floor.
+          reduceCd("attack", false);
         })
         .catch((e) => attackErrorHandler(e, targetToAttack)),
     );

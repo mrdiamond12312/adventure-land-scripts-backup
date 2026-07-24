@@ -22,8 +22,11 @@ const isWeak = (monster) =>
   monster.hp < calculateDamage(character, monster) * 0.9 || monster.target;
 const isCooperative = (monster) => monster.cooperative;
 const isMob = (entity) => entity.type === "monster";
-const reduceCd = (skillName) =>
-  reduce_cooldown(skillName, Math.min(...parent.pings));
+const reduceCd = (skillName, isPingBased = true) =>
+  reduce_cooldown(
+    skillName,
+    isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
+  );
 
 const tryMultiShot = async (skill, entityList) => {
   if (entityList.length === 0) return false;
@@ -34,7 +37,7 @@ const tryMultiShot = async (skill, entityList) => {
   return use_skill(skill, entityList)
     .then(() => {
       attackSpeedCompensate(attackFrequencyBeforeCompensate);
-      reduceCd("attack");
+      reduceCd("attack", false);
     })
     .catch((e) => attackErrorHandler(e));
 };
@@ -165,7 +168,7 @@ async function fight(target) {
         use_skill("attack", target)
           .then(() => {
             attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("attack");
+            reduceCd("attack", false);
           })
           .catch((e) => attackErrorHandler(e)),
       );
@@ -176,7 +179,7 @@ async function fight(target) {
         use_skill("attack", target)
           .then(() => {
             attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("attack");
+            reduceCd("attack", false);
           })
           .catch((e) => attackErrorHandler(e)),
       );
@@ -288,7 +291,7 @@ async function cupidHeal(playersToHeal) {
         promisesToAwait.push(
           use_skill("attack", healingTarget).then(() => {
             attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("attack");
+            reduceCd("attack", false);
           }),
         );
       }
