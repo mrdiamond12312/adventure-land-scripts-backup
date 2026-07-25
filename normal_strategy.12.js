@@ -1,29 +1,8 @@
 async function useNormalStrategy(target) {
   const promises = [];
   switch (character.ctype) {
-    case "mage":
-      const suggestedMageItems = calculateMageItems(target);
-
-      if (
-        Object.keys(suggestedMageItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedMageItems));
-      }
-
-      if (
-        character.mp > 100 &&
-        !is_on_cooldown("scare") &&
-        target.max_hp > 3000 &&
-        Object.values(parent.entities).some(
-          (entity) =>
-            entity.type === "monster" && entity.target === character.name,
-        )
-      )
-        promises.push(scareAwayMobs());
-
-      break;
+    // NOTE: mage skills (gear / scare) moved to per-skill loops in
+    // basic_mage.4.js (startSkillLoops) so they no longer gate the attack loop.
 
     case "warrior":
       const suggestedWarriorItems = calculateWarriorItems(target);

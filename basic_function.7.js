@@ -842,6 +842,28 @@ function ms_to_next_skill(skill) {
   return ms < 0 ? 0 : ms;
 }
 
+/**
+ * Self-rescheduling loop for one skill, decoupled from the attack loop.
+ * Reschedules on `ms_to_next_skill(skill)` (floored by `floorMs`); a non-skill
+ * name makes it a fixed `floorMs` loop.
+ * @param {string} skill - skill name to key the cooldown on
+ * @param {() => boolean} canUse - whether to cast this tick
+ * @param {() => Promise} cast - issues the skill; awaited to avoid double-casts
+ */
+function runSkillLoop({ skill, canUse, cast, floorMs = 100, timeoutMs = 1000 }) {
+  async function loop() {
+    try {
+      if (!character.rip && canUse()) await withTimeout(cast(), timeoutMs);
+    } catch (e) {
+      console.log(`[skillLoop:${skill}]`, e);
+    } finally {
+      setTimeout(loop, Math.max(ms_to_next_skill(skill), floorMs));
+    }
+  }
+  loop();
+  return loop;
+}
+
 async function leaveJail() {
   if (character.map === "jail" && !smart.moving && !isAdvanceSmartMoving) {
     log("Jail escape plan!");

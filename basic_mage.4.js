@@ -8,6 +8,7 @@ if (parent.caracAL) {
     ])
     .then(() => {
       mainLoop();
+      startSkillLoops();
     });
 } else {
   load_code(7);
@@ -78,96 +79,155 @@ async function fight(target) {
   // --- Early Exit ---
   if (!target) return;
 
-  const promisesToAwait = [];
-
-  // --- Energize Logic ---
-  const canEnergize = !is_on_cooldown("energize");
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
   const isTargetInAttackRange =
     distance(target, character) <= character.range + character.xrange;
-  if (canEnergize) {
-    let energizeTarget = null;
 
-    const buffee = getLowestMana();
-    const shouldEnergizeBuffee =
-      buffee &&
-      buffee.max_mp - buffee.mp > 500 &&
-      buffee.mp < buffee.max_mp * 0.65 &&
-      character.mp > character.max_mp * 0.75 &&
-      is_in_range(buffee, "energize");
-
-    if (shouldEnergizeBuffee) {
-      energizeTarget = buffee;
-    } else if (isAttackReady && isTargetInAttackRange) {
-      energizeTarget = character;
-    }
-
-    if (energizeTarget) {
-      promisesToAwait.push(
-        use_skill(
-          "energize",
-          energizeTarget,
-          Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
-        )
-          .then(() => reduceCd("energize"))
-          .catch((e) => attackErrorHandler(e)),
-      );
-    }
-  }
-
-  if (!isAttackReady && isTargetInAttackRange && shouldAttack()) {
-    promisesToAwait.push(currentStrategy(target));
-  }
-
+  // Attack only. Every non-attack skill (energize, reflection, and the
+  // farming-strategy skills/gear that used to be in currentStrategy) now runs on
+  // its own loop (startSkillLoops), so their server round-trips can never hold up
+  // this loop's reschedule — the next attack fires as soon as
+  // ms_to_next_skill("attack") elapses.
   if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
     set_message("Attacking");
-    promisesToAwait.push(
-      // currentStrategy(target),
-      attack(target)
-        .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduceCd("attack", false);
-        })
-        .catch((e) => {
-          attackErrorHandler(e);
-        }),
-    );
+    try {
+      await withTimeout(
+        attack(target)
+          .then(() => {
+            attackSpeedCompensate(attackFrequencyBeforeCompensate);
+            reduceCd("attack", false);
+          })
+          .catch((e) => {
+            attackErrorHandler(e);
+          }),
+        1000,
+      );
+    } catch (e) {
+      console.log(e);
+    }
   }
+}
 
-  // --- Await and Error Handling ---
-  try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
-  } catch (e) {
-    console.log(e);
-  }
+// --- Skills, each on its own loop -------------------------------------------
+// Every non-attack skill runs on its own runSkillLoop, keyed on that skill's
+// own cooldown and fully decoupled from the attack loop (fight/mainLoop). None
+// of these round-trips can delay the next attack anymore. The cburst/scare/gear
+// logic used to live inside currentStrategy() (pull_strategy/normal_strategy);
+// it now lives here so each piece gets its own cadence.
 
-  // --- Reflection Logic ---
-  const isMagicalTarget = target["damage_type"] === "magical";
-  const canUseReflection = !is_on_cooldown("reflection") && character.mp > 1000;
-  const targetAggroesParty = partyMems.includes(target.target);
+// Energize either the lowest-mana ally (a real buff) or self right as an attack
+// is about to land (dumps spare mp into the shot).
+function getEnergizeTarget() {
+  const buffee = getLowestMana();
+  const shouldEnergizeBuffee =
+    buffee &&
+    buffee.max_mp - buffee.mp > 500 &&
+    buffee.mp < buffee.max_mp * 0.65 &&
+    character.mp > character.max_mp * 0.75 &&
+    is_in_range(buffee, "energize");
+  if (shouldEnergizeBuffee) return buffee;
 
-  if (isMagicalTarget && canUseReflection && targetAggroesParty) {
-    use_skill("reflection", get_entity(target.target)).then(() =>
-      reduceCd("reflection"),
-    );
-  }
+  const target = get_targeted_monster();
+  const isAttackReady =
+    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  const isTargetInAttackRange =
+    target && distance(target, character) <= character.range + character.xrange;
+  if (isAttackReady && isTargetInAttackRange) return character;
 
-  // if (character.mp > 2000 && !is_on_cooldown("alchemy") && !isInvFull()) {
-  //   const sellableSlot = character.items.findIndex((item) =>
-  //     SALE_ABLE.includes(item?.name)
-  //   );
+  return null;
+}
 
-  //   if (sellableSlot !== -1) {
-  //     if (sellableSlot === 0 && SALE_ABLE.includes(character.items[0]?.name)) {
-  //       use_skill("alchemy");
-  //     } else {
-  //       swap(0, sellableSlot).then(() => {
-  //         if (SALE_ABLE.includes(character.items[0]?.name)) use_skill("alchemy");
-  //       });
-  //     }
-  //   }
-  // }
+function startSkillLoops() {
+  // Gear: not a cooldown skill, so it runs on a fixed cadence (floorMs).
+  // calculateMageItems already picks burst vs. farming gear from the target.
+  runSkillLoop({
+    skill: "gear",
+    floorMs: 200,
+    canUse: () => {
+      const target = get_targeted_monster();
+      if (!target) return false;
+      const suggested = calculateMageItems(target);
+      return Object.keys(suggested).some(
+        (slot) => character.slots[slot]?.name !== suggested[slot],
+      );
+    },
+    cast: () => equipBatch(calculateMageItems(get_targeted_monster())),
+  });
+
+  runSkillLoop({
+    skill: "energize",
+    canUse: () => !is_on_cooldown("energize") && getEnergizeTarget() != null,
+    cast: () =>
+      use_skill(
+        "energize",
+        getEnergizeTarget(),
+        Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
+      )
+        .then(() => reduceCd("energize"))
+        .catch((e) => attackErrorHandler(e)),
+  });
+
+  runSkillLoop({
+    skill: "reflection",
+    canUse: () => {
+      const target = get_targeted_monster();
+      return (
+        target &&
+        target["damage_type"] === "magical" &&
+        !is_on_cooldown("reflection") &&
+        character.mp > 1000 &&
+        partyMems.includes(target.target)
+      );
+    },
+    cast: () =>
+      use_skill(
+        "reflection",
+        get_entity(get_targeted_monster().target),
+      ).then(() => reduceCd("reflection")),
+  });
+
+  // cburst: pull strategy only — spend spare mp to help the priest keep the
+  // party topped off, but only when the healer is close, healthy and a priest.
+  runSkillLoop({
+    skill: "cburst",
+    canUse: () => {
+      if (currentStrategy !== usePullStrategies) return false;
+      if (character.mp <= 400 || get_targeted_monster()?.["1hp"]) return false;
+      const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
+      return (
+        partyHealer &&
+        partyHealer.ctype === "priest" &&
+        distance(partyHealer, character) <
+          (partyHealer.range ?? character.range * 0.7) &&
+        partyHealer.hp > 0.6 * partyHealer.max_hp &&
+        getMonstersToCBurst().length >= 1
+      );
+    },
+    cast: () =>
+      use_skill("cburst", getMonstersToCBurst()).then(() =>
+        reduce_cooldown("cburst", -2000),
+      ),
+  });
+
+  // scare: shake off mobs on a tanky target. Pull mode additionally requires
+  // the mage to actually be hurt before bailing.
+  runSkillLoop({
+    skill: "scare",
+    canUse: () => {
+      if (character.mp <= 100) return false;
+      const target = get_targeted_monster();
+      if (!target || target.max_hp <= 3000) return false;
+      const mobsOnMe = Object.values(parent.entities).some(
+        (entity) => entity.type === "monster" && entity.target === character.name,
+      );
+      if (!mobsOnMe) return false;
+      return currentStrategy === usePullStrategies
+        ? character.hp < character.max_hp * 0.7
+        : true;
+    },
+    cast: () => scareAwayMobs(),
+  });
 }
 
 async function mainLoop() {
@@ -270,4 +330,7 @@ async function mainLoop() {
   setTimeout(mainLoop, getLoopInterval());
 }
 
-if (!parent.caracAL) mainLoop();
+if (!parent.caracAL) {
+  mainLoop();
+  startSkillLoops();
+}

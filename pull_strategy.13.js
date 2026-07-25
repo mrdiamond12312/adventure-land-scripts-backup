@@ -14,47 +14,8 @@ async function usePullStrategies(target) {
   const promises = [];
 
   switch (character.ctype) {
-    case "mage":
-      const suggestedMageItems = calculateMageItems(target);
-      if (
-        Object.keys(suggestedMageItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedMageItems));
-      }
-
-      if (
-        ms_to_next_skill("cburst") === 0 &&
-        character.mp > 400 &&
-        !get_targeted_monster()?.["1hp"] &&
-        partyHealer &&
-        partyHealer.ctype === "priest" &&
-        distance(partyHealer, character) <
-          (partyHealer.range ?? character.range * 0.7) &&
-        partyHealer?.hp > 0.6 * partyHealer?.max_hp &&
-        getMonstersToCBurst().length >= 1
-      ) {
-        promises.push(
-          use_skill("cburst", getMonstersToCBurst()).then(() =>
-            reduce_cooldown("cburst", -2000),
-          ),
-        );
-      }
-
-      if (
-        character.mp > 100 &&
-        !is_on_cooldown("scare") &&
-        target.max_hp > 3000 &&
-        character.hp < character.max_hp * 0.7 &&
-        Object.values(parent.entities).some(
-          (entity) =>
-            entity.type === "monster" && entity.target === character.name,
-        )
-      )
-        promises.push(scareAwayMobs());
-
-      break;
+    // NOTE: mage skills (gear / cburst / scare) moved to per-skill loops in
+    // basic_mage.4.js (startSkillLoops) so they no longer gate the attack loop.
 
     case "warrior":
       const suggestedWarriorItems = calculateWarriorItems(target);
