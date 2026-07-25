@@ -266,19 +266,32 @@ async function fight(target) {
 // Mp held back by the skill checks so a temporal surge stays affordable
 const SURGE_MP_OFFSET = 1000;
 
+// Below this hp a mob dies too fast for the mark to pay for its mp
+const MARK_HP_THRESHOLD = 15_000;
+
 /**
- * Current target when it is a chunky, unmarked mob.
+ * Beefiest unmarked mob aggroed onto the party and in mark range.
  * @returns {Object|null} the mob to mark, or null
  */
 function getHuntersMarkTarget() {
-  const target = get_targeted_monster();
-  const shouldMark =
-    target &&
-    !target.s?.marked &&
-    target.hp > 3000 &&
-    character.mp > 300 + SURGE_MP_OFFSET &&
-    !is_on_cooldown("huntersmark");
-  return shouldMark ? target : null;
+  if (character.mp < SURGE_MP_OFFSET || is_on_cooldown("huntersmark"))
+    return null;
+
+  const party = new Set([...partyMems, partyMerchant, ...parent.party_list]);
+
+  return (
+    Object.values(parent.entities)
+      .filter(
+        (entity) =>
+          entity.type === "monster" &&
+          entity.target &&
+          party.has(entity.target) &&
+          !entity.s?.marked &&
+          entity.hp > MARK_HP_THRESHOLD &&
+          is_in_range(entity, "huntersmark"),
+      )
+      .sort((lhs, rhs) => rhs.hp - lhs.hp)[0] ?? null
+  );
 }
 
 const EMERGENCY_HEAL_HP_RATIO = 0.45;

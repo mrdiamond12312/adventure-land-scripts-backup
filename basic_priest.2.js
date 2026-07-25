@@ -144,32 +144,27 @@ async function fight(target, isMovingControlled = false) {
 
 // --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
 
-// Best mob to curse: aggroing a party member, cursable, chunky, biggest cluster.
+// Below this hp a mob dies too fast for the curse to pay for its mp
+const CURSE_HP_THRESHOLD = 15_000;
+
+// Beefiest uncursed mob aggroing a party member, in curse range.
 function getCurseTarget() {
   if (is_on_cooldown("curse") || character.mp <= 1600) return null;
   const prioritized = prioritizedNames();
-  const candidate = Object.values(parent.entities)
-    .filter(
-      (mob) =>
-        mob.type === "monster" &&
-        !mob.dead &&
-        !mob.s.curse &&
-        is_in_range(mob, "curse") &&
-        mob.max_hp > 3000 &&
-        prioritized.includes(mob.target),
-    )
-    .map((mob) => ({ mob, cluster: numberOfMonsterAroundTarget(mob, 17) }))
-    .sort((lhs, rhs) => {
-      if (lhs.mob.cooperative !== rhs.mob.cooperative)
-        return lhs.mob.cooperative ? -1 : 1;
-      if (lhs.cluster === rhs.cluster) return rhs.mob.hp - lhs.mob.hp;
-      return rhs.cluster - lhs.cluster;
-    })[0]?.mob;
 
-  const targetToCurse = candidate ?? get_targeted_monster();
-  return targetToCurse && is_in_range(targetToCurse, "curse")
-    ? targetToCurse
-    : null;
+  return (
+    Object.values(parent.entities)
+      .filter(
+        (mob) =>
+          mob.type === "monster" &&
+          !mob.dead &&
+          !mob.s.curse &&
+          is_in_range(mob, "curse") &&
+          mob.hp > CURSE_HP_THRESHOLD &&
+          prioritized.includes(mob.target),
+      )
+      .sort((lhs, rhs) => rhs.hp - lhs.hp)[0] ?? null
+  );
 }
 
 // A party member (not us, not the tank) in absorb range and holding aggro.
