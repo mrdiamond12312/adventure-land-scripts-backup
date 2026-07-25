@@ -34,8 +34,8 @@ const getHomeServer = () =>
 const isAtHomeServer = () => currentServer === getHomeServer();
 
 async function hopToServer(serverRegion, serverIdentifier) {
-  if (parent.caracAL) {
-    parent.caracAL.siblings.forEach((id) => send_cm(id, "loot-before-hopping"));
+  if (parent.caracAL) { 
+    send_cm(parent.caracAL.siblings, "loot-before-hopping");
     await midasLooting(true);
     await sleep(1000);
 
