@@ -91,15 +91,6 @@ async function fight(target) {
 
     const promisesToAwait = [];
 
-    promisesToAwait.push(
-      attack(target)
-        .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduceCd("attack", false);
-        })
-        .catch((e) => attackErrorHandler(e)),
-    );
-
     if (!is_on_cooldown("energize")) {
       promisesToAwait.push(
         use_skill(
@@ -111,6 +102,15 @@ async function fight(target) {
           .catch((e) => attackErrorHandler(e)),
       );
     }
+    
+    promisesToAwait.push(
+      attack(target)
+        .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeCompensate);
+          reduceCd("attack", false);
+        })
+        .catch((e) => attackErrorHandler(e)),
+    );
 
     try {
       await withTimeout(Promise.allSettled(promisesToAwait), 1000);
@@ -219,7 +219,8 @@ function startSkillLoops() {
       const target = get_targeted_monster();
       if (!target || target.max_hp <= 3000) return false;
       const mobsOnMe = Object.values(parent.entities).some(
-        (entity) => entity.type === "monster" && entity.target === character.name,
+        (entity) =>
+          entity.type === "monster" && entity.target === character.name,
       );
       if (!mobsOnMe) return false;
       return currentStrategy === usePullStrategies
