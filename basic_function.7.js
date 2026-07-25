@@ -1864,11 +1864,11 @@ const DYNAMIC_PARTY_PRESETS = {
     ) {
       setRogueSpeedLastDeployment();
       if (shouldDeployRogue()) {
-        return [WARRIOR, ROGUE, MAGE];
+        return [WARRIOR, ROGUE, RANGER];
       } else {
-        // RANGER = RANGER1;
+        RANGER = RANGER1;
         HEALER = PRIEST;
-        return [WARRIOR, PRIEST, MAGE];
+        return [WARRIOR, PRIEST, RANGER];
       }
     }
 
