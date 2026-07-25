@@ -89,12 +89,19 @@ function maybeCandySwap(targetToAttack) {
     candycane1 !== -1 && (isFastAttacker || candycane2 !== -1);
   if (!canCandySwap) return;
 
+  // One-way trip for an equip to take effect server-side
+  const equipLatencyMs = character.ping / 2;
+  const etaMs = projectileEtaMs(targetToAttack);
+
+  if (etaMs <= equipLatencyMs) return;
+
   isEquipingItems = true;
 
-  // Anchor the hold to when the canes actually land. The ETA countdown used to
-  // start when the equip was sent, so a ping-sized chunk of it was already
-  // spent before the canes were in hand.
-  const swapBackAt = Date.now() + projectileEtaMs(targetToAttack);
+  const swapBackAt = Date.now() + etaMs + equipLatencyMs;
+
+  const swapBackDeadline =
+    Date.now() + characterAtkCycleMs - equipLatencyMs - CANDY_MIN_HOLD_MS;
+
   const candyEquip = equip_batch(buildEquip(candycane1, candycane2));
 
   const swapBackAfterHit = () =>
@@ -122,12 +129,11 @@ function maybeCandySwap(targetToAttack) {
           );
         }
 
-        // The swap back re-bases next_skill.attack to the real weapon's cooldown
-        // (server does this on every equip that changes attack_ms), which wipes
-        // the ping reduction from the attack's .then. Re-apply it here, after the
-        // authoritative correction, so the ping shave actually sticks.
         resolve(equipPromise.then(() => reduceCd("attack", false)));
-      }, Math.max(CANDY_MIN_HOLD_MS, swapBackAt - Date.now()));
+      }, Math.min(
+        Math.max(CANDY_MIN_HOLD_MS, swapBackAt - Date.now()),
+        Math.max(0, swapBackDeadline - Date.now()),
+      ));
     });
 
   return Promise.allSettled([
