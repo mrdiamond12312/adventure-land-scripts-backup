@@ -179,7 +179,7 @@ async function get_tracktrix_data() {
 }
 
 async function getMaxScore(monsterId) {
-  return (await get_tracktrix_data()).max[monsterId];
+  return (await get_tracktrix_data()).max.monsters[monsterId];
 }
 
 //// INVENTORY functions
