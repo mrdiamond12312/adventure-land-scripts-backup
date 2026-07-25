@@ -146,20 +146,13 @@ function getReflectionBuffee() {
 }
 
 function startSkillLoops() {
-  // Gear: not a cooldown skill, so it runs on a fixed cadence (floorMs).
-  // calculateMageItems already picks burst vs. farming gear from the target.
+  // Strategy: gear + pull-strategy skills (cburst) run on a fixed cadence via
+  // currentStrategy, decoupled from the attack loop.
   runSkillLoop({
-    skill: "gear",
+    skill: "strategy",
     floorMs: 100,
-    canUse: () => {
-      const target = get_targeted_monster();
-      if (!target) return false;
-      const suggested = calculateMageItems(target);
-      return Object.keys(suggested).some(
-        (slot) => character.slots[slot]?.name !== suggested[slot],
-      );
-    },
-    cast: () => equipBatch(calculateMageItems(get_targeted_monster())),
+    canUse: () => true,
+    cast: () => currentStrategy(get_target()),
   });
 
   runSkillLoop({
@@ -184,29 +177,6 @@ function startSkillLoops() {
     cast: () =>
       use_skill("reflection", getReflectionBuffee()).then(() =>
         reduceCd("reflection"),
-      ),
-  });
-
-  // cburst: pull strategy only — spend spare mp to help the priest keep the
-  // party topped off, but only when the healer is close, healthy and a priest.
-  runSkillLoop({
-    skill: "cburst",
-    canUse: () => {
-      if (currentStrategy !== usePullStrategies) return false;
-      if (character.mp <= 400 || get_targeted_monster()?.["1hp"]) return false;
-      const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
-      return (
-        partyHealer &&
-        partyHealer.ctype === "priest" &&
-        distance(partyHealer, character) <
-          (partyHealer.range ?? character.range * 0.7) &&
-        partyHealer.hp > 0.6 * partyHealer.max_hp &&
-        getMonstersToCBurst().length >= 1
-      );
-    },
-    cast: () =>
-      use_skill("cburst", getMonstersToCBurst()).then(() =>
-        reduce_cooldown("cburst", -2000),
       ),
   });
 

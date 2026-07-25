@@ -14,13 +14,38 @@ async function usePullStrategies(target) {
   const promises = [];
 
   switch (character.ctype) {
-    // NOTE: mage skills (gear / cburst / scare) moved to per-skill loops in
-    // basic_mage.4.js (startSkillLoops) so they no longer gate the attack loop.
+    case "mage":
+      const suggestedMageItems = calculateMageItems(target);
 
-    // NOTE: warrior warcry / hardshell / stomp / defensive-taunt / scare moved to
-    // per-skill loops in basic_warrior.9.js (startSkillLoops). Gear + the
-    // strategic pull skills (agitate, pull-taunt) stay here, driven on a fixed
-    // cadence by that file's strategy loop calling currentStrategy.
+      if (
+        Object.keys(suggestedMageItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
+        )
+      ) {
+        promises.push(equipBatch(suggestedMageItems));
+      }
+
+      // Spend spare mp to help the priest keep the party topped off, but only
+      // when the healer is close, healthy and actually a priest.
+      if (
+        ms_to_next_skill("cburst") === 0 &&
+        character.mp > 400 &&
+        !get_targeted_monster()?.["1hp"] &&
+        partyHealer &&
+        partyHealer.ctype === "priest" &&
+        distance(partyHealer, character) <
+          (partyHealer.range ?? character.range * 0.7) &&
+        partyHealer.hp > 0.6 * partyHealer.max_hp &&
+        getMonstersToCBurst().length >= 1
+      ) {
+        promises.push(
+          use_skill("cburst", getMonstersToCBurst()).then(() =>
+            reduce_cooldown("cburst", -2000),
+          ),
+        );
+      }
+      break;
+
     case "warrior":
       const suggestedWarriorItems = calculateWarriorItems(target);
 
@@ -184,8 +209,8 @@ async function usePullStrategies(target) {
               (mob.damage_type === "physical"
                 ? physicalMobsTargetingSelf.length < character.courage
                 : mob.damage_type === "magical"
-                ? magicalMobsTargetingSelf.length < character.mcourage
-                : pureMobsTargetingSelf.length < character.pcourage),
+                  ? magicalMobsTargetingSelf.length < character.mcourage
+                  : pureMobsTargetingSelf.length < character.pcourage),
           );
 
         if (mobToPull)
@@ -224,8 +249,18 @@ async function usePullStrategies(target) {
       }
       break;
 
-    // NOTE: priest skills (gear / scare) moved to per-skill loops in
-    // basic_priest.2.js (startSkillLoops) so they no longer gate the attack loop.
+    case "priest":
+      const suggestedPriestItems = calculatePriestItems(target);
+
+      if (
+        Object.keys(suggestedPriestItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
+        )
+      ) {
+        promises.push(equipBatch(suggestedPriestItems));
+      }
+      break;
+
     default:
       break;
   }

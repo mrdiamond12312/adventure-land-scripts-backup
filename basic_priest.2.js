@@ -27,8 +27,7 @@ const reduceCd = (skillName, isPingBased = true) =>
 // Combat Logic
 
 async function fight(target, isMovingControlled = false) {
-  // Snapshot for attackSpeedCompensate: heal and attack share the attack
-  // cooldown, and weapon swaps change frequency mid-tick, so capture it now.
+  // Snapshot for attackSpeedCompensate
   const attackFrequencyBeforeCompensate = character.frequency;
   const promisesToAwait = [];
 
@@ -69,7 +68,7 @@ async function fight(target, isMovingControlled = false) {
       (character.slots.orb?.name === "test_orb" ||
         character.slots.mainhand?.name === "oozingterror") &&
       !target?.cooperative
-        ? mobsInRange
+        ? (mobsInRange
             .filter(
               (mob) =>
                 !mob.s.poisoned && prioritizedCharacter.includes(mob.target),
@@ -80,7 +79,7 @@ async function fight(target, isMovingControlled = false) {
               }
               return rhs.attack - lhs.attack;
             })
-            .shift() ?? target
+            .shift() ?? target)
         : target;
 
     target = targetToTaunt ?? targetToAttack;
@@ -88,10 +87,7 @@ async function fight(target, isMovingControlled = false) {
       target && distance(target, character) <= characterBufferedRange;
   }
 
-  // Decide heal vs attack — they share the attack cooldown, so it's one or the
-  // other. Heal wins when an ally is in heal range. Point our target at whatever
-  // we're about to act on *now*, even while on cooldown, so the gear loop
-  // (reading get_target()) tunes for it ahead of the shot.
+  // Decide heal vs attack
   const healRange = character.range + character.xrange * 0.9;
   const buffees = getPlayersToHeal();
   const healee = buffees.find(
@@ -123,9 +119,6 @@ async function fight(target, isMovingControlled = false) {
     }
   }
 
-  // No one in heal range: close on the nearest prioritized buffee that wants a
-  // heal. Moving doesn't spend the attack cooldown, so an in-range mob still
-  // gets attacked above this tick.
   if (!healee && !smart.moving && !isAdvanceSmartMoving) {
     const prioritizedBuffeesNames = prioritizedNames();
     const approaching = buffees.find((buffee) =>
@@ -208,7 +201,8 @@ function shouldPartyHeal() {
     allies.some(
       (lhs) =>
         lhs.hp < lhs.max_hp * 0.3 ||
-        (lhs.hp < lhs.max_hp - modInjuredThreshold && !is_in_range(lhs, "heal")),
+        (lhs.hp < lhs.max_hp - modInjuredThreshold &&
+          !is_in_range(lhs, "heal")),
     ) ||
     (allies.every((lhs) => lhs.hp < lhs.max_hp - modInjuredThreshold * 5) &&
       allies.length > 1)
@@ -314,7 +308,9 @@ function getZapTarget() {
       }
 
       if (lhs.target && rhs.target)
-        return lhs.hp_p !== rhs.hp_p ? rhs.hp_p - lhs.hp_p : rhs.dist - lhs.dist;
+        return lhs.hp_p !== rhs.hp_p
+          ? rhs.hp_p - lhs.hp_p
+          : rhs.dist - lhs.dist;
 
       if (isTanker) return rhs.dist - lhs.dist;
 
@@ -327,19 +323,13 @@ function getZapTarget() {
 }
 
 function startSkillLoops() {
-  // Gear: not a cooldown skill, runs on a fixed cadence (floorMs).
+  // Strategy: gear runs on a fixed cadence via currentStrategy, so each
+  // strategy can dress the priest differently, decoupled from the attack loop.
   runSkillLoop({
-    skill: "gear",
+    skill: "strategy",
     floorMs: 100,
-    canUse: () => {
-      const target = get_target();
-      if (!target) return false;
-      const suggested = calculatePriestItems(target);
-      return Object.keys(suggested).some(
-        (slot) => character.slots[slot]?.name !== suggested[slot],
-      );
-    },
-    cast: () => equipBatch(calculatePriestItems(get_target())),
+    canUse: () => true,
+    cast: () => currentStrategy(get_target()),
   });
 
   runSkillLoop({

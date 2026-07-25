@@ -1,12 +1,18 @@
 async function useNormalStrategy(target) {
   const promises = [];
   switch (character.ctype) {
-    // NOTE: mage skills (gear / scare) moved to per-skill loops in
-    // basic_mage.4.js (startSkillLoops) so they no longer gate the attack loop.
+    case "mage":
+      const suggestedMageItems = calculateMageItems(target);
 
-    // NOTE: warrior warcry / hardshell / stomp / defensive-taunt / scare moved to
-    // per-skill loops in basic_warrior.9.js (startSkillLoops). Gear stays here,
-    // driven on a fixed cadence by that file's strategy loop calling currentStrategy.
+      if (
+        Object.keys(suggestedMageItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
+        )
+      ) {
+        promises.push(equipBatch(suggestedMageItems));
+      }
+      break;
+
     case "warrior":
       const suggestedWarriorItems = calculateWarriorItems(target);
 
@@ -47,8 +53,17 @@ async function useNormalStrategy(target) {
       }
       break;
 
-    // NOTE: priest skills (gear / scare) moved to per-skill loops in
-    // basic_priest.2.js (startSkillLoops) so they no longer gate the attack loop.
+    case "priest":
+      const suggestedPriestItems = calculatePriestItems(target);
+
+      if (
+        Object.keys(suggestedPriestItems).some(
+          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
+        )
+      ) {
+        promises.push(equipBatch(suggestedPriestItems));
+      }
+      break;
   }
   return Promise.all(promises);
 }
