@@ -16,6 +16,7 @@ if (parent.caracAL) {
     .then(() => {
       cleaveLoop();
       mainLoop();
+      startSkillLoops();
     });
 } else {
   load_code(7);
@@ -207,27 +208,16 @@ async function fight(target) {
 
   const promisesToAwait = [];
 
-  // --- Attack & Warcry Logic ---
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-
-  if (!isAttackReady && inRange(target) && shouldAttack()) {
-    promisesToAwait.push(currentStrategy(target));
-  }
 
   const targetToAttack = inRange(target) ? target : altTarget;
   if (isAttackReady && targetToAttack && shouldAttack()) {
     set_message("Attacking");
-    // const xrangeUsed = distance(target, character) - character.range;
-    // if (xrangeUsed > 0) character.xrange -= xrangeUsed;
-    // Main attack execution
     promisesToAwait.push(
       attack(targetToAttack)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeComponsate);
-          // Full-RTT reduction (character.ping): next_skill.attack lands ~1 ping
-          // after this call, and the two ping/2 legs cancel, so Math.min(pings)
-          // under-compensates and attacks land late whenever ping exceeds its floor.
           reduceCd("attack", false);
         })
         .catch((e) => attackErrorHandler(e, targetToAttack)),
@@ -235,105 +225,6 @@ async function fight(target) {
 
     const candySwap = maybeCandySwap(targetToAttack);
     if (candySwap) promisesToAwait.push(candySwap);
-
-    // Warcry check (placed here to potentially benefit from a new attack)
-    const canWarcry =
-      character.mp > G.skills["warcry"].mp &&
-      !is_on_cooldown("warcry") &&
-      !character.s["warcry"];
-
-    if (canWarcry) {
-      promisesToAwait.push(
-        use_skill("warcry").then(() => reduceCd("warcry", false)), // Use full reduction for Warcry
-      );
-    }
-  }
-
-  // --- Defensive Abilities ---
-
-  // Hardshell
-  const shouldUseHardShell =
-    character.mp > G.skills["hardshell"].mp &&
-    !is_on_cooldown("hardshell") &&
-    avgDmgTaken(character) > 500 &&
-    character.hp < character.max_hp * 0.5;
-
-  if (shouldUseHardShell) {
-    promisesToAwait.push(use_skill("hardshell"));
-  }
-
-  // Warrior Stomp (Basher logic)
-  const hasBasherInInventory = locate_item("basher") !== -1;
-  const partyHasInjured = (
-    parent.party_list.length ? parent.party_list : [character]
-  )
-    .map((id) => get_player(id))
-    .filter((entity) => entity)
-    .some((player) => player.hp < player.max_hp * 0.4);
-
-  if (hasBasherInInventory && partyHasInjured) {
-    promisesToAwait.push(warriorStomp());
-  }
-
-  // --- Taunt Logic ---
-  const isTanker = isAssignedAsTanker();
-  const canTaunt =
-    isTanker && character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt");
-  const partyHealer = get_player(HEALER) || get_player(RANGER);
-  const isHealerAlive = partyHealer && !partyHealer.rip;
-
-  if (canTaunt && isHealerAlive) {
-    // --- If Mobs targeting allies
-    const mobsTargetingAlly = Object.values(parent.entities)
-      .filter(
-        (entity) =>
-          entity.type === "monster" &&
-          [...partyMems, partyMerchant].some(
-            (ally) => ally !== character.name && entity.target === ally,
-          ) &&
-          calculateDamage(entity, character) < 3000 && // Warrior can take the damage
-          !entity.cooperative &&
-          is_in_range(entity, "taunt"),
-      )
-      .sort((lhs, rhs) => rhs.attack - lhs.attack)
-      .shift();
-
-    if (mobsTargetingAlly) {
-      promisesToAwait.push(
-        use_skill("taunt", mobsTargetingAlly).then(() =>
-          reduceCd("taunt", false),
-        ), // Use full reduction for Taunt
-      );
-    }
-
-    // --- Taunt the current target if it's not already targeting the warrior and is weak enough
-    const shouldTauntTarget =
-      !target.target ||
-      (target.target !== character.name &&
-        partyMems.includes(target.target) &&
-        target.attack < 1500 &&
-        !target.cooperative &&
-        is_in_range(target, "taunt"));
-
-    if (mobsTargetingAlly === undefined && shouldTauntTarget) {
-      promisesToAwait.push(
-        use_skill("taunt", target).then(() => reduceCd("taunt", false)), // Use full reduction for Taunt
-      );
-    }
-  }
-
-  // --- Emergency Scare Logic ---
-  const isDangerouslyLow =
-    !partyHealer || partyHealer.rip || character.hp < character.max_hp * 0.3;
-  const isOverwhelmed =
-    Object.values(parent.entities).filter(
-      (mob) => mob.target === character.name,
-    ).length > 2;
-  const isReadyToScare =
-    !is_on_cooldown("scare") && character.mp > 100 && character.cc < 100;
-
-  if (character.fear || (isDangerouslyLow && isOverwhelmed && isReadyToScare)) {
-    promisesToAwait.push(scareAwayMobs());
   }
 
   // --- Kiting Rate Adjustment ---
@@ -379,6 +270,116 @@ async function cleaveLoop() {
     // Cleave loop runs on its own dedicated timer
     setTimeout(cleaveLoop, Math.max(ms_to_next_skill("cleave"), 100));
   }
+}
+
+// --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
+
+/**
+ * Defensive taunt target only: a mob to peel off an ally, or a weak current
+ * target attacking a party member (needs a live healer). Strategic pull-taunt
+ * stays in pull_strategy.13.js (driven by the strategy loop).
+ * @returns {Object|null} the mob to taunt, or null
+ */
+function getTauntTarget() {
+  if (!isAssignedAsTanker() || character.mp <= G.skills["taunt"].mp) return null;
+
+  const partyHealer = get_player(HEALER) || get_player(RANGER);
+  if (!partyHealer || partyHealer.rip) return null;
+
+  const mobsTargetingAlly = Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity.type === "monster" &&
+        [...partyMems, partyMerchant].some(
+          (ally) => ally !== character.name && entity.target === ally,
+        ) &&
+        calculateDamage(entity, character) < 3000 &&
+        !entity.cooperative &&
+        is_in_range(entity, "taunt"),
+    )
+    .sort((lhs, rhs) => rhs.attack - lhs.attack)[0];
+  if (mobsTargetingAlly) return mobsTargetingAlly;
+
+  const target = get_targeted_monster();
+  const shouldTauntTarget =
+    target &&
+    (!target.target ||
+      (target.target !== character.name &&
+        partyMems.includes(target.target) &&
+        target.attack < 1500 &&
+        !target.cooperative &&
+        is_in_range(target, "taunt")));
+  return shouldTauntTarget ? target : null;
+}
+
+/** @returns {boolean} whether the emergency scare should fire this tick */
+function shouldWarriorScare() {
+  const partyHealer = get_player(HEALER) || get_player(RANGER);
+  const isDangerouslyLow =
+    !partyHealer || partyHealer.rip || character.hp < character.max_hp * 0.3;
+  const isOverwhelmed =
+    Object.values(parent.entities).filter(
+      (mob) => mob.target === character.name,
+    ).length > 2;
+  const isReadyToScare = character.mp > 100 && character.cc < 100;
+  return character.fear || (isDangerouslyLow && isOverwhelmed && isReadyToScare);
+}
+
+function startSkillLoops() {
+  // Strategy: gear + pull-strategy skills (agitate, pull-taunt) run on a fixed
+  // cadence via currentStrategy, decoupled from the attack loop.
+  runSkillLoop({
+    skill: "strategy",
+    floorMs: 100,
+    canUse: () => true,
+    cast: () => currentStrategy(get_target()),
+  });
+
+  runSkillLoop({
+    skill: "warcry",
+    canUse: () =>
+      character.mp > G.skills["warcry"].mp &&
+      !character.s["warcry"] &&
+      !!get_targeted_monster(),
+    cast: () => use_skill("warcry").then(() => reduceCd("warcry", false)),
+  });
+
+  runSkillLoop({
+    skill: "hardshell",
+    canUse: () =>
+      character.mp > G.skills["hardshell"].mp &&
+      avgDmgTaken(character) > 500 &&
+      character.hp < character.max_hp * 0.5,
+    cast: () => use_skill("hardshell"),
+  });
+
+  runSkillLoop({
+    skill: "stomp",
+    canUse: () => {
+      const hasBasher = locate_item("basher") !== -1;
+      const partyHasInjured = (
+        parent.party_list.length ? parent.party_list : [character]
+      )
+        .map((id) => get_player(id))
+        .filter((entity) => entity)
+        .some((player) => player.hp < player.max_hp * 0.4);
+      return hasBasher && partyHasInjured;
+    },
+    cast: () => warriorStomp(),
+  });
+
+  runSkillLoop({
+    skill: "taunt",
+    canUse: () => getTauntTarget() != null,
+    cast: () =>
+      use_skill("taunt", getTauntTarget()).then(() => reduceCd("taunt", false)),
+  });
+
+  runSkillLoop({
+    skill: "scare",
+    canUse: () => shouldWarriorScare(),
+    cast: () => scareAwayMobs(),
+  });
 }
 
 if (!parent.caracAL) cleaveLoop();
@@ -468,4 +469,7 @@ async function mainLoop() {
   }
 }
 
-if (!parent.caracAL) mainLoop();
+if (!parent.caracAL) {
+  mainLoop();
+  startSkillLoops();
+}

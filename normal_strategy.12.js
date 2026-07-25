@@ -4,6 +4,9 @@ async function useNormalStrategy(target) {
     // NOTE: mage skills (gear / scare) moved to per-skill loops in
     // basic_mage.4.js (startSkillLoops) so they no longer gate the attack loop.
 
+    // NOTE: warrior warcry / hardshell / stomp / defensive-taunt / scare moved to
+    // per-skill loops in basic_warrior.9.js (startSkillLoops). Gear stays here,
+    // driven on a fixed cadence by that file's strategy loop calling currentStrategy.
     case "warrior":
       const suggestedWarriorItems = calculateWarriorItems(target);
 

@@ -17,6 +17,10 @@ async function usePullStrategies(target) {
     // NOTE: mage skills (gear / cburst / scare) moved to per-skill loops in
     // basic_mage.4.js (startSkillLoops) so they no longer gate the attack loop.
 
+    // NOTE: warrior warcry / hardshell / stomp / defensive-taunt / scare moved to
+    // per-skill loops in basic_warrior.9.js (startSkillLoops). Gear + the
+    // strategic pull skills (agitate, pull-taunt) stay here, driven on a fixed
+    // cadence by that file's strategy loop calling currentStrategy.
     case "warrior":
       const suggestedWarriorItems = calculateWarriorItems(target);
 
