@@ -44,26 +44,8 @@ async function useNormalStrategy(target) {
       }
       break;
 
-    case "priest":
-      const suggestedPriestItems = calculatePriestItems(target);
-      if (
-        Object.keys(suggestedPriestItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedPriestItems));
-      }
-
-      if (
-        avgPartyDmgTaken(partyMems) >
-          character.heal * 0.95 * character.frequency &&
-        character.hp < (isAssignedAsTanker() ? 0.2 : 0.5) * character.max_hp 
-      ) {
-        promises.push(scareAwayMobs());
-      }
-
-      if (!isAssignedAsTanker()) promises.push(scareAwayMobs());
-      break;
+    // NOTE: priest skills (gear / scare) moved to per-skill loops in
+    // basic_priest.2.js (startSkillLoops) so they no longer gate the attack loop.
   }
   return Promise.all(promises);
 }
