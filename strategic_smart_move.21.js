@@ -533,9 +533,14 @@ class StrategicSmartMove {
 
       pathFindingResult = this.pathfinderGetPath(toPosition, options.speed);
 
-      // Standable fallback (for example: icegolem spawn)
+      // Standable fallback (for example: icegolem spawn): when no direct path
+      // exists but the point itself is standable, reroute via spawn 0 and hop
+      // the last leg. Gated on useTown so short in-combat moves (kiting/tanking
+      // pass useTown:false) bail with an empty path instead of trekking the
+      // warrior all the way to spawn 0 mid-fight.
       if (
         (!pathFindingResult || !pathFindingResult.length) &&
+        options.useTown &&
         mapData?.spawns?.length &&
         this.isStandablePoint(toPosition)
       ) {
