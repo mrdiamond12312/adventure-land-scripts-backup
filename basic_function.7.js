@@ -165,6 +165,23 @@ var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 // desired elixir named
 var desiredElixir = "elixirluck";
 
+// TRACKTRIX
+async function get_tracktrix_data() {
+  let resolve;
+  let prom = new Promise((r) => (resolve = r));
+  let prev = parent.socket._callbacks.$tracker[0];
+  parent.socket._callbacks.$tracker[0] = (data) => {
+    parent.socket._callbacks.$tracker[0] = prev;
+    resolve(data);
+  };
+  parent.socket.emit("tracker");
+  return prom;
+}
+
+async function getMaxScore(monsterId) {
+  return (await get_tracktrix_data()).max[monsterId];
+}
+
 //// INVENTORY functions
 function item_info(item) {
   if (!item) return undefined;
@@ -866,11 +883,7 @@ function runSkillLoop({
       const isMovingControlled =
         (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
 
-      if (
-        !character.rip &&
-        (whileMoving || !isMovingControlled) &&
-        canUse()
-      )
+      if (!character.rip && (whileMoving || !isMovingControlled) && canUse())
         await withTimeout(cast(), timeoutMs);
     } catch (e) {
       console.log(`[skillLoop:${skill}]`, e);
@@ -1210,7 +1223,10 @@ function prioritizedNames() {
 let maxHealPower = 0;
 
 function getHealPower() {
-  maxHealPower = Math.max(maxHealPower, character.heal || character.attack * 2.5);
+  maxHealPower = Math.max(
+    maxHealPower,
+    character.heal || character.attack * 2.5,
+  );
   return maxHealPower;
 }
 
@@ -1745,14 +1761,53 @@ const setRogueSpeedLastDeployment = () => {
 
 const ENT_FIELD_MAX_FOR_ROGUE = 2;
 const ENT_FIELD_STALE_MS = 15 * 1000;
+const ENT_FIELD_REPORT_RANGE = 500;
+const ENT_FIELD_AGGRO_RANGE = 300;
+
+/**
+ * Publishes how many ents are engaged with the party at the farm spot, for the
+ * merchant's lure gate and the rogue swap. Called from the watchers' mainLoop
+ * so the count stays live; any class can report, not just the mage.
+ */
+function publishEntFieldReport() {
+  if (isMerchant()) return;
+
+  const farmSpot = { x: mapX, y: mapY, map };
+  if (
+    character.map !== map ||
+    distance(character, farmSpot) > ENT_FIELD_REPORT_RANGE
+  )
+    return;
+
+  const partyNames = new Set([
+    ...partyMems,
+    partyMerchant,
+    ...parent.party_list,
+  ]);
+  const entsTargetingPartyCount = Object.values(parent.entities).filter(
+    (entity) =>
+      entity &&
+      entity.type === "monster" &&
+      entity.mtype === "ent" &&
+      entity.target &&
+      partyNames.has(entity.target) &&
+      distance(entity, farmSpot) < ENT_FIELD_AGGRO_RANGE,
+  ).length;
+
+  set("entFieldReport", {
+    reporter: character.name,
+    entsTargetingPartyCount,
+    time: Date.now(),
+  });
+}
 
 const shouldDeployRogue = () => {
   // Check if it's safe to deploy rogue in place of the priest while farming ents
-  const mageLocation = get("mageLocation");
+  const entField = get("entFieldReport");
   if (
-    !mageLocation ||
-    mssince(new Date(mageLocation.time)) > ENT_FIELD_STALE_MS ||
-    mageLocation.entsTargetingPartyCount > ENT_FIELD_MAX_FOR_ROGUE
+    !entField ||
+    mssince(new Date(entField.time)) > ENT_FIELD_STALE_MS ||
+    entField.entsTargetingPartyCount > ENT_FIELD_MAX_FOR_ROGUE
   ) {
     return false;
   }

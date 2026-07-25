@@ -263,16 +263,17 @@ function getEntWaypoints() {
   ];
 }
 
-// The mage sits near spawn and reports how many ents are already engaged with the
-// party there (see mageLocation.entsTargetingPartyCount in basic_mage.4.js) —
+// Whoever is standing at the farm spot reports how many ents are already
+// engaged with the party there (publishEntFieldReport in basic_function.7.js) —
 // avoids luring past MAX_ENT concurrent ents at home.
 function hasMaxEntsEngagedAtSpawn() {
-  const mageInfo = get("mageLocation");
-  return !!(
-    mageInfo &&
-    Date.now() - mageInfo.time < 15_000 &&
-    mageInfo.entsTargetingPartyCount >= MAX_ENT
-  );
+  const report = get("entFieldReport");
+
+  // No fresh report means nobody is watching the field: assume it is full
+  // rather than luring blind.
+  if (!report || Date.now() - report.time >= ENT_FIELD_STALE_MS) return true;
+
+  return report.entsTargetingPartyCount >= MAX_ENT;
 }
 
 async function ensureDartgun() {

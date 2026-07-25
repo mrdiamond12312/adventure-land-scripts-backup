@@ -225,29 +225,18 @@ async function mainLoop() {
       });
     }
 
-    // Save location data for other characters/storage once high level
-    if (character.max_mp > G.skills["magiport"].mp * 1.5) {
-      // Observer count for the merchant's ent lure: how many ents are already
-      // engaged with the party near the farm spawn? (avoids double-luring)
-      const { party_list } = parent;
-      const partyNames = new Set([...partyMems, partyMerchant, ...party_list]);
-      const entsTargetingPartyCount = Object.values(parent.entities).filter(
-        (entity) =>
-          entity &&
-          entity.type === "monster" &&
-          entity.mtype === "ent" &&
-          entity.target &&
-          partyNames.has(entity.target) &&
-          distance(entity, { x: mapX, y: mapY }) < 300,
-      ).length;
+    publishEntFieldReport();
 
+    // Save location data for magiport consumers once high level. The ent count
+    // moved to publishEntFieldReport (basic_function.7.js) so it survives the
+    // mage being swapped out of the party.
+    if (character.max_mp > G.skills["magiport"].mp * 1.5) {
       set("mageLocation", {
         mp: character.mp,
         map: character.map,
         x: character.x,
         y: character.y,
         time: Date.now(),
-        entsTargetingPartyCount,
       });
     }
 

@@ -435,6 +435,8 @@ async function mainLoop() {
       });
     }
 
+    publishEntFieldReport();
+
     // Cupid heal, only once currentStrategy put cupid in hand
     const cupidHealees = isCupidEquipped()
       ? getCupidHealees(getPlayersToHeal())
