@@ -1841,14 +1841,27 @@ const DYNAMIC_PARTY_PRESETS = {
     default: [WARRIOR, PRIEST, MAGE],
   },
   mrpumpkin: "mrgreen", // share config
-  franky: () => {
-    // const isAggroed = !!parent.S.franky?.target;
-    // HEALER = PRIEST;
-    return [WARRIOR, PRIEST, ROGUE];
+  franky: {
+    EUII: () => {
+      RANGER = RANGER2;
+      return [RANGER2, PRIEST, ROGUE];
+    },
+    default: () => {
+      // const isAggroed = !!parent.S.franky?.target;
+      // HEALER = PRIEST;
+      return [WARRIOR, PRIEST, ROGUE];
+    },
   },
-  icegolem: () => {
-    HEALER = PRIEST;
-    return [PRIEST, ROGUE, MAGE];
+  icegolem: {
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = RANGER2;
+      return [RANGER2, ROGUE, MAGE];
+    },
+    default: () => {
+      HEALER = PRIEST;
+      return [PRIEST, ROGUE, MAGE];
+    },
   },
   dragold: {
     USI: [WARRIOR, PRIEST, ROGUE],

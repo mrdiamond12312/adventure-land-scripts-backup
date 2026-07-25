@@ -20,7 +20,8 @@ rangeRate = originRangeRate;
 
 // Utils
 const isWeak = (monster, multiplier = (dmg) => dmg * 1) =>
-  monster.hp < multiplier(calculateDamage(character, monster) * 0.9) || monster.target;
+  monster.hp < multiplier(calculateDamage(character, monster) * 0.9) ||
+  monster.target;
 const isCooperative = (monster) => monster.cooperative;
 const isMob = (entity) => entity.type === "monster";
 const reduceCd = (skillName, isPingBased = true) =>
@@ -167,7 +168,7 @@ function getShotPlan(incomingTarget = get_targeted_monster()) {
     hpOk &&
     character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 400 &&
     weakMobs.length >= 4 &&
-    mobsTo5Shot.every((mob) => shouldAttack(mob));
+    mobsTo5Shot.every((mob) => isSafeToShoot(mob));
 
   const mobsTo3Shot = potentialTargets.slice(0, 3);
   const is3ShotReady =
@@ -176,7 +177,7 @@ function getShotPlan(incomingTarget = get_targeted_monster()) {
     hpOk &&
     character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 400 &&
     potentialTargets.length >= 2 &&
-    mobsTo3Shot.every((mob) => shouldAttack(mob));
+    mobsTo3Shot.every((mob) => isSafeToShoot(mob));
 
   const shotPlan = (skill, target, gearTargets, shotTargets) => ({
     mode: "shot",
@@ -196,7 +197,7 @@ function getShotPlan(incomingTarget = get_targeted_monster()) {
 
   if (is3ShotReady) return shotPlan("3shot", target, mobsTo3Shot, mobsTo3Shot);
 
-  if (target && shouldAttack(target) && inRange(target))
+  if (target && isSafeToShoot(target) && inRange(target))
     return shotPlan("attack", target, target, target);
 
   return null;
@@ -332,10 +333,9 @@ function getSuperShotTarget() {
   const healerNearby = isHealerNearby();
   const isSafeToSuperShot = (mob) =>
     mob.attack * mob.frequency < 500 ||
-    isWeak(mob, (dmg) => dmg * SUPERSHOT_DAMAGE_MULTIPLIER) ||
-    healerNearby;
+    isWeak(mob, (dmg) => dmg * SUPERSHOT_DAMAGE_MULTIPLIER);
+  // || healerNearby
 
-  // Supershot outranges the bow: spend it on what a normal shot cannot reach.
   const isWorthSuperShooting = (mob) =>
     !!mob && !inRange(mob) && is_in_range(mob, "supershot");
 
@@ -394,10 +394,7 @@ function startSkillLoops() {
   runSkillLoop({
     skill: "supershot",
     canUse: () => {
-      if (
-        character.mp <= 400 + SURGE_MP_OFFSET ||
-        is_on_cooldown("supershot")
-      )
+      if (character.mp <= 400 + SURGE_MP_OFFSET || is_on_cooldown("supershot"))
         return false;
       pendingSuperShotTarget = isCupidEquipped()
         ? getEmergencyHealee()

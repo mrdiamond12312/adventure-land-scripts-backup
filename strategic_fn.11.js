@@ -139,19 +139,35 @@ function canOneShotWithWeapon(weaponInfo, targets) {
   });
 }
 
+/**
+ * An unaggroed mob inside the blast radius — one a splash would wake.
+ * @param {Object} target - centre of the blast
+ * @param {number} [blastRadius] - radius to scan
+ * @param {number} [minDamage] - only count mobs hitting harder than this
+ * @returns {boolean}
+ */
+function hasUntargetedMonsterAround(
+  target,
+  blastRadius = BLAST_RADIUS,
+  minDamage = 0,
+) {
+  if (!target) return false;
+
+  return Object.values(parent.entities).some(
+    (entity) =>
+      entity.type === "monster" &&
+      !entity.target &&
+      distance(target, entity) < blastRadius &&
+      (!minDamage || calculateDamage(entity, character, false) > minDamage),
+  );
+}
+
 function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return 0;
 
-  const hasUntargetedMonsterNearby = Object.values(parent.entities).some(
-    (entity) =>
-      entity.type === "monster" &&
-      distance(target, entity) < blastRadius &&
-      !entity.target,
-  );
-
   if (
     !["warrior", "priest", "paladin"].includes(character.ctype) &&
-    hasUntargetedMonsterNearby
+    hasUntargetedMonsterAround(target, blastRadius)
   ) {
     return 0;
   }
@@ -168,14 +184,10 @@ function findInvBooster() {
   return BOOSTERS.find((booster) => locate_item(booster) !== -1);
 }
 
+const FORMIDABLE_MOB_DAMAGE = 1100;
+
 function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
-  return Object.values(parent.entities).some(
-    (entity) =>
-      entity.type === "monster" &&
-      !entity.target &&
-      parent.distance(target, entity) < blastRadius &&
-      calculateDamage(entity, character, false) > 1100,
-  );
+  return hasUntargetedMonsterAround(target, blastRadius, FORMIDABLE_MOB_DAMAGE);
 }
 
 const EQUIP_IGNORE_MOBS = ["nerfedmummy"];
@@ -450,11 +462,34 @@ function chooseFireOrPouchForSplashing(targets) {
     : RANGER_INV_ITEMS.fireBow;
 }
 
+/**
+ * Whether firing at `mob` is safe once splash is accounted for. Everything the
+ * blast catches must already be aggroed and worth attacking, so a shot never
+ * wakes a fresh mob. Cannot use mobsListAroundTarget: it drops untargeted mobs,
+ * which are exactly the ones we are looking for.
+ * @param {Object} mob - the intended target
+ * @param {number} [splashRadius] - blast radius to test; 0 means no splash
+ * @returns {boolean}
+ */
+function isSafeToShoot(mob, splashRadius = character.explosion / 3.6 || 0) {
+  if (!shouldAttack(mob)) return false;
+  if (!splashRadius) return true;
+
+  return !hasUntargetedMonsterAround(mob, splashRadius);
+}
+
 function calculateRangerItems(target) {
   const targets = !target ? [] : Array.isArray(target) ? target : [target];
   const feelingLucky = shouldWearLuckGear();
   const feelingWise = shouldWearExpGear();
   const someTargetCooperative = targets.some((mob) => mob.cooperative);
+
+  // Judge splash safety against the radius we *would* have, not the one we have
+  // now, or picking up the poucher would immediately make itself unsafe.
+  const prospectiveSplashRadius = character.explosion / 3.6 || BLAST_RADIUS;
+  const targetsAreSafeToSplash = targets
+    .filter((entity) => entity.type === "monster")
+    .every((mob) => isSafeToShoot(mob, prospectiveSplashRadius));
 
   let mainhand = character.slots.mainhand?.name;
   const poucherAvailable = findMaxLevelItem(RANGER_INV_ITEMS.poucher) !== -1;
@@ -495,7 +530,9 @@ function calculateRangerItems(target) {
           const info = item_info(item);
           if (
             !["bow", "crossbow"].includes(info.wtype) ||
-            item.name === "cupid"
+            item.name === "cupid" ||
+            // Keep hands off the poucher when the blast would wake a fresh mob
+            (!targetsAreSafeToSplash && item.name === RANGER_INV_ITEMS.poucher)
           )
             return null;
 
@@ -544,9 +581,11 @@ function calculateRangerItems(target) {
   return {
     helmet: feelingLucky ? "wcap" : "fury",
     mainhand,
-    offhand: targets.some((entity) => haveFormidableMonsterAroundTarget(entity))
-      ? "t2quiver"
-      : "alloyquiver",
+    offhand:
+      !targetsAreSafeToSplash ||
+      targets.some((entity) => haveFormidableMonsterAroundTarget(entity))
+        ? "t2quiver"
+        : "alloyquiver",
     orb: feelingLucky
       ? "rabbitsfoot"
       : feelingWise
