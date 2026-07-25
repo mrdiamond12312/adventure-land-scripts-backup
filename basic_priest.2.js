@@ -335,7 +335,7 @@ function startSkillLoops() {
   // Gear: not a cooldown skill, runs on a fixed cadence (floorMs).
   runSkillLoop({
     skill: "gear",
-    floorMs: 200,
+    floorMs: 100,
     canUse: () => {
       const target = get_targeted_monster();
       if (!target) return false;

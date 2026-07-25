@@ -102,7 +102,7 @@ async function fight(target) {
           .catch((e) => attackErrorHandler(e)),
       );
     }
-    
+
     promisesToAwait.push(
       attack(target)
         .then(() => {
@@ -150,7 +150,7 @@ function startSkillLoops() {
   // calculateMageItems already picks burst vs. farming gear from the target.
   runSkillLoop({
     skill: "gear",
-    floorMs: 50,
+    floorMs: 100,
     canUse: () => {
       const target = get_targeted_monster();
       if (!target) return false;
