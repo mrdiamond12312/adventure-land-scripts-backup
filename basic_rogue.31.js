@@ -8,7 +8,7 @@ if (parent.caracAL) {
     ])
     .then(() => {
       mainLoop();
-      fuaLoop();
+      startSkillLoops();
     });
 } else {
   load_code(7);
@@ -25,14 +25,21 @@ const reduceCd = (skillName, isPingBased = true) =>
     isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
   );
 
+/**
+ * @param {Object} entity - the entity to measure against
+ * @returns {boolean} whether the entity is within attack range
+ */
+const inRange = (entity) =>
+  distance(entity, character) < character.range + character.xrange;
+
+/** @returns {boolean} whether the attack cooldown is up */
+const isAttackReady = () =>
+  ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+
 async function fight(target) {
   // Snapshot for attackSpeedCompensate: weapon swaps mid-tick change frequency,
   // and the attack cooldown must be timed with the frequency at fire time.
   const attackFrequencyBeforeCompensate = character.frequency;
-  const inRange = (entity) =>
-    distance(entity, character) < character.range + character.xrange;
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
   if (
     typeof usePullStrategies === "function" &&
@@ -68,15 +75,12 @@ async function fight(target) {
 
   const promisesToAwait = [];
 
-  if (!isAttackReady && inRange(target) && shouldAttack())
-    promisesToAwait.push(currentStrategy(target));
-
-  if (isAttackReady && inRange(target) && shouldAttack()) {
+  if (isAttackReady() && inRange(target) && shouldAttack()) {
     if (!ms_to_next_skill("invis")) {
-      use_skill("invis").then(() => reduceCd("invis"));
+      promisesToAwait.push(use_skill("invis").then(() => reduceCd("invis")));
     }
     promisesToAwait.push(
-      withTimeout(attack(target), 2500)
+      attack(target)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeCompensate);
           reduceCd("attack", false);
@@ -90,20 +94,21 @@ async function fight(target) {
   }
 
   try {
-    await Promise.allSettled(promisesToAwait);
+    await withTimeout(Promise.allSettled(promisesToAwait), 2500);
   } catch (e) {}
 }
 
-async function fuaLoop() {
-  try {
-    const currentTarget = get_target();
-    const promisesToAwait = [];
+// --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
 
-    const prioritized = prioritizedNames();
-    const playersNearbyWithoutRogueSpeed = [
-      ...Object.values(parent.entities),
-      character,
-    ]
+/**
+ * Nearby character (self included) whose rogue speed is missing or expiring,
+ * prioritized party members first.
+ * @returns {Object|null} the character to buff, or null
+ */
+function getRspeedBuffee() {
+  const prioritized = prioritizedNames();
+  return (
+    [...Object.values(parent.entities), character]
       .filter(
         (entity) =>
           entity.type === "character" &&
@@ -114,49 +119,80 @@ async function fuaLoop() {
         const lhsPriority = prioritized.includes(lhs.id || lhs.name) ? 1 : 0;
         const rhsPriority = prioritized.includes(rhs.id || rhs.name) ? 1 : 0;
         return rhsPriority - lhsPriority; // higher priority first
-      });
-
-    if (
-      playersNearbyWithoutRogueSpeed.length &&
-      ms_to_next_skill("rspeed") === 0 &&
-      character.mp > G.skills["rspeed"].mp &&
-      shouldAttack()
-    ) {
-      promisesToAwait.push(
-        use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift()),
-      );
-    }
-
-    if (
-      distance(character, currentTarget) < character.range + character.xrange &&
-      ms_to_next_skill("quickstab") === 0 &&
-      character.mp > parent.G.skills["rspeed"].mp * 2
-    ) {
-      const currentMainhand = item_info(character.slots.mainhand);
-      const skillToBeUsed =
-        currentMainhand?.wtype === "dagger"
-          ? "quickstab"
-          : currentMainhand?.wtype === "fist"
-          ? "quickpunch"
-          : undefined;
-      if (skillToBeUsed) {
-        promisesToAwait.push(
-          use_skill(skillToBeUsed, currentTarget).then(() =>
-            reduceCd(skillToBeUsed),
-          ),
-        );
-      }
-    }
-
-    await withTimeout(Promise.allSettled(promisesToAwait), 500);
-  } catch (e) {
-    console.log("Error while FuA: ", e);
-  }
-
-  setTimeout(fuaLoop, Math.max(ms_to_next_skill("quickpunch"), 100));
+      })[0] ?? null
+  );
 }
 
-if (!parent.caracAL) fuaLoop();
+/**
+ * Follow-up attack the current mainhand supports; both share the "quickstab"
+ * cooldown key.
+ * @returns {string|undefined} "quickstab", "quickpunch", or undefined
+ */
+function getFollowUpAttackSkill() {
+  const currentMainhand = item_info(character.slots.mainhand);
+  if (currentMainhand?.wtype === "dagger") return "quickstab";
+  if (currentMainhand?.wtype === "fist") return "quickpunch";
+  return undefined;
+}
+
+function startSkillLoops() {
+  // runSkillLoop always calls canUse right before cast, so canUse stashes what
+  // it approved and cast reuses it instead of recomputing the scans.
+  let pendingRspeedBuffee = null;
+  let pendingFollowUpSkill = undefined;
+
+  // Gear only while the attack is on cooldown: equipping re-bases the attack
+  // cooldown, so swapping mid-window would delay the shot.
+  runSkillLoop({
+    skill: "strategy",
+    floorMs: 100,
+    canUse: () => {
+      const target = get_target();
+      return (
+        !isAttackReady() && !!target && inRange(target) && shouldAttack()
+      );
+    },
+    cast: () => currentStrategy(get_target()),
+  });
+
+  runSkillLoop({
+    skill: "rspeed",
+    canUse: () => {
+      if (
+        ms_to_next_skill("rspeed") !== 0 ||
+        character.mp <= G.skills["rspeed"].mp ||
+        !shouldAttack()
+      )
+        return false;
+      pendingRspeedBuffee = getRspeedBuffee();
+      return pendingRspeedBuffee != null;
+    },
+    cast: () => use_skill("rspeed", pendingRspeedBuffee),
+  });
+
+  // Keyed on quickstab so the loop paces off that cooldown for either weapon.
+  runSkillLoop({
+    skill: "quickstab",
+    canUse: () => {
+      const target = get_target();
+      if (!target) return false;
+      if (
+        !inRange(target) ||
+        ms_to_next_skill("quickstab") !== 0 ||
+        character.mp <= G.skills["rspeed"].mp * 2
+      )
+        return false;
+      pendingFollowUpSkill = getFollowUpAttackSkill();
+      return pendingFollowUpSkill != null;
+    },
+    cast: () =>
+      use_skill(pendingFollowUpSkill, get_target()).then(() =>
+        reduceCd(pendingFollowUpSkill),
+      ),
+  });
+}
+
+if (!parent.caracAL) startSkillLoops();
 
 async function mainLoop() {
   try {

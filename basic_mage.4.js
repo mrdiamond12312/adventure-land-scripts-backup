@@ -146,6 +146,11 @@ function getReflectionBuffee() {
 }
 
 function startSkillLoops() {
+  // runSkillLoop always calls canUse right before cast, so canUse stashes what
+  // it approved and cast reuses it instead of recomputing the scans.
+  let pendingEnergizeBuffee = null;
+  let pendingReflectionBuffee = null;
+
   // Strategy: gear + pull-strategy skills (cburst) run on a fixed cadence via
   // currentStrategy, decoupled from the attack loop.
   runSkillLoop({
@@ -157,11 +162,15 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "energize",
-    canUse: () => !is_on_cooldown("energize") && getEnergizeBuffee() != null,
+    canUse: () => {
+      if (is_on_cooldown("energize")) return false;
+      pendingEnergizeBuffee = getEnergizeBuffee();
+      return pendingEnergizeBuffee != null;
+    },
     cast: () =>
       use_skill(
         "energize",
-        getEnergizeBuffee(),
+        pendingEnergizeBuffee,
         Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
       )
         .then(() => reduceCd("energize"))
@@ -170,12 +179,13 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "reflection",
-    canUse: () =>
-      !is_on_cooldown("reflection") &&
-      character.mp > 1000 &&
-      getReflectionBuffee() != null,
+    canUse: () => {
+      if (is_on_cooldown("reflection") || character.mp <= 1000) return false;
+      pendingReflectionBuffee = getReflectionBuffee();
+      return pendingReflectionBuffee != null;
+    },
     cast: () =>
-      use_skill("reflection", getReflectionBuffee()).then(() =>
+      use_skill("reflection", pendingReflectionBuffee).then(() =>
         reduceCd("reflection"),
       ),
   });

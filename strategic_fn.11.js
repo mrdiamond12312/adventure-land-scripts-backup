@@ -377,7 +377,24 @@ const RANGER_INV_ITEMS = {
   poucher: "pouchbow",
   fireBow: "firebow",
   crossBow: "crossbow",
+  cupid: "cupid",
 };
+
+/**
+ * Party members in cupid range that want a heal (empty while feared).
+ * @param {Object[]} [playersToHeal] - candidates, defaults to getPlayersToHeal()
+ * @returns {Object[]} the healees
+ */
+function getCupidHealees(playersToHeal = getPlayersToHeal()) {
+  if (character.fear) return [];
+
+  const characterRange = character.range + character.xrange;
+  return playersToHeal.filter(
+    (player) =>
+      player.name !== character.name &&
+      distance(player, character) < characterRange,
+  );
+}
 
 function explosionScore(itemInfo, targets) {
   if (!itemInfo || !targets?.length) return 0;
@@ -442,7 +459,15 @@ function calculateRangerItems(target) {
   let mainhand = character.slots.mainhand?.name;
   const poucherAvailable = findMaxLevelItem(RANGER_INV_ITEMS.poucher) !== -1;
 
-  if (targets.length) {
+  // Cupid outranks every bow: the strategy hands it over whenever someone wants
+  // a heal, and the ranger keeps shooting mobs until it is actually in hand.
+  const cupidAvailable =
+    findMaxLevelItem(RANGER_INV_ITEMS.cupid) !== -1 ||
+    mainhand === RANGER_INV_ITEMS.cupid;
+
+  if (cupidAvailable && getCupidHealees().length) {
+    mainhand = RANGER_INV_ITEMS.cupid;
+  } else if (targets.length) {
     const canSplash =
       (poucherAvailable || mainhand === RANGER_INV_ITEMS.poucher) &&
       currentStrategy === usePullStrategies &&

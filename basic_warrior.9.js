@@ -326,6 +326,10 @@ function shouldWarriorScare() {
 }
 
 function startSkillLoops() {
+  // runSkillLoop always calls canUse right before cast, so canUse stashes what
+  // it approved and cast reuses it instead of recomputing the scans.
+  let pendingTauntTarget = null;
+
   // Strategy: gear + pull-strategy skills (agitate, pull-taunt) run on a fixed
   // cadence via currentStrategy, decoupled from the attack loop.
   runSkillLoop({
@@ -370,9 +374,14 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "taunt",
-    canUse: () => getTauntTarget() != null,
+    canUse: () => {
+      pendingTauntTarget = getTauntTarget();
+      return pendingTauntTarget != null;
+    },
     cast: () =>
-      use_skill("taunt", getTauntTarget()).then(() => reduceCd("taunt", false)),
+      use_skill("taunt", pendingTauntTarget).then(() =>
+        reduceCd("taunt", false),
+      ),
   });
 
   runSkillLoop({

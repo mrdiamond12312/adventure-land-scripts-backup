@@ -7,6 +7,7 @@ if (parent.caracAL) {
     ])
     .then(() => {
       mainLoop();
+      startSkillLoops();
     });
 } else {
   load_code(7);
@@ -18,8 +19,8 @@ var originRangeRate = 0.6;
 rangeRate = originRangeRate;
 
 // Utils
-const isWeak = (monster) =>
-  monster.hp < calculateDamage(character, monster) * 0.9 || monster.target;
+const isWeak = (monster, multiplier = (dmg) => dmg * 1) =>
+  monster.hp < multiplier(calculateDamage(character, monster) * 0.9) || monster.target;
 const isCooperative = (monster) => monster.cooperative;
 const isMob = (entity) => entity.type === "monster";
 const reduceCd = (skillName, isPingBased = true) =>
@@ -45,19 +46,27 @@ const tryMultiShot = async (skill, entityList) => {
 const inRange = (entity) =>
   distance(entity, character) < character.range + character.xrange * 0.5;
 
-async function fight(target) {
-  const attackFrequencyBeforeCompensate = character.frequency;
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-  const canMultiShot = !character.fear;
+/** @returns {boolean} whether the attack cooldown is up */
+const isAttackReady = () =>
+  ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+
+// --- Decide: one plan drives both the gear loop and the shot ---
+
+/** @returns {boolean} whether cupid is the equipped mainhand */
+const isCupidEquipped = () =>
+  character.slots.mainhand?.name === RANGER_INV_ITEMS.cupid;
+
+/**
+ * Mobs worth shooting right now, annotated with cluster count and distance,
+ * best first.
+ * @returns {Object[]} the sorted candidates
+ */
+function getPotentialTargets() {
   const explosionRadius = character.explosion
     ? character.explosion / 3.6
     : BLAST_RADIUS;
-  const entitiesInVision = Object.values(parent.entities);
-  const promisesToAwait = [];
-  const isCupid = character.slots.mainhand?.name === "cupid";
 
-  const potentialTargets = entitiesInVision
+  return Object.values(parent.entities)
     .filter(
       (entity) =>
         entity.type === "monster" &&
@@ -91,38 +100,65 @@ async function fight(target) {
         lhs.distance - rhs.distance
       );
     });
+}
 
-  const weakMobs = potentialTargets.filter(isWeak);
+/**
+ * Cupid heal plan: 5shot > 3shot > single. Only valid while cupid is equipped;
+ * currentStrategy owns the swap itself.
+ * @param {Object[]} healees - from getCupidHealees
+ * @returns {{mode: string, skill: string, gearTargets: Object[], shotTargets: Object[]|Object}}
+ */
+function getCupidPlan(healees) {
+  const preservedMP = G.skills["huntersmark"].mp;
+  const is5ShotReady =
+    character.level >= G.skills["5shot"].level &&
+    healees.length >= 4 &&
+    character.mp > G.skills["5shot"].mp + preservedMP;
+  const is3ShotReady =
+    character.level >= G.skills["3shot"].level &&
+    healees.length >= 2 &&
+    character.mp > G.skills["3shot"].mp + preservedMP;
 
+  const skill = is5ShotReady ? "5shot" : is3ShotReady ? "3shot" : "attack";
+  const sliceAmount = is5ShotReady ? 5 : is3ShotReady ? 3 : 1;
+
+  return {
+    mode: "cupid",
+    skill,
+    gearTargets: healees,
+    shotTargets:
+      skill === "attack" ? healees[0] : healees.slice(0, sliceAmount),
+  };
+}
+
+/**
+ * Shot plan: 5shot > 3shot > single. `gearTargets` is what the gear decision
+ * reads, `shotTargets` is what gets shot (they differ for cupid, which shoots
+ * the wider list).
+ * @param {Object} [incomingTarget] - target from mainLoop, or the current one
+ * @returns {{mode: string, skill: string, target: Object, gearTargets: Object[]|Object, shotTargets: Object[]|Object}|null}
+ */
+function getShotPlan(incomingTarget = get_targeted_monster()) {
+  const potentialTargets = getPotentialTargets();
+  // Wrapped, not passed by reference: filter would hand isWeak the index as its
+  // multiplier.
+  const weakMobs = potentialTargets.filter((mob) => isWeak(mob));
+  const canMultiShot = !character.fear;
+  const isCupid = character.slots.mainhand?.name === "cupid";
+
+  let target = incomingTarget;
   if (potentialTargets.length && !target?.mtype.includes("crabx")) {
     target = potentialTargets[0];
-    change_target(target);
   }
 
-  // Reacquire target if feared
+  // Reacquire target if feared (the scare itself runs on its own loop)
   if (character.fear) {
     const aggroing = potentialTargets.find(
       (mob) => mob.target === character.name,
     );
-    promisesToAwait.push(scareAwayMobs());
     if (aggroing) target = aggroing;
   }
 
-  // Huntersmark
-  // TODO: Put in a seperate loop to narrow the gap between marks
-  const canHuntersMark =
-    target &&
-    !target.s?.marked &&
-    character.mp > 300 + 1000 &&
-    !is_on_cooldown("huntersmark") &&
-    target.hp > 3000;
-  if (canHuntersMark) {
-    promisesToAwait.push(
-      use_skill("huntersmark", target).then(() => reduceCd("huntersmark")),
-    );
-  }
-
-  // 5shot > 3shot > single
   const hpOk = character.hp > character.max_hp * 0.55;
   const mobsTo5Shot = weakMobs.slice(0, 5);
   const is5ShotReady =
@@ -142,80 +178,73 @@ async function fight(target) {
     potentialTargets.length >= 2 &&
     mobsTo3Shot.every((mob) => shouldAttack(mob));
 
-  if (is5ShotReady) {
-    if (!isAttackReady) promisesToAwait.push(currentStrategy(mobsTo5Shot));
-    else if (!isCupid) promisesToAwait.push(tryMultiShot("5shot", mobsTo5Shot));
-    else {
-      promisesToAwait.push(
-        currentStrategy(mobsTo5Shot),
-        tryMultiShot("5shot", potentialTargets.slice(0, 5)),
-      );
-    }
-  } else if (is3ShotReady) {
-    if (!isAttackReady) promisesToAwait.push(currentStrategy(mobsTo3Shot));
-    else if (!isCupid)
-      promisesToAwait.push(tryMultiShot("3shot", potentialTargets.slice(0, 3)));
-    else
-      promisesToAwait.push(
-        currentStrategy(mobsTo3Shot),
-        tryMultiShot("3shot", mobsTo3Shot),
-      );
-  } else if (target && shouldAttack(target) && inRange(target)) {
-    set_message("Shooting");
-    if (!isAttackReady) promisesToAwait.push(currentStrategy(target));
-    else if (!isCupid)
-      promisesToAwait.push(
-        use_skill("attack", target)
-          .then(() => {
-            attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("attack", false);
-          })
-          .catch((e) => attackErrorHandler(e)),
-      );
-    // Base case for Cupid: both attack and currentStrategy
-    else
-      promisesToAwait.push(
-        currentStrategy(target),
-        use_skill("attack", target)
-          .then(() => {
-            attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("attack", false);
-          })
-          .catch((e) => attackErrorHandler(e)),
-      );
+  const shotPlan = (skill, target, gearTargets, shotTargets) => ({
+    mode: "shot",
+    skill,
+    target,
+    gearTargets,
+    shotTargets,
+  });
+
+  if (is5ShotReady)
+    return shotPlan(
+      "5shot",
+      target,
+      mobsTo5Shot,
+      isCupid ? potentialTargets.slice(0, 5) : mobsTo5Shot,
+    );
+
+  if (is3ShotReady) return shotPlan("3shot", target, mobsTo3Shot, mobsTo3Shot);
+
+  if (target && shouldAttack(target) && inRange(target))
+    return shotPlan("attack", target, target, target);
+
+  return null;
+}
+
+/**
+ * What the ranger should do this tick. Healing only wins once currentStrategy
+ * has actually put cupid in hand; until then the ranger keeps shooting mobs.
+ * @param {Object} [incomingTarget] - target from mainLoop, or the current one
+ * @returns {Object|null} the plan, or null when there is nothing to do
+ */
+function getActionPlan(incomingTarget = get_targeted_monster()) {
+  const healees = isCupidEquipped() ? getCupidHealees() : [];
+  return healees.length ? getCupidPlan(healees) : getShotPlan(incomingTarget);
+}
+
+// --- Act ---
+
+/**
+ * Fires the plan's skill: a cupid heal at allies, or a shot at mobs.
+ * @param {Object} plan - from getActionPlan
+ */
+async function firePlan(plan) {
+  if (!isAttackReady()) return;
+
+  const attackFrequencyBeforeCompensate = character.frequency;
+  const promisesToAwait = [];
+
+  // Cupid heals whatever it hits, so shooting mobs with it feeds them. Swap
+  // concurrently with the shot instead of waiting for the gear loop's gap.
+  if (plan.mode === "shot" && isCupidEquipped()) {
+    promisesToAwait.push(currentStrategy(plan.gearTargets));
   }
 
-  // Supershot
-  const canSuperShot =
-    character.mp > 400 + 1000 && !is_on_cooldown("supershot");
-
-  if (canSuperShot) {
-    const coopTarget = target?.cooperative
-      ? target
-      : entitiesInVision.find(
-          (entity) => isMob(entity) && isCooperative(entity),
-        );
-
-    const easyMob =
-      entitiesInVision
-        .filter(
-          (entity) =>
-            isMob(entity) &&
-            entity.attack * entity.frequency < 500 &&
-            is_in_range(entity, "supershot"),
-        )
-        .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))
-        .shift() ??
-      coopTarget ??
-      target;
-
-    if (easyMob)
-      promisesToAwait.push(
-        use_skill("supershot", easyMob).then(() => reduceCd("supershot")),
-      );
+  if (plan.skill === "attack") {
+    set_message(plan.mode === "cupid" ? "Single Cupid" : "Shooting");
+    promisesToAwait.push(
+      use_skill("attack", plan.shotTargets)
+        .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeCompensate);
+          reduceCd("attack", false);
+        })
+        .catch((e) => attackErrorHandler(e)),
+    );
+  } else {
+    promisesToAwait.push(tryMultiShot(plan.skill, plan.shotTargets));
   }
 
-  // Await and Error Handling
   try {
     await withTimeout(Promise.allSettled(promisesToAwait), 1500);
   } catch (e) {
@@ -223,91 +252,175 @@ async function fight(target) {
   }
 }
 
-// Cupid Logic :cow2:
-async function cupidHeal(playersToHeal) {
-  const attackFrequencyBeforeCompensate = character.frequency;
-  const isAttackOnCD = ms_to_next_skill("attack") > 0 || character.s.penalty_cd;
-  const hasCupid =
-    locate_item("cupid") !== -1 || character.slots.mainhand?.name === "cupid";
-  if (!hasCupid || character.fear) return false;
+async function fight(target) {
+  const plan = getShotPlan(target);
+  if (!plan) return;
 
-  const characterRange = character.range + character.xrange;
-  const lowHealthPlayersInRange = playersToHeal.filter(
-    (player) =>
-      player.name !== character.name &&
-      distance(player, character) < characterRange,
+  if (plan.target) change_target(plan.target);
+  return firePlan(plan);
+}
+
+// --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
+
+// Mp held back by the skill checks so a temporal surge stays affordable
+const SURGE_MP_OFFSET = 1000;
+
+/**
+ * Current target when it is a chunky, unmarked mob.
+ * @returns {Object|null} the mob to mark, or null
+ */
+function getHuntersMarkTarget() {
+  const target = get_targeted_monster();
+  const shouldMark =
+    target &&
+    !target.s?.marked &&
+    target.hp > 3000 &&
+    character.mp > 300 + SURGE_MP_OFFSET &&
+    !is_on_cooldown("huntersmark");
+  return shouldMark ? target : null;
+}
+
+const EMERGENCY_HEAL_HP_RATIO = 0.45;
+const SUPERSHOT_DAMAGE_MULTIPLIER = 1.5;
+
+/**
+ * Critically hurt ally in supershot range. Supershot heals through cupid and
+ * outranges it, so it doubles as the emergency reach heal.
+ * @returns {Object|null} the player to heal, or null
+ */
+function getEmergencyHealee() {
+  if (character.fear) return null;
+
+  return (
+    getPlayersToHeal()
+      .filter(
+        (player) =>
+          player.name !== character.name &&
+          player.hp < player.max_hp * EMERGENCY_HEAL_HP_RATIO &&
+          is_in_range(player, "supershot"),
+      )
+      .sort((lhs, rhs) => lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp)[0] ?? null
   );
+}
 
-  const promisesToAwait = [];
+/** @returns {boolean} whether a live party priest is close enough to cover us */
+function isHealerNearby() {
+  const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
+  return (
+    !!partyHealer &&
+    partyHealer.ctype === "priest" &&
+    !partyHealer.rip &&
+    distance(partyHealer, character) <
+      (partyHealer.range ?? character.range * 0.7)
+  );
+}
 
-  if (lowHealthPlayersInRange.length > 0) {
-    // Equipping Cupid first
-    if (character.slots.mainhand?.name !== "cupid") {
-      const rangerItems = calculateRangerItems(lowHealthPlayersInRange);
-      promisesToAwait.push(equipBatch({ ...rangerItems, mainhand: "cupid" }));
-    }
+/**
+ * Nearest mob the bow cannot reach but supershot can, falling back to a
+ * cooperative mob then the current target.
+ * @returns {Object|null} the mob to supershot, or null
+ */
+function getSuperShotTarget() {
+  const target = get_targeted_monster();
+  const entitiesInVision = Object.values(parent.entities);
+  const coopTarget = target?.cooperative
+    ? target
+    : entitiesInVision.find((entity) => isMob(entity) && isCooperative(entity));
 
-    if (!isAttackOnCD) {
-      // Determine the best skill for healing
-      const preservedMP = G.skills["huntersmark"].mp;
-      const is5ShotReady =
-        character.level >= G.skills["5shot"].level &&
-        lowHealthPlayersInRange.length >= 4 &&
-        character.mp > G.skills["5shot"].mp + preservedMP &&
-        !character.fear;
-      const is3ShotReady =
-        character.level >= G.skills["3shot"].level &&
-        lowHealthPlayersInRange.length >= 2 &&
-        character.mp > G.skills["3shot"].mp + preservedMP &&
-        !character.fear;
+  // Taking the aggro is fine when the mob barely hits, already has someone
+  // else, dies to the shot (isWeak covers both), or the priest can cover us.
+  const healerNearby = isHealerNearby();
+  const isSafeToSuperShot = (mob) =>
+    mob.attack * mob.frequency < 500 ||
+    isWeak(mob, (dmg) => dmg * SUPERSHOT_DAMAGE_MULTIPLIER) ||
+    healerNearby;
 
-      let healingTarget = null;
-      let skillName = "attack";
-      let sliceAmount = 1;
+  // Supershot outranges the bow: spend it on what a normal shot cannot reach.
+  const isWorthSuperShooting = (mob) =>
+    !!mob && !inRange(mob) && is_in_range(mob, "supershot");
 
-      if (is5ShotReady) {
-        skillName = "5shot";
-        sliceAmount = 5;
-      } else if (is3ShotReady) {
-        skillName = "3shot";
-        sliceAmount = 3;
-      } else {
-        // Single shot fallback
-        healingTarget = lowHealthPlayersInRange[0];
-      }
+  return (
+    entitiesInVision
+      .filter(
+        (entity) =>
+          isMob(entity) &&
+          isWorthSuperShooting(entity) &&
+          isSafeToSuperShot(entity),
+      )
+      .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))
+      .shift() ??
+    [coopTarget, target].find(isWorthSuperShooting) ??
+    null
+  );
+}
 
-      if (skillName !== "attack") {
-        // Multi-shot healing
-        set_message(`${skillName} Cupid`);
-        const targets = lowHealthPlayersInRange.slice(0, sliceAmount);
-        console.log(
-          `Healing ${targets.map((player) => player.name).join(", ")}`,
-        );
-        promisesToAwait.push(tryMultiShot(skillName, targets));
-      } else if (healingTarget) {
-        // Single shot healing
-        set_message("Single Cupid");
-        log(`Healing ${healingTarget.name}`);
-        promisesToAwait.push(
-          use_skill("attack", healingTarget).then(() => {
-            attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("attack", false);
-          }),
-        );
-      }
-    }
-  }
+function startSkillLoops() {
+  // runSkillLoop always calls canUse right before cast, so canUse stashes what
+  // it approved and cast reuses it instead of recomputing the scans.
+  let pendingPlan = null;
+  let pendingMarkTarget = null;
+  let pendingSuperShotTarget = null;
 
-  try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
-  } catch (e) {
-    attackErrorHandler(e);
-    console.error("Error while Cupiding!", e);
-  }
+  // Exception: cupid left in hand with no one to heal jumps the queue, so the
+  // ranger is not shooting mobs with a heal bow.
+  runSkillLoop({
+    skill: "strategy",
+    floorMs: 100,
+    canUse: () => {
+      // Cheap gate first: only cupid left in hand justifies the scan mid-window.
+      if (isAttackReady() && !isCupidEquipped()) return false;
+      pendingPlan = getActionPlan();
+      if (!pendingPlan) return false;
+      return !isAttackReady() || pendingPlan.mode === "shot";
+    },
+    cast: () => currentStrategy(pendingPlan.gearTargets),
+  });
 
-  // This value determines if
-  // the ranger is about to Cupid (by equipping)/is currently Cupiding
-  return lowHealthPlayersInRange.length > 0;
+  // Own loop to narrow the gap between marks (was the TODO in fight).
+  runSkillLoop({
+    skill: "huntersmark",
+    canUse: () => {
+      if (isCupidEquipped()) return false;
+      pendingMarkTarget = getHuntersMarkTarget();
+      return pendingMarkTarget != null;
+    },
+    cast: () =>
+      use_skill("huntersmark", pendingMarkTarget).then(() =>
+        reduceCd("huntersmark"),
+      ),
+  });
+
+  // Cupid in hand turns supershot into the emergency heal; a bow shoots mobs.
+  runSkillLoop({
+    skill: "supershot",
+    canUse: () => {
+      if (
+        character.mp <= 400 + SURGE_MP_OFFSET ||
+        is_on_cooldown("supershot")
+      )
+        return false;
+      pendingSuperShotTarget = isCupidEquipped()
+        ? getEmergencyHealee()
+        : getSuperShotTarget();
+      return pendingSuperShotTarget != null;
+    },
+    cast: () => {
+      // The mainhand can flip between canUse and cast: never supershot a mob
+      // with cupid (it heals the mob), nor an ally with a bow.
+      const isHealee = pendingSuperShotTarget.type === "character";
+      if (isHealee !== isCupidEquipped()) return Promise.resolve();
+
+      return use_skill("supershot", pendingSuperShotTarget).then(() =>
+        reduceCd("supershot"),
+      );
+    },
+  });
+
+  runSkillLoop({
+    skill: "scare",
+    canUse: () => character.fear,
+    cast: () => scareAwayMobs(),
+  });
 }
 
 async function mainLoop() {
@@ -315,7 +428,6 @@ async function mainLoop() {
     desiredElixir = "pumpkinspice";
     assignRoles();
 
-    // 1. Death Check
     if (character.rip) {
       respawn();
       throw new Error("Character's down", {
@@ -323,11 +435,14 @@ async function mainLoop() {
       });
     }
 
-    // 2. Cupid Healing
-    const playersToHeal = getPlayersToHeal();
-    const isDeterminedToBeCupid = await cupidHeal(playersToHeal);
+    // Cupid heal, only once currentStrategy put cupid in hand
+    const cupidHealees = isCupidEquipped()
+      ? getCupidHealees(getPlayersToHeal())
+      : [];
+    const isDeterminedToBeCupid = cupidHealees.length > 0;
+    if (isDeterminedToBeCupid) await firePlan(getCupidPlan(cupidHealees));
 
-    // 3. Movement Control Check
+    // Prevent the rest of loop while smartmoving
     const isMovingControlled =
       (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
     if (isMovingControlled) {
@@ -336,17 +451,17 @@ async function mainLoop() {
       });
     }
 
-    // 4. Target Acquisition
+    // Default target
     let target = getTarget();
 
-    // Crypt & Event logic
+    // Crypt & Events
     if (get("cryptInstance")) {
       target = await useCryptStrategy(target);
     } else {
       target = await changeToDailyEventTargets();
     }
 
-    // 5. Movement Logic
+    // Smartmove if needed
     if (!target) {
       const needsToEnterCrypt =
         get("cryptInstance") && character.map !== "crypt";
@@ -384,4 +499,7 @@ async function mainLoop() {
   setTimeout(mainLoop, getLoopInterval());
 }
 
-if (!parent.caracAL) mainLoop();
+if (!parent.caracAL) {
+  mainLoop();
+  startSkillLoops();
+}

@@ -323,6 +323,12 @@ function getZapTarget() {
 }
 
 function startSkillLoops() {
+  // runSkillLoop always calls canUse right before cast, so canUse stashes what
+  // it approved and cast reuses it instead of recomputing the scans.
+  let pendingCurseTarget = null;
+  let pendingAbsorbTarget = null;
+  let pendingZapTarget = null;
+
   // Strategy: gear runs on a fixed cadence via currentStrategy, so each
   // strategy can dress the priest differently, decoupled from the attack loop.
   runSkillLoop({
@@ -334,9 +340,12 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "curse",
-    canUse: () => getCurseTarget() != null,
+    canUse: () => {
+      pendingCurseTarget = getCurseTarget();
+      return pendingCurseTarget != null;
+    },
     cast: () =>
-      use_skill("curse", getCurseTarget()).then(() => reduceCd("curse")),
+      use_skill("curse", pendingCurseTarget).then(() => reduceCd("curse")),
   });
 
   runSkillLoop({
@@ -356,8 +365,11 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "absorb",
-    canUse: () => getAbsorbTarget() != null,
-    cast: () => use_skill("absorb", getAbsorbTarget()),
+    canUse: () => {
+      pendingAbsorbTarget = getAbsorbTarget();
+      return pendingAbsorbTarget != null;
+    },
+    cast: () => use_skill("absorb", pendingAbsorbTarget),
   });
 
   runSkillLoop({
@@ -369,9 +381,14 @@ function startSkillLoops() {
   runSkillLoop({
     skill: "zapperzap",
     floorMs: 50,
-    canUse: () => getZapTarget() != null,
+    canUse: () => {
+      pendingZapTarget = getZapTarget();
+      return pendingZapTarget != null;
+    },
     cast: () =>
-      use_skill("zapperzap", getZapTarget()).then(() => reduceCd("zapperzap")),
+      use_skill("zapperzap", pendingZapTarget).then(() =>
+        reduceCd("zapperzap"),
+      ),
   });
 }
 
