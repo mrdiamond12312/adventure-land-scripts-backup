@@ -500,6 +500,8 @@ function calculateRangerItems(target) {
     findMaxLevelItem(RANGER_INV_ITEMS.cupid) !== -1 ||
     mainhand === RANGER_INV_ITEMS.cupid;
 
+  if (!mainhand) mainhand = RANGER_INV_ITEMS.fireBow;
+
   if (cupidAvailable && getCupidHealees().length) {
     mainhand = RANGER_INV_ITEMS.cupid;
   } else if (targets.length) {

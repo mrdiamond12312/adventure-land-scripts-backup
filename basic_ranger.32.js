@@ -367,13 +367,16 @@ function startSkillLoops() {
     skill: "strategy",
     floorMs: 100,
     canUse: () => {
-      // Cheap gate first: only cupid left in hand justifies the scan mid-window.
-      if (isAttackReady() && !isCupidEquipped()) return false;
+      // Cheap gate first: only cupid, or a bare mainhand, justifies the scan
+      // mid-window.
+      if (isAttackReady() && !isCupidEquipped() && character.slots.mainhand)
+        return false;
       pendingPlan = getActionPlan();
-      if (!pendingPlan) return false;
+      // No plan still equips: that is how a bare mainhand recovers.
+      if (!pendingPlan) return true;
       return !isAttackReady() || pendingPlan.mode === "shot";
     },
-    cast: () => currentStrategy(pendingPlan.gearTargets),
+    cast: () => currentStrategy(pendingPlan?.gearTargets),
   });
 
   // Own loop to narrow the gap between marks (was the TODO in fight).
