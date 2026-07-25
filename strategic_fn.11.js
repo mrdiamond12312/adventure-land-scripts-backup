@@ -254,7 +254,10 @@ function calculateMageItems() {
   const shouldUseBlaster =
     haveEnoughMobsToSplash &&
     !currentTarget?.["1hp"] &&
-    character.mp > G.skills["magiport"].mp + G.skills["blink"].mp;
+    character.mp >
+      G.skills["magiport"].mp +
+        G.skills["blink"].mp +
+        (ms_to_next_skill("use_mp") < ms_to_next_skill("attack" ? 0 : 500));
 
   const feelingLucky = shouldWearLuckGear();
   const feelingWise = shouldWearExpGear();
@@ -530,11 +533,6 @@ function calculateRangerItems(target) {
   };
 }
 
-// Keep the priest's heal-oriented gear equipped for a short grace window after
-// the last time a healee was targeted, so a healee that another player tops up
-// doesn't make us flicker heal/offense gear back and forth (each swap also
-// costs EQUIP_PENALTY_MS). Shared by the mainhand and orb because both key off
-// the same heal-target signal within the same tick.
 let priestLastHealGearAt = 0;
 
 function isPriestInHealGraceWindow(target) {
@@ -543,8 +541,7 @@ function isPriestInHealGraceWindow(target) {
     return true;
   }
 
-  // Guard until the end of next attack
-  const graceMs = ms_to_next_skill("attack") + 1000 / character.frequency;
+  const graceMs = 1000 / character.frequency;
   return Date.now() - priestLastHealGearAt < graceMs;
 }
 
