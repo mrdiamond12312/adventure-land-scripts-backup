@@ -1188,10 +1188,18 @@ function prioritizedNames() {
   return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
 }
 
+// Track max heal power so the threshold stays stable across gear swaps.
+let maxHealPower = 0;
+
+function getHealPower() {
+  maxHealPower = Math.max(maxHealPower, character.heal || character.attack * 2.5);
+  return maxHealPower;
+}
+
 function getPlayersToHeal() {
   const minHealMod = 0.9;
   const healThreshold = character.ctype === "priest" ? 0.8 : 0.65;
-  const healPower = character.heal || character.attack * 2.5;
+  const healPower = getHealPower();
   const prioritizedNamesList = new Set(prioritizedNames());
 
   const shouldHeal = (entity) => {
