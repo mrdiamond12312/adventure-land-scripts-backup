@@ -84,66 +84,61 @@ async function fight(target, isMovingControlled = false) {
         : target;
 
     target = targetToTaunt ?? targetToAttack;
-    if (target) change_target(target);
     isTargetInAttackRange =
       target && distance(target, character) <= characterBufferedRange;
   }
 
-  // Heal XOR attack
-  let committedToHeal = false;
-  const buffees = getPlayersToHeal();
-  const prioritizedBuffeesNames = prioritizedNames();
+  // Decide heal vs attack — they share the attack cooldown, so it's one or the
+  // other. Heal wins when an ally is in heal range. Point our target at whatever
+  // we're about to act on *now*, even while on cooldown, so the gear loop
+  // (reading get_target()) tunes for it ahead of the shot.
   const healRange = character.range + character.xrange * 0.9;
+  const buffees = getPlayersToHeal();
+  const healee = buffees.find(
+    (buffee) => distance(buffee, character) < healRange,
+  );
+  const actionTarget = healee ?? target;
+  if (actionTarget) change_target(actionTarget);
 
-  if (isAttackReady && buffees.length) {
-    for (const buffee of buffees) {
-      const dist = distance(buffee, character);
-
-      if (
-        !smart.moving &&
-        !isAdvanceSmartMoving &&
-        dist >= healRange &&
-        prioritizedBuffeesNames.includes(buffee.name)
-      ) {
-        const middleX = (buffee.x + character.x) / 2;
-        const middleY = (buffee.y + character.y) / 2;
-        if (can_move_to(middleX, middleY)) move(middleX, middleY);
-        else if (can_move_to(buffee.x, buffee.y)) move(buffee.x, buffee.y);
-        set_message(`Moving to ${buffee.name}`);
-        continue;
-      }
-
-      if (dist < healRange) {
-        set_message(`Heal ${buffee.name}`);
-        promisesToAwait.push(
-          use_skill("heal", buffee).then(() => {
+  // Once the shared attack cooldown is up: heal or attack (never both).
+  if (isAttackReady && actionTarget) {
+    if (healee) {
+      set_message(`Heal ${healee.name}`);
+      promisesToAwait.push(
+        use_skill("heal", healee).then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeCompensate);
+          reduceCd("heal");
+        }),
+      );
+    } else if (isTargetInAttackRange && shouldAttack()) {
+      set_message("Attacking");
+      promisesToAwait.push(
+        attack(target)
+          .then(() => {
             attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("heal");
-          }),
-        );
-        committedToHeal = true;
-        break;
-      }
+            reduceCd("attack", false);
+          })
+          .catch((e) => attackErrorHandler(e)),
+      );
     }
   }
 
-  // --- Attack (only if we didn't heal this tick) ---
-  if (
-    !committedToHeal &&
-    isAttackReady &&
-    target &&
-    isTargetInAttackRange &&
-    shouldAttack()
-  ) {
-    set_message("Attacking");
-    promisesToAwait.push(
-      attack(target)
-        .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduceCd("attack", false);
-        })
-        .catch((e) => attackErrorHandler(e)),
+  // No one in heal range: close on the nearest prioritized buffee that wants a
+  // heal. Moving doesn't spend the attack cooldown, so an in-range mob still
+  // gets attacked above this tick.
+  if (!healee && !smart.moving && !isAdvanceSmartMoving) {
+    const prioritizedBuffeesNames = prioritizedNames();
+    const approaching = buffees.find((buffee) =>
+      prioritizedBuffeesNames.includes(buffee.name),
     );
+    if (approaching) {
+      const middleX = (approaching.x + character.x) / 2;
+      const middleY = (approaching.y + character.y) / 2;
+      if (can_move_to(middleX, middleY)) move(middleX, middleY);
+      else if (can_move_to(approaching.x, approaching.y))
+        move(approaching.x, approaching.y);
+      set_message(`Moving to ${approaching.name}`);
+    }
   }
 
   // --- Await All Actions ---
@@ -337,14 +332,14 @@ function startSkillLoops() {
     skill: "gear",
     floorMs: 100,
     canUse: () => {
-      const target = get_targeted_monster();
+      const target = get_target();
       if (!target) return false;
       const suggested = calculatePriestItems(target);
       return Object.keys(suggested).some(
         (slot) => character.slots[slot]?.name !== suggested[slot],
       );
     },
-    cast: () => equipBatch(calculatePriestItems(get_targeted_monster())),
+    cast: () => equipBatch(calculatePriestItems(get_target())),
   });
 
   runSkillLoop({
