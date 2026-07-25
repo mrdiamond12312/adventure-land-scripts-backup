@@ -359,12 +359,14 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "partyheal",
+    whileMoving: true,
     canUse: () => shouldPartyHeal(),
     cast: () => use_skill("partyheal").then(() => reduceCd("partyheal")),
   });
 
   runSkillLoop({
     skill: "absorb",
+    whileMoving: true,
     canUse: () => {
       pendingAbsorbTarget = getAbsorbTarget();
       return pendingAbsorbTarget != null;
@@ -381,6 +383,7 @@ function startSkillLoops() {
   runSkillLoop({
     skill: "zapperzap",
     floorMs: 50,
+    whileMoving: true,
     canUse: () => {
       pendingZapTarget = getZapTarget();
       return pendingZapTarget != null;

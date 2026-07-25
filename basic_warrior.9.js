@@ -29,6 +29,7 @@ rangeRate = originRangeRate;
 
 const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
 const CANDY_SWAP_FALLBACK_DELAY_MS = 150; // used when no projectile speed can be resolved
+const CANDY_MIN_HOLD_MS = 40; // dwell after the canes land, even if the ETA is spent
 
 /**
  * ETA (ms) of the character's attack projectile against the target
@@ -90,6 +91,12 @@ function maybeCandySwap(targetToAttack) {
 
   isEquipingItems = true;
 
+  // Anchor the hold to when the canes actually land. The ETA countdown used to
+  // start when the equip was sent, so a ping-sized chunk of it was already
+  // spent before the canes were in hand.
+  const swapBackAt = Date.now() + projectileEtaMs(targetToAttack);
+  const candyEquip = equip_batch(buildEquip(candycane1, candycane2));
+
   const swapBackAfterHit = () =>
     new Promise((resolve) => {
       setTimeout(() => {
@@ -120,16 +127,20 @@ function maybeCandySwap(targetToAttack) {
         // the ping reduction from the attack's .then. Re-apply it here, after the
         // authoritative correction, so the ping shave actually sticks.
         resolve(equipPromise.then(() => reduceCd("attack", false)));
-      }, projectileEtaMs(targetToAttack));
+      }, Math.max(CANDY_MIN_HOLD_MS, swapBackAt - Date.now()));
     });
 
   return Promise.allSettled([
-    equip_batch(buildEquip(candycane1, candycane2)),
-    swapBackAfterHit(),
+    candyEquip,
+    candyEquip.then(swapBackAfterHit),
   ]).finally(() => {
     isEquipingItems = false;
   });
 }
+
+/** @returns {boolean} whether the attack cooldown is up */
+const isAttackReady = () =>
+  ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
 // Main fight function
 async function fight(target) {
@@ -208,11 +219,8 @@ async function fight(target) {
 
   const promisesToAwait = [];
 
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-
   const targetToAttack = inRange(target) ? target : altTarget;
-  if (isAttackReady && targetToAttack && shouldAttack()) {
+  if (isAttackReady() && targetToAttack && shouldAttack()) {
     set_message("Attacking");
     promisesToAwait.push(
       attack(targetToAttack)

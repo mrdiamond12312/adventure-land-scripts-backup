@@ -157,6 +157,7 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "rspeed",
+    whileMoving: true,
     canUse: () => {
       if (
         ms_to_next_skill("rspeed") !== 0 ||

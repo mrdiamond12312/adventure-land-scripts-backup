@@ -850,10 +850,28 @@ function ms_to_next_skill(skill) {
  * @param {() => boolean} canUse - whether to cast this tick
  * @param {() => Promise} cast - issues the skill; awaited to avoid double-casts
  */
-function runSkillLoop({ skill, canUse, cast, floorMs = 100, timeoutMs = 1000 }) {
+// Skills used to sit in fight(), which mainLoop skipped while smart moving, so
+// loops stay silent then too. whileMoving opts back in the ones that used to
+// run from their own loop or before mainLoop's smart_move throw.
+function runSkillLoop({
+  skill,
+  canUse,
+  cast,
+  floorMs = 100,
+  timeoutMs = 1000,
+  whileMoving = false,
+}) {
   async function loop() {
     try {
-      if (!character.rip && canUse()) await withTimeout(cast(), timeoutMs);
+      const isMovingControlled =
+        (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
+
+      if (
+        !character.rip &&
+        (whileMoving || !isMovingControlled) &&
+        canUse()
+      )
+        await withTimeout(cast(), timeoutMs);
     } catch (e) {
       console.log(`[skillLoop:${skill}]`, e);
     } finally {
