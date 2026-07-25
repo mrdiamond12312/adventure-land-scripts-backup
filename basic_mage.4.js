@@ -84,58 +84,65 @@ async function fight(target) {
   const isTargetInAttackRange =
     distance(target, character) <= character.range + character.xrange;
 
-  // Attack only. Every non-attack skill (energize, reflection, and the
-  // farming-strategy skills/gear that used to be in currentStrategy) now runs on
-  // its own loop (startSkillLoops), so their server round-trips can never hold up
-  // this loop's reschedule — the next attack fires as soon as
-  // ms_to_next_skill("attack") elapses.
+  // Attack, paired with self-energize (spare mp feeds the shot). Every other
+  // skill runs on its own loop (startSkillLoops).
   if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
     set_message("Attacking");
-    try {
-      await withTimeout(
-        attack(target)
-          .then(() => {
-            attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("attack", false);
-          })
-          .catch((e) => {
-            attackErrorHandler(e);
-          }),
-        1000,
+
+    const promisesToAwait = [];
+
+    promisesToAwait.push(
+      attack(target)
+        .then(() => {
+          attackSpeedCompensate(attackFrequencyBeforeCompensate);
+          reduceCd("attack", false);
+        })
+        .catch((e) => attackErrorHandler(e)),
+    );
+
+    if (!is_on_cooldown("energize")) {
+      promisesToAwait.push(
+        use_skill(
+          "energize",
+          character,
+          Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
+        )
+          .then(() => reduceCd("energize"))
+          .catch((e) => attackErrorHandler(e)),
       );
+    }
+
+    try {
+      await withTimeout(Promise.allSettled(promisesToAwait), 1000);
     } catch (e) {
       console.log(e);
     }
   }
 }
 
-// --- Skills, each on its own loop -------------------------------------------
-// Every non-attack skill runs on its own runSkillLoop, keyed on that skill's
-// own cooldown and fully decoupled from the attack loop (fight/mainLoop). None
-// of these round-trips can delay the next attack anymore. The cburst/scare/gear
-// logic used to live inside currentStrategy() (pull_strategy/normal_strategy);
-// it now lives here so each piece gets its own cadence.
+// --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
 
-// Energize either the lowest-mana ally (a real buff) or self right as an attack
-// is about to land (dumps spare mp into the shot).
-function getEnergizeTarget() {
+// Ally worth energizing: needs the mana, and we have spare to give.
+// (Self-energize is paired with the attack in fight, not here.)
+function getEnergizeBuffee() {
   const buffee = getLowestMana();
-  const shouldEnergizeBuffee =
+  const shouldEnergize =
     buffee &&
     buffee.max_mp - buffee.mp > 500 &&
     buffee.mp < buffee.max_mp * 0.65 &&
     character.mp > character.max_mp * 0.75 &&
     is_in_range(buffee, "energize");
-  if (shouldEnergizeBuffee) return buffee;
+  return shouldEnergize ? buffee : null;
+}
 
-  const target = get_targeted_monster();
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-  const isTargetInAttackRange =
-    target && distance(target, character) <= character.range + character.xrange;
-  if (isAttackReady && isTargetInAttackRange) return character;
-
-  return null;
+// Party member (in reflection range) taking the most magical damage right now.
+function getReflectionBuffee() {
+  return prioritizedNames()
+    .map((name) => get_player(name))
+    .filter((player) => player && is_in_range(player, "reflection"))
+    .map((player) => ({ player, dmg: avgDmgTaken(player, "magical") }))
+    .filter(({ dmg }) => dmg > 0)
+    .sort((lhs, rhs) => rhs.dmg - lhs.dmg)[0]?.player;
 }
 
 function startSkillLoops() {
@@ -143,7 +150,7 @@ function startSkillLoops() {
   // calculateMageItems already picks burst vs. farming gear from the target.
   runSkillLoop({
     skill: "gear",
-    floorMs: 200,
+    floorMs: 50,
     canUse: () => {
       const target = get_targeted_monster();
       if (!target) return false;
@@ -157,11 +164,11 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "energize",
-    canUse: () => !is_on_cooldown("energize") && getEnergizeTarget() != null,
+    canUse: () => !is_on_cooldown("energize") && getEnergizeBuffee() != null,
     cast: () =>
       use_skill(
         "energize",
-        getEnergizeTarget(),
+        getEnergizeBuffee(),
         Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
       )
         .then(() => reduceCd("energize"))
@@ -170,21 +177,14 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "reflection",
-    canUse: () => {
-      const target = get_targeted_monster();
-      return (
-        target &&
-        target["damage_type"] === "magical" &&
-        !is_on_cooldown("reflection") &&
-        character.mp > 1000 &&
-        partyMems.includes(target.target)
-      );
-    },
+    canUse: () =>
+      !is_on_cooldown("reflection") &&
+      character.mp > 1000 &&
+      getReflectionBuffee() != null,
     cast: () =>
-      use_skill(
-        "reflection",
-        get_entity(get_targeted_monster().target),
-      ).then(() => reduceCd("reflection")),
+      use_skill("reflection", getReflectionBuffee()).then(() =>
+        reduceCd("reflection"),
+      ),
   });
 
   // cburst: pull strategy only — spend spare mp to help the priest keep the
