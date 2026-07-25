@@ -1858,6 +1858,11 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER2;
       return [RANGER2, ROGUE, MAGE];
     },
+    USII: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER1;
+      return [RANGER, ROGUE, MAGE];
+    },
     default: () => {
       HEALER = PRIEST;
       return [PRIEST, ROGUE, MAGE];
@@ -1881,13 +1886,21 @@ const DYNAMIC_PARTY_PRESETS = {
     },
     default: [WARRIOR, PRIEST, ROGUE],
   },
-  crabxx: () => {
-    // const isAggroed = !!parent.S.crabxx?.target;
-    // if (isAggroed) RANGER = RANGER1;
-    // HEALER = isAggroed ? RANGER1 : PRIEST;
-    // return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
-    RANGER = RANGER1;
-    return [WARRIOR, PRIEST, MAGE];
+  crabxx: {
+    EUII: () => {
+      RANGER = RANGER2;
+      return [WARRIOR, RANGER, PRIEST];
+    },
+    USII: () => {
+      RANGER = RANGER1;
+      return [WARRIOR, RANGER, PRIEST];
+    },
+    USI: () => {
+      return [WARRIOR, ROGUE, PRIEST];
+    },
+    default: () => {
+      return [WARRIOR, PRIEST, MAGE];
+    },
   },
   pinkgoo: {
     USI: [MAGE, PRIEST, ROGUE],

@@ -179,6 +179,7 @@ function startSkillLoops() {
       if (!target) return false;
       if (
         !inRange(target) ||
+        !shouldAttack(target) ||
         ms_to_next_skill("quickstab") !== 0 ||
         character.mp <= G.skills["rspeed"].mp * 2
       )
