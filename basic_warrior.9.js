@@ -262,14 +262,8 @@ async function fight(target) {
 
 async function cleaveLoop() {
   try {
-    const shouldCleave =
-      smart.moving ||
-      ms_to_next_skill("attack") > 0 ||
-      distance(character, get_targeted_monster()) >
-        character.range + character.xrange * 1.1;
-
     if (
-      shouldCleave &&
+      canAffordSwap(2) &&
       character.mp > 1720 &&
       !Object.keys(character.c).length
     ) {

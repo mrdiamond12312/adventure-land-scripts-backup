@@ -1296,6 +1296,27 @@ function getCleaveWeapon() {
   )[0];
 }
 
+/**
+ * @param {number} slots - equipment slots the swap changes
+ * @returns {boolean} whether the swap clears before the next attack
+ */
+function canAffordSwap(slots) {
+  const targetedMonster = get_targeted_monster();
+
+  // Moving or out of range means no auto-attack is pending to protect
+  const isAutoAttacking =
+    !smart.moving &&
+    !isAdvanceSmartMoving &&
+    !!targetedMonster &&
+    distance(character, targetedMonster) <= character.range + character.xrange;
+
+  return (
+    !isAutoAttacking ||
+    character.ping > 1000 / character.frequency ||
+    ms_to_next_skill("attack") > slots * EQUIP_PENALTY_MS + character.ping / 2
+  );
+}
+
 let isCleaving = false;
 async function warriorCleave(currentStrategy) {
   const mobsList = Object.values(parent.entities).filter(
@@ -1381,24 +1402,13 @@ async function warriorCleave(currentStrategy) {
     (mob) => mob.abilities?.burn,
   );
 
-  const msToNextAttack = ms_to_next_skill("attack");
-
-  /**
-   * @param {number} slots - equipment slots the swap changes
-   * @returns {boolean} whether the swap clears before the next attack
-   */
-  const canAffordSwap = (slots) =>
-    character.ping > 1000 / character.frequency ||
-    msToNextAttack > slots * 1 * EQUIP_PENALTY_MS + character.ping / 2;
-
   if (
     isSafeToAggro &&
     !hasRiskyMob &&
     !hasBurningNonAggro &&
     !isFeared &&
     !formidableMob &&
-    !isEquipingItems &&
-    canAffordSwap(2)
+    !isEquipingItems
   ) {
     isEquipingItems = true;
     const cleaveSet = [];
