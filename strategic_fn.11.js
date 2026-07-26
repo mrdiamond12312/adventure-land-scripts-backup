@@ -143,13 +143,13 @@ function canOneShotWithWeapon(weaponInfo, targets) {
  * An unaggroed mob inside the blast radius — one a splash would wake.
  * @param {Object} target - centre of the blast
  * @param {number} [blastRadius] - radius to scan
- * @param {number} [minDamage] - only count mobs hitting harder than this
+ * @param {(mob: Object) => boolean} [counts] - only count mobs passing this
  * @returns {boolean}
  */
 function hasUntargetedMonsterAround(
   target,
   blastRadius = BLAST_RADIUS,
-  minDamage = 0,
+  counts = () => true,
 ) {
   if (!target) return false;
 
@@ -158,7 +158,7 @@ function hasUntargetedMonsterAround(
       entity.type === "monster" &&
       !entity.target &&
       distance(target, entity) < blastRadius &&
-      (!minDamage || calculateDamage(entity, character, false) > minDamage),
+      counts(entity),
   );
 }
 
@@ -187,7 +187,11 @@ function findInvBooster() {
 const FORMIDABLE_MOB_DAMAGE = 1100;
 
 function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
-  return hasUntargetedMonsterAround(target, blastRadius, FORMIDABLE_MOB_DAMAGE);
+  return hasUntargetedMonsterAround(
+    target,
+    blastRadius,
+    (mob) => calculateDamage(mob, character, false) > FORMIDABLE_MOB_DAMAGE,
+  );
 }
 
 const EQUIP_IGNORE_MOBS = ["nerfedmummy"];
@@ -462,11 +466,25 @@ function chooseFireOrPouchForSplashing(targets) {
     : RANGER_INV_ITEMS.fireBow;
 }
 
+const HARMLESS_MOB_DAMAGE = 300;
+const SPLASH_DAMAGE_RATE = 0.5;
+
 /**
- * Whether firing at `mob` is safe once splash is accounted for. Everything the
- * blast catches must already be aggroed and worth attacking, so a shot never
- * wakes a fresh mob. Cannot use mobsListAroundTarget: it drops untargeted mobs,
- * which are exactly the ones we are looking for.
+ * Whether waking `mob` with a splash is acceptable: it barely scratches us, or
+ * the same splash kills it outright.
+ * @param {Object} mob - the unaggroed bystander in the blast
+ * @returns {boolean}
+ */
+function isNegligibleMob(mob) {
+  return (
+    !!mob["1hp"] ||
+    calculateDamage(mob, character, false) < HARMLESS_MOB_DAMAGE ||
+    mob.hp < calculateDamage(character, mob) * SPLASH_DAMAGE_RATE
+  );
+}
+
+/**
+ * Whether firing at `mob` is safe once splash is accounted for. 
  * @param {Object} mob - the intended target
  * @param {number} [splashRadius] - blast radius to test; 0 means no splash
  * @returns {boolean}
@@ -475,7 +493,11 @@ function isSafeToShoot(mob, splashRadius = character.explosion / 3.6 || 0) {
   if (!shouldAttack(mob)) return false;
   if (!splashRadius) return true;
 
-  return !hasUntargetedMonsterAround(mob, splashRadius);
+  return !hasUntargetedMonsterAround(
+    mob,
+    splashRadius,
+    (bystander) => !isNegligibleMob(bystander),
+  );
 }
 
 function calculateRangerItems(target) {

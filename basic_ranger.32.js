@@ -54,8 +54,9 @@ const isAttackReady = () =>
 // --- Decide: one plan drives both the gear loop and the shot ---
 
 /** @returns {boolean} whether cupid is the equipped mainhand */
-const isCupidEquipped = () =>
-  character.slots.mainhand?.name === RANGER_INV_ITEMS.cupid;
+// Literal, not RANGER_INV_ITEMS.cupid: strategic_fn.11.js may not be loaded yet
+// on the first mainLoop tick.
+const isCupidEquipped = () => character.slots.mainhand?.name === "cupid";
 
 /**
  * Mobs worth shooting right now, annotated with cluster count and distance,
