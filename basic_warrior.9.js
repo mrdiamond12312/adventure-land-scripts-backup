@@ -64,7 +64,7 @@ function maybeCandySwap(targetToAttack) {
     !isCleaving &&
     !isEquipingItems &&
     characterAtkCycleMs > 250 + character.ping &&
-    // !character.s.sugarrush &&
+    !character.s.sugarrush &&
     (CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.offhand?.name) ||
       CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.mainhand?.name)) &&
     character.slots.offhand?.name !== "mshield" &&
@@ -98,48 +98,33 @@ function maybeCandySwap(targetToAttack) {
 
   isEquipingItems = true;
 
-  const swapBackAt = Date.now() + etaMs + equipLatencyMs;
+  const swapBackAt = Date.now() + etaMs;
 
   const swapBackDeadline =
-    Date.now() + characterAtkCycleMs - equipLatencyMs - CANDY_MIN_HOLD_MS;
+    Date.now() +
+    characterAtkCycleMs -
+    equipLatencyMs -
+    CANDY_MIN_HOLD_MS -
+    EQUIP_PENALTY_MS * 2;
 
   const candyEquip = equip_batch(buildEquip(candycane1, candycane2));
 
-  const swapBackAfterHit = () =>
-    new Promise((resolve) => {
-      setTimeout(() => {
-        const warriorItems = calculateWarriorItems();
-        const mainhand = findMaxLevelItem(warriorItems.mainhand);
-        const mainhandNum = mainhand === -1 ? candycane1 : mainhand;
-
-        let equipPromise;
-        if (!warriorItems.offhand) {
-          // Double-handed mainhand: empty the offhand.
-          equipPromise = Promise.all([
-            unequip("offhand"),
-            equip_batch([{ num: mainhandNum, slot: "mainhand" }]),
-          ]);
-        } else {
-          // If offhand === mainhand, use a different inventory slot.
-          const offhand =
-            warriorItems.offhand === warriorItems.mainhand
-              ? findMaxLevelItem(warriorItems.offhand, 1)
-              : findMaxLevelItem(warriorItems.offhand);
-          equipPromise = equip_batch(
-            buildEquip(mainhandNum, offhand === -1 ? candycane2 : offhand),
-          );
-        }
-
-        resolve(equipPromise.then(() => reduceCd("attack", false)));
-      }, Math.min(
-        Math.max(CANDY_MIN_HOLD_MS, swapBackAt - Date.now()),
-        Math.max(0, swapBackDeadline - Date.now()),
-      ));
-    });
+  // Hold the canes until the hit lands, then release and let currentStrategy
+  // put the real weapons back on its own tick
+  const holdUntilSwapBack = () =>
+    new Promise((resolve) =>
+      setTimeout(
+        resolve,
+        Math.min(
+          Math.max(CANDY_MIN_HOLD_MS, swapBackAt - Date.now()),
+          Math.max(0, swapBackDeadline - Date.now()),
+        ),
+      ),
+    );
 
   return Promise.allSettled([
     candyEquip,
-    candyEquip.then(swapBackAfterHit),
+    candyEquip.then(holdUntilSwapBack),
   ]).finally(() => {
     isEquipingItems = false;
   });

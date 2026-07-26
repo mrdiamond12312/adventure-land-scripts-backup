@@ -1423,11 +1423,9 @@ async function warriorCleave(currentStrategy) {
         unequip("offhand"),
         cleaveSet.length ? equip_batch(cleaveSet) : undefined,
       ]),
-      withTimeout(use_skill("cleave"), 2500).then(async () => {
-        const warriorItems = calculateWarriorItems();
-        reduce_cooldown("cleave", 0.95 * character.ping);
-        await equipBatch(warriorItems);
-      }),
+      withTimeout(use_skill("cleave"), 2500).then(() =>
+        reduce_cooldown("cleave", 0.95 * character.ping),
+      ),
     );
   }
 
