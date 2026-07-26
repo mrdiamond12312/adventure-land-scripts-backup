@@ -250,7 +250,7 @@ async function firePlan(plan) {
 }
 
 async function fight(target) {
-  const plan = getShotPlan(target);
+  const plan = getActionPlan(target);
   if (!plan) return;
 
   if (plan.target) change_target(plan.target);
