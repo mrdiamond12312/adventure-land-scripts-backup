@@ -328,7 +328,7 @@ function startSkillLoops() {
   // cadence via currentStrategy, decoupled from the attack loop.
   runSkillLoop({
     skill: "strategy",
-    floorMs: 100,
+    floorMs: 50,
     canUse: () => true,
     cast: () => currentStrategy(get_target()),
   });

@@ -1432,7 +1432,15 @@ async function warriorCleave(currentStrategy) {
   return Promise.allSettled(promises).finally(() => {
     isCleaving = false;
     // Only release the flag if the aggro branch above claimed it
-    if (promises.length) isEquipingItems = false;
+    if (promises.length) {
+      isEquipingItems = false;
+      // equipBatch bails while penalty_cd is up, so hand the restore to
+      // currentStrategy at the earliest moment it can actually equip
+      setTimeout(
+        () => currentStrategy(get_target()),
+        character.s.penalty_cd?.ms ?? 0,
+      );
+    }
   });
 }
 
@@ -1458,15 +1466,19 @@ async function warriorStomp() {
 
   promises.push(
     equipBatch({ mainhand: "basher", offhand: undefined }, true),
-    use_skill("stomp").then(async () => {
-      const warriorItems = calculateWarriorItems();
-      reduce_cooldown("stomp", 0.95 * character.ping);
-      await equipBatch(warriorItems, true);
-    }),
+    use_skill("stomp").then(() =>
+      reduce_cooldown("stomp", 0.95 * character.ping),
+    ),
   );
 
   return Promise.allSettled(promises).finally(() => {
     isStomping = false;
+    // equipBatch bails while penalty_cd is up, so hand the restore to
+    // currentStrategy at the earliest moment it can actually equip
+    setTimeout(
+      () => currentStrategy(get_target()),
+      character.s.penalty_cd?.ms ?? 0,
+    );
   });
 }
 
