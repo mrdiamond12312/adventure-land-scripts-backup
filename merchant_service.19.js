@@ -137,9 +137,18 @@ async function openCryptInstance() {
   }
 }
 
+/** @param {string} name character name */
+function isSiblingOnline(name) {
+  if (parent.caracAL) return !!parent.caracAL.siblings?.includes(name);
+  return !!get_active_characters()[name];
+}
+
 function isMyPriestOnline() {
-  if (parent.caracAL) return !!parent.caracAL.siblings?.includes(PRIEST);
-  return !!get_active_characters()[PRIEST];
+  return isSiblingOnline(PRIEST);
+}
+
+function isMyMageOnline() {
+  return isSiblingOnline(MAGE);
 }
 
 var isLuringMobs = false;
@@ -156,6 +165,7 @@ async function lureMechaGnome() {
     smart.moving ||
     shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
+    !isMyMageOnline() ||
     (!(
       parent.party_list &&
       trustedPartners.some((name) => parent.party_list.includes(name))
