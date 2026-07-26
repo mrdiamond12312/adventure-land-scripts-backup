@@ -1318,7 +1318,7 @@ function canAffordSwap(slots) {
 }
 
 let isCleaving = false;
-async function warriorCleave(currentStrategy) {
+async function warriorCleave(strategyName) {
   const mobsList = Object.values(parent.entities).filter(
     (mob) =>
       mob.type === "monster" &&
@@ -1382,10 +1382,10 @@ async function warriorCleave(currentStrategy) {
   const allMobs = [...magicalMobs, ...physicalMobs, ...pureMobs];
   const totalDpsTaken = totalMobDps(allMobs);
 
-  const healThreshold = currentStrategy === "pull" ? healerHps() * 0.9 : 0;
+  const healThreshold = strategyName === "pull" ? healerHps() * 0.9 : 0;
 
   const isSafeToAggro =
-    currentStrategy === "pull"
+    strategyName === "pull"
       ? totalDpsTaken <= healThreshold ||
         listOfNoTargetMonsterInRange.length === 0
       : listOfNoTargetMonsterInRange.length === 0;
