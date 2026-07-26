@@ -1381,21 +1381,31 @@ async function warriorCleave(currentStrategy) {
     (mob) => mob.abilities?.burn,
   );
 
+  const msToNextAttack = ms_to_next_skill("attack");
+
+  /**
+   * @param {number} slots - equipment slots the swap changes
+   * @returns {boolean} whether the swap clears before the next attack
+   */
+  const canAffordSwap = (slots) =>
+    character.ping > 1000 / character.frequency ||
+    msToNextAttack > slots * 1 * EQUIP_PENALTY_MS + character.ping / 2;
+
   if (
     isSafeToAggro &&
     !hasRiskyMob &&
     !hasBurningNonAggro &&
     !isFeared &&
     !formidableMob &&
-    !isEquipingItems
+    !isEquipingItems &&
+    canAffordSwap(2)
   ) {
     isEquipingItems = true;
-    const msToNextAttack = ms_to_next_skill("attack");
     const cleaveSet = [];
     if (cleaveWeapon.num >= 0)
       cleaveSet.push({ num: cleaveWeapon.num, slot: "mainhand" });
 
-    if (msToNextAttack > 320)
+    if (canAffordSwap(3))
       cleaveSet.push({ num: findMaxLevelItem("mpxamulet"), slot: "amulet" });
 
     promises.push(
@@ -1406,10 +1416,7 @@ async function warriorCleave(currentStrategy) {
       withTimeout(use_skill("cleave"), 2500).then(async () => {
         const warriorItems = calculateWarriorItems();
         reduce_cooldown("cleave", 0.95 * character.ping);
-        await equipBatch(
-          { mainhand: warriorItems.mainhand, offhand: warriorItems.offhand },
-          true,
-        );
+        await equipBatch(warriorItems);
       }),
     );
   }
