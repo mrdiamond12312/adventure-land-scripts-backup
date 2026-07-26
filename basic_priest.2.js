@@ -5,6 +5,7 @@ if (parent.caracAL) {
       "adventure-land-scripts-backup/basic_function.7.js",
       "adventure-land-scripts-backup/other_class_msg_listener.8.js",
     ])
+    .then(() => dependenciesLoaded)
     .then(() => {
       mainLoop();
       startSkillLoops();
@@ -260,7 +261,7 @@ function getZapTarget() {
       ...entity,
       dist: distance(entity, character),
       hp_p: entity.hp / entity.max_hp,
-      weak: entity.max_hp < 2000,
+      weak: entity.max_hp < TRIVIAL_MOB_MAX_HP,
     }))
     .filter((entity) => {
       if (entity.target) return true;

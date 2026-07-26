@@ -6,6 +6,7 @@ if (parent.caracAL) {
       "adventure-land-scripts-backup/basic_function.7.js",
       "adventure-land-scripts-backup/other_class_msg_listener.8.js",
     ])
+    .then(() => dependenciesLoaded)
     .then(() => {
       mainLoop();
       startSkillLoops();

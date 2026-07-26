@@ -6,6 +6,7 @@ if (parent.caracAL) {
       "adventure-land-scripts-backup/basic_function.7.js",
       "adventure-land-scripts-backup/other_class_msg_listener.8.js",
     ])
+    .then(() => dependenciesLoaded)
     .then(() => {
       mainLoop();
       startSkillLoops();
@@ -36,7 +37,7 @@ async function fight(target) {
     !target?.mtype.includes("crabx")
   ) {
     const attackRange = character.range + character.xrange;
-    const blastRadius = character.blast / 3.6 || BLAST_RADIUS;
+    const blastRadius = getSplashRadius();
 
     // Filter: Find all aggroed mobs within a reasonable pull distance, excluding formidable ones
     const aggroedMobs = Object.values(parent.entities)

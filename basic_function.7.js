@@ -216,16 +216,26 @@ function getTotalQuantityOf(item) {
   }, 0);
 }
 
+// Under caracAL these loads resolve *after* this file's top-level code returns,
+// so awaiting basic_function.7.js alone is not enough — an entry script that
+// starts looping right away can run a tick before strategic_fn.11.js exists.
+// Every loader must await dependenciesLoaded (assigned at the end of this file).
+var pendingScriptLoads = [];
+
 // Strategic functions
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/strategic_fn.11.js",
-  ]);
-  if (character.ctype !== "merchant") {
+  pendingScriptLoads.push(
     parent.caracAL.load_scripts([
-      "adventure-land-scripts-backup/normal_strategy.12.js",
-      "adventure-land-scripts-backup/pull_strategy.13.js",
-    ]);
+      "adventure-land-scripts-backup/strategic_fn.11.js",
+    ]),
+  );
+  if (character.ctype !== "merchant") {
+    pendingScriptLoads.push(
+      parent.caracAL.load_scripts([
+        "adventure-land-scripts-backup/normal_strategy.12.js",
+        "adventure-land-scripts-backup/pull_strategy.13.js",
+      ]),
+    );
   }
 } else {
   load_code(11);
@@ -240,9 +250,11 @@ if (parent.caracAL) {
 
 // Server hoping
 if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/server_hop.14.js",
-  ]);
+  pendingScriptLoads.push(
+    parent.caracAL.load_scripts([
+      "adventure-land-scripts-backup/server_hop.14.js",
+    ]),
+  );
 } else if (!character.controller) {
   load_code(14);
 }
@@ -514,18 +526,34 @@ const DISMANTLE_LIST = [
 var maxUpgrade = 7;
 var maxCompound = 3;
 
+// Mob weakness thresholds (damage ones are dps, like calculateDamage)
+const HARMLESS_MOB_DAMAGE = 300;
+const DANGEROUS_MOB_DAMAGE = 600;
+const FORMIDABLE_MOB_DAMAGE = 1100;
+const TRIVIAL_MOB_MAX_HP = 2000;
+const SHOT_DAMAGE_MARGIN = 0.9;
+// Cleave rolls 0.1 to 0.9 of the weapon's damage per hit — this is the midpoint
+const CLEAVE_ONE_HIT_MULTIPLIER = 0.5;
+// A burn tops out at 1.5x the attack that lit it (3x for the unlimited kind)
+const BURN_DAMAGE_MULTIPLIER = 1.5;
+
 // Smart move strategies
 var isAdvanceSmartMoving = false;
 if (parent.caracAL) {
-  parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/crypt_strategy.16.js",
-    "adventure-land-scripts-backup/strategic_smart_move.21.js",
-    "adventure-land-scripts-backup/advance_smart_move.20.js",
-  ]);
+  pendingScriptLoads.push(
+    parent.caracAL.load_scripts([
+      "adventure-land-scripts-backup/crypt_strategy.16.js",
+      "adventure-land-scripts-backup/strategic_smart_move.21.js",
+      "adventure-land-scripts-backup/advance_smart_move.20.js",
+    ]),
+  );
 } else {
   load_code(20);
   load_code(16);
 }
+
+// Resolves once every script this file pulls in has actually been evaluated
+var dependenciesLoaded = Promise.all(pendingScriptLoads);
 
 // Wrapper to use which depends on client platform
 async function advanceSmartMove(props, options = { useScare: true }) {

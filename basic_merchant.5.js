@@ -9,6 +9,7 @@ if (parent.caracAL) {
       "adventure-land-scripts-backup/merchant_crafting.10.js",
       "adventure-land-scripts-backup/merchant_service.19.js",
     ])
+    .then(() => dependenciesLoaded)
     .then(() => {
       syncBankData();
       bankLoop();

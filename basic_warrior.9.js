@@ -13,6 +13,7 @@ if (parent.caracAL) {
       "adventure-land-scripts-backup/basic_function.7.js",
       "adventure-land-scripts-backup/other_class_msg_listener.8.js",
     ])
+    .then(() => dependenciesLoaded)
     .then(() => {
       cleaveLoop();
       mainLoop();
@@ -150,7 +151,7 @@ const isAttackReady = () =>
 
 // Main fight function
 async function fight(target) {
-  const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
+  const blastRadius = getSplashRadius();
   const attackRange = character.range + character.xrange;
   const attackFrequencyBeforeComponsate = character.frequency;
   const inRange = (entity, mult = 1) =>

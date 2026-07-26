@@ -5,6 +5,7 @@ if (parent.caracAL) {
       "adventure-land-scripts-backup/basic_function.7.js",
       "adventure-land-scripts-backup/other_class_msg_listener.8.js",
     ])
+    .then(() => dependenciesLoaded)
     .then(() => {
       mainLoop();
       startSkillLoops();
@@ -19,9 +20,6 @@ var originRangeRate = 0.6;
 rangeRate = originRangeRate;
 
 // Utils
-const isWeak = (monster, multiplier = (dmg) => dmg * 1) =>
-  monster.hp < multiplier(calculateDamage(character, monster) * 0.9) ||
-  monster.target;
 const isCooperative = (monster) => monster.cooperative;
 const isMob = (entity) => entity.type === "monster";
 const reduceCd = (skillName, isPingBased = true) =>
@@ -64,9 +62,7 @@ const isCupidEquipped = () => character.slots.mainhand?.name === "cupid";
  * @returns {Object[]} the sorted candidates
  */
 function getPotentialTargets() {
-  const explosionRadius = character.explosion
-    ? character.explosion / 3.6
-    : BLAST_RADIUS;
+  const explosionRadius = getSplashRadius();
 
   return Object.values(parent.entities)
     .filter(
@@ -76,9 +72,8 @@ function getPotentialTargets() {
         !entity.rip &&
         inRange(entity) &&
         !entity.s?.fullguardx &&
-        (entity.attack * (entity.frequency > 1 ? entity.frequency : 1) < 500 ||
+        (isHarmlessMob(entity) ||
           (entity.cooperative && !partyMems.includes(entity.target)) ||
-          entity["1hp"] ||
           entity.target),
     )
     .map((entity) => {
@@ -142,11 +137,11 @@ function getCupidPlan(healees) {
  */
 function getShotPlan(incomingTarget = get_targeted_monster()) {
   const potentialTargets = getPotentialTargets();
-  // Wrapped, not passed by reference: filter would hand isWeak the index as its
-  // multiplier.
-  const weakMobs = potentialTargets.filter((mob) => isWeak(mob));
+  // Wrapped, not passed by reference: filter would hand isWeakMob the index as
+  // its multiplier.
+  const weakMobs = potentialTargets.filter((mob) => isWeakMob(mob));
   const canMultiShot = !character.fear;
-  const isCupid = character.slots.mainhand?.name === "cupid";
+  const isCupid = isCupidEquipped();
 
   let target = incomingTarget;
   if (potentialTargets.length && !target?.mtype.includes("crabx")) {
@@ -343,15 +338,15 @@ function getSuperShotTarget() {
     : entitiesInVision.find((entity) => isMob(entity) && isCooperative(entity));
 
   // Taking the aggro is fine when the mob barely hits, already has someone
-  // else, dies to the shot (isWeak covers both), or the priest can cover us.
+  // else, dies to the shot (isWeakMob covers both), or the priest can cover us.
   const healerNearby = isHealerNearby();
   const isSafeToSuperShot = (mob) =>
-    mob.attack * mob.frequency < 500 ||
-    isWeak(mob, (dmg) => dmg * SUPERSHOT_DAMAGE_MULTIPLIER);
+    isHarmlessMob(mob) || isWeakMob(mob, SUPERSHOT_DAMAGE_MULTIPLIER);
   // || healerNearby
 
+  // The long shot is wasted on a mob any normal hit would kill
   const isWorthSuperShooting = (mob) =>
-    !!mob && !inRange(mob) && is_in_range(mob, "supershot");
+    !!mob && !mob["1hp"] && !inRange(mob) && is_in_range(mob, "supershot");
 
   return (
     entitiesInVision

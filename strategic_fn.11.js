@@ -60,6 +60,16 @@ function getMaxBlastRadius() {
   return bestBlast / BLAST_DIVISOR;
 }
 
+/**
+ * Radius our own splash currently covers.
+ * @param {number} [fallback] - used when we carry no splash at all
+ * @returns {number} the radius
+ */
+function getSplashRadius(fallback = BLAST_RADIUS) {
+  const splash = character.explosion || character.blast || 0;
+  return splash / BLAST_DIVISOR || fallback;
+}
+
 function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
   if (!target) return [];
 
@@ -104,7 +114,32 @@ function rawAttackMultiplier() {
   return character[mainStat] / 20;
 }
 
-function canOneShotWithWeapon(weaponInfo, targets) {
+/**
+ * Attack we would have holding this weapon: the raw difference against what is
+ * in hand, scaled by our stats, on top of the attack we already have.
+ * @param {Object} weaponInfo - item_info of the weapon
+ * @returns {number} the attack
+ */
+function effectiveAttackWith(weaponInfo) {
+  const currentAttack = character.slots.mainhand
+    ? (item_info(character.slots.mainhand).attack ?? 0)
+    : 0;
+
+  return (
+    character.attack +
+    ((weaponInfo?.attack ?? 0) - currentAttack) * (rawAttackMultiplier() + 1)
+  );
+}
+
+/**
+ * Whether any target dies to a single hit of this weapon.
+ * @param {Object} weaponInfo - item_info of the weapon
+ * @param {Object[]} targets - mobs to test
+ * @param {number} [multiplier] - damage scaling of the skill, when it is not a
+ * plain attack whose scaling follows the target count
+ * @returns {boolean}
+ */
+function canOneShotWithWeapon(weaponInfo, targets, multiplier) {
   const classData = G.classes[character.ctype];
   const damageType = classData.damage_type;
 
@@ -112,9 +147,7 @@ function canOneShotWithWeapon(weaponInfo, targets) {
     ? item_info(character.slots.mainhand)
     : { attack: 0, name: null, wtype: null };
 
-  const effectiveAttack =
-    character.attack +
-    (weaponInfo.attack - currentInfo.attack) * (rawAttackMultiplier() + 1);
+  const effectiveAttack = effectiveAttackWith(weaponInfo);
 
   let effectivePiercing =
     damageType === "physical" ? character.apiercing : character.rpiercing;
@@ -125,7 +158,7 @@ function canOneShotWithWeapon(weaponInfo, targets) {
 
   const piercingMultiplier = damageType === "physical" ? 2 : 1;
   const shotMultiplier =
-    targets.length >= 4 ? 0.5 : targets.length >= 2 ? 0.7 : 1;
+    multiplier ?? (targets.length >= 4 ? 0.5 : targets.length >= 2 ? 0.7 : 1);
 
   return targets.some((mob) => {
     const defense = getMobDefense(mob);
@@ -172,19 +205,12 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
     return 0;
   }
 
-  return Object.values(parent.entities).filter(
-    (entity) =>
-      entity.type === "monster" &&
-      distance(target, entity) < blastRadius &&
-      entity.target,
-  ).length;
+  return mobsListAroundTarget(target, blastRadius).length;
 }
 
 function findInvBooster() {
   return BOOSTERS.find((booster) => locate_item(booster) !== -1);
 }
-
-const FORMIDABLE_MOB_DAMAGE = 1100;
 
 function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   return hasUntargetedMonsterAround(
@@ -192,6 +218,30 @@ function haveFormidableMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
     blastRadius,
     (mob) => calculateDamage(mob, character, false) > FORMIDABLE_MOB_DAMAGE,
   );
+}
+
+// Mob weakness
+function isDyingToOurShot(mob, multiplier = 1) {
+  if (!mob) return false;
+
+  return (
+    mob.hp < calculateDamage(character, mob) * SHOT_DAMAGE_MARGIN * multiplier
+  );
+}
+
+function isHarmlessMob(mob) {
+  if (!mob) return false;
+
+  return (
+    !!mob["1hp"] ||
+    mob.max_hp < TRIVIAL_MOB_MAX_HP ||
+    calculateDamage(mob, character, false) < HARMLESS_MOB_DAMAGE
+  );
+}
+
+/** A free target: someone already holds its aggro, or it dies to our next shot */
+function isWeakMob(mob, multiplier = 1) {
+  return isDyingToOurShot(mob, multiplier) || !!mob?.target;
 }
 
 const EQUIP_IGNORE_MOBS = ["nerfedmummy"];
@@ -240,6 +290,37 @@ function attackSpeedCompensate(
 // Class Items logic
 const MAGE_WEAK_MOB_TYPES = ["pinkgoo", "snowman", "wabbit", "crab"];
 
+/**
+ * Owned items passing `matches`, best first — the bag plus whatever is
+ * equipped, whose `num` is -1 since it has no inventory slot.
+ * @param {(entry: {num: number, name: string, info: Object}) => boolean} matches
+ * @param {(entry: Object) => number} [score] - ranking, attack by default
+ * @returns {{num: number, name: string, info: Object, score: number}[]}
+ */
+function findOwnedItems(matches, score = (entry) => entry.info.attack ?? 0) {
+  const entries = character.items.map((item, num) =>
+    item ? { num, name: item.name, info: item_info(item) } : null,
+  );
+
+  for (const slot of Object.values(character.slots)) {
+    if (slot) entries.push({ num: -1, name: slot.name, info: item_info(slot) });
+  }
+
+  return entries
+    .filter((entry) => entry && matches(entry))
+    .map((entry) => ({ ...entry, score: score(entry) }))
+    .sort((lhs, rhs) => rhs.score - lhs.score);
+}
+
+/**
+ * item_info for an item we actually carry, at the level we carry it.
+ * @param {string} id - item name
+ * @returns {Object|undefined} the info, or undefined when not owned
+ */
+function getOwnedItemInfo(id) {
+  return findOwnedItems((entry) => entry.name === id)[0]?.info;
+}
+
 function getMageMainhand(
   currentTarget,
   shouldUseBlaster,
@@ -248,12 +329,17 @@ function getMageMainhand(
   if (character.map === "crypt" && !currentTarget?.s?.frozen)
     return "froststaff";
 
-  const isWeakMob = MAGE_WEAK_MOB_TYPES.includes(currentTarget?.mtype);
-  const isLowHpMob =
-    currentTarget?.max_hp < 2000 &&
+  const isWeakMobType = MAGE_WEAK_MOB_TYPES.includes(currentTarget?.mtype);
+
+  // Pinkie is worth its lost attack only when it still kills in one cast
+  const pinkieInfo = getOwnedItemInfo("pinkie");
+  const pinkieOneShots =
+    !!pinkieInfo &&
+    !!currentTarget &&
+    canOneShotWithWeapon(pinkieInfo, [currentTarget]) &&
     (currentStrategy !== usePullStrategies || !haveEnoughMobsToSplash);
 
-  if (isWeakMob || isLowHpMob) return "pinkie";
+  if (isWeakMobType || pinkieOneShots) return "pinkie";
 
   if (currentStrategy === usePullStrategies && shouldUseBlaster)
     return "gstaff";
@@ -412,62 +498,89 @@ function getCupidHealees(playersToHeal = getPlayersToHeal()) {
   );
 }
 
-function explosionScore(itemInfo, targets) {
+function explosionScore(
+  itemInfo,
+  targets,
+  clusterOf = numberOfMonsterAroundTarget,
+) {
   if (!itemInfo || !targets?.length) return 0;
 
-  const attack = itemInfo.attack || 0;
+  const attack = effectiveAttackWith(itemInfo);
   const explosion =
     (character.explosion ?? 0) + (itemInfo.explosion_delta ?? 0);
+  const radius = explosion / BLAST_DIVISOR || BLAST_RADIUS;
 
-  return targets.reduce((accumulator, mob) => {
-    const cluster = numberOfMonsterAroundTarget(
-      mob,
-      explosion / 3.6 || BLAST_RADIUS,
-    );
+  // Expected damage with this bow's crit over the one we hold: a crit doubles
+  // the hit, so each point of crit chance is worth one extra point of damage
+  const crit = character.crit ?? 0;
+  const critRate =
+    (1 + (crit + (itemInfo.crit_delta ?? 0)) / 100) / (1 + crit / 100);
+
+  const burnChance =
+    itemInfo.ability === "burn" ? (itemInfo.attr0 ?? 0) / 100 : 0;
+
+  const score = targets.reduce((accumulator, mob) => {
+    const cluster = clusterOf(mob, radius);
+
+    // Burn lands on every mob we shoot, never on the ones the splash catches
+    const burn = burnChance
+      ? dps_multiplier((mob.armor ?? 0) - (character.apiercing ?? 0) * 2) *
+        ((100 - (mob.firesistance ?? 0)) / 100) *
+        BURN_DAMAGE_MULTIPLIER *
+        attack *
+        burnChance *
+        0.9
+      : 0;
+
     return (
       accumulator +
       attack +
-      ((attack * explosion) / 100) * Math.max(0, cluster - 1)
+      ((attack * explosion) / 100) * Math.max(0, cluster - 1) +
+      burn
     );
   }, 0);
+
+  return score * critRate;
 }
 
-function chooseFireOrPouchForSplashing(targets) {
-  const currentBow = {
-    ...(item_info(character.slots.mainhand) ?? {}),
-    explosion_delta: 0,
+/**
+ * Best-scoring bow to splash with, over every bow carried plus the one in hand.
+ * @param {Object[]} targets - the mobs about to be shot
+ * @returns {string} the bow's name
+ */
+function chooseBowForSplashing(targets) {
+  const currentBow = character.slots.mainhand;
+  const currentInfo = currentBow ? item_info(currentBow) : undefined;
+  const currentExplosion = currentInfo?.explosion ?? 0;
+  const currentCrit = currentInfo?.crit ?? 0;
+
+  // Bows sharing a radius share their cluster counts, for this call only
+  const clusters = new Map();
+  const clusterOf = (mob, radius) => {
+    const key = `${mob.id}:${Math.round(radius)}`;
+    if (!clusters.has(key))
+      clusters.set(key, numberOfMonsterAroundTarget(mob, radius));
+    return clusters.get(key);
   };
-  const currentBowExplosion = currentBow.explosion ?? 0;
 
-  const resolveBowInfo = (id) => {
-    if (currentBow.id === id) return currentBow;
+  const best = findOwnedItems(
+    (entry) =>
+      ["bow", "crossbow"].includes(entry.info?.wtype) &&
+      entry.name !== RANGER_INV_ITEMS.cupid,
+    (entry) =>
+      explosionScore(
+        {
+          ...entry.info,
+          explosion_delta: (entry.info.explosion ?? 0) - currentExplosion,
+          crit_delta: (entry.info.crit ?? 0) - currentCrit,
+        },
+        targets,
+        clusterOf,
+      ),
+  )[0];
 
-    const slot = findMaxLevelItem(id);
-    if (slot === -1) return undefined;
-
-    const info = item_info(character.items[slot]);
-    return {
-      ...info,
-      explosion_delta: (info.explosion ?? 0) - currentBowExplosion,
-    };
-  };
-
-  const fireInfo = resolveBowInfo(RANGER_INV_ITEMS.fireBow);
-  const pouchInfo = resolveBowInfo(RANGER_INV_ITEMS.poucher);
-
-  if (!pouchInfo) return RANGER_INV_ITEMS.fireBow;
-  if (!fireInfo) return RANGER_INV_ITEMS.poucher;
-
-  const fireScore = explosionScore(fireInfo, targets);
-  const pouchScore = explosionScore(pouchInfo, targets);
-
-  return pouchScore > fireScore
-    ? RANGER_INV_ITEMS.poucher
-    : RANGER_INV_ITEMS.fireBow;
+  return best?.name ?? RANGER_INV_ITEMS.fireBow;
 }
-
-const HARMLESS_MOB_DAMAGE = 300;
-const SPLASH_DAMAGE_RATE = 0.5;
 
 /**
  * Whether waking `mob` with a splash is acceptable: it barely scratches us, or
@@ -477,19 +590,18 @@ const SPLASH_DAMAGE_RATE = 0.5;
  */
 function isNegligibleMob(mob) {
   return (
-    !!mob["1hp"] ||
-    calculateDamage(mob, character, false) < HARMLESS_MOB_DAMAGE ||
-    mob.hp < calculateDamage(character, mob) * SPLASH_DAMAGE_RATE
+    isHarmlessMob(mob) ||
+    isDyingToOurShot(mob, (character.explosion ?? 0) / 100)
   );
 }
 
 /**
- * Whether firing at `mob` is safe once splash is accounted for. 
+ * Whether firing at `mob` is safe once splash is accounted for.
  * @param {Object} mob - the intended target
  * @param {number} [splashRadius] - blast radius to test; 0 means no splash
  * @returns {boolean}
  */
-function isSafeToShoot(mob, splashRadius = character.explosion / 3.6 || 0) {
+function isSafeToShoot(mob, splashRadius = getSplashRadius(0)) {
   if (!shouldAttack(mob)) return false;
   if (!splashRadius) return true;
 
@@ -508,13 +620,12 @@ function calculateRangerItems(target) {
 
   // Judge splash safety against the radius we *would* have, not the one we have
   // now, or picking up the poucher would immediately make itself unsafe.
-  const prospectiveSplashRadius = character.explosion / 3.6 || BLAST_RADIUS;
+  const prospectiveSplashRadius = getSplashRadius();
   const targetsAreSafeToSplash = targets
     .filter((entity) => entity.type === "monster")
     .every((mob) => isSafeToShoot(mob, prospectiveSplashRadius));
 
   let mainhand = character.slots.mainhand?.name;
-  const poucherAvailable = findMaxLevelItem(RANGER_INV_ITEMS.poucher) !== -1;
 
   // Cupid outranks every bow: the strategy hands it over whenever someone wants
   // a heal, and the ranger keeps shooting mobs until it is actually in hand.
@@ -528,19 +639,16 @@ function calculateRangerItems(target) {
     mainhand = RANGER_INV_ITEMS.cupid;
   } else if (targets.length) {
     const canSplash =
-      (poucherAvailable || mainhand === RANGER_INV_ITEMS.poucher) &&
       currentStrategy === usePullStrategies &&
       targets.some(
         (mob) =>
           (mob.cluster_count ??
-            numberOfMonsterAroundTarget(
-              mob,
-              character.explosion / 3.6 || BLAST_RADIUS,
-            )) >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
+            numberOfMonsterAroundTarget(mob, getSplashRadius())) >=
+          TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
       );
 
     if (canSplash) {
-      mainhand = chooseFireOrPouchForSplashing(targets);
+      mainhand = chooseBowForSplashing(targets);
     } else if (someTargetCooperative) {
       mainhand = RANGER_INV_ITEMS.fireBow;
     } else {
@@ -779,6 +887,12 @@ function findMaxLevelItem(id, offset = 0) {
 }
 
 let isEquipingItems = false;
+
+// withTimeout in the callers only bounds the wait — the equip promise it raced
+// stays pending. Without a bound here, one unanswered equip latches
+// isEquipingItems forever and silently ends all gear changes until a restart.
+const EQUIP_TIMEOUT_MS = 1000;
+
 async function equipBatch(suggestedItems, forced = false) {
   if (
     (character.cc > 130 ||
@@ -791,6 +905,23 @@ async function equipBatch(suggestedItems, forced = false) {
 
   isEquipingItems = true;
 
+  try {
+    const promises = buildEquipPromises(suggestedItems, forced);
+    if (!promises.length) return false;
+
+    return await withTimeout(Promise.allSettled(promises), EQUIP_TIMEOUT_MS);
+  } finally {
+    isEquipingItems = false;
+  }
+}
+
+/**
+ * Fires off the equips a suggestion asks for, within the penalty_cd budget.
+ * @param {Object} suggestedItems - slot -> item name
+ * @param {boolean} forced - spend penalty freely, ignoring the budget
+ * @returns {Promise[]} the in-flight equip promises
+ */
+function buildEquipPromises(suggestedItems, forced) {
   const promises = [];
   const currentBooster = findInvBooster();
 
@@ -867,14 +998,7 @@ async function equipBatch(suggestedItems, forced = false) {
     promises.push(equip_batch(itemSlots));
   }
 
-  if (!promises.length) {
-    isEquipingItems = false;
-    return false;
-  }
-
-  return Promise.all(promises).finally(() => {
-    isEquipingItems = false;
-  });
+  return promises;
 }
 
 function calculateHeal(fromEntity, toEntity) {
@@ -1161,6 +1285,17 @@ function getMonstersToCBurst() {
   return selectedMobs.map((mob) => [mob, 2]);
 }
 
+/**
+ * Hardest-hitting owned weapon cleave can actually be swung with, the mainhand
+ * included — `num` is -1 when it is the one already equipped.
+ * @returns {{num: number, info: Object}|undefined} the weapon, or undefined
+ */
+function getCleaveWeapon() {
+  return findOwnedItems((entry) =>
+    G.skills.cleave.wtype.includes(entry.info?.wtype),
+  )[0];
+}
+
 let isCleaving = false;
 async function warriorCleave(currentStrategy) {
   const mobsList = Object.values(parent.entities).filter(
@@ -1169,7 +1304,10 @@ async function warriorCleave(currentStrategy) {
       distance(mob, character) < G.skills["cleave"].range + character.xrange,
   );
 
+  const cleaveWeapon = getCleaveWeapon();
+
   if (
+    !cleaveWeapon ||
     character.s.penalty_cd ||
     character.mp < G.skills["cleave"].mp + 280 ||
     is_on_cooldown("cleave") ||
@@ -1198,16 +1336,15 @@ async function warriorCleave(currentStrategy) {
 
   for (const mob of mobsTargetingSelf) categorizeMob(mob);
 
-  const listOfNoTargetMonsterInRange = Object.values(parent.entities).filter(
+  const listOfNoTargetMonsterInRange = mobsList.filter(
     (mob) =>
-      mob.type === "monster" &&
       !mob.target &&
-      distance(mob, character) < G.skills["cleave"].range + character.xrange &&
-      mob.hp >
-        character.attack *
-          dps_multiplier(mob.armor - character.apiercing * 2) *
-          1.5 &&
-      mob.attack > 150,
+      !canOneShotWithWeapon(
+        cleaveWeapon.info,
+        [mob],
+        CLEAVE_ONE_HIT_MULTIPLIER,
+      ) &&
+      !isHarmlessMob(mob),
   );
 
   for (const mob of listOfNoTargetMonsterInRange) categorizeMob(mob);
@@ -1254,13 +1391,18 @@ async function warriorCleave(currentStrategy) {
   ) {
     isEquipingItems = true;
     const msToNextAttack = ms_to_next_skill("attack");
-    const cleaveSet = [{ num: findMaxLevelItem("bataxe"), slot: "mainhand" }];
+    const cleaveSet = [];
+    if (cleaveWeapon.num >= 0)
+      cleaveSet.push({ num: cleaveWeapon.num, slot: "mainhand" });
 
     if (msToNextAttack > 320)
       cleaveSet.push({ num: findMaxLevelItem("mpxamulet"), slot: "amulet" });
 
     promises.push(
-      Promise.all([unequip("offhand"), equip_batch(cleaveSet)]),
+      Promise.all([
+        unequip("offhand"),
+        cleaveSet.length ? equip_batch(cleaveSet) : undefined,
+      ]),
       withTimeout(use_skill("cleave"), 2500).then(async () => {
         const warriorItems = calculateWarriorItems();
         reduce_cooldown("cleave", 0.95 * character.ping);
@@ -1330,7 +1472,7 @@ function shouldAttack(target = get_target()) {
 
   if (
     target &&
-    target.attack > 600 &&
+    calculateDamage(target, character, false) > DANGEROUS_MOB_DAMAGE &&
     (!target.target || target.target === character.name)
   ) {
     const partyPriests = [...parent.party_list, ...partyMems]
