@@ -13,7 +13,6 @@ const SMART_MOVE_CONFIG = Object.freeze({
   MAGIPORT_MAGE_NEAR_DEST_DISTANCE: 200, // mage counts as "parked at the destination" within this
   MAGIPORT_MIN_WORTH_DISTANCE: 100, // closer than this to the mage, walking is cheaper than a port
   MAGIPORT_MP_RESERVE_CASTS: 2, // mage keeps mp for this many magiport casts (the other fighters)
-  MAGIPORT_INFO_MAX_AGE_MS: 15_000, // mageLocation snapshots older than this are stale
   MAGIPORT_LANDING_WAIT_MS: 1500, // wait after send_cm before checking whether the port landed
   MAGIPORT_ARRIVAL_DISTANCE: 300, // landed within this of the destination = the port worked
 
@@ -193,10 +192,20 @@ class StrategicSmartMove {
   // Mage Utils
 
   /**
+   * Whether the mage is currently running, so its location snapshot is live
+   * @returns {boolean} true if the mage character is online
+   */
+  isMageOnline() {
+    if (parent.caracAL) return !!parent.caracAL.siblings?.includes(MAGE);
+    return !!get_active_characters()[MAGE];
+  }
+
+  /**
    * Get Mage Information
-   * @returns mage information from localStorage or from iframe
+   * @returns mage information from localStorage or from iframe, undefined if the mage is offline
    */
   getMageInfo() {
+    if (!this.isMageOnline()) return undefined;
     return parent.caracAL ? get("mageLocation") : getCharacter(MAGE);
   }
 
@@ -216,7 +225,8 @@ class StrategicSmartMove {
    * Recurring check (1s) that asks the mage for a magiport once it is parked
    * near the destination. Verifies the port actually landed before ending the
    * smartMove session — if the mage never casts, the walk keeps going and the
-   * check keeps retrying.
+   * check keeps retrying. While the mage is offline the loop just idles, so it
+   * picks the port back up if the mage comes online mid-walk.
    * @param {number} session - the smartMove session this loop belongs to
    * @param {Object} toPosition - resolved destination with `map`, `x`, `y`
    */
@@ -237,7 +247,6 @@ class StrategicSmartMove {
       mageInfo.mp >
         parent.G.skills["magiport"].mp *
           SMART_MOVE_CONFIG.MAGIPORT_MP_RESERVE_CASTS &&
-      mageInfo.time > Date.now() - SMART_MOVE_CONFIG.MAGIPORT_INFO_MAX_AGE_MS &&
       !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
     ) {
       this.isDoingSomethingMagical = true;
@@ -616,7 +625,7 @@ class StrategicSmartMove {
       console.warn("Code's not ready");
     }
 
-    if (options.useMagiport && character.ctype !== "mage") {
+    if (options.useMagiport && MAGE && character.ctype !== "mage") {
       this.magiportLoop = setTimeout(
         () => this._magiportCheck(session, toPosition),
         0,
