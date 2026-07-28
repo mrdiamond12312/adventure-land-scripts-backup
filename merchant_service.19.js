@@ -255,6 +255,8 @@ const ENT_FIRST_ANCHOR = { x: 136, y: -1836 };
 const ENT_SCARE_BUFFER = 1.5;
 const ENT_TICK = 10;
 const MAX_ENT = 3; // party can engage up to this many ents at once near spawn
+const MAX_CONCURRENT_ENT = 2; // ents dragged at once in a single run
+const ENT_PICKUP_TOLERANCE = 10; // px around the avg distance of the dragged ents
 
 function getEntLureDestination() {
   return { x: mapX, y: mapY, map: ENT_LURE_MAP };
@@ -294,6 +296,29 @@ async function ensureDartgun() {
     equipBatch(calculateMerchantEquipments()),
     Math.max(300, character.ping),
   );
+}
+
+/**
+ * Furthest untargeted ent from ENT_FIRST_ANCHOR.
+ * @returns {object|undefined}
+ */
+function getFurthestEntFromFirstAnchor() {
+  let furthest;
+  let furthestDistance = -1;
+
+  for (const id in parent.entities) {
+    const entity = parent.entities[id];
+    if (!entity || entity.type !== "monster" || entity.mtype !== "ent") continue;
+    if (entity.target && entity.target !== character.name) continue;
+
+    const d = distance(ENT_FIRST_ANCHOR, entity);
+    if (d > furthestDistance) {
+      furthestDistance = d;
+      furthest = entity;
+    }
+  }
+
+  return furthest;
 }
 
 async function positionAtEntAimPoint(entId, dartgunRange) {
@@ -350,7 +375,39 @@ async function aggroEnt(entId, dartgunRange) {
   if (!ent) throw new Error("Ent disappeared before aggro — lure aborted.");
 }
 
-async function walkEntToSpawn(entId) {
+/**
+ * @param {number} d distance to the ent
+ * @returns {boolean} whether the ent sits in the band where a shot re-aggros it
+ */
+function isInEntAggroBand(d) {
+  return (
+    d <= character.range + character.xrange * 0.1 &&
+    d > character.range * 0.85
+  );
+}
+
+/**
+ * Untargeted ent that can join the drag: in the aggro band and level with the
+ * ents already being dragged.
+ * @param {string[]} entIds ids already in the drag
+ * @param {number} avgDistance mean distance from us to the dragged ents
+ * @returns {object|undefined}
+ */
+function getEntToPickUp(entIds, avgDistance) {
+  for (const id in parent.entities) {
+    const entity = parent.entities[id];
+    if (!entity || entity.type !== "monster" || entity.mtype !== "ent") continue;
+    if (entity.target || entIds.includes(entity.id)) continue;
+
+    const d = distance(character, entity);
+    if (!isInEntAggroBand(d)) continue;
+    if (Math.abs(d - avgDistance) > ENT_PICKUP_TOLERANCE) continue;
+
+    return entity;
+  }
+}
+
+async function walkEntsToSpawn(entIds) {
   let arrived = false;
   let aborted = false;
 
@@ -373,22 +430,26 @@ async function walkEntToSpawn(entId) {
   try {
     await new Promise((resolve, reject) => {
       const step = async () => {
-        const ent = parent.entities[entId];
-        if (!ent || character.rip) return resolve();
+        const ents = entIds
+          .map((id) => parent.entities[id])
+          .filter((ent) => !!ent);
+        if (!ents.length || character.rip) return resolve();
         if (arrived) {
           // At the end of dragging path, hold the aggro if no one pick up the aggro yet
           // for up to 10 seconds
           handoffDeadline ??= Date.now() + 10_000;
-          const handedOff = ent.target && ent.target !== character.name;
+          const handedOff = ents.every(
+            (ent) => ent.target && ent.target !== character.name,
+          );
           if (handedOff || Date.now() > handoffDeadline) return resolve();
         }
         if (!isMyPriestOnline()) {
           return reject(new Error("Priest went offline mid-lure — aborting."));
         }
 
-        const d = distance(character, ent);
+        const distances = ents.map((ent) => distance(character, ent));
         if (
-          d < G.monsters.ent.range * ENT_SCARE_BUFFER &&
+          distances.some((d) => d < G.monsters.ent.range * ENT_SCARE_BUFFER) &&
           !ms_to_next_skill("scare")
         ) {
           await withTimeout(use_skill("scare"), 300)
@@ -396,13 +457,22 @@ async function walkEntToSpawn(entId) {
             .catch(() => {});
         }
 
-        if (
-          !ent.target &&
-          d <= character.range + character.xrange * 0.1 &&
-          d > character.range * 0.85 &&
-          !is_on_cooldown("attack")
-        ) {
-          await withTimeout(attack(ent), 300).catch(() => {});
+        if (!is_on_cooldown("attack")) {
+          const avgDistance =
+            distances.reduce((sum, d) => sum + d, 0) / distances.length;
+
+          // Slipped aggro first, then top the train up to MAX_CONCURRENT_ENT.
+          const target =
+            ents.find(
+              (ent, i) => !ent.target && isInEntAggroBand(distances[i]),
+            ) ||
+            (ents.length < MAX_CONCURRENT_ENT &&
+              getEntToPickUp(entIds, avgDistance));
+
+          if (target) {
+            await withTimeout(attack(target), 300).catch(() => {});
+            if (!entIds.includes(target.id)) entIds.push(target.id);
+          }
         }
 
         setTimeout(step, ENT_TICK);
@@ -446,12 +516,12 @@ async function dragEnt() {
     // await advanceSmartMove({ ...ENT_FIRST_ANCHOR, map: ENT_LURE_MAP });
     await advanceSmartMove("ent");
 
-    const ent = get_nearest_monster({ type: "ent" });
+    const ent = getFurthestEntFromFirstAnchor();
     if (!ent) throw new Error("No Ent found!");
 
     await positionAtEntAimPoint(ent.id, dartgunRange);
     await aggroEnt(ent.id, dartgunRange);
-    await walkEntToSpawn(ent.id);
+    await walkEntsToSpawn([ent.id]);
 
     nextDelay = 15_000; // lured successfully, give it a while before going again
   } catch (e) {
