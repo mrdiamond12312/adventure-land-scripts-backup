@@ -1496,12 +1496,15 @@ async function warriorStomp() {
 function shouldAttack(target = get_target()) {
   const partyHealer = get_entity(HEALER);
 
+  // PvP: players are always worth shooting, priest or not
+  if (target?.type === "character") return true;
+
   if (character.map === "crypt") {
     return !!partyHealer && !partyHealer.rip;
   }
 
   if (
-    ["warrior", "rogue"].includes(character.ctype) &&
+    isMelee() &&
     target &&
     MELEE_IGNORE_LIST.includes(target.mtype ?? target.ctype)
   ) {

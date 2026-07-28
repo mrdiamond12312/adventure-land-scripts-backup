@@ -136,13 +136,13 @@ indefinitely.
 Self-rescheduling loop on the merchant, same shape as `lureMechaGnome`. Goes and aggroes a wild
 `ent` with a dartgun (long range, low commitment), then walks it home along a fixed waypoint path
 so the tanker can pick it up at the farm spot (see above) instead of the whole party having to
-travel out to it.
+travel out to it. A run can bring back up to `MAX_CONCURRENT_ENT` of them (see below).
 
 Guards before/during a run:
 - Only runs at all while farming `desertland` (`map === ENT_LURE_MAP`).
 - Skips if already busy (`onDuty`/`isLuringMobs`/smart-moving/chilling), a live server event is
-  running, or the mage reports (via `mageLocation.entTargetingParty`) that an ent is already
-  engaged with the party at spawn — avoids double-luring.
+  running, or the field report says `MAX_ENT` ents are already engaged with the party at spawn
+  (`hasMaxEntsEngagedAtSpawn`, see "Field reports must fail closed") — avoids double-luring.
 - Requires the party's own `PRIEST` to be an online sibling (`isPriestOnline()`), checked both
   before starting and repeatedly mid-lure — if `dynamicParty()` swaps PRIEST out for ROGUE while
   an ent is being dragged, the lure aborts cleanly rather than bringing home an unhealed tank.
@@ -151,6 +151,35 @@ Guards before/during a run:
   controller — a priest logged in elsewhere reads as offline, deliberately). The in-browser
   branch exists because `parent.caracAL.siblings` is a guaranteed TypeError there, which used
   to kill the loop (see below).
+
+### Which ent to grab (`getFurthestEntFromFirstAnchor`)
+
+The run used to take `get_nearest_monster({ type: "ent" })`, which grabs whichever ent happens to
+be closest on arrival — usually one sitting right on `ENT_FIRST_ANCHOR`, the first waypoint. Walking
+that one home means the rest of the path back out of the spawn passes *through* the ents we didn't
+take, collecting them accidentally. Picking the ent **furthest** from `ENT_FIRST_ANCHOR` means the
+walk back moves away from the remaining pack instead of into it. Ents already aggroed on someone
+else are skipped so we don't steal another player's mob.
+
+### Dragging more than one (`walkEntsToSpawn`, `MAX_CONCURRENT_ENT`)
+
+The walk tracks an array of ids rather than a single one — a full round trip is expensive, so the
+merchant tops the train up to `MAX_CONCURRENT_ENT` (2) opportunistically while walking rather than
+making a second trip. Per tick, with one attack available:
+
+- **Re-aggroing a slipped ent always wins over picking up a new one.** Losing the ent already half
+  way home is strictly worse than not adding a second.
+- A pickup candidate must be untargeted, inside the same aggro band as the re-aggro check
+  (`isInEntAggroBand`), *and* within `ENT_PICKUP_TOLERANCE` (10px) of the mean distance from us to
+  the ents already being dragged. The average is what keeps the train together: an ent noticeably
+  nearer or further than the pack will drift out of scare range on one side or lag off the path on
+  the other, and the single per-tick attack can't hold a strung-out line.
+- The cap counts *live* tracked ents, not ids ever added, so a despawn mid-drag frees a slot.
+- Scare fires if **any** tracked ent is inside the buffer; the handoff/arrival check requires
+  **every** tracked ent handed off (or the 10s deadline) before the run resolves.
+
+`positionAtEntAimPoint`/`aggroEnt` still operate on the seed ent only — the extra ents are picked
+up during the walk, not at the aim point.
 
 ## Self-rescheduling loop discipline (`dragEnt`/`lureMechaGnome`, merchant_service.19.js)
 
@@ -186,7 +215,7 @@ lureMechaGnome kept going" (2026-07-17) established the failure taxonomy:
 
 Unrelated hang risks noted but not yet addressed: `aggroEnt`/`positionAtEntAimPoint` have no
 deadline and no `character.rip` check (can spin forever chasing an ent that targets someone
-else, or after the merchant dies); `walkEntToSpawn`'s inner `step()` schedules its next tick as
+else, or after the merchant dies); `walkEntsToSpawn`'s inner `step()` schedules its next tick as
 its last line, so an unexpected throw mid-step leaves the wrapping promise unsettled (hang +
 leaked locks); a failed waypoint `move()` in `walkPromise` silently strands the step loop
 holding aggro with no overall lure timeout.
