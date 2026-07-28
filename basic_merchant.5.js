@@ -613,37 +613,49 @@ function handle_death() {
   respawn().catch((e) => setTimeout(() => respawn(), e.ms + 300));
 }
 
-// Handler to buy from Ponty
+/**
+ * Handler to buy from Ponty.
+ * @type {{name: string, maxLevel?: number, minLevel?: number, property?: string}[]}
+ * maxLevel/minLevel/property are optional filters — when omitted that check is skipped.
+ * `property` matches the secondhands item's `p` field (e.g. "shiny", "glitched").
+ */
 const ITEM_NEEDED = [
-  "strring",
-  // "intring",
-  // "dexring",
-  "dexearring",
-  "bataxe",
-  "pinkie",
-  "ololipop",
-  "jacko",
-  "gcape",
-  "carrot",
-  "brownenvelope",
-  "harbringer",
-  "throwingstars",
-  "angelwings",
-  "smoke",
-  "gphelmet",
+  { name: "strring" },
+  // { name: "intring" },
+  // { name: "dexring" },
+  { name: "dexearring" },
+  { name: "bataxe" },
+  { name: "pinkie" },
+  { name: "ololipop" },
+  { name: "jacko" },
+  { name: "gcape" },
+  { name: "carrot" },
+  { name: "brownenvelope" },
+  { name: "harbringer" },
+  { name: "throwingstars", maxLevel: 0 },
+  { name: "angelwings" },
+  { name: "smoke" },
+  { name: "gphelmet" },
 ];
+
+/** @returns {boolean} whether the secondhands entry satisfies the wanted item's filters */
+function matchesWantedItem(item, wanted) {
+  const level = item.level || 0;
+  if (wanted.maxLevel !== undefined && level > wanted.maxLevel) return false;
+  if (wanted.minLevel !== undefined && level < wanted.minLevel) return false;
+  if (wanted.property !== undefined && item.p !== wanted.property) return false;
+  return true;
+}
 
 function secondhandsHandler(events) {
   if (isInvFull(6)) return false;
   for (const item of events) {
-    if (
-      item &&
-      ITEM_NEEDED.filter((item) => !SALE_ABLE.includes(item)).includes(
-        item.name,
-      )
-    ) {
-      parent.socket.emit("sbuy", { rid: item.rid });
-    }
+    if (!item) continue;
+    if (SALE_ABLE.includes(item.name)) continue;
+    const wanted = ITEM_NEEDED.find((w) => w.name === item.name);
+    if (!wanted) continue;
+    if (!matchesWantedItem(item, wanted)) continue;
+    parent.socket.emit("sbuy", { rid: item.rid });
   }
 }
 
