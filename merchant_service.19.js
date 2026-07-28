@@ -389,12 +389,18 @@ function isInEntAggroBand(d) {
 }
 
 /**
- * Untargeted ent in the aggro band and level with the ones already dragged.
+ * Untargeted ent in the aggro band, level with the ones already dragged, and
+ * behind us relative to the leg we are walking — an ent nearer the waypoint
+ * than we are sits on the path we are about to take.
  * @param {string[]} entIds ids already in the drag
  * @param {number} avgDistance mean distance from us to the dragged ents
- * @returns {object|undefined}
+ * @param {{x: number, y: number}} waypoint the leg currently being walked
+ * @returns {object|undefined} the candidate furthest from the waypoint
  */
-function getEntToPickUp(entIds, avgDistance) {
+function getEntToPickUp(entIds, avgDistance, waypoint) {
+  const ourDistanceToWaypoint = distance(character, waypoint);
+  const candidates = [];
+
   for (const id in parent.entities) {
     const entity = parent.entities[id];
     if (!entity || entity.type !== "monster" || entity.mtype !== "ent") continue;
@@ -403,14 +409,20 @@ function getEntToPickUp(entIds, avgDistance) {
     const d = distance(character, entity);
     if (!isInEntAggroBand(d)) continue;
     if (Math.abs(d - avgDistance) > ENT_PICKUP_TOLERANCE) continue;
+    if (distance(entity, waypoint) < ourDistanceToWaypoint) continue;
 
-    return entity;
+    candidates.push(entity);
   }
+
+  return candidates.sort(
+    (lhs, rhs) => distance(rhs, waypoint) - distance(lhs, waypoint),
+  )[0];
 }
 
 async function walkEntsToSpawn(entIds) {
   let arrived = false;
   let aborted = false;
+  let currentWaypoint = getEntWaypoints()[0];
 
   // Runs concurrently with the step loop below; checks `aborted` before each leg
   // so it stops issuing move() calls once the lure ends instead of continuing to
@@ -418,6 +430,7 @@ async function walkEntsToSpawn(entIds) {
   const walkPromise = (async () => {
     for (const { x: nextX, y: nextY } of getEntWaypoints()) {
       if (aborted) return;
+      currentWaypoint = { x: nextX, y: nextY };
       await move(nextX, nextY).catch((e) => {
         console.warn("move failed", nextX, nextY, e);
         throw e;
@@ -468,7 +481,7 @@ async function walkEntsToSpawn(entIds) {
               (ent, i) => !ent.target && isInEntAggroBand(distances[i]),
             ) ||
             (ents.length < MAX_CONCURRENT_ENT &&
-              getEntToPickUp(entIds, avgDistance));
+              getEntToPickUp(entIds, avgDistance, currentWaypoint));
 
           if (target) {
             await withTimeout(attack(target), 300).catch(() => {});
