@@ -1886,7 +1886,7 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER2;
       return [RANGER2, ROGUE, MAGE];
     },
-    USII: () => {
+    ASIAI: () => {
       RANGER = RANGER1;
       HEALER = RANGER1;
       return [RANGER, ROGUE, MAGE];
