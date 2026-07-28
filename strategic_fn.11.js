@@ -229,6 +229,15 @@ function isDyingToOurShot(mob, multiplier = 1) {
   );
 }
 
+/**
+ * Whether waking `mob` drags an ability we never want loose (burn, stone).
+ * @param {Object} mob
+ * @returns {boolean}
+ */
+function hasWatchoutAbility(mob) {
+  return WATCHOUT_ABILITIES.some((skill) => !!mob?.abilities?.[skill]);
+}
+
 function isHarmlessMob(mob) {
   if (!mob) return false;
 
@@ -603,12 +612,14 @@ function isNegligibleMob(mob) {
  */
 function isSafeToShoot(mob, splashRadius = getSplashRadius(0)) {
   if (!shouldAttack(mob)) return false;
+  // A watchout mob nobody holds yet is ours the moment we touch it
+  if (!mob?.target && hasWatchoutAbility(mob)) return false;
   if (!splashRadius) return true;
 
   return !hasUntargetedMonsterAround(
     mob,
     splashRadius,
-    (bystander) => !isNegligibleMob(bystander),
+    (bystander) => hasWatchoutAbility(bystander) || !isNegligibleMob(bystander),
   );
 }
 

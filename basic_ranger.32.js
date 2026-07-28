@@ -49,6 +49,22 @@ const inRange = (entity) =>
 const isAttackReady = () =>
   ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
+/** armor above which piercingshot out-damages a plain attack */
+const PIERCING_SHOT_MIN_ARMOR = 700;
+
+/**
+ * Piercing shot shares the attack cooldown and ignores armor, so it replaces
+ * the single-target attack on heavily armored mobs.
+ * @param {Object} target - the mob about to be shot
+ * @returns {boolean} whether to piercingshot instead of attack
+ */
+const shouldPiercingShot = (target) =>
+  target.armor > PIERCING_SHOT_MIN_ARMOR &&
+  character.level >= G.skills["piercingshot"].level &&
+  !is_on_cooldown("piercingshot") &&
+  character.mp >
+    G.skills["piercingshot"].mp + G.skills["huntersmark"].mp + 400;
+
 // --- Decide: one plan drives both the gear loop and the shot ---
 
 /** @returns {boolean} whether cupid is the equipped mainhand */
@@ -77,12 +93,13 @@ function getPotentialTargets() {
           entity.target),
     )
     .map((entity) => {
-      // Optimization: Pre-calculate cluster count and distance
+      // Optimization: Pre-calculate cluster count, distance and splash safety
       entity.cluster_count = numberOfMonsterAroundTarget(
         entity,
         explosionRadius,
       );
       entity.distance = distance(character, entity);
+      entity.safe_to_shoot = isSafeToShoot(entity);
       return entity;
     })
     .sort((lhs, rhs) => {
@@ -157,23 +174,24 @@ function getShotPlan(incomingTarget = get_targeted_monster()) {
   }
 
   const hpOk = character.hp > character.max_hp * 0.55;
-  const mobsTo5Shot = weakMobs.slice(0, 5);
+  // Only shoot safe to shoot targets
+  const mobsTo5Shot = weakMobs.filter((mob) => mob.safe_to_shoot).slice(0, 5);
   const is5ShotReady =
     character.level >= G.skills["5shot"].level &&
     canMultiShot &&
     hpOk &&
     character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 400 &&
-    weakMobs.length >= 4 &&
-    mobsTo5Shot.every((mob) => isSafeToShoot(mob));
+    mobsTo5Shot.length >= 4;
 
-  const mobsTo3Shot = potentialTargets.slice(0, 3);
+  const mobsTo3Shot = potentialTargets
+    .filter((mob) => mob.safe_to_shoot)
+    .slice(0, 3);
   const is3ShotReady =
     character.level >= G.skills["3shot"].level &&
     canMultiShot &&
     hpOk &&
     character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 400 &&
-    potentialTargets.length >= 2 &&
-    mobsTo3Shot.every((mob) => isSafeToShoot(mob));
+    mobsTo3Shot.length >= 2;
 
   const shotPlan = (skill, target, gearTargets, shotTargets) => ({
     mode: "shot",
@@ -194,7 +212,12 @@ function getShotPlan(incomingTarget = get_targeted_monster()) {
   if (is3ShotReady) return shotPlan("3shot", target, mobsTo3Shot, mobsTo3Shot);
 
   if (target && isSafeToShoot(target) && inRange(target))
-    return shotPlan("attack", target, target, target);
+    return shotPlan(
+      shouldPiercingShot(target) ? "piercingshot" : "attack",
+      target,
+      target,
+      target,
+    );
 
   return null;
 }
@@ -228,10 +251,16 @@ async function firePlan(plan) {
     promisesToAwait.push(currentStrategy(plan.gearTargets));
   }
 
-  if (plan.skill === "attack") {
-    set_message(plan.mode === "cupid" ? "Single Cupid" : "Shooting");
+  if (plan.skill === "attack" || plan.skill === "piercingshot") {
+    set_message(
+      plan.mode === "cupid"
+        ? "Single Cupid"
+        : plan.skill === "piercingshot"
+          ? "Piercing"
+          : "Shooting",
+    );
     promisesToAwait.push(
-      use_skill("attack", plan.shotTargets)
+      use_skill(plan.skill, plan.shotTargets)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeCompensate);
           reduceCd("attack", false);
