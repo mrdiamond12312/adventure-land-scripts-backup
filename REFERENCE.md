@@ -170,10 +170,14 @@ making a second trip. Per tick, with one attack available:
 - **Re-aggroing a slipped ent always wins over picking up a new one.** Losing the ent already half
   way home is strictly worse than not adding a second.
 - A pickup candidate must be untargeted, inside the same aggro band as the re-aggro check
-  (`isInEntAggroBand`), *and* within `ENT_PICKUP_TOLERANCE` (10px) of the mean distance from us to
-  the ents already being dragged. The average is what keeps the train together: an ent noticeably
-  nearer or further than the pack will drift out of scare range on one side or lag off the path on
-  the other, and the single per-tick attack can't hold a strung-out line.
+  (`isInEntAggroBand`), *and* within `ENT_PICKUP_TOLERANCE` of the mean distance from us to the
+  ents already being dragged. The average is what keeps the train together: scare is an area
+  effect on a ~5s cooldown, so a *level* pack closes in at once and a single cast covers all of
+  it, while a strung-out one trips the scare on the leading ent and lets the trailing one arrive
+  into a cooldown and hit for free.
+  **Currently set to 999, i.e. deliberately disabled** — the loose version is being trialled
+  (2026-07-29). The guard was kept and the constant widened precisely so the fix is one number:
+  drop it back to ~10 if the merchant starts eating hits mid-drag.
 - The cap counts *live* tracked ents, not ids ever added, so a despawn mid-drag frees a slot.
 - Scare fires if **any** tracked ent is inside the buffer; the handoff/arrival check requires
   **every** tracked ent handed off (or the 10s deadline) before the run resolves.

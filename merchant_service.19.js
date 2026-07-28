@@ -256,7 +256,9 @@ const ENT_SCARE_BUFFER = 1.5;
 const ENT_TICK = 10;
 const MAX_ENT = 3; // party can engage up to this many ents at once near spawn
 const MAX_CONCURRENT_ENT = 2; // ents dragged at once in a single run
-const ENT_PICKUP_TOLERANCE = 10; // px around the avg distance of the dragged ents
+// px around the avg distance of the dragged ents; 999 = effectively off, drop
+// it back to ~10 if a staggered pack outruns the scare cooldown
+const ENT_PICKUP_TOLERANCE = 999;
 
 function getEntLureDestination() {
   return { x: mapX, y: mapY, map: ENT_LURE_MAP };
@@ -387,8 +389,7 @@ function isInEntAggroBand(d) {
 }
 
 /**
- * Untargeted ent that can join the drag: in the aggro band and level with the
- * ents already being dragged.
+ * Untargeted ent in the aggro band and level with the ones already dragged.
  * @param {string[]} entIds ids already in the drag
  * @param {number} avgDistance mean distance from us to the dragged ents
  * @returns {object|undefined}
