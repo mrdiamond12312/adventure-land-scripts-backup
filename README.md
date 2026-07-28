@@ -48,6 +48,41 @@ This repository is a backup of my automation scripts for fighters and merchants 
   - `smart_move` to desired NPC to exchange `mistletoe`, `candycane`, `ornament`
   - `smart_move` to Leo in `main` to exchange the 9 pieces for `xbox`
 
+## What has changed since the first version [28/07/2026]
+
+The loop above is still the skeleton, but most of the decisions moved out of the `basic_*` files and
+into shared ones, so the classes stopped keeping their own copies of the same logic
+
+- Farming strategies can be swapped at runtime -- `currentStrategy` gets reassigned by
+  `changeToPullStrategies()` / `changeToNormalStrategies()` in `basic_function`, and everyone just calls
+  `currentStrategy()`
+
+  - `normal_strategy` -- fight whatever is in front of you
+  - `pull_strategy` -- monster stacking. The tanker `agitate`/`taunt`s mobs into one pile, but only while
+    the healer can keep up with the damage, and it will not pull anything that `burn`s or `stone`s
+  - `crypt_strategy` -- crypt runs, moving junction by junction and remembering what is already dead
+
+- Gears are picked every tick from the whole inventory instead of holding one weapon (`strategic_fn`) --
+  luck gear when a monster is nearly dead, exp gear when it is worth it, splash weapons only when the
+  blast is clean, blaster/cleave swaps for the warrior. All swaps go through `equipBatch` so they do not
+  waste the `penalty_cd`
+- Area attacks check what they would *wake up* first (`hasUntargetedMonsterAround`). A monster nobody is
+  holding yet is a monster you are about to aggro, and the ones that `burn` or `stone` never count as
+  harmless
+- Skills run on their own loops now (`runSkillLoop`) instead of one big `fight()` per class -- `canUse`
+  decides and `cast` acts, and a skill can opt in to firing while smart moving with `whileMoving`
+- Movement was rewritten (`strategic_smart_move` / `advance_smart_move`) -- it tracks the move as a
+  session it can cancel, uses the mage for `blink`/magiport when he is online, and recovers from the
+  stuck cases the escape scripts below only patched over
+- The ranger can hold `cupid` and heal the party with it, without fighting itself over the mainhand while
+  there are still monsters to shoot
+- Server hopping (`server_hop`) -- checks `parent.S` and the aldata API for a boss worth going to, loots
+  first, hops, then comes back home
+- The merchant does field work too (`merchant_service`) -- opening crypt instances, luring the mecha
+  gnome, and dragging ents back to where the party farms with a dartgun
+- Everything runs both in the in-game CODE editor and headless under `caracAL` (`parent.caracAL`), which
+  can run the whole party from one place
+
 ## Extra scripts for Leaders (`partyMems[0]` in `basic_function` files)
 
 - Send party invites to other members in `partyMems`
@@ -58,13 +93,23 @@ This repository is a backup of my automation scripts for fighters and merchants 
 - `smart_move` to target if out of range (sometimes you get stuck when kiting; this will help)
 - Teleport to the primary point of the map when stuck in some obstacle, which makes `smart_move` return `path_not_found`
 
+## Reading the code
+
+- `CLAUDE.md` -- my conventions for refactoring and testing here: how files load each other (every file
+  is named `<name>.<CODE slot>.js` and pulls its dependencies in with `load_code` /
+  `caracAL.load_scripts`), what depends on what, and where the config is allowed to live. There is no
+  build or test runner in this repo, so testing a change means reading it and running it in the game
+- `REFERENCE.md` -- why the odd-looking parts are the way they are: kiting math, the merchant duty lock,
+  cooldown compensation, equip batching, splash safety, the shape of each class's skill loops
+
 > [!NOTE]
 > These scripts are implemented by myself; please observe the code carefully and be responsible for loss if anything happens to your game resource.
+> I do use Claude Code as a pair for refactoring and for keeping `REFERENCE.md` honest, but the strategies and the game knowledge in here are mine.
 > If you have any issues or improvement ideas, make a PR or send an issue ticket; I will be there in my free time!
 > Have fun playing!
 
 > Under Development
 >
-> - Monster stacking strategy
-> - Change gears for fighters on condition (luck gear for drops when monster nearly die, and base on strategy)
+> - ~~Monster stacking strategy~~ -- done, see `pull_strategy`
+> - ~~Change gears for fighters on condition (luck gear for drops when monster nearly die, and base on strategy)~~ -- done, see `strategic_fn`
 > - Gimme more ideas...
