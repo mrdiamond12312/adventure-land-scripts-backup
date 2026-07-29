@@ -310,7 +310,8 @@ function getFurthestEntFromFirstAnchor() {
 
   for (const id in parent.entities) {
     const entity = parent.entities[id];
-    if (!entity || entity.type !== "monster" || entity.mtype !== "ent") continue;
+    if (!entity || entity.type !== "monster" || entity.mtype !== "ent")
+      continue;
     if (entity.target && entity.target !== character.name) continue;
 
     const d = distance(ENT_FIRST_ANCHOR, entity);
@@ -383,8 +384,8 @@ async function aggroEnt(entId, dartgunRange) {
  */
 function isInEntAggroBand(d) {
   return (
-    d <= character.range + character.xrange * 0.1 &&
-    d > character.range * 0.85
+    d <= character.range + character.xrange * 0.25 &&
+    d > character.range * 0.925
   );
 }
 
@@ -403,7 +404,8 @@ function getEntToPickUp(entIds, avgDistance, waypoint) {
 
   for (const id in parent.entities) {
     const entity = parent.entities[id];
-    if (!entity || entity.type !== "monster" || entity.mtype !== "ent") continue;
+    if (!entity || entity.type !== "monster" || entity.mtype !== "ent")
+      continue;
     if (entity.target || entIds.includes(entity.id)) continue;
 
     const d = distance(character, entity);
