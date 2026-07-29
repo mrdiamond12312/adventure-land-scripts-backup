@@ -904,35 +904,57 @@ let isEquipingItems = false;
 // isEquipingItems forever and silently ends all gear changes until a restart.
 const EQUIP_TIMEOUT_MS = 1000;
 
-async function equipBatch(suggestedItems, forced = false) {
+/**
+ * @param {Object} suggestedItems - slot -> item name
+ * @param {Object} [options]
+ * @param {Object<string, number>} [options.fallback] - slot -> inventory slot when the item isn't findable
+ * @param {(penaltyMs: number) => number} [options.penaltyModifier] - adjusts the assumed penalty_cd
+ * @param {boolean} [options.preventPenaltizeNextAttack=true] - false skips the penalty_cd bail and slicing
+ * @param {boolean} [options.preventKeySnatch=true] - false ignores the isEquipingItems latch
+ */
+async function equipBatch(suggestedItems, options = {}) {
+  const {
+    fallback = {},
+    penaltyModifier = (penalty) => penalty,
+    preventPenaltizeNextAttack = true,
+    preventKeySnatch = true,
+  } = options;
+
+  if (preventKeySnatch && isEquipingItems) return false;
+
   if (
-    (character.cc > 130 ||
-      isEquipingItems ||
-      character.s.penalty_cd ||
-      isLooting) &&
-    !forced
+    preventPenaltizeNextAttack &&
+    (character.cc > 130 || character.s.penalty_cd || isLooting)
   )
     return false;
 
+  // Never release a latch we didn't take — a preventKeySnatch:false call runs
+  // inside someone else's swap and must leave their flag alone
+  const tookLatch = !isEquipingItems;
   isEquipingItems = true;
 
   try {
-    const promises = buildEquipPromises(suggestedItems, forced);
+    const promises = buildEquipPromises(suggestedItems, {
+      fallback,
+      penaltyModifier,
+      preventPenaltizeNextAttack,
+    });
     if (!promises.length) return false;
 
     return await withTimeout(Promise.allSettled(promises), EQUIP_TIMEOUT_MS);
   } finally {
-    isEquipingItems = false;
+    if (tookLatch) isEquipingItems = false;
   }
 }
 
 /**
  * Fires off the equips a suggestion asks for, within the penalty_cd budget.
  * @param {Object} suggestedItems - slot -> item name
- * @param {boolean} forced - spend penalty freely, ignoring the budget
+ * @param {Object} options - resolved equipBatch options
  * @returns {Promise[]} the in-flight equip promises
  */
-function buildEquipPromises(suggestedItems, forced) {
+function buildEquipPromises(suggestedItems, options) {
+  const { fallback, penaltyModifier, preventPenaltizeNextAttack } = options;
   const promises = [];
   const currentBooster = findInvBooster();
 
@@ -940,12 +962,12 @@ function buildEquipPromises(suggestedItems, forced) {
   const msToNextAttack = ms_to_next_skill("attack");
   const timeToNextAttack =
     msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
-  const currentPenalty = character.s.penalty_cd?.ms ?? 0;
+  const currentPenalty = penaltyModifier(character.s.penalty_cd?.ms ?? 0);
   const equipLatency = Math.min(character.ping / 2, 100);
   let penaltyBudget = timeToNextAttack - currentPenalty - equipLatency;
 
   let targetBooster = null;
-  if ((!isLooting || forced) && currentBooster) {
+  if ((!isLooting || !preventPenaltizeNextAttack) && currentBooster) {
     if (suggestedItems.booster) {
       if (currentBooster !== suggestedItems.booster)
         targetBooster = suggestedItems.booster;
@@ -957,7 +979,10 @@ function buildEquipPromises(suggestedItems, forced) {
   }
   // Shifting a booster costs more penalty than a regular equip — only pay for
   // it when there's room in the budget, or when the caller forces the swap
-  if (targetBooster && (forced || penaltyBudget >= SHIFT_PENALTY_MS)) {
+  if (
+    targetBooster &&
+    (!preventPenaltizeNextAttack || penaltyBudget >= SHIFT_PENALTY_MS)
+  ) {
     promises.push(shift(locate_item(currentBooster), targetBooster));
     penaltyBudget -= SHIFT_PENALTY_MS;
   }
@@ -980,7 +1005,10 @@ function buildEquipPromises(suggestedItems, forced) {
     .filter(
       (slot) =>
         suggestedItems[slot] &&
-        (suggestedItems[slot] !== character.slots[slot]?.name ||
+        // A fallback means the caller knows character.slots is stale (a swap it
+        // just fired hasn't come back yet), so trust it over the comparison
+        (fallback[slot] !== undefined ||
+          suggestedItems[slot] !== character.slots[slot]?.name ||
           character.items[findMaxLevelItem(suggestedItems[slot])]?.level >
             character.slots[slot]?.level),
     )
@@ -989,7 +1017,7 @@ function buildEquipPromises(suggestedItems, forced) {
       const count = usedCounts[id] || 0;
       const num = findMaxLevelItem(id, count);
       usedCounts[id] = count + 1;
-      return { slot, num };
+      return { slot, num: num >= 0 ? num : (fallback[slot] ?? -1) };
     })
     .filter((equipInfo) => equipInfo.num >= 0);
 
@@ -999,7 +1027,7 @@ function buildEquipPromises(suggestedItems, forced) {
     Math.floor(penaltyBudget / EQUIP_PENALTY_MS),
   );
 
-  if (itemSlots.length > maxItemsToEquip && !forced) {
+  if (itemSlots.length > maxItemsToEquip && preventPenaltizeNextAttack) {
     itemSlots.splice(maxItemsToEquip);
   }
 
@@ -1328,6 +1356,35 @@ function canAffordSwap(slots) {
   );
 }
 
+/**
+ * Fallback slots for a cleave/stomp restore fired before its swap resolves,
+ * while character.slots/items still show the pre-swap gear: the displaced
+ * mainhand lands where the swap weapon came from, the unequipped offhand in the
+ * first free inventory slot.
+ * @param {Object} restoreItems - the gear to go back to
+ * @param {number} swapWeaponSlot - inventory slot the swap weapon came from
+ * @returns {Object<string, number>} slot -> inventory slot
+ */
+function buildWarriorRestoreFallback(restoreItems, swapWeaponSlot) {
+  const fallback = {};
+  const firstEmptySlot = character.items.findIndex((item) => !item);
+
+  if (
+    swapWeaponSlot >= 0 &&
+    restoreItems.mainhand === character.slots.mainhand?.name
+  )
+    fallback.mainhand = swapWeaponSlot;
+
+  if (
+    firstEmptySlot !== -1 &&
+    character.slots.offhand &&
+    restoreItems.offhand === character.slots.offhand.name
+  )
+    fallback.offhand = firstEmptySlot;
+
+  return fallback;
+}
+
 let isCleaving = false;
 async function warriorCleave(strategyName) {
   const mobsList = Object.values(parent.entities).filter(
@@ -1429,6 +1486,12 @@ async function warriorCleave(strategyName) {
     if (canAffordSwap(3))
       cleaveSet.push({ num: findMaxLevelItem("mpxamulet"), slot: "amulet" });
 
+    const restoreItems = calculateWarriorItems();
+    const restoreFallback = buildWarriorRestoreFallback(
+      restoreItems,
+      cleaveWeapon.num,
+    );
+
     promises.push(
       Promise.all([
         unequip("offhand"),
@@ -1437,6 +1500,14 @@ async function warriorCleave(strategyName) {
       withTimeout(use_skill("cleave"), 2500).then(() =>
         reduce_cooldown("cleave", 0.95 * character.ping),
       ),
+      // Cleave procs sugarcane off whatever the server sees equipped when it
+      // runs, so swap back right away instead of waiting on use_skill
+      equipBatch(restoreItems, {
+        fallback: restoreFallback,
+        penaltyModifier: (penalty) =>
+          penalty + cleaveSet.length * EQUIP_PENALTY_MS,
+        preventKeySnatch: false,
+      }),
     );
   }
 
@@ -1475,11 +1546,27 @@ async function warriorStomp() {
 
   const promises = [];
 
+  const restoreItems = calculateWarriorItems();
+  const restoreFallback = buildWarriorRestoreFallback(
+    restoreItems,
+    findMaxLevelItem("basher"),
+  );
+
   promises.push(
-    equipBatch({ mainhand: "basher", offhand: undefined }, true),
+    equipBatch(
+      { mainhand: "basher", offhand: undefined },
+      { preventPenaltizeNextAttack: false, preventKeySnatch: false },
+    ),
     use_skill("stomp").then(() =>
       reduce_cooldown("stomp", 0.95 * character.ping),
     ),
+    // Same trick as cleave: the basher only has to be on when the server runs
+    // stomp, so restore without waiting for the swap or the skill to resolve
+    equipBatch(restoreItems, {
+      fallback: restoreFallback,
+      penaltyModifier: (penalty) => penalty + EQUIP_PENALTY_MS,
+      preventKeySnatch: false,
+    }),
   );
 
   return Promise.allSettled(promises).finally(() => {
@@ -1541,7 +1628,10 @@ async function scareAwayMobs() {
     character.mp > 100
   ) {
     return Promise.all([
-      equipBatch({ orb: "jacko" }, true),
+      equipBatch(
+        { orb: "jacko" },
+        { preventPenaltizeNextAttack: false, preventKeySnatch: false },
+      ),
       use_skill("scare").then(() =>
         reduce_cooldown("scare", 0.95 * character.ping),
       ),
@@ -1604,7 +1694,12 @@ async function useTemporalSurge() {
 
   if (nearbySpawn.length && nearbySpawnWithSpawnMechanic.length === 0) {
     if (character.slots.orb?.name !== "orboftemporal") {
-      promises.push(equipBatch({ orb: "orboftemporal" }, true));
+      promises.push(
+        equipBatch(
+          { orb: "orboftemporal" },
+          { preventPenaltizeNextAttack: false, preventKeySnatch: false },
+        ),
+      );
     }
     promises.push(use_skill("temporalsurge"));
   }

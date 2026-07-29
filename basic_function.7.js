@@ -1402,7 +1402,7 @@ async function midasLooting(forced = false) {
                 booster: "goldbooster",
                 cape: "horsecapeg",
               },
-              true,
+              { preventPenaltizeNextAttack: false, preventKeySnatch: false },
             ),
             500,
           );

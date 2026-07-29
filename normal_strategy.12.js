@@ -34,10 +34,11 @@ async function useNormalStrategy(target) {
         )
       ) {
         promises.push(
-          equipBatch(
-            suggestedRangerItems,
-            character.slots.mainhand?.name === "cupid",
-          ),
+          equipBatch(suggestedRangerItems, {
+            preventPenaltizeNextAttack:
+              character.slots.mainhand?.name !== "cupid",
+            preventKeySnatch: character.slots.mainhand?.name !== "cupid",
+          }),
         );
       }
       break;

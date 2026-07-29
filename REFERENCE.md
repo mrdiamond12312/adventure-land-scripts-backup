@@ -245,11 +245,46 @@ no booster was suggested (previously a suggested-but-already-equipped booster fe
 got swapped away). `suggestedItems.booster` is always deleted afterward because "booster" is not
 a real equipment slot — leaking it into the slot loop would try to `equip()` it.
 
+Options (second arg, replacing the old `forced` boolean): `preventPenaltizeNextAttack` (default
+true) is the old force switch — false skips the `penalty_cd`/`cc`/`isLooting` bail, the batch
+slicing and the booster-shift budget check. `preventKeySnatch` (default true) false ignores the
+`isEquipingItems` latch. `penaltyModifier` rewrites the assumed `penalty_cd` before budgeting,
+for equips already dispatched but not yet reflected in `character.s` (e.g. `(x) => x + 120` when
+firing right after a stomp/cleave swap). `fallback` maps a slot to an inventory slot number to
+use when `findMaxLevelItem` comes up empty. Old `equipBatch(x, true)` call sites are now
+`equipBatch(x, { preventPenaltizeNextAttack: false, preventKeySnatch: false })`.
+
+## Restoring gear before the swap resolves (`warriorCleave` / `warriorStomp`)
+
+Cleave and stomp only need their swap weapon equipped *server-side when the skill runs*, and
+cleave procs sugarcane off whatever is on at that moment — the same trick the candy-cane swap
+uses. So the restore `equipBatch` is fired synchronously right after `use_skill`, in the same
+promise array, instead of waiting for the skill (or even the swap) to resolve.
+
+That means `character.slots`/`character.items` still describe the *pre-swap* gear when the
+restore is built, which is what the `fallback`/`penaltyModifier` options exist for
+(`buildWarriorRestoreFallback`):
+
+- the displaced mainhand will land in the inventory slot the swap weapon came from
+  (`cleaveWeapon.num` / `findMaxLevelItem("basher")`), so that's `fallback.mainhand` whenever the
+  restore wants the weapon that's still showing as equipped;
+- `unequip("offhand")` drops the offhand into the first empty `character.items` slot, so that's
+  `fallback.offhand`;
+- `penaltyModifier` adds `EQUIP_PENALTY_MS` per equip the swap already dispatched, since the
+  server-side `penalty_cd` from them hasn't been echoed back yet. `preventPenaltizeNextAttack`
+  stays on, so if that predicted penalty leaves no budget the restore is simply skipped and the
+  existing `setTimeout(currentStrategy, penalty_cd)` backstop picks it up.
+
+Only `preventKeySnatch` is turned off — the restore runs inside the swap's own
+`isEquipingItems` window on purpose.
+
 Flag ownership: `isEquipingItems` follows the same "never release a lock you didn't take" rule
 as the merchant's `onDuty` — `warriorStomp` used to clear it unconditionally despite never
-setting it (it only calls `equipBatch(…, true)`, which manages the flag itself), which could
+setting it (it only calls `equipBatch` with the force options, which manages the flag itself), which could
 unlock a concurrent `equipBatch` mid-flight; `warriorCleave` only clears it when its aggro
-branch actually claimed it.
+branch actually claimed it. `equipBatch` itself follows the rule too: it records whether the
+latch was free on entry and only clears it in that case, so a `preventKeySnatch: false` call
+nested inside someone else's swap can't unlock it early.
 
 ## Attack cooldown reduction after `attack()` (`reduceCd`, basic_warrior.9.js)
 
