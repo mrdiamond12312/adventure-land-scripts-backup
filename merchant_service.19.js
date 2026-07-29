@@ -384,8 +384,8 @@ async function aggroEnt(entId, dartgunRange) {
  */
 function isInEntAggroBand(d) {
   return (
-    d <= character.range + character.xrange * 0.25 &&
-    d > character.range * 0.925
+    d <= character.range + character.xrange * 0.85 &&
+    d > character.range * 0.875
   );
 }
 
