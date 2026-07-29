@@ -1874,6 +1874,10 @@ const DYNAMIC_PARTY_PRESETS = {
       RANGER = RANGER2;
       return [RANGER2, PRIEST, ROGUE];
     },
+    ASIAI: () => {
+      RANGER = RANGER1;
+      return [RANGER1, PRIEST, ROGUE];
+    },
     default: () => {
       // const isAggroed = !!parent.S.franky?.target;
       // HEALER = PRIEST;
@@ -1886,7 +1890,7 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER2;
       return [RANGER2, ROGUE, MAGE];
     },
-    USII: () => {
+    ASIAI: () => {
       RANGER = RANGER1;
       HEALER = RANGER1;
       return [RANGER, ROGUE, MAGE];
@@ -1898,7 +1902,7 @@ const DYNAMIC_PARTY_PRESETS = {
   },
   dragold: {
     USI: [WARRIOR, PRIEST, ROGUE],
-    EUI: () => {
+    ASIAI: () => {
       RANGER = RANGER1;
       HEALER = PRIEST;
       return [WARRIOR, RANGER, PRIEST];
@@ -1919,7 +1923,7 @@ const DYNAMIC_PARTY_PRESETS = {
       RANGER = RANGER2;
       return [WARRIOR, RANGER, PRIEST];
     },
-    USII: () => {
+    ASIAI: () => {
       RANGER = RANGER1;
       return [WARRIOR, RANGER, PRIEST];
     },
@@ -1933,7 +1937,7 @@ const DYNAMIC_PARTY_PRESETS = {
   pinkgoo: {
     USI: [MAGE, PRIEST, ROGUE],
     USII: [WARRIOR, MAGE, PRIEST],
-    EUI: () => {
+    ASIAI: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
       return [WARRIOR, RANGER, MAGE];
@@ -1972,6 +1976,16 @@ const DYNAMIC_PARTY_PRESETS = {
       RANGER = RANGER2;
       HEALER = RANGER;
       return [WARRIOR, RANGER, MAGE];
+    },
+    USI: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, ROGUE];
+    },
+    USIII: () => {
+      RANGER = RANGER1;
+      HEALER = PRIEST;
+      return [WARRIOR, RANGER, PRIEST];
     },
     default: () => {
       RANGER = RANGER1;
