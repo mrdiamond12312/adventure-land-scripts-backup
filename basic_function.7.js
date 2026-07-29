@@ -1859,14 +1859,14 @@ const DYNAMIC_PARTY_PRESETS = {
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
+      return [WARRIOR, RANGER, ROGUE];
     },
-    USII: () => {
+    ASIAI: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
+      return [WARRIOR, RANGER, ROGUE];
     },
-    default: [WARRIOR, PRIEST, MAGE],
+    default: [WARRIOR, PRIEST, ROGUE],
   },
   mrpumpkin: "mrgreen", // share config
   franky: {
