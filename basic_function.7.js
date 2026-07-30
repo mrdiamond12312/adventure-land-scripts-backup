@@ -1997,6 +1997,7 @@ const DYNAMIC_PARTY_PRESETS = {
   default: () => {
     const globalParty = get("currentParty");
     const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
+    HEALER = PRIEST;
 
     if (
       globalParty &&
@@ -2005,15 +2006,12 @@ const DYNAMIC_PARTY_PRESETS = {
     ) {
       setRogueSpeedLastDeployment();
       if (shouldDeployRogue()) {
-        return [WARRIOR, ROGUE, RANGER];
+        return [WARRIOR, ROGUE, MAGE];
       } else {
-        RANGER = RANGER1;
-        HEALER = PRIEST;
-        return [WARRIOR, PRIEST, RANGER];
+        return [WARRIOR, PRIEST, MAGE];
       }
     }
 
-    HEALER = PRIEST;
     return [WARRIOR, PRIEST, MAGE];
   },
 };
