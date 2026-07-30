@@ -205,21 +205,28 @@ function shouldPartyHeal() {
   );
 }
 
+// Party-wide incoming dps has outrun our heal throughput. getHealPower() rather
+// than character.heal: heal drops whenever gear swaps to a damage set, and that
+// dip must not read as "we can no longer keep up".
+function isOutHealed() {
+  return (
+    avgPartyDmgTaken(partyMems) > getHealPower() * 0.95 * character.frequency
+  );
+}
+
 function shouldPriestScare() {
-  const overHealed =
-    avgPartyDmgTaken(partyMems) > character.heal * 0.95 * character.frequency;
+  if (!isOutHealed()) return false;
+
   if (currentStrategy === usePullStrategies) {
     return (
-      overHealed &&
       character.hp < (isAssignedAsTanker() ? 0.3 : 0.5) * character.max_hp &&
       character.cc < 100
     );
   }
-  return (
-    (overHealed &&
-      character.hp < (isAssignedAsTanker() ? 0.2 : 0.5) * character.max_hp) ||
-    !isAssignedAsTanker()
-  );
+
+  // Off-tank: nothing we picked up is worth holding once healing can't keep up,
+  // and scare only ever drops the mobs aggroing us anyway.
+  return !isAssignedAsTanker() || character.hp < 0.2 * character.max_hp;
 }
 
 // Best mob to zapperzap (migrated from the old zapperLoop). Null unless the
@@ -246,10 +253,9 @@ function getZapTarget() {
   );
 
   const isTanker = isAssignedAsTanker();
+  const mobsOnMe = listOfMonsterAttacking(character);
   const aggroCount = (dmgType) =>
-    targetsInRange.filter(
-      (e) => e.target === character.name && e.damage_type === dmgType,
-    ).length;
+    mobsOnMe.filter((mob) => mob.damage_type === dmgType).length;
   const courageMap = {
     physical: { count: aggroCount("physical"), limit: character.courage },
     magical: { count: aggroCount("magical"), limit: character.mcourage },

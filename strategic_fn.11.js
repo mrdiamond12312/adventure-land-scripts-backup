@@ -3,6 +3,8 @@ const BLAST_DIVISOR = 3.6;
 const BLAST_RADIUS = getMaxBlastRadius() || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
 const MAX_MOB_DPS = 2500;
+// Sleeping mobs a single cburst must wake to be worth the mp
+const CBURST_MIN_BATCH = 3;
 const EQUIP_PENALTY_MS = 120;
 const SHIFT_PENALTY_MS = 240;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];

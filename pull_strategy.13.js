@@ -26,8 +26,10 @@ async function usePullStrategies(target) {
       }
 
       // Spend spare mp to help the priest keep the party topped off, but only
-      // when the healer is close, healthy and actually a priest.
-      if (
+      // when the healer is close, healthy and actually a priest. Only a batch
+      // worth of sleeping mobs pays for the mp — the blaster keeps the mage
+      // starved, so lone stragglers are left to the priest's zapper.
+      const canAffordCBurst =
         ms_to_next_skill("cburst") === 0 &&
         character.mp > 400 &&
         !get_targeted_monster()?.["1hp"] &&
@@ -35,12 +37,14 @@ async function usePullStrategies(target) {
         partyHealer.ctype === "priest" &&
         distance(partyHealer, character) <
           (partyHealer.range ?? character.range * 0.7) &&
-        partyHealer.hp > 0.6 * partyHealer.max_hp &&
-        getMonstersToCBurst().length >= 1
-      ) {
+        partyHealer.hp > 0.6 * partyHealer.max_hp;
+
+      const mobsToCBurst = canAffordCBurst ? getMonstersToCBurst() : [];
+
+      if (mobsToCBurst.length >= CBURST_MIN_BATCH) {
         promises.push(
-          use_skill("cburst", getMonstersToCBurst()).then(() =>
-            reduce_cooldown("cburst", -2000),
+          use_skill("cburst", mobsToCBurst).then(() =>
+            reduce_cooldown("cburst", -6000),
           ),
         );
       }
