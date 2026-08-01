@@ -20,12 +20,17 @@ const reduceCd = (skillName, isPingBased = true) =>
     isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
   );
 
+// How far past attack range target selection is allowed to search
+const TARGET_SEARCH_RANGE_MULTIPLIER = 5;
+
 /**
  * @param {Object} entity - the entity to measure against
- * @returns {boolean} whether the entity is within attack range
+ * @param {number} [mult] - multiplier on attack range
+ * @returns {boolean} whether the entity is within that range
  */
-const inRange = (entity) =>
-  distance(entity, character) < character.range + character.xrange;
+const inRange = (entity, mult = 1) =>
+  !!entity &&
+  distance(entity, character) < (character.range + character.xrange) * mult;
 
 /** @returns {boolean} whether the attack cooldown is up */
 const isAttackReady = () =>
@@ -36,46 +41,52 @@ async function fight(target) {
   // and the attack cooldown must be timed with the frequency at fire time.
   const attackFrequencyBeforeCompensate = character.frequency;
 
+  const allAggroedByParty = Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity.type === "monster" &&
+        ([...partyMems, ...parent.party_list].includes(entity.target) ||
+          (entity.cooperative && entity.target)) &&
+        !MELEE_IGNORE_LIST.includes(entity.mtype) &&
+        inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
+    )
+    .sort((lhs, rhs) => {
+      const lhsHpPercentage = lhs.hp / lhs.max_hp;
+      const rhsHpPercentage = rhs.hp / rhs.max_hp;
+
+      if (lhs.cooperative && rhs.cooperative) {
+        if (lhs["1hp"]) return -1;
+        else return 1;
+      }
+      if (lhs.cooperative) return -1;
+      if (rhs.cooperative) return 1;
+
+      return rhsHpPercentage - lhsHpPercentage;
+    });
+
   if (
     typeof usePullStrategies === "function" &&
     currentStrategy === usePullStrategies
   ) {
-    const allAggroedByParty = Object.values(parent.entities)
-      .filter(
-        (entity) =>
-          entity.type === "monster" &&
-          ([...partyMems, ...parent.party_list].includes(entity.target) ||
-            (entity.cooperative && entity.target)) &&
-          !MELEE_IGNORE_LIST.includes(entity.mtype) &&
-          inRange(entity),
-      )
-      .sort((lhs, rhs) => {
-        const lhsHpPercentage = lhs.hp / lhs.max_hp;
-        const rhsHpPercentage = rhs.hp / rhs.max_hp;
-
-        if (lhs.cooperative && rhs.cooperative) {
-          if (lhs["1hp"]) return -1;
-          else return 1;
-        }
-        if (lhs.cooperative) return -1;
-        if (rhs.cooperative) return 1;
-
-        return rhsHpPercentage - lhsHpPercentage;
-      });
-
-    target = allAggroedByParty.shift() ?? target;
+    target = allAggroedByParty[0] ?? target;
   }
 
   if (!target) return;
 
+  // The picked target can sit outside our reach; rather than skip the swing,
+  // hit the best party-aggroed mob that is actually in range.
+  const attackTarget = inRange(target)
+    ? target
+    : allAggroedByParty.filter((mob) => mob !== target && inRange(mob))[0];
+
   const promisesToAwait = [];
 
-  if (isAttackReady() && inRange(target) && shouldAttack()) {
+  if (isAttackReady() && attackTarget && shouldAttack()) {
     if (!ms_to_next_skill("invis")) {
       promisesToAwait.push(use_skill("invis").then(() => reduceCd("invis")));
     }
     promisesToAwait.push(
-      attack(target)
+      attack(attackTarget)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeCompensate);
           reduceCd("attack", false);

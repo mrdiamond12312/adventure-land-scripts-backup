@@ -19,6 +19,18 @@ const reduceCd = (skillName, isPingBased = true) =>
     isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
   );
 
+// How far past attack range target selection is allowed to search
+const TARGET_SEARCH_RANGE_MULTIPLIER = 1.5;
+
+/**
+ * @param {Object} entity - the entity to measure against
+ * @param {number} [mult] - multiplier on attack range
+ * @returns {boolean} whether the entity is within that range
+ */
+const inRange = (entity, mult = 1) =>
+  !!entity &&
+  distance(entity, character) <= (character.range + character.xrange) * mult;
+
 // Combat Logic
 
 async function fight(target, isMovingControlled = false) {
@@ -30,17 +42,18 @@ async function fight(target, isMovingControlled = false) {
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
   // Targetting, poisoned aggro'ed mob or taunt if assigned as tanker
-  let isTargetInAttackRange = false;
+  let attackTarget;
   if (target && !isMovingControlled) {
     const partyDmgRecieved = avgPartyDmgTaken(partyMems);
-    const characterBufferedRange = character.range + character.xrange;
     const prioritizedCharacter = prioritizedNames();
-    const mobsInRange = Object.values(parent.entities).filter(
+    const mobsInSearchRange = Object.values(parent.entities).filter(
       (entity) =>
         entity.type === "monster" &&
         !entity.dead &&
-        distance(character, entity) <= characterBufferedRange,
+        inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
     );
+    // Taunt and poison spread both need the mob actually reachable
+    const mobsInRange = mobsInSearchRange.filter((mob) => inRange(mob));
 
     const targetToTaunt =
       isAssignedAsTanker() &&
@@ -59,7 +72,7 @@ async function fight(target, isMovingControlled = false) {
             .shift()
         : null;
 
-    const targetToAttack =
+    const targetToPoison =
       (character.slots.orb?.name === "test_orb" ||
         character.slots.mainhand?.name === "oozingterror") &&
       !target?.cooperative
@@ -77,9 +90,15 @@ async function fight(target, isMovingControlled = false) {
             .shift() ?? target)
         : target;
 
-    target = targetToTaunt ?? targetToAttack;
-    isTargetInAttackRange =
-      target && distance(target, character) <= characterBufferedRange;
+    target = targetToTaunt ?? targetToPoison;
+
+    // The computed target can sit outside our reach; rather than skip the shot,
+    // swing at the beefiest aggroed mob that is actually in range.
+    attackTarget = inRange(target)
+      ? target
+      : mobsInRange
+          .filter((mob) => mob !== target && mob.target)
+          .sort((lhs, rhs) => rhs.hp - lhs.hp)[0];
   }
 
   // Decide heal vs attack
@@ -101,10 +120,10 @@ async function fight(target, isMovingControlled = false) {
           reduceCd("heal");
         }),
       );
-    } else if (isTargetInAttackRange && shouldAttack()) {
+    } else if (attackTarget && shouldAttack()) {
       set_message("Attacking");
       promisesToAwait.push(
-        attack(target)
+        attack(attackTarget)
           .then(() => {
             attackSpeedCompensate(attackFrequencyBeforeCompensate);
             reduceCd("attack", false);

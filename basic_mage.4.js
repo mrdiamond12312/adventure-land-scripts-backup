@@ -20,39 +20,49 @@ const reduceCd = (skillName, isPingBased = true) =>
     isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
   );
 
+// How far past attack range target selection is allowed to search
+const TARGET_SEARCH_RANGE_MULTIPLIER = 1.5;
+
+/**
+ * @param {Object} entity - the entity to measure against
+ * @param {number} [mult] - multiplier on attack range
+ * @returns {boolean} whether the entity is within that range
+ */
+const inRange = (entity, mult = 1) =>
+  !!entity &&
+  distance(entity, character) <= (character.range + character.xrange) * mult;
+
 async function fight(target) {
   // Snapshot for attackSpeedCompensate: blaster's attack speed modifier means
   // frequency can change mid-tick when weapons swap, and the attack cooldown
   // must be timed with the frequency the shot was actually fired at.
   const attackFrequencyBeforeCompensate = character.frequency;
 
+  // Filter: Find all aggroed mobs within a reasonable pull distance, excluding formidable ones
+  const aggroedMobs = Object.values(parent.entities).filter(
+    (entity) =>
+      entity.type === "monster" &&
+      entity.target && // Must be aggroed
+      !entity.dead &&
+      !entity.s?.fullguardx &&
+      !haveFormidableMonsterAroundTarget(entity) &&
+      inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
+  );
+
   if (
     currentStrategy === usePullStrategies &&
     !target?.mtype.includes("crabx")
   ) {
-    const attackRange = character.range + character.xrange;
     const blastRadius = getSplashRadius();
-
-    // Filter: Find all aggroed mobs within a reasonable pull distance, excluding formidable ones
-    const aggroedMobs = Object.values(parent.entities)
-      .filter(
-        (entity) =>
-          entity.type === "monster" &&
-          entity.target && // Must be aggroed
-          !entity.dead &&
-          !entity.s?.fullguardx &&
-          !haveFormidableMonsterAroundTarget(entity) &&
-          distance(entity, character) <= attackRange,
-      )
-      // Map: Pre-calculate the cluster count (The performance optimization)
-      .map((mob) => {
-        mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
-        return mob;
-      });
 
     if (aggroedMobs.length) {
       // Sort: Find the best mob to target for cluster damage
       const bestTarget = aggroedMobs
+        // Map: Pre-calculate the cluster count (The performance optimization)
+        .map((mob) => {
+          mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
+          return mob;
+        })
         .sort((lhs, rhs) => {
           if (lhs.cooperative !== rhs.cooperative) {
             return lhs.cooperative ? -1 : 1;
@@ -63,8 +73,7 @@ async function fight(target) {
           }
           // If cluster counts are equal, prioritize highest HP to apply max damage
           return rhs.hp - lhs.hp;
-        })
-        .shift(); // Get the first (best) target
+        })[0]; // Get the first (best) target
 
       target = bestTarget ?? target;
       change_target(target);
@@ -76,12 +85,16 @@ async function fight(target) {
 
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-  const isTargetInAttackRange =
-    distance(target, character) <= character.range + character.xrange;
+
+  // The best target can sit outside our reach; rather than skip the shot, take
+  // the best aggroed mob that is actually in range instead.
+  const attackTarget = inRange(target)
+    ? target
+    : aggroedMobs.filter((mob) => mob !== target && inRange(mob))[0];
 
   // Attack, paired with self-energize (spare mp feeds the shot). Every other
   // skill runs on its own loop (startSkillLoops).
-  if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
+  if (isAttackReady && attackTarget && shouldAttack()) {
     set_message("Attacking");
 
     const promisesToAwait = [];
@@ -99,7 +112,7 @@ async function fight(target) {
     }
 
     promisesToAwait.push(
-      attack(target)
+      attack(attackTarget)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeCompensate);
           reduceCd("attack", false);
