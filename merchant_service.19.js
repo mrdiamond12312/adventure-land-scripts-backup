@@ -551,8 +551,3 @@ async function dragEnt() {
     setTimeout(dragEnt, nextDelay);
   }
 }
-
-if (!parent.caracAL) {
-  lureMechaGnome();
-  dragEnt();
-}

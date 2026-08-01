@@ -1,16 +1,10 @@
 // Load basic functions from other code snippet
 
 if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts([
-      "adventure-land-scripts-backup/basic_function.7.js",
-      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-    ])
-    .then(() => dependenciesLoaded)
-    .then(() => {
-      mainLoop();
-      startSkillLoops();
-    });
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/basic_function.7.js",
+    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+  ]);
 } else {
   load_code(7);
   load_code(8);
@@ -195,8 +189,6 @@ function startSkillLoops() {
   });
 }
 
-if (!parent.caracAL) startSkillLoops();
-
 async function mainLoop() {
   try {
     desiredElixir = "pumpkinspice";
@@ -256,4 +248,5 @@ async function mainLoop() {
   setTimeout(mainLoop, getLoopInterval());
 }
 
-if (!parent.caracAL) mainLoop();
+mainLoop();
+startSkillLoops();

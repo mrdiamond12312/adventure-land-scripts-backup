@@ -4,18 +4,10 @@
 // Just set attack_mode to true and ENGAGE!
 
 if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts([
-      "adventure-land-scripts-backup/merchant_crafting.10.js",
-      "adventure-land-scripts-backup/merchant_service.19.js",
-    ])
-    .then(() => dependenciesLoaded)
-    .then(() => {
-      syncBankData();
-      bankLoop();
-      lureMechaGnome();
-      dragEnt();
-    });
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/merchant_crafting.10.js",
+    "adventure-land-scripts-backup/merchant_service.19.js",
+  ]);
 } else {
   load_code(10);
   load_code(19);
@@ -665,6 +657,11 @@ function on_destroy() {
   clear_drawings(); // <-- Default in on_destroy
   clear_buttons(); // <-- Default in on_destroy
 }
+
+syncBankData();
+bankLoop();
+lureMechaGnome();
+dragEnt();
 
 // Register secondhands event handler
 parent.socket.on("secondhands", secondhandsHandler);

@@ -216,26 +216,16 @@ function getTotalQuantityOf(item) {
   }, 0);
 }
 
-// Under caracAL these loads resolve *after* this file's top-level code returns,
-// so awaiting basic_function.7.js alone is not enough — an entry script that
-// starts looping right away can run a tick before strategic_fn.11.js exists.
-// Every loader must await dependenciesLoaded (assigned at the end of this file).
-var pendingScriptLoads = [];
-
 // Strategic functions
 if (parent.caracAL) {
-  pendingScriptLoads.push(
-    parent.caracAL.load_scripts([
-      "adventure-land-scripts-backup/strategic_fn.11.js",
-    ]),
-  );
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/strategic_fn.11.js",
+  ]);
   if (character.ctype !== "merchant") {
-    pendingScriptLoads.push(
-      parent.caracAL.load_scripts([
-        "adventure-land-scripts-backup/normal_strategy.12.js",
-        "adventure-land-scripts-backup/pull_strategy.13.js",
-      ]),
-    );
+    parent.caracAL.load_scripts([
+      "adventure-land-scripts-backup/normal_strategy.12.js",
+      "adventure-land-scripts-backup/pull_strategy.13.js",
+    ]);
   }
 } else {
   load_code(11);
@@ -250,11 +240,9 @@ if (parent.caracAL) {
 
 // Server hoping
 if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
-  pendingScriptLoads.push(
-    parent.caracAL.load_scripts([
-      "adventure-land-scripts-backup/server_hop.14.js",
-    ]),
-  );
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/server_hop.14.js",
+  ]);
 } else if (!character.controller) {
   load_code(14);
 }
@@ -540,20 +528,15 @@ const BURN_DAMAGE_MULTIPLIER = 1.5;
 // Smart move strategies
 var isAdvanceSmartMoving = false;
 if (parent.caracAL) {
-  pendingScriptLoads.push(
-    parent.caracAL.load_scripts([
-      "adventure-land-scripts-backup/crypt_strategy.16.js",
-      "adventure-land-scripts-backup/strategic_smart_move.21.js",
-      "adventure-land-scripts-backup/advance_smart_move.20.js",
-    ]),
-  );
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/crypt_strategy.16.js",
+    "adventure-land-scripts-backup/strategic_smart_move.21.js",
+    "adventure-land-scripts-backup/advance_smart_move.20.js",
+  ]);
 } else {
   load_code(20);
   load_code(16);
 }
-
-// Resolves once every script this file pulls in has actually been evaluated
-var dependenciesLoaded = Promise.all(pendingScriptLoads);
 
 // Wrapper to use which depends on client platform
 async function advanceSmartMove(props, options = { useScare: true }) {

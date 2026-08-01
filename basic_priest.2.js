@@ -1,15 +1,9 @@
 // Load basic functions from other code snippet
 if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts([
-      "adventure-land-scripts-backup/basic_function.7.js",
-      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-    ])
-    .then(() => dependenciesLoaded)
-    .then(() => {
-      mainLoop();
-      startSkillLoops();
-    });
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/basic_function.7.js",
+    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+  ]);
 } else {
   load_code(7);
   load_code(8);
@@ -205,9 +199,6 @@ function shouldPartyHeal() {
   );
 }
 
-// Party-wide incoming dps has outrun our heal throughput. getHealPower() rather
-// than character.heal: heal drops whenever gear swaps to a damage set, and that
-// dip must not read as "we can no longer keep up".
 function isOutHealed() {
   return (
     avgPartyDmgTaken(partyMems) > getHealPower() * 0.95 * character.frequency
@@ -224,13 +215,9 @@ function shouldPriestScare() {
     );
   }
 
-  // Off-tank: nothing we picked up is worth holding once healing can't keep up,
-  // and scare only ever drops the mobs aggroing us anyway.
   return !isAssignedAsTanker() || character.hp < 0.2 * character.max_hp;
 }
 
-// Best mob to zapperzap (migrated from the old zapperLoop). Null unless the
-// zapper ring is on, mp is healthy, and a worthwhile target clears the mp gate.
 function getZapTarget() {
   const hasZapper =
     character.slots.ring1?.name === "zapper" ||
@@ -461,7 +448,5 @@ async function mainLoop() {
   setTimeout(mainLoop, getLoopInterval());
 }
 
-if (!parent.caracAL) {
-  mainLoop();
-  startSkillLoops();
-}
+mainLoop();
+startSkillLoops();

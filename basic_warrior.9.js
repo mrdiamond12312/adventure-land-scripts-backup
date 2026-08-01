@@ -8,17 +8,10 @@ const reduceCd = (skillName, isPingBased = true) => {
 
 // Load basic functions (unchanged)
 if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts([
-      "adventure-land-scripts-backup/basic_function.7.js",
-      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-    ])
-    .then(() => dependenciesLoaded)
-    .then(() => {
-      cleaveLoop();
-      mainLoop();
-      startSkillLoops();
-    });
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/basic_function.7.js",
+    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+  ]);
 } else {
   load_code(7);
   load_code(8);
@@ -385,8 +378,6 @@ function startSkillLoops() {
   });
 }
 
-if (!parent.caracAL) cleaveLoop();
-
 // Main control loop
 async function mainLoop() {
   try {
@@ -472,7 +463,6 @@ async function mainLoop() {
   }
 }
 
-if (!parent.caracAL) {
-  mainLoop();
-  startSkillLoops();
-}
+cleaveLoop();
+mainLoop();
+startSkillLoops();

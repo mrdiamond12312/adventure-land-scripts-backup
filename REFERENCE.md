@@ -200,14 +200,9 @@ lureMechaGnome kept going" (2026-07-17) established the failure taxonomy:
 - **The reschedule must be the last statement of `finally`** — anything before it that can throw
   (the `set("luringMobType", undefined)` call is the suspect) kills the loop *after* clearing the
   flags, producing exactly the "sibling loop healthy, this loop dead" symptom.
-- **Load-order race (caracAL only)**: `basic_merchant.5.js`'s `load_scripts([10, 19]).then(start)`
-  only proves files 10/19 executed — 10 fire-and-forgets basic_function.7.js, which
-  fire-and-forgets strategic_fn.11.js. On the first ticks, identifiers from 7/11 (`map`,
-  `isAdvanceSmartMoving`, `serverCurrentlyHasLiveEvent`, `findMaxLevelItem`, ...) can be
-  undeclared → ReferenceError. In-browser `load_code` is synchronous, so no race there. With the
-  guard inside `try` this self-heals (failed tick just retries); that's why the load graph wasn't
-  restructured — whether caracAL's `load_scripts` dedupes re-loads is unknown, and a duplicate
-  top-level execution of file 7 would be worse than the race.
+- **Load-order race (caracAL only)**: gone as of 2026-08-02, `load_scripts` is synchronous — see
+  "Script loading is synchronous in both environments" below. It is worth knowing this failure
+  mode existed: a loop that never started looks exactly like a loop whose reschedule died.
 - **KNOWN ISSUE (open as of 2026-07-17)**: moving the guard inside `try` means a guard-*blocked*
   tick now also runs `finally`, which unconditionally clears `onDuty`/`isLuringMobs`/
   `isDraggingMobs` and `luringMobType` — flags that tick never acquired and that the cm duty
@@ -646,18 +641,26 @@ covers a synchronous throw, with `withTimeout(..., EQUIP_TIMEOUT_MS)` bounding t
 latch. `Promise.allSettled` rather than `Promise.all`, so one rejected equip no longer rejects the
 whole batch — no caller reads the resolved value.
 
-## `dependenciesLoaded`: awaiting basic_function.7.js is not enough
+## Script loading is synchronous in both environments (2026-08-02)
 
-Under caracAL, `load_scripts` is async. `basic_function.7.js` pulls in strategic_fn / the strategy
-pair / server_hop / the smart-move trio from its own top level, so the promise an entry script
-awaits resolves as soon as basic_function's top-level code *ran* — not when its children exist. The
-entry script then calls `mainLoop()`, and the first tick can reference something declared in
-`strategic_fn.11.js` that is not there yet (observed as `ReferenceError: RANGER_INV_ITEMS is not
-defined` at ranger boot). It is startup-only, so it looks like a flake.
+caracAL's `load_scripts` is now synchronous, matching the native `load_code`, and a failed load
+reloads the character rather than rejecting a promise. Every file pulled in — transitively — has
+finished evaluating by the time the call returns, so there is no readiness handshake: entry scripts
+load their dependencies at the top and start their loops unconditionally at the bottom of the file
+(after every `const` in that file has been initialised — starting them at the top would hit the TDZ
+on module-scope config declared further down).
 
-Those child loads now accumulate in `pendingScriptLoads` and end up as `dependenciesLoaded`, which
-every entry script chains on before starting its loops. Anything moved *into* a shared file is
-otherwise a new instance of this bug at every call site that runs on tick one.
+This retired `pendingScriptLoads`/`dependenciesLoaded` and the `if (!parent.caracAL)` guards around
+loop starts; there is now exactly one start site per loop per entry script.
+
+**The bug it retired**, and why it survived so long: `basic_merchant.5.js` was the only entry script
+that never loaded `basic_function.7.js` itself — it loaded 10 and 19, and file 10 *fire-and-forgot*
+file 7. So `load_scripts([10, 19])` could resolve while file 7 was still in flight, making
+`.then(() => dependenciesLoaded)` a **ReferenceError on an undeclared `var`**. The chain rejected
+with no `.catch`, so `syncBankData`/`bankLoop`/`lureMechaGnome`/`dragEnt` never started — silently,
+and only on the races file 7 lost. Diagnosing it burned a session on `dragEnt` itself, because the
+symptom (all lure flags `false`, no lure ever) is identical to a dead reschedule. Rule of thumb:
+before debugging a self-rescheduling loop, prove it started at least once.
 
 ## One definition of a weak mob
 

@@ -36,14 +36,21 @@ if (parent.caracAL) {
   parent.caracAL.load_scripts([
     "adventure-land-scripts-backup/basic_function.7.js",
     "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-  ]).then(() => {
-    mainLoop(); // kick off after dependencies are actually loaded
-  });
+  ]);
 } else {
   load_code(7); // native in-game CODE call, by slot number
   load_code(8);
 }
+
+// ...definitions...
+
+mainLoop(); // started at the bottom of the file, in both environments
 ```
+
+Both loaders are **synchronous**: everything pulled in, transitively, has finished evaluating by the
+time the call returns, so no readiness handshake is needed. Entry scripts start their loops
+unconditionally at the *bottom* of the file — at the top, module-scope `const`s declared further
+down are still in the TDZ.
 
 `load_code`/`load_scripts` execute the target file's top-level code into the *same* global scope — so
 functions and `var`/`let` globals defined in a loaded file become directly available, unqualified, in the

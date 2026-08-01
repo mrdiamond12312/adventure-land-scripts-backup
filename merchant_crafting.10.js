@@ -773,8 +773,3 @@ const syncBankData = async () => {
     setTimeout(syncBankData, 60_000);
   }
 };
-
-if (!parent.caracAL) {
-  bankLoop();
-  syncBankData();
-}
