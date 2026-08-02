@@ -561,11 +561,7 @@ setInterval(async function () {
   )
     await moveHome();
 
-  if (
-    (isInvFull() || invJammed) &&
-    !isAdvanceSmartMoving &&
-    !smart.moving
-  ) {
+  if ((isInvFull() || invJammed) && !isAdvanceSmartMoving && !smart.moving) {
     onDuty = true;
     try {
       await bankStoreRoutine();

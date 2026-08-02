@@ -1,4 +1,4 @@
-upgradeif (parent.caracAL) {
+if (parent.caracAL) {
   parent.caracAL.load_scripts([
     "adventure-land-scripts-backup/basic_function.7.js",
   ]);
