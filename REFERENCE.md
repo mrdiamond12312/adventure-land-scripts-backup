@@ -662,6 +662,73 @@ and only on the races file 7 lost. Diagnosing it burned a session on `dragEnt` i
 symptom (all lure flags `false`, no lure ever) is identical to a dead reschedule. Rule of thumb:
 before debugging a self-rescheduling loop, prove it started at least once.
 
+## Merchant event participation (`merchantAttackLoop`, merchant_frenzinesss.100.js)
+
+Written 2026-08-02. The merchant tags event bosses purely for a loot share, so the risk budget is
+the inverse of a fighter's: it never needs the kill, so any tick that looks unsafe is skipped
+rather than fought through.
+
+- **It only shoots what somebody else is tanking.** `isSafeToHit` requires `target.target` to be
+  set and to not be us — an *untargeted* boss is the dangerous case, because our hit is what
+  aggroes it. `isEventTanked` prefers the local entity's `target` over `parent.S[name].target`
+  (the S copy lags, and is absent entirely before the boss is rendered). The exceptions are listed
+  in `UNTANKED_OK` (snowman/wabbit/pinkgoo) — harmless enough to hit solo; they still go through
+  `isHitAffordable`.
+- **The retreat floor is healer-dependent** (`getCoveringHealer`). Alone, the merchant bails at
+  80% and won't re-engage until 95% — it has no way back up but `potionLoop`. With our own healer
+  alive and inside its *own* range (`HEALER`, not `PRIEST`: `dynamicParty` swaps a ranger into the
+  role for several events), hp is rented rather than spent, so the band drops to 40%/60%. The
+  `party_heal` cm is only worth sending in the uncovered case — a healer already in range is
+  healing us anyway.
+- **`isHitAffordable` compares dps to max hp**, not per-hit damage — `calculateDamage` multiplies
+  by frequency (see "strategic_fn.11.js math conventions"). `EVENT_MAX_DPS_RATIO` is that budget.
+- **Positioning is `hitAndRun`, not a second mover.** The loop used to walk itself with bespoke
+  `move()` steps; it now hands the boss to `change_target` and writes `rangeRate`, and the shared
+  kite loop does the rest. `hitAndRun()` is therefore started for *every* class, with an
+  `isMerchant() && !shouldMerchantKite()` gate inside it (guarded by `typeof`, since fighters never
+  load slot 100) so there is exactly one loop that can be enabled rather than a second one spawned
+  per fight. **`shouldMerchantKite` checks the weapon, not just the flag**: orbit radius is
+  `character.range * rangeRate`, so kiting on the broom would hold a melee-length orbit around a
+  boss. For the same reason the attack loop stops dead right after `equipBatch` until
+  `character.slots.mainhand` actually reads `EVENT_WEAPON` — `isFightingBoss` goes true when the
+  duty is taken, which is well before the swap lands. It also returns false when the current
+  target is under `SNIPE_MAX_PREDICTED_HP`: something that is dying anyway is not worth orbiting,
+  and moving for it walks us out of position for the boss.
+- **Two tick rates, not five**: `EVENT_TICK` while actually shooting a boss, `EVENT_IDLE_TICK` for
+  every branch that is waiting on something else (travel, gear swap, no event, nothing in range).
+  Consequences worth remembering: **backing off is a `rangeRate` change**
+  (`EVENT_RETREAT_RANGE_RATE`), never a `move()` of our own — two writers on position fight each
+  other; `releaseEventDuty` restores `basicRangeRate`; and travel still belongs to
+  `advanceSmartMove`, which `hitAndRun` sits out (`smart.moving || isAdvanceSmartMoving`). The
+  loop only calls the pathfinder past `EVENT_APPROACH_MULTIPLIER` of our reach — inside that, the
+  kite closes the gap. The merchant still has no `currentStrategy`: basic_function.7.js skips
+  slots 12/13 for `ctype === "merchant"`. Shedding aggro is `scareAwayMobs()`, as everywhere else.
+- **Duty ownership is held across ticks, not per tick.** `acquireEventDuty`/`releaseEventDuty` set
+  `holdsEventDuty` so the loop only ever clears an `onDuty` it took (the rule in "Merchant duty
+  lock"). Releasing it every tick would let the 750ms main loop `moveHome()` mid-fight.
+  `isFightingBoss` is the separate cosmetic flag: it swaps gear to dartgun/armorring and suppresses
+  `open_stand()` in basic_merchant.5.js.
+- **Concurrent bosses: lowest hp share wins** (`getEventHpRatio`/`getEventToJoin`), the same
+  measure `changeToDailyEventTargets` sorts on — mrgreen/mrpumpkin in particular overlap. The
+  local entity's hp beats the `parent.S` copy once we're on the map, and an event reporting no hp
+  reads as full so it never jumps the queue by accident. Unlike the fighters, though, re-picking
+  costs the merchant a **whole map trip**, so `currentEventName` only loses its slot when another
+  boss is `EVENT_SWITCH_MARGIN` (15pp) lower — two bosses melting in lockstep would otherwise
+  leave the merchant commuting instead of shooting. `releaseEventDuty` clears the commitment.
+- **Idle sniping** (`getSnipeTarget`/`snipeNearbyWeakMob`): with no event to join, anything under
+  `SNIPE_MAX_PREDICTED_HP` already inside `is_in_range(entity, "attack")` gets a shot. It takes no
+  duty and never moves — a free kill costs the merchant only the shot, and chasing would put it
+  where nothing else expects it to be. `getPredictedHp` subtracts what is already in the air (the
+  `PROJECTILE_MANAGER` measure `getCrabsForCrabxx` annotates crabs with), so the merchant doesn't
+  waste its shot on a mob the party has already killed. The idle branch ticks at attack speed
+  while a candidate is visible and drops back to `EVENT_IDLE_TICK` otherwise.
+- **`lootIfSolo`** runs every tick, floored at `LOOT_INTERVAL`. `midasLooting` (basic_function.7.js)
+  is a party arrangement — it defers to whoever carries handofmidas and never has the merchant
+  open anything — so a partyless merchant would otherwise leave its own chests on the ground.
+- The loop is self-rescheduling with the reschedule as the last statement of `finally`, per
+  "Self-rescheduling loop discipline". A guard-blocked tick releases duty (it owns the check) and
+  just waits `EVENT_IDLE_TICK`.
+
 ## One definition of a weak mob
 
 The thresholds live in basic_function.7.js next to the other config (`HARMLESS_MOB_DAMAGE`,

@@ -860,7 +860,7 @@ function getLoopInterval() {
 
   return ms_to_next_skill("attack") <= dynamicInterval
     ? Math.max(ms_to_next_skill("attack"), 1)
-    : (dynamicInterval ?? frequencyInterval);
+    : dynamicInterval ?? frequencyInterval;
 }
 
 function ms_to_next_skill(skill) {
@@ -1179,7 +1179,13 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   let nextDelay = loopInterval;
 
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
-  if (!target || smart.moving || isAdvanceSmartMoving) {
+
+  // Merchant gonna do the moveAround while taking part in events
+  const isMerchantIdle =
+    isMerchant() &&
+    !(typeof shouldMerchantKite === "function" && shouldMerchantKite());
+
+  if (isMerchantIdle || !target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
     lastKitingTargetId = undefined;
     return setTimeout(hitAndRun, loopInterval);
@@ -1222,7 +1228,8 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     setTimeout(hitAndRun, nextDelay);
   }
 }
-if (!isMerchant()) hitAndRun();
+// Starting Positioning loop
+hitAndRun();
 
 const HEAL_IGNORE = ["Geoffriel"];
 
@@ -2026,8 +2033,33 @@ function dynamicParty() {
 dynamicParty();
 setInterval(dynamicParty, 3000);
 
-//// Daily Events
-// var pinkGooVisitedBoundary = [];
+// Crabxx helper
+const getCrabsForCrabxx = () => {
+  const entities = Object.values(parent.entities);
+  const crabxList = [];
+  let crabxxInstance;
+
+  for (const entity of entities) {
+    if (!entity || entity.rip) continue;
+
+    if (entity.mtype === "crabxx" && !crabxxInstance) {
+      crabxxInstance = entity;
+    }
+
+    const incomingNumber =
+      PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
+
+    const predictedHp =
+      entity.name === character.name ? entity.hp : entity.hp + incomingNumber;
+    entity.predictedHp = predictedHp;
+
+    if (entity.mtype === "crabx") {
+      crabxList.push(entity);
+    }
+  }
+  return { crabxxInstance, crabxList };
+};
+
 async function changeToDailyEventTargets() {
   let target = getTarget();
   rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
@@ -2133,35 +2165,7 @@ async function changeToDailyEventTargets() {
     const inRange = (entity) =>
       distance(entity, character) < character.range + character.xrange * 0.8;
 
-    const getCrabs = () => {
-      const entities = Object.values(parent.entities);
-      const crabxList = [];
-      let crabxxInstance;
-
-      for (const entity of entities) {
-        if (!entity || entity.rip) continue;
-
-        if (entity.mtype === "crabxx" && !crabxxInstance) {
-          crabxxInstance = entity;
-        }
-
-        const incomingNumber =
-          PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
-
-        const predictedHp =
-          entity.name === character.name
-            ? entity.hp
-            : entity.hp + incomingNumber;
-        entity.predictedHp = predictedHp;
-
-        if (entity.mtype === "crabx") {
-          crabxList.push(entity);
-        }
-      }
-      return { crabxxInstance, crabxList };
-    };
-
-    let { crabxxInstance, crabxList } = getCrabs();
+    let { crabxxInstance, crabxList } = getCrabsForCrabxx();
 
     if (!crabxxInstance) {
       if (character.s.hopsickness) {
@@ -2170,7 +2174,7 @@ async function changeToDailyEventTargets() {
         await join("crabxx");
         await sleep(character.ping);
       }
-      ({ crabxxInstance, crabxList } = getCrabs());
+      ({ crabxxInstance, crabxList } = getCrabsForCrabxx());
 
       if (!crabxxInstance) return;
     }
@@ -2305,7 +2309,7 @@ async function changeToDailyEventTargets() {
     else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
     else change_target(snowmanInstance);
 
-    return (grinchInstance ?? snowmanInstance.s?.fullguardx)
+    return grinchInstance ?? snowmanInstance.s?.fullguardx
       ? beeToAttack
       : snowmanInstance;
   }

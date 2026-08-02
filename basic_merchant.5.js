@@ -7,10 +7,12 @@ if (parent.caracAL) {
   parent.caracAL.load_scripts([
     "adventure-land-scripts-backup/merchant_crafting.10.js",
     "adventure-land-scripts-backup/merchant_service.19.js",
+    "adventure-land-scripts-backup/merchant_frenzinesss.100.js",
   ]);
 } else {
   load_code(10);
   load_code(19);
+  load_code(100);
 }
 
 // Global Vars
@@ -41,15 +43,16 @@ async function equipBroom() {
 
 function calculateMerchantEquipments() {
   return {
-    helmet: isLuringMobs ? "xhelmet" : "eear",
-    mainhand: isDraggingMobs ? "dartgun" : "broom",
-    offhand: isDraggingMobs ? "t2quiver" : "wbookhs",
-    amulet: isLuringMobs ? "t2intamulet" : "warmscarf",
+    helmet: isLuringMobs || isFightingBoss ? "xhelmet" : "eear",
+    // Dartgun keeps us out of the boss' melee range while still landing hits
+    mainhand: isDraggingMobs || isFightingBoss ? "dartgun" : "broom",
+    offhand: isDraggingMobs || isFightingBoss ? "t2quiver" : "wbookhs",
+    amulet: isLuringMobs || isFightingBoss ? "t2intamulet" : "warmscarf",
     orb: "jacko",
     chest: "tshirt4",
     pants: "pants",
     ring1: "solitaire",
-    ring2: isLuringMobs ? "armorring" : "dexring",
+    ring2: isLuringMobs || isFightingBoss ? "armorring" : "dexring",
     shoes: "eslippers",
     gloves: "gloves1",
     belt: "sbelt",
@@ -502,7 +505,8 @@ setInterval(async function () {
     !character.moving &&
     !character.stand &&
     !smart.moving &&
-    !isAdvanceSmartMoving
+    !isAdvanceSmartMoving &&
+    !isFightingBoss
   )
     open_stand();
 
@@ -662,6 +666,7 @@ syncBankData();
 bankLoop();
 lureMechaGnome();
 dragEnt();
+merchantAttackLoop();
 
 // Register secondhands event handler
 parent.socket.on("secondhands", secondhandsHandler);
