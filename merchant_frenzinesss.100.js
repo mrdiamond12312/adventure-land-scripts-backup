@@ -9,9 +9,6 @@ const EVENT_RESUME_HP_RATIO = 0.95;
 const EVENT_COVERED_RETREAT_HP_RATIO = 0.4;
 const EVENT_COVERED_RESUME_HP_RATIO = 0.6;
 
-// Safe threshold before attacking
-const EVENT_MAX_DPS_RATIO = 0.15;
-
 // Orbit radius
 const EVENT_RANGE_RATE = 0.85;
 const EVENT_RETREAT_RANGE_RATE = 2.5;
@@ -69,39 +66,29 @@ function isEventTanked(eventName) {
   return !!aggroHolder && aggroHolder !== character.name;
 }
 
-/** @returns {boolean} whether the target's dps is survivable for us */
-function isHitAffordable(target) {
-  if (!target) return false;
-  return (
-    calculateDamage(target, character, false) <
-    character.max_hp * EVENT_MAX_DPS_RATIO
-  );
+/** @returns {boolean} whether somebody other than us is holding this mob */
+function isSomeoneElsesTarget(target) {
+  return !!target?.target && target.target !== character.name;
 }
 
 /**
- * Generic gate every boss shares: somebody else is holding it. Deliberately no
- * isHitAffordable here — an event boss out-dpses the merchant's whole hp bar
- * many times over (crabxx is ~100k against ~8k), so testing its dps against our
- * budget rejects every boss forever. Whoever is tanking it is the one paying.
+ * Generic gate every boss if they are aggroed
  */
 function isSafeToHit(target) {
   if (!target || target.rip || target.dead) return false;
-  if (target.target === character.name) return false;
-  if (!target.target) return false; // an untargeted boss would come straight at us
-  return true;
+  // Untargeted or on us: our hit is what aggroes it, or it is already coming
+  return isSomeoneElsesTarget(target);
 }
 
 /**
- * Boss table. `shouldJoin` decides whether the trip is worth it at all,
- * `strategy` travels and returns the entity to hit, `shouldAttack` is the
- * per-boss safety check layered on top of `isSafeToHit`.
+ * Boss table. 
+ * `shouldJoin` whether to join the boss,
+ * `strategy` travels and returns the entity to hit, 
+ * `shouldAttack` is the per-boss safety check layered on top of `isSafeToHit`.
  * @type {Object<string, {shouldJoin: () => boolean, shouldAttack: (target?: Object) => boolean, strategy: () => Promise<Object|undefined>}>}
  */
 const bossConfigs = {
   crabxx: {
-    // Crabxx itself is harmless; the crabx it spawns are the danger.
-    // While its shell is up ("1hp") every hit lands for 1 — not worth the
-    // aggro, so we park (idleAtEvent) until the party has cracked it open.
     shouldJoin: () => !!parent.S.crabxx?.live,
     shouldAttack: (target) => !!target && !target["1hp"],
     strategy: async () => {
@@ -121,7 +108,6 @@ const bossConfigs = {
     },
   },
   snowman: {
-    // Roams and is weak enough that we don't wait for a tank
     shouldJoin: () => !!parent.S.snowman?.live,
     shouldAttack: (target) => !!target && !target.s?.fullguardx,
     strategy: async () => {
@@ -130,14 +116,10 @@ const bossConfigs = {
         await advanceSmartMove(parent.S.snowman);
         snowmanInstance = get_nearest_monster({ type: "snowman" });
       }
-
-      // Guard phase is simply waited out — no bee fallback like the fighters'.
-      // shouldAttack rejects the guarded snowman, which parks us (idleAtEvent).
       return snowmanInstance;
     },
   },
   franky: {
-    // Only tag along once a fighter is holding it — franky's adds hit hard
     shouldJoin: () => isEventTanked("franky"),
     shouldAttack: () => isEventTanked("franky"),
     strategy: async () => {
@@ -202,7 +184,6 @@ const bossConfigs = {
     },
   },
   wabbit: {
-    // Harmless, but it runs — only chase while we know where it is
     shouldJoin: () => !!parent.S.wabbit?.live && !!parent.S.wabbit?.x,
     shouldAttack: (target) => !!target,
     strategy: async () => {
@@ -228,8 +209,7 @@ const bossConfigs = {
   },
 };
 
-// Bosses whose `shouldAttack` doesn't demand a tank (harmless ones) still go
-// through isSafeToHit unless listed here.
+// Bosses whose doesn't demand a tank (harmless ones) still go
 const UNTANKED_OK = ["snowman", "wabbit", "pinkgoo"];
 
 /**
@@ -277,10 +257,7 @@ function getEventToJoin() {
 }
 
 /**
- * Blockers that stop us *starting* a fight. Deliberately soft: an upgrade in
- * flight is a reason not to set off, not a reason to walk away from a boss.
- * A rod/pickaxe channel is not listed at all — events outrank chilling, and
- * both are back on cooldown long before the next one spawns.
+ * Blockers that stop us *starting* a fight.
  * @returns {boolean}
  */
 function isMerchantBusy() {
@@ -334,13 +311,12 @@ function getPredictedHp(entity) {
 }
 
 /**
- * Anything nearly dead that is already inside dartgun range — no chasing, no
- * duty taken, so it costs the merchant nothing but the shot.
+ * Anything nearly dead that is already inside dartgun range
+ *  so it costs the merchant nothing but the shot.
  * @returns {Object|undefined}
  */
 function getSnipeTarget() {
-  // Not is_in_range: the broom's reach is melee, and we'd never spot a mob
-  // worth swapping for (getAttackWeaponReach, merchant_service.19.js)
+  // Max range or base range if equipped
   const snipeRange = getAttackWeaponReach();
   if (!snipeRange) return undefined;
 
@@ -352,9 +328,7 @@ function getSnipeTarget() {
 
     if (!entity || entity.type !== "monster" || entity.rip || entity.dead)
       continue;
-    if (MELEE_IGNORE_LIST.includes(entity.mtype)) continue;
     if (distance(character, entity) > snipeRange) continue;
-    if (!isHitAffordable(entity)) continue;
 
     const predictedHp = getPredictedHp(entity);
     if (predictedHp <= 0 || predictedHp >= bestHp) continue;
@@ -377,9 +351,7 @@ function canSnipe() {
 }
 
 /**
- * What calculateMerchantEquipments (strategic_fn.11.js) branches the weapon on.
- * A question rather than a flag: `isFightingBoss` belongs to the duty handshake,
- * and a second flag for the same loop would only be one more thing to leak.
+ * What calculateMerchantEquipment should be returning
  * @returns {boolean}
  */
 function shouldHoldAttackWeapon() {
@@ -420,8 +392,7 @@ async function snipeNearbyWeakMob() {
 }
 
 /**
- * Solo, there is no midas looter in the party to defer to (midasLooting in
- * basic_function.7.js sits out for merchants), so the merchant opens its own.
+ * Solo, there is no midas looter in the party to defer to
  */
 function lootIfSolo() {
   if (parent.party_list?.length) return;
@@ -433,9 +404,7 @@ function lootIfSolo() {
 }
 
 /**
- * Our priest (or whoever is HEALER right now — dynamicParty swaps a ranger in),
- * alive and close enough to actually land a heal on us. Heal range is the
- * healer's own range, trimmed so we don't sit right on the edge of it.
+ * Our priest nearby?
  * @returns {Object|undefined}
  */
 function getCoveringHealer() {
@@ -456,9 +425,7 @@ function idleAtEvent() {
 }
 
 /**
- * Asks the priest for a partyheal, but only when it could actually cast one:
- * its own cooldown isn't visible to us, so we rate-limit ourselves by the
- * skill's cooldown, and skip entirely when a visible priest is out of mp.
+ * Asks the priest for a partyheal
  */
 function requestPartyHeal() {
   const partyHealInfo = G.skills["partyheal"];
@@ -480,23 +447,7 @@ function monstersOnMe() {
 }
 
 /**
- * Whether what's chewing on us is more than the hp budget allows — the same
- * measure isHitAffordable applies to the boss, summed over everything aggroed.
- * @returns {boolean}
- */
-function isAggroOverwhelming(threats) {
-  const incomingDps = threats.reduce(
-    (total, mob) => total + calculateDamage(mob, character, false),
-    0,
-  );
-
-  return incomingDps >= character.max_hp * EVENT_MAX_DPS_RATIO;
-}
-
-/**
- * The merchant half of the fighters' shouldAttack: sheds aggro and widens the
- * kite. Backing off is a rangeRate change, not a move() of its own — hitAndRun
- * owns our position while isFightingBoss, and two writers would fight.
+ * The merchant half of the fighters' shouldAttack
  * @returns {Promise<boolean>} whether it is safe to keep fighting this tick
  */
 async function keepMerchantSafe(target) {
@@ -520,11 +471,10 @@ async function keepMerchantSafe(target) {
 
   if (isHurt) {
     if (!healer) requestPartyHeal();
-    // potionLoop (basic_function.7.js) tops us back up; wait it out
     return character.hp >= character.max_hp * resumeRatio;
   }
 
-  return !isAggroOverwhelming(monstersOnMe());
+  return true;
 }
 
 /**
@@ -565,10 +515,7 @@ async function fightCurrentEvent() {
   if (!isSafeToFight) return { delay: EVENT_TICK };
 
   const requiresTank = !UNTANKED_OK.includes(eventName);
-  if (
-    !config.shouldAttack(target) ||
-    (requiresTank ? !isSafeToHit(target) : !isHitAffordable(target))
-  ) {
+  if (!config.shouldAttack(target) || (requiresTank && !isSafeToHit(target))) {
     // Nothing to shoot (a guarded snowman, an untanked boss)
     idleAtEvent();
     return { delay: EVENT_TICK };

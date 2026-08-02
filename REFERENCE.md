@@ -679,34 +679,34 @@ rather than fought through.
   set and to not be us — an *untargeted* boss is the dangerous case, because our hit is what
   aggroes it. `isEventTanked` prefers the local entity's `target` over `parent.S[name].target`
   (the S copy lags, and is absent entirely before the boss is rendered). The exceptions are listed
-  in `UNTANKED_OK` (snowman/wabbit/pinkgoo) — harmless enough to hit solo; those go through
-  `isHitAffordable` instead, since nobody else is paying for them.
-- **`isHitAffordable` must not be applied to a tanked boss (fixed 2026-08-02).** It used to run on
-  the boss *as well as* the tank check — once inside `isSafeToHit`, once again standalone in
-  `fightCurrentEvent`, and a third time in five of the `shouldAttack`s. An event boss out-dpses
-  the merchant's entire hp bar many times over (crabxx ≈ 100k vs ≈ 8k hp), so the test could never
-  pass and `attack` was unreachable for every tanked boss — the merchant travelled to the event,
-  geared up, and then idled at the stand forever, which reads exactly like a hang. The gate is now
-  either/or: `requiresTank ? !isSafeToHit(target) : !isHitAffordable(target)`. Residual risk taken
-  knowingly: if the boss switches to the merchant, that dps arrives before the next tick can react
-  — `keepMerchantSafe` and `isSafeToHit`'s own `target.target === character.name` only catch it
-  afterwards.
+  in `UNTANKED_OK` (snowman/wabbit/pinkgoo) — harmless enough to hit solo, and gated on nothing
+  but their own `shouldAttack`.
+- **There is no dps test anywhere any more (removed 2026-08-02).** `isHitAffordable` compared
+  `calculateDamage(target, character)` against `max_hp * EVENT_MAX_DPS_RATIO` and ran on the boss
+  *as well as* the tank check — inside `isSafeToHit`, again standalone in `fightCurrentEvent`, and
+  a third time in five of the `shouldAttack`s. An event boss out-dpses the merchant's entire hp
+  bar many times over (crabxx ≈ 100k vs ≈ 8k hp), so it could never pass: `attack` was unreachable
+  for every tanked boss, and the merchant travelled to the event, geared up, then idled at the
+  stand forever — which reads exactly like a hang. Safety is now positional and structural, the
+  same shape the fighters use: shoot only what someone else holds (`isSafeToHit`), kite at
+  `EVENT_RANGE_RATE` of dartgun range, and pull out on the hp band below. Residual risk taken
+  knowingly: if a boss switches to the merchant, its dps arrives before the next tick can react.
 - **The retreat floor is healer-dependent** (`getCoveringHealer`). Alone, the merchant bails at
   80% and won't re-engage until 95% — it has no way back up but `potionLoop`. With our own healer
   alive and inside its *own* range (`HEALER`, not `PRIEST`: `dynamicParty` swaps a ranger into the
   role for several events), hp is rented rather than spent, so the band drops to 40%/60%. The
   `party_heal` cm is only worth sending in the uncovered case — a healer already in range is
   healing us anyway.
-- **`isHitAffordable` compares dps to max hp**, not per-hit damage — `calculateDamage` multiplies
-  by frequency (see "strategic_fn.11.js math conventions"). `EVENT_MAX_DPS_RATIO` is that budget.
 - **Aggro on us is not by itself a reason to stop shooting (fixed 2026-08-02).** `keepMerchantSafe`
   used to end with `!monstersOnMe().length`, i.e. any single mob holding our aggro parked the
   fight. At crabxx that is permanent: the boss spawns young crabx onto whoever is nearest far
   faster than scare comes off cooldown, so `isSafeToFight` was false on nearly every tick and
   `attack` was never reached — the merchant sat next to a cracked crabxx with the stand still open
-  from the `"1hp"` phase, kiting the adds around at `EVENT_RETREAT_RANGE_RATE`. It now scares as
-  before but only *stops* on `isAggroOverwhelming`: the summed `calculateDamage` of everything on
-  us against the same `EVENT_MAX_DPS_RATIO` budget `isHitAffordable` uses for the boss.
+  from the `"1hp"` phase, kiting the adds around at `EVENT_RETREAT_RANGE_RATE`. It still scares
+  what it can, but only the hp band stops the fight now.
+- **The snipe takes anything under `SNIPE_MAX_PREDICTED_HP` in reach**, full stop — no tank check,
+  no dps check. A mob that close to death is worth the shot whoever owns it, and the loot/xp is
+  free; `getSnipeTarget` is deliberately just type/range/predicted-hp.
 - **Positioning is `hitAndRun`, not a second mover.** The loop used to walk itself with bespoke
   `move()` steps; it now hands the boss to `change_target` and writes `rangeRate`, and the shared
   kite loop does the rest. `hitAndRun()` is therefore started for *every* class, with an
