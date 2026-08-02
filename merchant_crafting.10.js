@@ -1,4 +1,4 @@
-if (parent.caracAL) {
+upgradeif (parent.caracAL) {
   parent.caracAL.load_scripts([
     "adventure-land-scripts-backup/basic_function.7.js",
   ]);
@@ -14,10 +14,7 @@ const BANK_FLOORS = {
   bank_b: { map: "bank_b", x: -210, y: -130 },
 };
 
-// Set once bankLoop's first run has walked every floor. Nothing that would take
-// the merchant away from that trip may start before it (see isMerchantBusy,
-// merchant_frenzinesss.100.js) — the bank cache is what the rest of the file
-// reads to decide what to upgrade, store or retrieve.
+// Set once bankLoop's first run has walked every floor.
 var hasVisitedBank = false;
 
 /**

@@ -289,9 +289,6 @@ async function goMining() {
     isInvFull() ||
     smart.moving ||
     isAdvanceSmartMoving ||
-    character.q.compound ||
-    character.q.upgrade ||
-    character.q.exchange ||
     character.c.mining ||
     character.c.fishing ||
     is_on_cooldown("mining") ||
@@ -556,11 +553,6 @@ setInterval(async function () {
 
   if (!hasEventToJoin && !is_on_cooldown("mining")) goMining();
   else if (!hasEventToJoin && !is_on_cooldown("fishing")) goFishing();
-  // else if (
-  //   locate_item("gemfragment") !== -1 &&
-  //   character.items[locate_item("gemfragment")]?.q >= 50
-  // )
-  //   exchangeMines();
   else if (
     !hasEventToJoin &&
     !character.c.mining &&
@@ -569,11 +561,8 @@ setInterval(async function () {
   )
     await moveHome();
 
-  // Not while an event is on: the bank run would cost the loot share, and the
-  // inventory keeps until the fight ends (merchant_frenzinesss.100.js)
   if (
     (isInvFull() || invJammed) &&
-    !isFightingBoss &&
     !isAdvanceSmartMoving &&
     !smart.moving
   ) {
@@ -588,9 +577,6 @@ setInterval(async function () {
 }, 750);
 
 setInterval(function () {
-  // Recovery for a leaked onDuty (a duty that threw without resetting) — but
-  // never yank it away from an active lure/drag, whose movement would get
-  // hijacked by bankLoop and friends the moment the flag drops.
   if (!isLuringMobs && !isDraggingMobs) onDuty = false;
   use_skill("mluck", character);
 }, 300000);
