@@ -97,9 +97,11 @@ function isSafeToHit(target) {
  */
 const bossConfigs = {
   crabxx: {
-    // Crabxx itself is harmless; the crabx it spawns are the danger
+    // Crabxx itself is harmless; the crabx it spawns are the danger.
+    // While its shell is up ("1hp") every hit lands for 1 — not worth the
+    // aggro, so we park (idleAtEvent) until the party has cracked it open.
     shouldJoin: () => !!parent.S.crabxx?.live,
-    shouldAttack: (target) => !!target && !target.s?.fullguardx,
+    shouldAttack: (target) => !!target && !target["1hp"],
     strategy: async () => {
       let { crabxxInstance } = getCrabsForCrabxx();
 
@@ -234,9 +236,7 @@ const bossConfigs = {
 const UNTANKED_OK = ["snowman", "wabbit", "pinkgoo"];
 
 /**
- * Remaining hp share of a live event boss, same measure the fighters sort on in
- * changeToDailyEventTargets (basic_function.7.js). The local entity wins over the
- * `parent.S` copy once we're on the map, since S only refreshes periodically.
+ * Remaining hp share of a live event boss
  * @returns {number} 0..1, defaulting to 1 (full) when the event reports no hp
  */
 function getEventHpRatio(eventName) {

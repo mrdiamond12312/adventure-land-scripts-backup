@@ -755,6 +755,20 @@ rather than fought through.
   "Self-rescheduling loop discipline". A guard-blocked tick releases duty (it owns the check) and
   just waits `EVENT_IDLE_TICK`.
 
+## Crabxx targeting keys off the shell, not the crabx (`changeToDailyEventTargets`)
+
+`crabxx` carries `"1hp"` while its shell is up: every hit lands for exactly 1, whoever throws it.
+Target selection therefore branches on that flag first — shell down means the boss outranks any
+crabx for every class; only while it's up do the old per-class rules apply (warrior takes the
+best-clustered crabx for cleave, everyone else the best crabx, falling back to the boss only if
+something else is already holding it). The previous "are there crabx around" heuristic is what
+this replaced: it could leave the party chipping 1s off a cracked boss because adds happened to
+be nearby, or ignore a cracked boss when they weren't.
+
+The merchant reads the same flag from the other end (`bossConfigs.crabxx.shouldAttack`,
+merchant_frenzinesss.100.js) — it parks with the stand open while `"1hp"` is set rather than
+spending shots for 1 damage each.
+
 ## One definition of a weak mob
 
 The thresholds live in basic_function.7.js next to the other config (`HARMLESS_MOB_DAMAGE`,

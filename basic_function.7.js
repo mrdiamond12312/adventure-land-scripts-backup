@@ -2236,7 +2236,12 @@ async function changeToDailyEventTargets() {
 
     let targetCrab;
 
-    if (character.ctype === "warrior") {
+    // The shell ("1hp") is what decides the target, not whether crabx happen to
+    // be standing around: while it's up every hit on the boss lands for 1, and
+    // the moment it drops the boss is worth more than any crabx.
+    if (!crabxxInstance["1hp"]) {
+      targetCrab = crabxxInstance;
+    } else if (character.ctype === "warrior") {
       targetCrab = bestClusteredCrabx || crabxxInstance;
     } else {
       targetCrab =
