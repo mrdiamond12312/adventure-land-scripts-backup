@@ -38,6 +38,7 @@ var isFightingBoss = false;
 // Set only when *this* loop took onDuty, so it never clears a duty it didn't acquire
 var holdsEventDuty = false;
 var lastLootTime = 0;
+var lastPartyHealRequest = 0;
 
 // The event this loop is currently committed to, for the switch margin above
 var currentEventName = undefined;
@@ -126,12 +127,8 @@ const bossConfigs = {
         snowmanInstance = get_nearest_monster({ type: "snowman" });
       }
 
-      // Guard phase: our hits do nothing, so shoot its bees instead of standing
-      // idle — same fallback the fighters take in changeToDailyEventTargets
-      if (snowmanInstance?.s?.fullguardx) {
-        return get_nearest_monster({ type: "arcticbee" }) ?? snowmanInstance;
-      }
-
+      // Guard phase is simply waited out — no bee fallback like the fighters'.
+      // shouldAttack rejects the guarded snowman, which parks us (idleAtEvent).
       return snowmanInstance;
     },
   },
@@ -422,6 +419,34 @@ function getCoveringHealer() {
   return distance(character, healer) <= healRange ? healer : undefined;
 }
 
+/**
+ * Opens the stand while there is nothing worth shooting. Nothing closes it
+ * again — the merchant still moves (and kites) with it open, just slowly, which
+ * is fine for standing around an event.
+ */
+function idleAtEvent() {
+  if (character.stand || smart.moving || isAdvanceSmartMoving) return;
+
+  open_stand();
+}
+
+/**
+ * Asks the priest for a partyheal, but only when it could actually cast one:
+ * its own cooldown isn't visible to us, so we rate-limit ourselves by the
+ * skill's cooldown, and skip entirely when a visible priest is out of mp.
+ */
+function requestPartyHeal() {
+  const partyHealInfo = G.skills["partyheal"];
+  if (Date.now() - lastPartyHealRequest < partyHealInfo.cooldown) return;
+
+  // mp only reads on a priest we can see; a far one gets the benefit of doubt
+  const priest = get_entity(PRIEST);
+  if (priest && priest.mp < partyHealInfo.mp) return;
+
+  lastPartyHealRequest = Date.now();
+  send_cm(PRIEST, "party_heal");
+}
+
 /** @returns {Object[]} monsters currently aggroed on the merchant */
 function monstersOnMe() {
   return Object.values(parent.entities).filter(
@@ -454,7 +479,7 @@ async function keepMerchantSafe(target) {
   if (threats.length) await scareAwayMobs();
 
   if (isHurt) {
-    if (!healer) send_cm(PRIEST, "party_heal");
+    if (!healer) requestPartyHeal();
     // potionLoop (basic_function.7.js) tops us back up; wait it out
     return character.hp >= character.max_hp * resumeRatio;
   }
@@ -529,6 +554,9 @@ async function merchantAttackLoop() {
       (requiresTank && !isSafeToHit(target)) ||
       !isHitAffordable(target)
     ) {
+      // Nothing to shoot (a guarded snowman, an untanked boss): park and earn
+      // stand income rather than hover around it
+      idleAtEvent();
       nextDelay = EVENT_TICK;
       return;
     }
@@ -542,8 +570,6 @@ async function merchantAttackLoop() {
       nextDelay = EVENT_TICK;
       return;
     }
-
-    if (character.stand) close_stand();
 
     if (ms_to_next_skill("attack") === 0 && !character.s.penalty_cd) {
       await attack(target)

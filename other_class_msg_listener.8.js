@@ -49,6 +49,13 @@ character.on("cm", async function ({ name, message }) {
       break;
 
     case "party_heal":
+      // The asker can't see our cooldown or mp — check before spending the cast
+      if (
+        is_on_cooldown("partyheal") ||
+        character.mp <= G.skills["partyheal"].mp
+      )
+        break;
+
       log(`Remotely heal ${name}!`);
       use_skill("partyheal").then(() =>
         reduce_cooldown("partyheal", character.ping * 0.95),

@@ -723,6 +723,12 @@ rather than fought through.
   emergency `bankStoreRoutine` skips too. A full inventory (or `invJammed`) is therefore a
   `mustAbandonFight` reason: there is nothing left to gain from the fight, and **releasing the duty
   is precisely what unblocks the banking** — the two guards are a handoff, not a deadlock.
+- **The stand stays open at events.** `idleAtEvent` opens it whenever the attack gate rejects the
+  target (a `fullguardx` snowman is the common case — unlike the fighters, the merchant does *not*
+  fall back to shooting arcticbees, it just waits the phase out). Nothing closes it again: a
+  merchant moves at speed 10 with a stand open, which is fine for orbiting a boss, so the attack
+  path doesn't `close_stand()` and `hitAndRun` isn't gated on it. The main loop's
+  close-the-stand-when-moving rule is skipped while `isFightingBoss` for the same reason.
 - **Duty ownership is held across ticks, not per tick.** `acquireEventDuty`/`releaseEventDuty` set
   `holdsEventDuty` so the loop only ever clears an `onDuty` it took (the rule in "Merchant duty
   lock"). Releasing it every tick would let the 750ms main loop `moveHome()` mid-fight.

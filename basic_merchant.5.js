@@ -498,7 +498,9 @@ setInterval(async function () {
     return;
   }
 
-  if (character.moving && character.stand) {
+  // At an event the stand stays open even while moving — speed is 10 anyway,
+  // and idleAtEvent (merchant_frenzinesss.100.js) wants it up
+  if (character.moving && character.stand && !isFightingBoss) {
     close_stand();
     await equipBatch(calculateMerchantEquipments());
   } else if (
@@ -523,7 +525,7 @@ setInterval(async function () {
     character.hp < character.max_hp - 1000 &&
     (!get_entity(PRIEST) || distance(character, get_entity(PRIEST)) > 150)
   ) {
-    send_cm(PRIEST, "party_heal");
+    requestPartyHeal();
   }
 
   await withTimeout(
