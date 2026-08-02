@@ -116,8 +116,7 @@ const bossConfigs = {
     },
   },
   snowman: {
-    // Roams and is weak enough that we don't wait for a tank, but its guard
-    // phase (fullguardx) means our hits do nothing, so we hold off then.
+    // Roams and is weak enough that we don't wait for a tank
     shouldJoin: () => !!parent.S.snowman?.live,
     shouldAttack: (target) => !!target && !target.s?.fullguardx,
     strategy: async () => {
@@ -126,6 +125,13 @@ const bossConfigs = {
         await advanceSmartMove(parent.S.snowman);
         snowmanInstance = get_nearest_monster({ type: "snowman" });
       }
+
+      // Guard phase: our hits do nothing, so shoot its bees instead of standing
+      // idle — same fallback the fighters take in changeToDailyEventTargets
+      if (snowmanInstance?.s?.fullguardx) {
+        return get_nearest_monster({ type: "arcticbee" }) ?? snowmanInstance;
+      }
+
       return snowmanInstance;
     },
   },
@@ -276,20 +282,34 @@ function getEventToJoin() {
   return isWorthSwitching ? best : currentEventName;
 }
 
-/** @returns {boolean} whether anything else on the merchant owns its time right now */
+/**
+ * Blockers that stop us *starting* a fight. Deliberately soft: an upgrade in
+ * flight is a reason not to set off, not a reason to walk away from a boss.
+ * A rod/pickaxe channel is not listed at all — events outrank chilling, and
+ * both are back on cooldown long before the next one spawns.
+ * @returns {boolean}
+ */
 function isMerchantBusy() {
   return (
     (onDuty && !holdsEventDuty) ||
     isLuringMobs ||
     isDraggingMobs ||
-    character.c.mining ||
-    character.c.fishing ||
     character.q.exchange ||
     character.q.upgrade ||
     character.q.compound ||
-    isInvFull(3) ||
-    invJammed
+    mustAbandonFight()
   );
+}
+
+/**
+ * Blockers that make us give up a fight already committed to. Anything softer
+ * than this belongs in isMerchantBusy: dropping the duty mid-event hands the
+ * merchant back to the main loop, which walks it home — and the moment the soft
+ * flag clears we walk back out, which is the home/boss ping-pong.
+ * @returns {boolean}
+ */
+function mustAbandonFight() {
+  return character.rip || isInvFull(3) || invJammed;
 }
 
 function acquireEventDuty() {
@@ -461,8 +481,10 @@ async function merchantAttackLoop() {
     lootIfSolo();
 
     const eventName = getEventToJoin();
+    // Once committed, only a hard blocker unseats us — see mustAbandonFight
+    const isBlocked = holdsEventDuty ? mustAbandonFight() : isMerchantBusy();
 
-    if (!eventName || isMerchantBusy()) {
+    if (!eventName || isBlocked) {
       releaseEventDuty();
 
       // Something dying in range is worth ticking at attack speed for

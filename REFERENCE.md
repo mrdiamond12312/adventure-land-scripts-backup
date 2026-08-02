@@ -703,6 +703,19 @@ rather than fought through.
   loop only calls the pathfinder past `EVENT_APPROACH_MULTIPLIER` of our reach — inside that, the
   kite closes the gap. The merchant still has no `currentStrategy`: basic_function.7.js skips
   slots 12/13 for `ctype === "merchant"`. Shedding aggro is `scareAwayMobs()`, as everywhere else.
+- **The home/boss ping-pong (debugged 2026-08-02).** Symptom: at snowman with `fullguardx` up,
+  the merchant walked home and back, repeatedly. `fullguardx` was only the trigger — with nothing
+  to shoot, the merchant idles at the event, so the 750ms main loop's `compoundInv`/`upgradeInv`
+  get their turn and set `character.q.upgrade`. That was in `isMerchantBusy`, which released the
+  duty; `onDuty` false hands the merchant back to the main loop, which calls `moveHome()`; the
+  quest flag then clears, the event is still live, and the loop walks straight back out. Fix is
+  the split between `isMerchantBusy` (soft — reasons not to *set off*) and `mustAbandonFight`
+  (hard — rip/inventory only, the sole reasons to walk away from a boss already committed to).
+  General rule for this loop: **anything that can toggle on its own must not be able to release
+  the duty**, or the main loop's movement and ours take turns undoing each other. Same reasoning
+  removed `character.c.mining`/`c.fishing` from `isMerchantBusy` and put `getEventToJoin()` in
+  front of `goMining`/`goFishing`/`moveHome` in the main loop: a live event outranks chilling, and
+  a skipped rod cast is back off cooldown long before the next boss spawns.
 - **Duty ownership is held across ticks, not per tick.** `acquireEventDuty`/`releaseEventDuty` set
   `holdsEventDuty` so the loop only ever clears an `onDuty` it took (the rule in "Merchant duty
   lock"). Releasing it every tick would let the 750ms main loop `moveHome()` mid-fight.

@@ -568,14 +568,23 @@ setInterval(async function () {
     300000,
   );
 
-  if (!is_on_cooldown("mining")) goMining();
-  else if (!is_on_cooldown("fishing")) goFishing();
+  // Events outrank chilling: a rod cast we skip comes back on cooldown long
+  // before the next boss does (merchant_frenzinesss.100.js owns the fight)
+  const hasEventToJoin = !!getEventToJoin();
+
+  if (!hasEventToJoin && !is_on_cooldown("mining")) goMining();
+  else if (!hasEventToJoin && !is_on_cooldown("fishing")) goFishing();
   // else if (
   //   locate_item("gemfragment") !== -1 &&
   //   character.items[locate_item("gemfragment")]?.q >= 50
   // )
   //   exchangeMines();
-  else if (!character.c.mining && !character.c.fishing && !onDuty)
+  else if (
+    !hasEventToJoin &&
+    !character.c.mining &&
+    !character.c.fishing &&
+    !onDuty
+  )
     await moveHome();
 
   if ((isInvFull() || invJammed) && !isAdvanceSmartMoving && !smart.moving) {

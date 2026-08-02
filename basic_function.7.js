@@ -1339,6 +1339,10 @@ function sleep(delay) {
   return new Promise((resolve) => setTimeout(resolve, delay));
 }
 
+// Merchant's own potions: restock to POTION_STACK once it is nearly out
+const POTION_STACK = 20;
+const POTION_REFILL_AT = 2;
+
 const LOOTING_LIMIT = 15;
 var isLooting = false;
 async function midasLooting(forced = false) {
@@ -1480,7 +1484,18 @@ setInterval(async function () {
     parent.socket.emit("interaction", { type: "newyear_tree" });
   }
 
-  if (isMerchant()) return;
+  // The merchant has no merchant to ask — it buys its own stack instead of
+  // sending itself the buy_mana/buy_hp cms below
+  if (isMerchant()) {
+    if (haveAComputer() && !isInvFull(2)) {
+      for (const potionId of ["mpot1", "hpot1"]) {
+        const owned = getTotalQuantityOf(potionId);
+        if (owned >= POTION_REFILL_AT) continue;
+        await buy(potionId, POTION_STACK - owned).catch((e) => log(e));
+      }
+    }
+    return;
+  }
 
   // Fix a bug where character is stuck to corner
   const currentTarget =

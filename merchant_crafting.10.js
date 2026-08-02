@@ -289,12 +289,13 @@ function getKeepThreshold(itemName) {
 
 /**
  * Ensures a scroll of the given type is in the inventory.
- * Retrieves from bank first, then buys if unavailable.
+ * Retrieves from bank first, then buys if unavailable and allowed to.
  * @param {string} scrollType - e.g. "scroll0", "cscroll2"
  * @param {number} itemGrade
+ * @param {boolean} [allowBuy=true] - false makes it bank-stock only
  * @returns {Promise<number>} inventory slot of the scroll, or -1 on failure
  */
-async function ensureScroll(scrollType, itemGrade) {
+async function ensureScroll(scrollType, itemGrade, allowBuy = true) {
   if (
     !character.c.fishing &&
     !character.c.mining &&
@@ -306,6 +307,7 @@ async function ensureScroll(scrollType, itemGrade) {
   let scrollSlot = locate_item(scrollType);
   if (scrollSlot !== -1) return scrollSlot;
 
+  if (!allowBuy) return -1;
   if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD) return -1;
 
   try {
@@ -623,9 +625,11 @@ async function upgradeInv() {
     selectedGrade >= 2;
   const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
 
+  // Upgrade runs off whatever scrolls the bank already holds — no vendor buying
   const scrollSlot = await ensureScroll(
     `scroll${selectedGrade}`,
     selectedGrade,
+    false,
   );
   if (scrollSlot === -1) return;
 
