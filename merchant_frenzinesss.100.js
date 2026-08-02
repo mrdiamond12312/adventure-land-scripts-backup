@@ -78,19 +78,24 @@ function isHitAffordable(target) {
   );
 }
 
-/** Generic gate every boss shares: tanked by someone else, and cheap to be hit by */
+/**
+ * Generic gate every boss shares: somebody else is holding it. Deliberately no
+ * isHitAffordable here — an event boss out-dpses the merchant's whole hp bar
+ * many times over (crabxx is ~100k against ~8k), so testing its dps against our
+ * budget rejects every boss forever. Whoever is tanking it is the one paying.
+ */
 function isSafeToHit(target) {
   if (!target || target.rip || target.dead) return false;
   if (target.target === character.name) return false;
   if (!target.target) return false; // an untargeted boss would come straight at us
-  return isHitAffordable(target);
+  return true;
 }
 
 /**
  * Boss table. `shouldJoin` decides whether the trip is worth it at all,
  * `strategy` travels and returns the entity to hit, `shouldAttack` is the
  * per-boss safety check layered on top of `isSafeToHit`.
- * @type {Object<string, {shouldJoin: () => boolean, shouldAttack: (target: Object) => boolean, strategy: () => Promise<Object|undefined>}>}
+ * @type {Object<string, {shouldJoin: () => boolean, shouldAttack: (target?: Object) => boolean, strategy: () => Promise<Object|undefined>}>}
  */
 const bossConfigs = {
   crabxx: {
@@ -134,8 +139,7 @@ const bossConfigs = {
   franky: {
     // Only tag along once a fighter is holding it — franky's adds hit hard
     shouldJoin: () => isEventTanked("franky"),
-    shouldAttack: (target) =>
-      isEventTanked("franky") && isHitAffordable(target),
+    shouldAttack: () => isEventTanked("franky"),
     strategy: async () => {
       let frankyInstance = get_nearest_monster({ type: "franky" });
       if (!frankyInstance) {
@@ -151,8 +155,7 @@ const bossConfigs = {
   },
   icegolem: {
     shouldJoin: () => isEventTanked("icegolem"),
-    shouldAttack: (target) =>
-      isEventTanked("icegolem") && isHitAffordable(target),
+    shouldAttack: () => isEventTanked("icegolem"),
     strategy: async () => {
       let icegolemInstance = get_nearest_monster({ type: "icegolem" });
       if (!icegolemInstance) {
@@ -164,8 +167,7 @@ const bossConfigs = {
   },
   dragold: {
     shouldJoin: () => isEventTanked("dragold"),
-    shouldAttack: (target) =>
-      isEventTanked("dragold") && isHitAffordable(target),
+    shouldAttack: () => isEventTanked("dragold"),
     strategy: async () => {
       let dragoldInstance = get_nearest_monster({ type: "dragold" });
       if (!dragoldInstance) {
@@ -177,8 +179,7 @@ const bossConfigs = {
   },
   mrpumpkin: {
     shouldJoin: () => isEventTanked("mrpumpkin"),
-    shouldAttack: (target) =>
-      isEventTanked("mrpumpkin") && isHitAffordable(target),
+    shouldAttack: () => isEventTanked("mrpumpkin"),
     strategy: async () => {
       let pumpkinInstance = get_nearest_monster({ type: "mrpumpkin" });
       if (!pumpkinInstance) {
@@ -190,8 +191,7 @@ const bossConfigs = {
   },
   mrgreen: {
     shouldJoin: () => isEventTanked("mrgreen"),
-    shouldAttack: (target) =>
-      isEventTanked("mrgreen") && isHitAffordable(target),
+    shouldAttack: () => isEventTanked("mrgreen"),
     strategy: async () => {
       let greenInstance = get_nearest_monster({ type: "mrgreen" });
       if (!greenInstance) {
@@ -480,6 +480,20 @@ function monstersOnMe() {
 }
 
 /**
+ * Whether what's chewing on us is more than the hp budget allows — the same
+ * measure isHitAffordable applies to the boss, summed over everything aggroed.
+ * @returns {boolean}
+ */
+function isAggroOverwhelming(threats) {
+  const incomingDps = threats.reduce(
+    (total, mob) => total + calculateDamage(mob, character, false),
+    0,
+  );
+
+  return incomingDps >= character.max_hp * EVENT_MAX_DPS_RATIO;
+}
+
+/**
  * The merchant half of the fighters' shouldAttack: sheds aggro and widens the
  * kite. Backing off is a rangeRate change, not a move() of its own — hitAndRun
  * owns our position while isFightingBoss, and two writers would fight.
@@ -501,6 +515,7 @@ async function keepMerchantSafe(target) {
 
   if (!threats.length && !isHurt) return true;
 
+  // Shed what we can, but scare is on a long cooldown next to this loop's tick
   if (threats.length) await scareAwayMobs();
 
   if (isHurt) {
@@ -509,7 +524,7 @@ async function keepMerchantSafe(target) {
     return character.hp >= character.max_hp * resumeRatio;
   }
 
-  return !monstersOnMe().length;
+  return !isAggroOverwhelming(monstersOnMe());
 }
 
 /**
@@ -552,11 +567,9 @@ async function fightCurrentEvent() {
   const requiresTank = !UNTANKED_OK.includes(eventName);
   if (
     !config.shouldAttack(target) ||
-    (requiresTank && !isSafeToHit(target)) ||
-    !isHitAffordable(target)
+    (requiresTank ? !isSafeToHit(target) : !isHitAffordable(target))
   ) {
-    // Nothing to shoot (a guarded snowman, an untanked boss): park and earn
-    // stand income rather than hover around it
+    // Nothing to shoot (a guarded snowman, an untanked boss)
     idleAtEvent();
     return { delay: EVENT_TICK };
   }

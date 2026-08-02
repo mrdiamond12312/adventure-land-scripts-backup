@@ -180,7 +180,10 @@ async function lureMechaGnome() {
     onDuty = true;
     isLuringMobs = true; // Prevent scareAwayMobs
 
-    await advanceSmartMove({ map: "cyberland" });
+    // The flag can't reach smartMove's own scare interval, and `{ map }` with no
+    // x/y walks to spawns[0] — i.e. the last leg is *inside* cyberland, where a
+    // gnome aggroing us gets shed seconds before the mage magiports
+    await advanceSmartMove({ map: "cyberland" }, { useScare: false });
     await sleep(character.ping);
 
     const gnomesNearby = Object.values(parent.entities).filter(

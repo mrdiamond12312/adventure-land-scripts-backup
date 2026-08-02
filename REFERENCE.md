@@ -111,10 +111,17 @@ the flag only covers one of them:
   needs no separate gate because `dragEnt` sets both flags.
 - `smartMove`'s internal 1s scare interval, which is **opt-out per call** (`useScare` defaults to
   `true`) and lives from before the walk starts until `cleanUp()` at the end of the move. The flag
-  is invisible to it. This is why the drag leg passes `useScare: false` explicitly. Note that
-  `{ map: "cyberland" }` with no x/y resolves to `G.maps.cyberland.spawns[0]`, so "travel to
-  cyberland" includes an in-map walk *with scare live* — any gnome aggroing during it is shed.
-  `dragEnt`'s `advanceSmartMove("ent")` has the same untouched default.
+  is invisible to it, so every leg walked while luring must opt out by hand.
+
+  **The pre-magiport scare (debugged 2026-08-02).** Symptom: the gnomes are shed seconds before
+  the magiport lands. `{ map: "cyberland" }` with no x/y resolves to `G.maps.cyberland.spawns[0]`,
+  so "travel to cyberland" ends with an in-map walk *among the gnomes* — and that leg was still
+  on the default `useScare: true`, so the first gnome to aggro was scared off ~1s later, while the
+  merchant was still waiting on the mage. It now passes `useScare: false`, which also matches what
+  the flag already means for the rest of the lure: the 750ms loop's scare is suppressed for the
+  whole duration, so the trip was never scare-protected by anything else anyway.
+  `dragEnt`'s `advanceSmartMove("ent")` still runs on the default — harmless there, since the drag
+  picks and aggroes its ent *after* that walk finishes, but it is the same untouched hole.
 
 **The magiport-landing race (debugged 2026-07-25).** Symptom: the merchant aggroes the pack, gets
 magiported home, and immediately scares it off. Cause was neither `useScare` nor a leaked
@@ -672,8 +679,18 @@ rather than fought through.
   set and to not be us — an *untargeted* boss is the dangerous case, because our hit is what
   aggroes it. `isEventTanked` prefers the local entity's `target` over `parent.S[name].target`
   (the S copy lags, and is absent entirely before the boss is rendered). The exceptions are listed
-  in `UNTANKED_OK` (snowman/wabbit/pinkgoo) — harmless enough to hit solo; they still go through
-  `isHitAffordable`.
+  in `UNTANKED_OK` (snowman/wabbit/pinkgoo) — harmless enough to hit solo; those go through
+  `isHitAffordable` instead, since nobody else is paying for them.
+- **`isHitAffordable` must not be applied to a tanked boss (fixed 2026-08-02).** It used to run on
+  the boss *as well as* the tank check — once inside `isSafeToHit`, once again standalone in
+  `fightCurrentEvent`, and a third time in five of the `shouldAttack`s. An event boss out-dpses
+  the merchant's entire hp bar many times over (crabxx ≈ 100k vs ≈ 8k hp), so the test could never
+  pass and `attack` was unreachable for every tanked boss — the merchant travelled to the event,
+  geared up, and then idled at the stand forever, which reads exactly like a hang. The gate is now
+  either/or: `requiresTank ? !isSafeToHit(target) : !isHitAffordable(target)`. Residual risk taken
+  knowingly: if the boss switches to the merchant, that dps arrives before the next tick can react
+  — `keepMerchantSafe` and `isSafeToHit`'s own `target.target === character.name` only catch it
+  afterwards.
 - **The retreat floor is healer-dependent** (`getCoveringHealer`). Alone, the merchant bails at
   80% and won't re-engage until 95% — it has no way back up but `potionLoop`. With our own healer
   alive and inside its *own* range (`HEALER`, not `PRIEST`: `dynamicParty` swaps a ranger into the
@@ -682,6 +699,14 @@ rather than fought through.
   healing us anyway.
 - **`isHitAffordable` compares dps to max hp**, not per-hit damage — `calculateDamage` multiplies
   by frequency (see "strategic_fn.11.js math conventions"). `EVENT_MAX_DPS_RATIO` is that budget.
+- **Aggro on us is not by itself a reason to stop shooting (fixed 2026-08-02).** `keepMerchantSafe`
+  used to end with `!monstersOnMe().length`, i.e. any single mob holding our aggro parked the
+  fight. At crabxx that is permanent: the boss spawns young crabx onto whoever is nearest far
+  faster than scare comes off cooldown, so `isSafeToFight` was false on nearly every tick and
+  `attack` was never reached — the merchant sat next to a cracked crabxx with the stand still open
+  from the `"1hp"` phase, kiting the adds around at `EVENT_RETREAT_RANGE_RATE`. It now scares as
+  before but only *stops* on `isAggroOverwhelming`: the summed `calculateDamage` of everything on
+  us against the same `EVENT_MAX_DPS_RATIO` budget `isHitAffordable` uses for the boss.
 - **Positioning is `hitAndRun`, not a second mover.** The loop used to walk itself with bespoke
   `move()` steps; it now hands the boss to `change_target` and writes `rangeRate`, and the shared
   kite loop does the rest. `hitAndRun()` is therefore started for *every* class, with an

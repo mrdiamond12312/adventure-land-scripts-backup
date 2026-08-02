@@ -206,7 +206,7 @@ async function moveHome() {
     log("Moving back Town!");
     await advanceSmartMove(homeLocation, {
       exact: true,
-      useScare: isLuringMobs,
+      useScare: !isLuringMobs,
     });
 
     if (locate_item("stand0") === -1 && !haveAComputer()) {
