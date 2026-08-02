@@ -41,26 +41,6 @@ async function equipBroom() {
   }
 }
 
-function calculateMerchantEquipments() {
-  return {
-    helmet: isLuringMobs || isFightingBoss ? "xhelmet" : "eear",
-    // Dartgun keeps us out of the boss' melee range while still landing hits
-    mainhand: isDraggingMobs || isFightingBoss ? "dartgun" : "broom",
-    offhand: isDraggingMobs || isFightingBoss ? "t2quiver" : "wbookhs",
-    amulet: isLuringMobs || isFightingBoss ? "t2intamulet" : "warmscarf",
-    orb: "jacko",
-    chest: "tshirt4",
-    pants: "pants",
-    ring1: "solitaire",
-    ring2: isLuringMobs || isFightingBoss ? "armorring" : "dexring",
-    shoes: "eslippers",
-    gloves: "gloves1",
-    belt: "sbelt",
-    earring1: "dexearring",
-    earring2: "dexearring",
-  };
-}
-
 function shouldGoChilling() {
   return (
     (!is_on_cooldown("fishing") &&

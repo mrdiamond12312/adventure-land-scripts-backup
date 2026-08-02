@@ -291,8 +291,10 @@ function hasMaxEntsEngagedAtSpawn() {
 }
 
 async function ensureDartgun() {
-  if (findMaxLevelItem("dartgun") === -1) await retrieveBankItem("dartgun");
-  if (findMaxLevelItem("t2quiver") === -1) await retrieveBankItem("t2quiver");
+  if (findMaxLevelItem(ATTACK_WEAPON) === -1) {
+    await retrieveBankItem(ATTACK_WEAPON);
+  }
+  if (!getBestQuiver()) await retrieveBankItem(ATTACK_OFFHAND);
 
   await withTimeout(
     equipBatch(calculateMerchantEquipments()),
@@ -527,7 +529,7 @@ async function dragEnt() {
     set("luringMobType", "ent");
 
     await ensureDartgun();
-    const dartgunRange = character.range + character.xrange * 0.8;
+    const dartgunRange = getAttackWeaponReach();
 
     // await advanceSmartMove({ ...ENT_FIRST_ANCHOR, map: ENT_LURE_MAP });
     await advanceSmartMove("ent");

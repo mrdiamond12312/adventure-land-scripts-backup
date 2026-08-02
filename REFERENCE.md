@@ -103,8 +103,8 @@ session (2026-07-19):
 ## Gnome luring: why the merchant must not scare (`lureMechaGnome`, merchant_service.19.js)
 
 `isLuringMobs` exists to suppress `scareAwayMobs()` — scare is the one skill that undoes a lure,
-and the merchant carries jacko permanently (`calculateMerchantEquipments` always sets
-`orb: "jacko"`), so it is always *able* to scare. There are two independent scare sources, and
+and the merchant is always *able* to scare: `calculateMerchantEquipments` keeps jacko on the orb
+except while the luck set is up, and `scareAwayMobs` re-equips it itself anyway. There are two independent scare sources, and
 the flag only covers one of them:
 
 - The merchant's own 750ms loop, gated by `if (!isLuringMobs) scareAwayMobs()`. `isDraggingMobs`
@@ -690,7 +690,7 @@ rather than fought through.
   per fight. **`shouldMerchantKite` checks the weapon, not just the flag**: orbit radius is
   `character.range * rangeRate`, so kiting on the broom would hold a melee-length orbit around a
   boss. For the same reason the attack loop stops dead right after `equipBatch` until
-  `character.slots.mainhand` actually reads `EVENT_WEAPON` — `isFightingBoss` goes true when the
+  `character.slots.mainhand` actually reads `ATTACK_WEAPON` — `isFightingBoss` goes true when the
   duty is taken, which is well before the swap lands. It also returns false when the current
   target is under `SNIPE_MAX_PREDICTED_HP`: something that is dying anyway is not worth orbiting,
   and moving for it walks us out of position for the boss.
@@ -703,6 +703,42 @@ rather than fought through.
   loop only calls the pathfinder past `EVENT_APPROACH_MULTIPLIER` of our reach — inside that, the
   kite closes the gap. The merchant still has no `currentStrategy`: basic_function.7.js skips
   slots 12/13 for `ctype === "merchant"`. Shedding aggro is `scareAwayMobs()`, as everywhere else.
+- **Sniping is not part of the event half.** `fightCurrentEvent` owns joining/gearing/shooting a
+  boss and reports back whether it spent the shot; `merchantAttackLoop` snipes on any tick it
+  didn't, event or not — a nearly-dead mob in reach is free, and waiting on a tank or walking in
+  are exactly the ticks with a spare attack. It can't steal the boss' cooldown because it only
+  runs on the `attacked: false` path.
+  **The reach it scans with is computed, not read** (`getAttackWeaponReach`, merchant_service.19.js
+  — shared with `dragEnt`, which used to inline `character.range + character.xrange * 0.8`).
+  `character.range` is the *broom's* outside a fight (`calculateMerchantEquipments` only hands over
+  the dartgun while `isFightingBoss` or `isDraggingMobs`), so a live check would never see a mob
+  worth swapping for — chicken and egg. `getMaxAttackWeaponRange` measures what we *could* field
+  instead, like `BLAST_RADIUS`, but name-locked to `ATTACK_WEAPON` plus `getBestQuiver`: the
+  merchant hauls the fighters' loot, so a by-wtype sweep would set the reach off a crossbow he
+  can't hold. Unlike `BLAST_RADIUS` it can't be a load-time `const` — the dartgun normally starts
+  in the bank, so it's remembered in `maxAttackWeaponRange` (refreshed to the real
+  `character.range` whenever the gun is in hand) and reads 0, snipe off, until one has been seen.
+  `getBestQuiver` is also what `calculateMerchantEquipments` and `ensureDartgun` pick the offhand
+  with, so the reach we measured and the quiver we equip can't disagree. The swap itself goes
+  through `calculateMerchantEquipments` like every other one, which branches on
+  `shouldHoldAttackWeapon()` — deliberately a *question* (`isDraggingMobs || isFightingBoss ||
+  a snipe target is in reach`) and not a second flag. `isFightingBoss` can't be borrowed for it,
+  since `releaseEventDuty` clears that every eventless tick; and a flag of its own would be a
+  second piece of state for one loop, with a lifetime to leak. Asking instead means the broom
+  comes back on its own the moment nothing is in reach, via whoever next runs the calc (the main
+  loop's `character.moving && character.stand` branch, or `advanceSmartMove`'s direct equip).
+- **The merchant wears the luck set too**, off the same `shouldWearLuckGear()` the fighters use.
+  That is why `calculateMerchantEquipments` now lives in strategic_fn.11.js beside the other
+  `calculate*Items` (and in `calculateBestItems`) rather than in basic_merchant.5.js — slot 11 is
+  loaded for merchants, 12/13 are not. The gear/range primitives it needs (`ATTACK_*`,
+  `getCarriedItems`, `getBestQuiver`, `getMaxAttackWeaponRange`, `getAttackWeaponReach`) moved
+  there with it, next to `findMaxLevelItem`/`getMaxBlastRadius` where gear selection already
+  lives, so the direction is 11 → 19 → 100 throughout and only *state flags* are read the other
+  way — the same shape as `calculateWarriorItems` reading `currentStrategy`.
+  `getMerchantOffhand` drops the quiver for
+  `mshield` while it's up — the range loss is deliberate, since what makes us lucky is a mob that
+  is nearly dead anyway — plus `rabbitsfoot`/`spookyamulet`. Losing `jacko` off the orb is safe:
+  `scareAwayMobs` re-equips it itself before casting.
 - **The home/boss ping-pong (debugged 2026-08-02).** Symptom: at snowman with `fullguardx` up,
   the merchant walked home and back, repeatedly. `fullguardx` was only the trigger — with nothing
   to shoot, the merchant idles at the event, so the 750ms main loop's `compoundInv`/`upgradeInv`

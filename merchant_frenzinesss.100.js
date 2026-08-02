@@ -26,9 +26,6 @@ const EVENT_SWITCH_MARGIN = 0.001;
 const EVENT_TICK = 5;
 const EVENT_IDLE_TICK = 250;
 
-// Must have this weapon before attacking
-const EVENT_WEAPON = "dartgun";
-
 // Sniping mobs
 const SNIPE_MAX_PREDICTED_HP = 200;
 // loot after this interval if not in a party
@@ -51,7 +48,7 @@ var currentEventName = undefined;
  */
 function shouldMerchantKite() {
   if (!isFightingBoss) return false;
-  if (character.slots.mainhand?.name !== EVENT_WEAPON) return false;
+  if (character.slots.mainhand?.name !== ATTACK_WEAPON) return false;
 
   // Whatever we're shooting is about to die anyway — orbiting it just walks us
   // out of position for the boss
@@ -337,11 +334,16 @@ function getPredictedHp(entity) {
 }
 
 /**
- * Anything nearly dead that is already inside our attack range — no chasing, no
+ * Anything nearly dead that is already inside dartgun range — no chasing, no
  * duty taken, so it costs the merchant nothing but the shot.
  * @returns {Object|undefined}
  */
 function getSnipeTarget() {
+  // Not is_in_range: the broom's reach is melee, and we'd never spot a mob
+  // worth swapping for (getAttackWeaponReach, merchant_service.19.js)
+  const snipeRange = getAttackWeaponReach();
+  if (!snipeRange) return undefined;
+
   let bestTarget;
   let bestHp = SNIPE_MAX_PREDICTED_HP;
 
@@ -351,7 +353,7 @@ function getSnipeTarget() {
     if (!entity || entity.type !== "monster" || entity.rip || entity.dead)
       continue;
     if (MELEE_IGNORE_LIST.includes(entity.mtype)) continue;
-    if (!is_in_range(entity, "attack")) continue;
+    if (distance(character, entity) > snipeRange) continue;
     if (!isHitAffordable(entity)) continue;
 
     const predictedHp = getPredictedHp(entity);
@@ -364,6 +366,28 @@ function getSnipeTarget() {
   return bestTarget;
 }
 
+/** @returns {boolean} whether a snipe may take over our position and gear */
+function canSnipe() {
+  return !(
+    isLuringMobs ||
+    isDraggingMobs ||
+    character.c.mining ||
+    character.c.fishing
+  );
+}
+
+/**
+ * What calculateMerchantEquipments (strategic_fn.11.js) branches the weapon on.
+ * A question rather than a flag: `isFightingBoss` belongs to the duty handshake,
+ * and a second flag for the same loop would only be one more thing to leak.
+ * @returns {boolean}
+ */
+function shouldHoldAttackWeapon() {
+  if (isDraggingMobs || isFightingBoss) return true;
+
+  return canSnipe() && !!getSnipeTarget();
+}
+
 /**
  * Takes the free kill if there is one. Skips anything that owns our position
  * (a lure/drag, a channelled gather).
@@ -371,18 +395,21 @@ function getSnipeTarget() {
  * caller ticks faster while one is around
  */
 async function snipeNearbyWeakMob() {
-  if (
-    isLuringMobs ||
-    isDraggingMobs ||
-    character.c.mining ||
-    character.c.fishing
-  )
-    return undefined;
+  if (!canSnipe()) return undefined;
 
   const target = getSnipeTarget();
   if (!target) return undefined;
 
   if (character.s.penalty_cd || ms_to_next_skill("attack") > 0) return target;
+
+  // The broom can't reach it — and the gear calc already agrees, since it
+  // branches on the same target being there
+  if (character.slots.mainhand?.name !== ATTACK_WEAPON) {
+    await equipBatch(calculateMerchantEquipments());
+    if (character.slots.mainhand?.name !== ATTACK_WEAPON) return target;
+  }
+
+  if (!is_in_range(target, "attack")) return target;
 
   change_target(target);
   await attack(target)
@@ -420,9 +447,7 @@ function getCoveringHealer() {
 }
 
 /**
- * Opens the stand while there is nothing worth shooting. Nothing closes it
- * again — the merchant still moves (and kites) with it open, just slowly, which
- * is fine for standing around an event.
+ * Opens the stand while there is nothing worth shooting.
  */
 function idleAtEvent() {
   if (character.stand || smart.moving || isAdvanceSmartMoving) return;
@@ -487,6 +512,78 @@ async function keepMerchantSafe(target) {
   return !monstersOnMe().length;
 }
 
+/**
+ * The event half of a tick: joins, travels, gears up and shoots the boss.
+ * @returns {Promise<{delay: number, attacked?: boolean}>} the tick delay, and
+ * whether the shot was spent — an unspent one is the snipe's to take
+ */
+async function fightCurrentEvent() {
+  const eventName = getEventToJoin();
+  // Once committed, only a hard blocker unseats us — see mustAbandonFight
+  const isBlocked = holdsEventDuty ? mustAbandonFight() : isMerchantBusy();
+
+  if (!eventName || isBlocked) {
+    releaseEventDuty();
+    return { delay: EVENT_IDLE_TICK };
+  }
+
+  if (!acquireEventDuty()) return { delay: EVENT_IDLE_TICK };
+
+  currentEventName = eventName;
+  const config = bossConfigs[eventName];
+  const target = await config.strategy();
+
+  if (!target) return { delay: EVENT_IDLE_TICK };
+
+  await equipBatch(calculateMerchantEquipments());
+
+  if (character.slots.mainhand?.name !== ATTACK_WEAPON) {
+    return { delay: EVENT_IDLE_TICK };
+  }
+
+  // hitAndRun kites off get_target(), so hand it the boss before anything else
+  change_target(target);
+
+  const isSafeToFight = await keepMerchantSafe(target);
+  rangeRate = isSafeToFight ? EVENT_RANGE_RATE : EVENT_RETREAT_RANGE_RATE;
+
+  if (!isSafeToFight) return { delay: EVENT_TICK };
+
+  const requiresTank = !UNTANKED_OK.includes(eventName);
+  if (
+    !config.shouldAttack(target) ||
+    (requiresTank && !isSafeToHit(target)) ||
+    !isHitAffordable(target)
+  ) {
+    // Nothing to shoot (a guarded snowman, an untanked boss): park and earn
+    // stand income rather than hover around it
+    idleAtEvent();
+    return { delay: EVENT_TICK };
+  }
+
+  if (!is_in_range(target, "attack")) {
+    // hitAndRun walks us into orbit; only a real gap needs the pathfinder
+    const reach = character.range + character.xrange;
+    if (distance(character, target) > reach * EVENT_APPROACH_MULTIPLIER) {
+      await advanceSmartMove(target, { useScare: false });
+    }
+    return { delay: EVENT_TICK };
+  }
+
+  if (ms_to_next_skill("attack") > 0 || character.s.penalty_cd) {
+    return { delay: EVENT_TICK };
+  }
+
+  await attack(target)
+    .then(() => reduce_cooldown("attack", character.ping * 0.95))
+    .catch((e) => console.warn(e));
+
+  return {
+    delay: Math.max(ms_to_next_skill("attack"), EVENT_TICK),
+    attacked: true,
+  };
+}
+
 // Merchant main attack loop
 async function merchantAttackLoop() {
   let nextDelay = EVENT_IDLE_TICK;
@@ -501,83 +598,17 @@ async function merchantAttackLoop() {
 
     lootIfSolo();
 
-    const eventName = getEventToJoin();
-    // Once committed, only a hard blocker unseats us — see mustAbandonFight
-    const isBlocked = holdsEventDuty ? mustAbandonFight() : isMerchantBusy();
+    const { delay, attacked } = await fightCurrentEvent();
+    nextDelay = delay;
 
-    if (!eventName || isBlocked) {
-      releaseEventDuty();
+    // A free kill in range costs nothing, event or not — it only ever spends a
+    // shot the boss didn't take, and is worth ticking at attack speed for
+    if (attacked) return;
 
-      // Something dying in range is worth ticking at attack speed for
-      const snipeTarget = await snipeNearbyWeakMob();
-      nextDelay = snipeTarget
-        ? Math.max(ms_to_next_skill("attack"), EVENT_TICK)
-        : EVENT_IDLE_TICK;
-      return;
+    const snipeTarget = await snipeNearbyWeakMob();
+    if (snipeTarget) {
+      nextDelay = Math.max(ms_to_next_skill("attack"), EVENT_TICK);
     }
-
-    if (!acquireEventDuty()) return;
-
-    currentEventName = eventName;
-    const config = bossConfigs[eventName];
-    const target = await config.strategy();
-
-    if (!target) {
-      nextDelay = EVENT_IDLE_TICK;
-      return;
-    }
-
-    // Gear first, and nothing past this line until the dartgun is actually in
-    // hand: both the kite radius and the "am I in range" check come off
-    // character.range, and the broom's would put us in the boss' melee.
-    await equipBatch(calculateMerchantEquipments());
-
-    if (character.slots.mainhand?.name !== EVENT_WEAPON) {
-      nextDelay = EVENT_IDLE_TICK;
-      return;
-    }
-
-    // hitAndRun kites off get_target(), so hand it the boss before anything else
-    change_target(target);
-
-    const isSafeToFight = await keepMerchantSafe(target);
-    rangeRate = isSafeToFight ? EVENT_RANGE_RATE : EVENT_RETREAT_RANGE_RATE;
-
-    if (!isSafeToFight) {
-      nextDelay = EVENT_TICK;
-      return;
-    }
-
-    const requiresTank = !UNTANKED_OK.includes(eventName);
-    if (
-      !config.shouldAttack(target) ||
-      (requiresTank && !isSafeToHit(target)) ||
-      !isHitAffordable(target)
-    ) {
-      // Nothing to shoot (a guarded snowman, an untanked boss): park and earn
-      // stand income rather than hover around it
-      idleAtEvent();
-      nextDelay = EVENT_TICK;
-      return;
-    }
-
-    if (!is_in_range(target, "attack")) {
-      // hitAndRun walks us into orbit; only a real gap needs the pathfinder
-      const reach = character.range + character.xrange;
-      if (distance(character, target) > reach * EVENT_APPROACH_MULTIPLIER) {
-        await advanceSmartMove(target, { useScare: false });
-      }
-      nextDelay = EVENT_TICK;
-      return;
-    }
-
-    if (ms_to_next_skill("attack") === 0 && !character.s.penalty_cd) {
-      await attack(target)
-        .then(() => reduce_cooldown("attack", character.ping * 0.95))
-        .catch((e) => console.warn(e));
-    }
-
-    nextDelay = Math.max(ms_to_next_skill("attack"), EVENT_TICK);
   } catch (e) {
     console.warn(e);
   } finally {

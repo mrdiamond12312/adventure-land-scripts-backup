@@ -872,6 +872,116 @@ function calculateRogueItems(target) {
   };
 }
 
+// What the merchant shoots with, whenever it shoots at all — a lure, a drag, an
+// event boss, or a snipe (merchant_service.19.js, merchant_frenzinesss.100.js)
+const ATTACK_WEAPON = "dartgun";
+// Only a fallback for the bank trip: everything else takes getBestQuiver
+const ATTACK_OFFHAND = "t2quiver";
+// How much of xrange the merchant lets itself aim with
+const ATTACK_XRANGE_RATE = 0.8;
+// Best reach seen so far — see getAttackWeaponReach
+var maxAttackWeaponRange = 0;
+
+/** @returns {Object[]} everything equipped or in the bag */
+function getCarriedItems() {
+  return [
+    character.slots.mainhand,
+    character.slots.offhand,
+    ...character.items,
+  ].filter(Boolean);
+}
+
+/**
+ * Longest-ranged quiver we are carrying. Not the by-wtype sweep getMaxBlastRadius
+ * does — the merchant hauls the fighters' loot, so its bag is full of gear it
+ * can't hold.
+ * @returns {{name: string, range: number}|undefined}
+ */
+function getBestQuiver() {
+  let best;
+
+  for (const item of getCarriedItems()) {
+    const info = item_info(item);
+    if ((info?.wtype ?? info?.type) !== "quiver") continue;
+
+    const range = info.range ?? 0;
+    if (range > (best?.range ?? 0)) best = { name: item.name, range };
+  }
+
+  return best;
+}
+
+/**
+ * Reach the dartgun would give us: the gun itself plus the best quiver's delta.
+ * Name-locked on the gun — a looted crossbow would otherwise set the number.
+ * @returns {number} 0 when there is no dartgun to hold
+ */
+function getMaxAttackWeaponRange() {
+  const dartgunRange = getCarriedItems()
+    .filter((item) => item.name === ATTACK_WEAPON)
+    .reduce((best, item) => Math.max(best, item_info(item)?.range ?? 0), 0);
+
+  if (!dartgunRange) return 0;
+
+  return dartgunRange + (getBestQuiver()?.range ?? 0);
+}
+
+/**
+ * How far the merchant can shoot *once geared*: with the broom in hand
+ * character.range reads melee, so callers that have to decide whether gearing up
+ * is worth it can't measure it live. 0 until a dartgun has been seen at all.
+ * @returns {number}
+ */
+function getAttackWeaponReach() {
+  maxAttackWeaponRange =
+    character.slots.mainhand?.name === ATTACK_WEAPON
+      ? character.range
+      : Math.max(maxAttackWeaponRange, getMaxAttackWeaponRange());
+
+  if (!maxAttackWeaponRange) return 0;
+
+  return maxAttackWeaponRange + character.xrange * ATTACK_XRANGE_RATE;
+}
+
+/** Luck outranks the quiver's range: whatever we're shooting is nearly dead anyway */
+function getMerchantOffhand(isArmed, feelingLucky) {
+  if (feelingLucky) return "mshield";
+  if (!isArmed) return "wbookhs";
+  return getBestQuiver()?.name ?? ATTACK_OFFHAND;
+}
+
+function getMerchantAmulet(feelingLucky) {
+  if (feelingLucky) return "spookyamulet";
+  return isLuringMobs || isFightingBoss ? "t2intamulet" : "warmscarf";
+}
+
+/**
+ * Merchant-only
+ */
+function calculateMerchantEquipments() {
+  const isArmed = shouldHoldAttackWeapon();
+  const feelingLucky = shouldWearLuckGear();
+
+  return {
+    helmet: isLuringMobs || isFightingBoss ? "xhelmet" : "eear",
+    // Dartgun keeps us out of the boss' melee range while still landing hits
+    mainhand: isArmed ? ATTACK_WEAPON : "broom",
+    offhand: getMerchantOffhand(isArmed, feelingLucky),
+    amulet: getMerchantAmulet(feelingLucky),
+    // scareAwayMobs re-equips jacko itself when something actually aggroes us
+    orb: feelingLucky ? "rabbitsfoot" : "jacko",
+    chest: "tshirt4",
+    pants: "pants",
+    ring1: "solitaire",
+    ring2: isLuringMobs || isFightingBoss ? "armorring" : "dexring",
+    shoes: "eslippers",
+    gloves: "gloves1",
+    belt: "sbelt",
+    earring1: "dexearring",
+    earring2: "dexearring",
+  };
+}
+
 function calculateBestItems(characterClass = character.ctype) {
   switch (characterClass) {
     case "mage":
@@ -882,6 +992,8 @@ function calculateBestItems(characterClass = character.ctype) {
       return calculateRangerItems(get_target());
     case "priest":
       return calculatePriestItems(get_target());
+    case "merchant":
+      return calculateMerchantEquipments();
     default:
       return {};
   }
