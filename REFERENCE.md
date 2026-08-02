@@ -716,6 +716,13 @@ rather than fought through.
   removed `character.c.mining`/`c.fishing` from `isMerchantBusy` and put `getEventToJoin()` in
   front of `goMining`/`goFishing`/`moveHome` in the main loop: a live event outranks chilling, and
   a skipped rod cast is back off cooldown long before the next boss spawns.
+- **Banking and fighting are mutually exclusive, in both directions.** The startup bank walk wins
+  first: `hasVisitedBank` (merchant_crafting.10.js, set at the end of `bankLoop`'s first run) is in
+  `isMerchantBusy`, so no event can start before the cache the rest of the merchant reads even
+  exists. After that the fight wins: `bankLoop` waits while `isFightingBoss`, and the main loop's
+  emergency `bankStoreRoutine` skips too. A full inventory (or `invJammed`) is therefore a
+  `mustAbandonFight` reason: there is nothing left to gain from the fight, and **releasing the duty
+  is precisely what unblocks the banking** — the two guards are a handoff, not a deadlock.
 - **Duty ownership is held across ticks, not per tick.** `acquireEventDuty`/`releaseEventDuty` set
   `holdsEventDuty` so the loop only ever clears an `onDuty` it took (the rule in "Merchant duty
   lock"). Releasing it every tick would let the 750ms main loop `moveHome()` mid-fight.

@@ -291,21 +291,17 @@ function getEventToJoin() {
  */
 function isMerchantBusy() {
   return (
+    // The startup bank trip comes first — everything downstream reads its cache
+    !hasVisitedBank ||
     (onDuty && !holdsEventDuty) ||
     isLuringMobs ||
     isDraggingMobs ||
-    character.q.exchange ||
-    character.q.upgrade ||
-    character.q.compound ||
     mustAbandonFight()
   );
 }
 
 /**
- * Blockers that make us give up a fight already committed to. Anything softer
- * than this belongs in isMerchantBusy: dropping the duty mid-event hands the
- * merchant back to the main loop, which walks it home — and the moment the soft
- * flag clears we walk back out, which is the home/boss ping-pong.
+ * Dont fight while urgent task
  * @returns {boolean}
  */
 function mustAbandonFight() {

@@ -587,7 +587,14 @@ setInterval(async function () {
   )
     await moveHome();
 
-  if ((isInvFull() || invJammed) && !isAdvanceSmartMoving && !smart.moving) {
+  // Not while an event is on: the bank run would cost the loot share, and the
+  // inventory keeps until the fight ends (merchant_frenzinesss.100.js)
+  if (
+    (isInvFull() || invJammed) &&
+    !isFightingBoss &&
+    !isAdvanceSmartMoving &&
+    !smart.moving
+  ) {
     onDuty = true;
     try {
       await bankStoreRoutine();

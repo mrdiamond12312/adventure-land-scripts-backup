@@ -14,6 +14,12 @@ const BANK_FLOORS = {
   bank_b: { map: "bank_b", x: -210, y: -130 },
 };
 
+// Set once bankLoop's first run has walked every floor. Nothing that would take
+// the merchant away from that trip may start before it (see isMerchantBusy,
+// merchant_frenzinesss.100.js) — the bank cache is what the rest of the file
+// reads to decide what to upgrade, store or retrieve.
+var hasVisitedBank = false;
+
 /**
  * Slots to skip globally (gold, personal storage).
  * items10 is reserved for personal items and is never touched.
@@ -719,7 +725,9 @@ async function bankStoreRoutine() {
 async function bankLoop() {
   let delay = 120_000;
 
-  if (onDuty) {
+  // isFightingBoss is checked separately from onDuty: an event fight holds the
+  // duty, but this makes it explicit that banking waits for the fight to end
+  if (onDuty || (typeof isFightingBoss !== "undefined" && isFightingBoss)) {
     return setTimeout(bankLoop, 5_000);
   }
 
@@ -728,8 +736,15 @@ async function bankLoop() {
 
     // First run: build item level map then fetch items
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-      // Visit all floors to populate BANK_CACHE fully
-      await smart_move(BANK_FLOORS.bank);
+      // Walk every floor: character.bank only carries the packs of the floor
+      // we're standing on, so one visit per floor is what fills BANK_CACHE.
+      // goToBankFloor is forced — this runs at startup, before any other loop
+      // has taken the duty, and it updateBank()s on arrival.
+      for (const floor of Object.keys(BANK_FLOORS)) {
+        await goToBankFloor(floor, true);
+      }
+
+      hasVisitedBank = true;
 
       retrieveMaxItemsLevel();
       await retrievedBankItemToUpgrade();
