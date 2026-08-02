@@ -1339,9 +1339,16 @@ function sleep(delay) {
   return new Promise((resolve) => setTimeout(resolve, delay));
 }
 
+// Potions every character keeps stocked; fighters name one of these in their
+// buy_potions cm, the merchant refuses anything else
+const desiredPotions = ["mpot1", "hpot1"];
+
 // Merchant's own potions: restock to POTION_STACK once it is nearly out
 const POTION_STACK = 20;
 const POTION_REFILL_AT = 2;
+
+// Fighters ask the merchant for a refill below this
+const POTION_REQUEST_AT = 200;
 
 const LOOTING_LIMIT = 15;
 var isLooting = false;
@@ -1485,10 +1492,10 @@ setInterval(async function () {
   }
 
   // The merchant has no merchant to ask — it buys its own stack instead of
-  // sending itself the buy_mana/buy_hp cms below
+  // sending itself the buy_potions cm below
   if (isMerchant()) {
     if (haveAComputer() && !isInvFull(2)) {
-      for (const potionId of ["mpot1", "hpot1"]) {
+      for (const potionId of desiredPotions) {
         const owned = getTotalQuantityOf(potionId);
         if (owned >= POTION_REFILL_AT) continue;
         await buy(potionId, POTION_STACK - owned).catch((e) => log(e));
@@ -1595,22 +1602,21 @@ setInterval(async function () {
     );
   }
 
+  const potionToRestock = desiredPotions.find(
+    (potion) => getTotalQuantityOf(potion) < POTION_REQUEST_AT,
+  );
+
   // Inventory check and potions
   if (isInvFull(4)) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
-  } else if (
-    !isInvFull(2) &&
-    (locate_item("mpot1") === -1 || getTotalQuantityOf("mpot1") < 100)
-  ) {
-    log("Asking the merchant for some mana potions...");
-    send_cm(partyMerchant, { msg: "buy_mana", ...obj });
-  } else if (
-    !isInvFull(2) &&
-    (locate_item("hpot1") === -1 || getTotalQuantityOf("hpot1") < 100)
-  ) {
-    log("Asking the merchant for some health potions...");
-    send_cm(partyMerchant, { msg: "buy_hp", ...obj });
+  } else if (!isInvFull(2) && potionToRestock) {
+    log(`Asking the merchant for some ${potionToRestock}...`);
+    send_cm(partyMerchant, {
+      msg: "buy_potions",
+      potion: potionToRestock,
+      ...obj,
+    });
   } else if (!character.slots.elixir || !character.slots.elixir.name) {
     log("Drinking Elixir");
 

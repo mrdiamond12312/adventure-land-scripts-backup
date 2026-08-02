@@ -38,18 +38,12 @@ character.on("cm", async function ({ name, message }) {
       send_cm(partyMerchant, "inv_ok");
       break;
 
-    case "buy_mana_merchant_near":
-      log("Thanks for the potions merchant!");
-      send_gold(partyMerchant, 1500000);
-      break;
-
-    case "buy_hp_merchant_near":
+    case "buy_potions_merchant_near":
       log("Thanks for the potions merchant!");
       send_gold(partyMerchant, 1500000);
       break;
 
     case "party_heal":
-      // The asker can't see our cooldown or mp — check before spending the cast
       if (
         is_on_cooldown("partyheal") ||
         character.mp <= G.skills["partyheal"].mp

@@ -114,7 +114,7 @@ Standalone / auxiliary (not wired into the load graph above, used directly or ad
   delete it) when switching farming spots.
 - **Cross-character coordination happens over code-messages (`cm`)**, via `send_cm(targetName, { msg, ...})`
   / the `on_cm`-style listener in `other_class_msg_listener.8.js`. Message `msg` types already in use include
-  `buff_mluck`, `inv_full`, `buy_mana`, `buy_hp`, `elixir`, `xptome`, `dc-harakiri` — reuse these rather than
+  `buff_mluck`, `inv_full`, `buy_potions`, `elixir`, `xptome`, `dc-harakiri` — reuse these rather than
   inventing near-duplicates when a fighter needs something from the merchant.
 - **`parent.caracAL` is the environment switch.** Nearly every cross-file load, and some behavioral branches
   (e.g. server hopping only runs `if (!character.controller)` under native CODE), check
