@@ -534,10 +534,13 @@ async function merchantAttackLoop() {
     }
 
     promisesToAwait.push(lootIfSolo());
-    promisesToAwait.push(equipBatch(calculateMerchantEquipments()));
 
     for (const strategy of merchantStrategies) {
       if (await strategy(promisesToAwait)) break;
+    }
+
+    if (isFightingBoss || !shouldGoChilling()) {
+      promisesToAwait.push(equipBatch(calculateMerchantEquipments()));
     }
 
     await Promise.all(promisesToAwait);
