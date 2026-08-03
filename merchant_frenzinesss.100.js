@@ -1,27 +1,20 @@
 // Merchant Frenzinessss!
 // Get him to join in events & chickens!
 
-// Timeout the loop if he's below this hp
+// Hold the shot while he's below this hp
 const EVENT_RETREAT_HP_RATIO = 0.8;
-const EVENT_RESUME_HP_RATIO = 0.95;
 
 // Or with our priest nearby
 const EVENT_COVERED_RETREAT_HP_RATIO = 0.4;
-const EVENT_COVERED_RESUME_HP_RATIO = 0.6;
 
 // Orbit radius
 const EVENT_RANGE_RATE = 0.85;
-const EVENT_RETREAT_RANGE_RATE = 2.5;
 
 // Close the gap if target too far
 const EVENT_APPROACH_MULTIPLIER = 1.4;
 
 // Smartmoving to other mobs if the current one have hp higher than the lowest one
 const EVENT_SWITCH_MARGIN = 0.001;
-
-// nextDelay ticks
-const EVENT_TICK = 5;
-const EVENT_IDLE_TICK = 250;
 
 // Sniping mobs
 const SNIPE_MAX_PREDICTED_HP = 200;
@@ -81,16 +74,17 @@ function isSafeToHit(target) {
 }
 
 /**
- * Boss table. 
+ * Boss table.
  * `shouldJoin` whether to join the boss,
- * `strategy` travels and returns the entity to hit, 
- * `shouldAttack` is the per-boss safety check layered on top of `isSafeToHit`.
+ * `strategy` travels and returns the entity to hit,
+ * `shouldAttack` is the only gate before we shoot — tanked bosses use `isSafeToHit`,
+ * the harmless ones only check their own quirk.
  * @type {Object<string, {shouldJoin: () => boolean, shouldAttack: (target?: Object) => boolean, strategy: () => Promise<Object|undefined>}>}
  */
 const bossConfigs = {
   crabxx: {
-    shouldJoin: () => !!parent.S.crabxx?.live,
-    shouldAttack: (target) => !!target && !target["1hp"],
+    shouldJoin: () => isEventTanked("crabxx") && !!parent.S.crabxx?.live,
+    shouldAttack: isSafeToHit,
     strategy: async () => {
       let { crabxxInstance } = getCrabsForCrabxx();
 
@@ -108,7 +102,7 @@ const bossConfigs = {
     },
   },
   snowman: {
-    shouldJoin: () => !!parent.S.snowman?.live,
+    shouldJoin: () => parent.S.snowman?.live,
     shouldAttack: (target) => !!target && !target.s?.fullguardx,
     strategy: async () => {
       let snowmanInstance = get_nearest_monster({ type: "snowman" });
@@ -121,7 +115,7 @@ const bossConfigs = {
   },
   franky: {
     shouldJoin: () => isEventTanked("franky"),
-    shouldAttack: () => isEventTanked("franky"),
+    shouldAttack: isSafeToHit,
     strategy: async () => {
       let frankyInstance = get_nearest_monster({ type: "franky" });
       if (!frankyInstance) {
@@ -137,7 +131,7 @@ const bossConfigs = {
   },
   icegolem: {
     shouldJoin: () => isEventTanked("icegolem"),
-    shouldAttack: () => isEventTanked("icegolem"),
+    shouldAttack: isSafeToHit,
     strategy: async () => {
       let icegolemInstance = get_nearest_monster({ type: "icegolem" });
       if (!icegolemInstance) {
@@ -149,7 +143,7 @@ const bossConfigs = {
   },
   dragold: {
     shouldJoin: () => isEventTanked("dragold"),
-    shouldAttack: () => isEventTanked("dragold"),
+    shouldAttack: isSafeToHit,
     strategy: async () => {
       let dragoldInstance = get_nearest_monster({ type: "dragold" });
       if (!dragoldInstance) {
@@ -161,7 +155,7 @@ const bossConfigs = {
   },
   mrpumpkin: {
     shouldJoin: () => isEventTanked("mrpumpkin"),
-    shouldAttack: () => isEventTanked("mrpumpkin"),
+    shouldAttack: isSafeToHit,
     strategy: async () => {
       let pumpkinInstance = get_nearest_monster({ type: "mrpumpkin" });
       if (!pumpkinInstance) {
@@ -173,7 +167,7 @@ const bossConfigs = {
   },
   mrgreen: {
     shouldJoin: () => isEventTanked("mrgreen"),
-    shouldAttack: () => isEventTanked("mrgreen"),
+    shouldAttack: isSafeToHit,
     strategy: async () => {
       let greenInstance = get_nearest_monster({ type: "mrgreen" });
       if (!greenInstance) {
@@ -209,9 +203,6 @@ const bossConfigs = {
   },
 };
 
-// Bosses whose doesn't demand a tank (harmless ones) still go
-const UNTANKED_OK = ["snowman", "wabbit", "pinkgoo"];
-
 /**
  * Remaining hp share of a live event boss
  * @returns {number} 0..1, defaulting to 1 (full) when the event reports no hp
@@ -229,6 +220,11 @@ function getEventHpRatio(eventName) {
   return source.hp / maxHp;
 }
 
+/** @returns {boolean} whether the event is still running */
+function isEventStillLive(eventName) {
+  return !!parent.S[eventName] || !!get_nearest_monster({ type: eventName });
+}
+
 /**
  * Which live event to go to.Lowest %HP one if concurrently occurs
  * @returns {string|undefined}
@@ -242,6 +238,16 @@ function getEventToJoin() {
       return false;
     }
   });
+
+  // A boss we already committed to keeps its slot while it lives: `shouldJoin`
+  // reads its momentary aggro, which drops every time it switches target
+  if (
+    currentEventName &&
+    !joinable.includes(currentEventName) &&
+    isEventStillLive(currentEventName)
+  ) {
+    joinable.push(currentEventName);
+  }
 
   const best = joinable
     .sort((lhs, rhs) => getEventHpRatio(lhs) - getEventHpRatio(rhs))
@@ -363,32 +369,31 @@ function shouldHoldAttackWeapon() {
 /**
  * Takes the free kill if there is one. Skips anything that owns our position
  * (a lure/drag, a channelled gather).
- * @returns {Promise<Object|undefined>} the candidate seen, shot or not — the
- * caller ticks faster while one is around
+ * @param {Promise[]} promisesToAwait the tick's bucket, awaited by the loop
+ * @returns {boolean} whether the shot was spent
  */
-async function snipeNearbyWeakMob() {
-  if (!canSnipe()) return undefined;
+function snipeNearbyWeakMob(promisesToAwait) {
+  if (!canSnipe()) return false;
 
   const target = getSnipeTarget();
-  if (!target) return undefined;
+  if (!target) return false;
 
-  if (character.s.penalty_cd || ms_to_next_skill("attack") > 0) return target;
+  if (character.s.penalty_cd || ms_to_next_skill("attack") > 0) return false;
 
-  // The broom can't reach it — and the gear calc already agrees, since it
-  // branches on the same target being there
-  if (character.slots.mainhand?.name !== ATTACK_WEAPON) {
-    await equipBatch(calculateMerchantEquipments());
-    if (character.slots.mainhand?.name !== ATTACK_WEAPON) return target;
-  }
+  // The broom can't reach it — the gear plan already agrees, since it branches
+  // on the same target being there, so next tick has the weapon in hand
+  if (character.slots.mainhand?.name !== ATTACK_WEAPON) return false;
 
-  if (!is_in_range(target, "attack")) return target;
+  if (!is_in_range(target, "attack")) return false;
 
   change_target(target);
-  await attack(target)
-    .then(() => reduce_cooldown("attack", character.ping * 0.95))
-    .catch((e) => console.warn(e));
+  promisesToAwait.push(
+    attack(target)
+      .then(() => reduce_cooldown("attack", character.ping * 0.95))
+      .catch((e) => console.warn(e)),
+  );
 
-  return target;
+  return true;
 }
 
 /**
@@ -439,86 +444,60 @@ function requestPartyHeal() {
   send_cm(PRIEST, "party_heal");
 }
 
-/** @returns {Object[]} monsters currently aggroed on the merchant */
-function monstersOnMe() {
-  return Object.values(parent.entities).filter(
-    (entity) => entity?.type === "monster" && entity.target === character.name,
-  );
-}
-
 /**
- * The merchant half of the fighters' shouldAttack
- * @returns {Promise<boolean>} whether it is safe to keep fighting this tick
+ * The merchant half of the fighters' shouldAttack. Shedding aggro isn't ours —
+ * the 750ms main loop scares every tick already.
+ * @returns {boolean} whether it is safe to keep fighting this tick
  */
-async function keepMerchantSafe(target) {
+function keepMerchantSafe() {
   if (character.rip) return false;
 
-  const healer = getCoveringHealer();
-  const retreatRatio = healer
+  const retreatRatio = getCoveringHealer()
     ? EVENT_COVERED_RETREAT_HP_RATIO
     : EVENT_RETREAT_HP_RATIO;
-  const resumeRatio = healer
-    ? EVENT_COVERED_RESUME_HP_RATIO
-    : EVENT_RESUME_HP_RATIO;
 
-  const threats = monstersOnMe();
-  const isHurt = character.hp < character.max_hp * retreatRatio;
-
-  if (!threats.length && !isHurt) return true;
-
-  // Shed what we can, but scare is on a long cooldown next to this loop's tick
-  if (threats.length) await scareAwayMobs();
-
-  if (isHurt) {
-    if (!healer) requestPartyHeal();
-    return character.hp >= character.max_hp * resumeRatio;
-  }
-
-  return true;
+  return character.hp >= character.max_hp * retreatRatio;
 }
 
 /**
- * The event half of a tick: joins, travels, gears up and shoots the boss.
- * @returns {Promise<{delay: number, attacked?: boolean}>} the tick delay, and
- * whether the shot was spent — an unspent one is the snipe's to take
+ * The event half of a tick: joins, travels and shoots the boss.
+ * @param {Promise[]} promisesToAwait the tick's bucket, awaited by the loop
+ * @returns {Promise<boolean>} whether the shot was spent — an unspent one is
+ * the snipe's to take
  */
-async function fightCurrentEvent() {
+async function fightCurrentEvent(promisesToAwait) {
   const eventName = getEventToJoin();
   // Once committed, only a hard blocker unseats us — see mustAbandonFight
   const isBlocked = holdsEventDuty ? mustAbandonFight() : isMerchantBusy();
 
   if (!eventName || isBlocked) {
     releaseEventDuty();
-    return { delay: EVENT_IDLE_TICK };
+    return false;
   }
 
-  if (!acquireEventDuty()) return { delay: EVENT_IDLE_TICK };
+  if (!acquireEventDuty()) return false;
 
   currentEventName = eventName;
   const config = bossConfigs[eventName];
   const target = await config.strategy();
 
-  if (!target) return { delay: EVENT_IDLE_TICK };
+  if (!target) return false;
 
-  await equipBatch(calculateMerchantEquipments());
-
-  if (character.slots.mainhand?.name !== ATTACK_WEAPON) {
-    return { delay: EVENT_IDLE_TICK };
-  }
+  // The loop's gear plan puts the weapon in hand; a tick behind is fine
+  if (character.slots.mainhand?.name !== ATTACK_WEAPON) return false;
 
   // hitAndRun kites off get_target(), so hand it the boss before anything else
   change_target(target);
 
-  const isSafeToFight = await keepMerchantSafe(target);
-  rangeRate = isSafeToFight ? EVENT_RANGE_RATE : EVENT_RETREAT_RANGE_RATE;
+  rangeRate = EVENT_RANGE_RATE;
 
-  if (!isSafeToFight) return { delay: EVENT_TICK };
+  // Hold the orbit either way — backing off just walks us out of the fight
+  if (!keepMerchantSafe()) return false;
 
-  const requiresTank = !UNTANKED_OK.includes(eventName);
-  if (!config.shouldAttack(target) || (requiresTank && !isSafeToHit(target))) {
+  if (!config.shouldAttack(target)) {
     // Nothing to shoot (a guarded snowman, an untanked boss)
     idleAtEvent();
-    return { delay: EVENT_TICK };
+    return false;
   }
 
   if (!is_in_range(target, "attack")) {
@@ -527,26 +506,24 @@ async function fightCurrentEvent() {
     if (distance(character, target) > reach * EVENT_APPROACH_MULTIPLIER) {
       await advanceSmartMove(target, { useScare: false });
     }
-    return { delay: EVENT_TICK };
+    return false;
   }
 
-  if (ms_to_next_skill("attack") > 0 || character.s.penalty_cd) {
-    return { delay: EVENT_TICK };
-  }
+  if (ms_to_next_skill("attack") > 0 || character.s.penalty_cd) return false;
 
-  await attack(target)
-    .then(() => reduce_cooldown("attack", character.ping * 0.95))
-    .catch((e) => console.warn(e));
+  promisesToAwait.push(
+    attack(target)
+      .then(() => reduce_cooldown("attack", character.ping * 0.95))
+      .catch((e) => console.warn(e)),
+  );
 
-  return {
-    delay: Math.max(ms_to_next_skill("attack"), EVENT_TICK),
-    attacked: true,
-  };
+  return true;
 }
 
+const merchantStrategies = [fightCurrentEvent, snipeNearbyWeakMob];
 // Merchant main attack loop
 async function merchantAttackLoop() {
-  let nextDelay = EVENT_IDLE_TICK;
+  const promisesToAwait = [];
 
   try {
     // Respawn is handled by merchant main loop already
@@ -556,22 +533,17 @@ async function merchantAttackLoop() {
       return;
     }
 
-    lootIfSolo();
+    promisesToAwait.push(lootIfSolo());
+    promisesToAwait.push(equipBatch(calculateMerchantEquipments()));
 
-    const { delay, attacked } = await fightCurrentEvent();
-    nextDelay = delay;
-
-    // A free kill in range costs nothing, event or not — it only ever spends a
-    // shot the boss didn't take, and is worth ticking at attack speed for
-    if (attacked) return;
-
-    const snipeTarget = await snipeNearbyWeakMob();
-    if (snipeTarget) {
-      nextDelay = Math.max(ms_to_next_skill("attack"), EVENT_TICK);
+    for (const strategy of merchantStrategies) {
+      if (await strategy(promisesToAwait)) break;
     }
+
+    await Promise.all(promisesToAwait);
   } catch (e) {
     console.warn(e);
   } finally {
-    setTimeout(merchantAttackLoop, nextDelay);
+    setTimeout(merchantAttackLoop, getLoopInterval());
   }
 }

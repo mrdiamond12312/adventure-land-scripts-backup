@@ -802,6 +802,16 @@ rather than fought through.
   costs the merchant a **whole map trip**, so `currentEventName` only loses its slot when another
   boss is `EVENT_SWITCH_MARGIN` (15pp) lower — two bosses melting in lockstep would otherwise
   leave the merchant commuting instead of shooting. `releaseEventDuty` clears the commitment.
+- **The home\boss ping-pong, second cause (debugged 2026-08-03).** Same symptom at franky, one
+  layer earlier than the `isMerchantBusy` fix above: `shouldJoin` for the tanked bosses is
+  `isEventTanked`, which reads the boss' *momentary* `target`. A boss between targets — franky
+  retargets constantly, and its adds pull aggro — reads untanked for a tick, `getEventToJoin()`
+  returns undefined, `fightCurrentEvent` releases the duty, and the main loop walks home before
+  the next tick re-acquires. The `?? eventInfo.target` fallback doesn't save it: the `parent.S`
+  entry has no `target` field. Fix: `getEventToJoin` re-adds `currentEventName` to the joinable
+  list while `isEventStillLive`, so only the boss actually ending (or `mustAbandonFight`) unseats
+  us. The general rule is the one above, applied to the *join* decision and not just the blockers:
+  anything that toggles on its own must not be able to release the duty.
 - **Idle sniping** (`getSnipeTarget`/`snipeNearbyWeakMob`): with no event to join, anything under
   `SNIPE_MAX_PREDICTED_HP` already inside `is_in_range(entity, "attack")` gets a shot. It takes no
   duty and never moves — a free kill costs the merchant only the shot, and chasing would put it
