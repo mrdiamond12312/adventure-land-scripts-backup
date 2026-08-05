@@ -89,12 +89,7 @@ const bossConfigs = {
       let { crabxxInstance } = getCrabsForCrabxx();
 
       if (!crabxxInstance) {
-        if (character.s.hopsickness) {
-          await advanceSmartMove(parent.S.crabxx);
-        } else {
-          await join("crabxx").catch((e) => console.warn(e));
-          await sleep(character.ping);
-        }
+        await advanceSmartMove(parent.S.crabxx);
         ({ crabxxInstance } = getCrabsForCrabxx());
       }
 
@@ -119,10 +114,6 @@ const bossConfigs = {
     strategy: async () => {
       let frankyInstance = get_nearest_monster({ type: "franky" });
       if (!frankyInstance) {
-        if (!character.s.hopsickness) {
-          await join("franky").catch((e) => console.warn(e));
-          await sleep(character.ping);
-        }
         await advanceSmartMove(parent.S.franky);
         frankyInstance = get_nearest_monster({ type: "franky" });
       }
@@ -286,7 +277,11 @@ function mustAbandonFight() {
 }
 
 function acquireEventDuty() {
-  if (holdsEventDuty) return true;
+  if (holdsEventDuty) {
+    onDuty = true;
+    renewDuty();
+    return true;
+  }
   if (onDuty || isLuringMobs || isDraggingMobs) return false;
 
   onDuty = true;
@@ -426,7 +421,7 @@ function getCoveringHealer() {
 function idleAtEvent() {
   if (character.stand || smart.moving || isAdvanceSmartMoving) return;
 
-  open_stand();
+  // open_stand();
 }
 
 /**

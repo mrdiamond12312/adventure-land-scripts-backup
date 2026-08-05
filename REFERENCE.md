@@ -52,11 +52,29 @@ emergency banking). The rules, established after debugging ent drags getting hij
   and was removed). Signal through a dedicated flag instead — e.g. `invJammed`, set when an
   exchange fails with `inventory_full`, which asks the emergency banking to run without
   squatting on the duty lock.
-- **The 5-minute watchdog interval is a leak-recovery safety net, not a scheduler.** It only
-  exists for the case where a reset was somehow still missed, and it deliberately skips the
-  reset while `isLuringMobs`/`isDraggingMobs` is set — lures/drags move with plain `move()`, so
-  `smart.moving`/`isAdvanceSmartMoving` read false during them and the duty lock is the *only*
-  thing keeping `bankLoop` and friends from smart-moving away mid-drag.
+- **The watchdog is a leak-recovery safety net, not a scheduler,** and a `finally` is not enough
+  to retire it. `finally` only runs if every `await` inside settles, and several never have to:
+  raw `move()` (the `smartMove` walk loop, `_blinkCheck`, `_magiportCheck`, `walkEntsToSpawn`),
+  native `smart_move()` (`transport`'s walk-up-to-the-door, `useTownWithRetry`'s fallback) and
+  `town()` are all runner-settled with no timeout. A `stop()`, a magiport landing or a teleport
+  mid-walk can leave them pending forever, and then the holder's `finally` never runs at all —
+  that is the lureMechaGnome hang below, and `walkEntsToSpawn` still has the shape (`arrived` is
+  only set if every `move()` settles, and line 498 swallows the rejection).
+- **The watchdog measures the *continuous* hold, and live owners renew it.** `dutyHeldSince`
+  (basic_merchant.5.js) is zeroed on any tick that sees `onDuty` false, so it can only ever
+  describe one unbroken hold; anything still holding after `DUTY_STALE_MS` is presumed parked and
+  the lock is reclaimed. The event loop is the one owner that legitimately holds for many minutes
+  — sometimes standing still, so no movement flag proves it alive — so `acquireEventDuty` calls
+  `renewDuty()` on every tick it re-enters holding the duty. Nothing else renews: cm deliveries,
+  bank trips, lures and drags are all bounded well under the window, and a lure that outlives it
+  is exactly the hang worth reclaiming. This replaced a flag exemption list
+  (`isLuringMobs`/`isDraggingMobs`), which had it backwards — it protected the two holders whose
+  known hang it needed to rescue, and left the event fight, which it then unlocked mid-boss.
+- **`acquireEventDuty` re-asserts `onDuty` instead of trusting `holdsEventDuty`.** The duty spans
+  ticks, so a reclaim (or any future outside reset) would otherwise leave the merchant fighting
+  with the lock free: `bankLoop` still holds off on `isFightingBoss`, but the cm handler, `craft`,
+  `dismantleSomething` and `exchangeSomething` gate on `onDuty` alone and would start an NPC trip
+  mid-fight — two `smartMove`s then preempt each other every tick (see "smartMove sessions").
 - Routines that can smart-move but run outside the lock (`goFishing`, `goMining`,
   `exchangeSomething`'s bank-retrieval/npc-travel paths) must check `onDuty` before moving.
   Exchanging items already in inventory is allowed while on duty — with a computer that needs

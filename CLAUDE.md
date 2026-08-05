@@ -124,6 +124,9 @@ Standalone / auxiliary (not wired into the load graph above, used directly or ad
 - **Filenames are `<descriptive_name>.<slot_number>.js`.** When adding a new shared/loadable script, pick an
   unused slot number consistent with `CODE_SLOTS`/existing `load_code` call sites, and update every loader
   that should pull it in (both the `load_scripts` array and the `load_code` fallback).
+- **Comments are JSDoc blocks and short one-liners only.** Don't narrate an edit in a comment — no
+  "unlike X", "we do this because the old version…", no multi-line prose explaining a change. If the
+  *why* is non-obvious, it belongs in `REFERENCE.md`, not inline.
 - Strategy swapping uses feature-flag-style globals rather than branching call sites: e.g.
   `currentStrategy` is reassigned by `changeToPullStrategies()` / `changeToNormalStrategies()`
   (`basic_function.7.js`), and callers just invoke `currentStrategy()`.

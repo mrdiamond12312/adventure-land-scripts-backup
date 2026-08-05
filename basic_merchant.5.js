@@ -17,6 +17,8 @@ if (parent.caracAL) {
 
 // Global Vars
 var onDuty = false;
+// When the current unbroken hold started, 0 while nobody holds it
+var dutyHeldSince = 0;
 var isExeing = false;
 // Set when an exchange fails with inventory_full; makes the emergency banking
 // below run even if isInvFull() reads false. Cleared after the bank trip —
@@ -572,8 +574,21 @@ setInterval(async function () {
   }
 }, 750);
 
+/** Tells the watchdog below the duty is still being used */
+function renewDuty() {
+  dutyHeldSince = Date.now();
+}
+
+const DUTY_STALE_MS = 300000;
+const DUTY_WATCHDOG_INTERVAL = 30000;
+
 setInterval(function () {
-  if (!isLuringMobs && !isDraggingMobs) onDuty = false;
+  if (!onDuty) dutyHeldSince = 0;
+  else if (!dutyHeldSince) renewDuty();
+  else if (Date.now() - dutyHeldSince > DUTY_STALE_MS) onDuty = false;
+}, DUTY_WATCHDOG_INTERVAL);
+
+setInterval(function () {
   use_skill("mluck", character);
 }, 300000);
 
