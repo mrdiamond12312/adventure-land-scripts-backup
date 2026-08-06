@@ -1837,7 +1837,8 @@ class ProjectileManagement {
   }
 
   _calculateSingleHitDamage(from, to) {
-    return calculateDamage({ ...from, frequency: 1 }, to, false);
+    const damage = calculateDamage({ ...from, frequency: 1 }, to, false);
+    return to["1hp"] ? Math.min(damage, 1) : damage;
   }
 
   _onIncomingProjectile = (data) => {
@@ -1931,6 +1932,10 @@ class ProjectileManagement {
     this.socket = null;
   }
 
+  /**
+   * @param {string} target entity id
+   * @returns {number} negative for damage in the air, positive for heals
+   */
   getIncomingNumber(target) {
     const map = this.projectilesByTarget.get(target);
     if (!map) return 0;

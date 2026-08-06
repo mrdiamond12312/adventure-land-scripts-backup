@@ -837,6 +837,23 @@ rather than fought through.
   `PROJECTILE_MANAGER` measure `getCrabsForCrabxx` annotates crabs with), so the merchant doesn't
   waste its shot on a mob the party has already killed. The idle branch ticks at attack speed
   while a candidate is visible and drops back to `EVENT_IDLE_TICK` otherwise.
+- **The "about to die" kite cutoff is a snipe rule, and must not read the boss** (debugged
+  2026-08-06). `shouldMerchantKite` drops the orbit once `get_target()` is under
+  `SNIPE_MAX_PREDICTED_HP` — right for a trash mob that dies before we finish walking, wrong for
+  the boss, which `fightCurrentEvent` has already made the target. `hitAndRun` then goes idle and
+  nothing closes the gap between `reach` and `reach * EVENT_APPROACH_MULTIPLIER` (the pathfinder
+  only engages past the latter), so a *roaming* boss drifts a few pixels out of range and the
+  merchant stops shooting until it dies. Stationary bosses hide the bug; snowman is where it
+  shows. Hence the `target.mtype !== currentEventName` exemption.
+- **`1hp` is clamped in the projectile manager, not at the call sites.**
+  `_calculateSingleHitDamage` caps at 1 for a `1hp` target, so every consumer of
+  `getIncomingNumber` (the merchant's `getPredictedHp`, `getCrabsForCrabxx`, the priest's healee
+  prediction, `suicide`) is right by default. Without it, `calculateDamage` reports the full
+  swing: three party projectiles at a shelled snowman or crabxx read as thousands of damage in
+  the air, driving predicted hp negative at *full* boss hp — the cutoff above then fires the
+  whole fight, not just at the end. The clamp lands at registration, so a projectile fired while
+  the shell was up stays worth 1 even if the shell breaks first; flight time is well under a
+  second, so it is not worth re-reading on every query.
 - **`lootIfSolo`** runs every tick, floored at `LOOT_INTERVAL`. `midasLooting` (basic_function.7.js)
   is a party arrangement — it defers to whoever carries handofmidas and never has the merchant
   open anything — so a partyless merchant would otherwise leave its own chests on the ground.

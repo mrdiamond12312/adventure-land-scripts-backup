@@ -43,7 +43,12 @@ function shouldMerchantKite() {
   // Whatever we're shooting is about to die anyway — orbiting it just walks us
   // out of position for the boss
   const target = get_target();
-  if (target && getPredictedHp(target) < SNIPE_MAX_PREDICTED_HP) return false;
+  if (
+    target &&
+    target.mtype !== currentEventName &&
+    getPredictedHp(target) < SNIPE_MAX_PREDICTED_HP
+  )
+    return false;
 
   return true;
 }
