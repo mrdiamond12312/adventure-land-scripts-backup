@@ -308,6 +308,7 @@ const ENT_AIM_POINT = { x: -75, y: -1897 };
 const ENT_FIRST_ANCHOR = { x: 136, y: -1836 };
 const ENT_SCARE_BUFFER = 1.5;
 const ENT_TICK = 10;
+const ENT_DEATH_POLL = 100;
 const MAX_ENT = 3; // party can engage up to this many ents at once near spawn
 const MAX_CONCURRENT_ENT = 2; // ents dragged at once in a single run
 // px around the avg distance of the dragged ents; 999 = effectively off, drop
@@ -380,12 +381,56 @@ function getFurthestEntFromFirstAnchor() {
   return furthest;
 }
 
+/**
+ * Aborts the run when it can no longer make progress. Every ent-lure loop polls
+ * this so none of them can spin forever holding the duty locks — a dead
+ * merchant never reaches its stand point and never gets an ent to target it.
+ */
+function assertEntLureAlive() {
+  if (character.rip) throw new Error("Merchant died mid-lure — aborting.");
+  if (!isMyPriestOnline())
+    throw new Error("Priest went offline mid-lure — aborting.");
+}
+
+/**
+ * Settles as soon as `promise` does or the merchant dies — no time limit, a
+ * single move can take anywhere from seconds to minutes. For travel calls that
+ * have no internal death check and would otherwise never settle once we're a
+ * corpse, which would stop the caller's guards from ever running again.
+ * @param {Promise} promise
+ */
+function untilDoneOrDead(promise) {
+  let done = false;
+  const tracked = promise.then(
+    (value) => {
+      done = true;
+      return value;
+    },
+    (e) => {
+      done = true;
+      throw e;
+    },
+  );
+  tracked.catch(() => {}); // may be abandoned below; keep the rejection handled
+
+  return Promise.race([
+    tracked,
+    new Promise((resolve) => {
+      const poll = () =>
+        done || character.rip ? resolve() : setTimeout(poll, ENT_DEATH_POLL);
+      poll();
+    }),
+  ]);
+}
+
 async function positionAtEntAimPoint(entId, dartgunRange) {
   let ent = parent.entities[entId];
 
   // Re-derive the stand point every tick (not just once) since the ent can drift
   // before we're in position, and keep retrying until we're actually there.
   while (ent) {
+    assertEntLureAlive();
+
     const dx = ENT_AIM_POINT.x - ent.x;
     const dy = ENT_AIM_POINT.y - ent.y;
     const len = Math.sqrt(dx * dx + dy * dy);
@@ -398,11 +443,9 @@ async function positionAtEntAimPoint(entId, dartgunRange) {
 
     if (distance(character, standPoint) < 20) break;
 
-    if (!isMyPriestOnline()) {
-      throw new Error("Priest went offline mid-lure — aborting.");
-    }
-
-    await move(standPoint.x, standPoint.y).catch(() => smart_move(standPoint));
+    await untilDoneOrDead(
+      move(standPoint.x, standPoint.y).catch(() => smart_move(standPoint)),
+    );
     await sleep(ENT_TICK);
     ent = parent.entities[entId];
   }
@@ -414,18 +457,18 @@ async function positionAtEntAimPoint(entId, dartgunRange) {
 async function aggroEnt(entId, dartgunRange) {
   let ent = parent.entities[entId];
   while (ent && ent.target !== character.name) {
-    if (!isMyPriestOnline()) {
-      throw new Error("Priest went offline mid-lure — aborting.");
-    }
+    assertEntLureAlive();
 
     const d = distance(character, ent);
     if (!is_on_cooldown("attack") && d <= dartgunRange) {
-      await attack(ent).catch(() => {});
+      await withTimeout(attack(ent).catch(() => {}), 300);
     } else if (d > dartgunRange) {
-      await move(
-        character.x + (ent.x - character.x) * 0.2,
-        character.y + (ent.y - character.y) * 0.2,
-      ).catch(() => {});
+      await untilDoneOrDead(
+        move(
+          character.x + (ent.x - character.x) * 0.2,
+          character.y + (ent.y - character.y) * 0.2,
+        ).catch(() => {}),
+      );
     }
     await sleep(ENT_TICK);
     ent = parent.entities[entId];
@@ -501,50 +544,61 @@ async function walkEntsToSpawn(entIds) {
 
   try {
     await new Promise((resolve, reject) => {
+      // The reschedule is the last statement, so anything that throws above it
+      // would leave this promise unsettled — reject instead of hanging.
       const step = async () => {
-        const ents = entIds
-          .map((id) => parent.entities[id])
-          .filter((ent) => !!ent);
-        if (!ents.length || character.rip) return resolve();
-        if (arrived) {
-          // At the end of dragging path, hold the aggro if no one pick up the aggro yet
-          // for up to 10 seconds
-          handoffDeadline ??= Date.now() + 10_000;
+        try {
+          const ents = entIds
+            .map((id) => parent.entities[id])
+            .filter((ent) => !!ent);
+          if (!ents.length) return resolve();
+
+          // Someone else holds every ent — the drag is over wherever we are, no
+          // reason to keep walking the rest of the path
           const handedOff = ents.every(
             (ent) => ent.target && ent.target !== character.name,
           );
-          if (handedOff || Date.now() > handoffDeadline) return resolve();
-        }
-        if (!isMyPriestOnline()) {
-          return reject(new Error("Priest went offline mid-lure — aborting."));
-        }
+          if (handedOff) return resolve();
 
-        const distances = ents.map((ent) => distance(character, ent));
-        if (
-          distances.some((d) => d < G.monsters.ent.range * ENT_SCARE_BUFFER) &&
-          !ms_to_next_skill("scare")
-        ) {
-          await withTimeout(use_skill("scare"), 300)
-            .then(() => reduce_cooldown("scare", character.ping * 0.95))
-            .catch(() => {});
-        }
-
-        if (!is_on_cooldown("attack")) {
-          const avgDistance =
-            distances.reduce((sum, d) => sum + d, 0) / distances.length;
-
-          // Slipped aggro first, then top the train up to MAX_CONCURRENT_ENT.
-          const target =
-            ents.find(
-              (ent, i) => !ent.target && isInEntAggroBand(distances[i]),
-            ) ||
-            (ents.length < MAX_CONCURRENT_ENT &&
-              getEntToPickUp(entIds, avgDistance, currentWaypoint));
-
-          if (target) {
-            await withTimeout(attack(target), 300).catch(() => {});
-            if (!entIds.includes(target.id)) entIds.push(target.id);
+          if (arrived) {
+            // At the end of dragging path, hold the aggro if no one pick up the aggro yet
+            // for up to 10 seconds
+            handoffDeadline ??= Date.now() + 10_000;
+            if (Date.now() > handoffDeadline) return resolve();
           }
+          assertEntLureAlive();
+
+          const distances = ents.map((ent) => distance(character, ent));
+          if (
+            distances.some(
+              (d) => d < G.monsters.ent.range * ENT_SCARE_BUFFER,
+            ) &&
+            !ms_to_next_skill("scare")
+          ) {
+            await withTimeout(use_skill("scare"), 300)
+              .then(() => reduce_cooldown("scare", character.ping * 0.95))
+              .catch(() => {});
+          }
+
+          if (!is_on_cooldown("attack")) {
+            const avgDistance =
+              distances.reduce((sum, d) => sum + d, 0) / distances.length;
+
+            // Slipped aggro first, then top the train up to MAX_CONCURRENT_ENT.
+            const target =
+              ents.find(
+                (ent, i) => !ent.target && isInEntAggroBand(distances[i]),
+              ) ||
+              (ents.length < MAX_CONCURRENT_ENT &&
+                getEntToPickUp(entIds, avgDistance, currentWaypoint));
+
+            if (target) {
+              await withTimeout(attack(target), 300).catch(() => {});
+              if (!entIds.includes(target.id)) entIds.push(target.id);
+            }
+          }
+        } catch (e) {
+          return reject(e);
         }
 
         setTimeout(step, ENT_TICK);
@@ -552,8 +606,30 @@ async function walkEntsToSpawn(entIds) {
       step();
     });
   } finally {
+    // `aborted` is only read between legs, so halt the one in flight too —
+    // otherwise the merchant keeps walking to the next waypoint after the drag
+    // has already ended
     aborted = true;
+    stop("move");
   }
+}
+
+/** One lure run, from gearing up to handing the train over at the farm spot. */
+async function runEntLure() {
+  await ensureDartgun();
+  const dartgunRange = getAttackWeaponReach();
+  assertEntLureAlive();
+
+  // await advanceSmartMove({ ...ENT_FIRST_ANCHOR, map: ENT_LURE_MAP });
+  await untilDoneOrDead(advanceSmartMove("ent"));
+  assertEntLureAlive();
+
+  const ent = getFurthestEntFromFirstAnchor();
+  if (!ent) throw new Error("No Ent found!");
+
+  await positionAtEntAimPoint(ent.id, dartgunRange);
+  await aggroEnt(ent.id, dartgunRange);
+  await walkEntsToSpawn([ent.id]);
 }
 
 async function dragEnt() {
@@ -582,18 +658,7 @@ async function dragEnt() {
     // as a farm target while it's still being walked in from elsewhere.
     set("luringMobType", "ent");
 
-    await ensureDartgun();
-    const dartgunRange = getAttackWeaponReach();
-
-    // await advanceSmartMove({ ...ENT_FIRST_ANCHOR, map: ENT_LURE_MAP });
-    await advanceSmartMove("ent");
-
-    const ent = getFurthestEntFromFirstAnchor();
-    if (!ent) throw new Error("No Ent found!");
-
-    await positionAtEntAimPoint(ent.id, dartgunRange);
-    await aggroEnt(ent.id, dartgunRange);
-    await walkEntsToSpawn([ent.id]);
+    await runEntLure();
 
     nextDelay = 15_000; // lured successfully, give it a while before going again
   } catch (e) {

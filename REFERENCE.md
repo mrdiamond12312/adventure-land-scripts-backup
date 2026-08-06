@@ -204,8 +204,14 @@ making a second trip. Per tick, with one attack available:
   (2026-07-29). The guard was kept and the constant widened precisely so the fix is one number:
   drop it back to ~10 if the merchant starts eating hits mid-drag.
 - The cap counts *live* tracked ents, not ids ever added, so a despawn mid-drag frees a slot.
-- Scare fires if **any** tracked ent is inside the buffer; the handoff/arrival check requires
-  **every** tracked ent handed off (or the 10s deadline) before the run resolves.
+- Scare fires if **any** tracked ent is inside the buffer; the handoff check requires **every**
+  tracked ent to have a target that isn't us before the run resolves.
+- **Handoff is checked every tick, not only on arrival** (2026-08-06). It used to sit inside the
+  `arrived` branch, so once the fighters took the aggro near the farm spot the merchant still
+  walked out the remaining waypoints for no reason. Once nobody's ent is ours the drag is over
+  wherever we happen to be standing — the only thing arrival still gates is the 10s grace period
+  for holding aggro when *nobody* has picked the train up yet. The `finally` also `stop("move")`s,
+  because `aborted` is only read between legs and would otherwise let the current leg finish.
 
 `positionAtEntAimPoint`/`aggroEnt` still operate on the seed ent only — the extra ents are picked
 up during the walk, not at the aim point.
@@ -237,12 +243,37 @@ lureMechaGnome kept going" (2026-07-17) established the failure taxonomy:
   `dragEnt` has the guard-inside-try change; `lureMechaGnome` still has its guard outside the
   `try` and needs the same treatment, with the same lock-ownership care.
 
-Unrelated hang risks noted but not yet addressed: `aggroEnt`/`positionAtEntAimPoint` have no
-deadline and no `character.rip` check (can spin forever chasing an ent that targets someone
-else, or after the merchant dies); `walkEntsToSpawn`'s inner `step()` schedules its next tick as
-its last line, so an unexpected throw mid-step leaves the wrapping promise unsettled (hang +
-leaked locks); a failed waypoint `move()` in `walkPromise` silently strands the step loop
-holding aggro with no overall lure timeout.
+### Death mid-lure used to freeze `dragEnt` permanently (fixed 2026-08-06)
+
+`walkEntsToSpawn` always checked `character.rip`, but the two phases before it did not, and a
+corpse can never satisfy either loop's exit condition: `positionAtEntAimPoint` loops until the
+character reaches its stand point (a corpse never moves) and `aggroEnt` loops until an ent targets
+us (a corpse can't attack). Since neither phase reached `dragEnt`'s `finally`, the loop never
+rescheduled *and* kept `onDuty`/`isLuringMobs`/`isDraggingMobs`/`luringMobType` held — only
+`onDuty` is ever recovered, by the 5-minute duty watchdog in `basic_merchant.5.js`.
+
+The abort condition is **death or priest offline only — deliberately no time deadline**, a real
+lure can legitimately run ten minutes. `assertEntLureAlive()` is polled by every ent-lure loop
+(including `walkEntsToSpawn`'s `step`, replacing its silent `rip` resolve, so death is logged
+rather than looking like a completed run).
+
+Polling alone isn't enough, because a guard only runs if the loop's awaits settle:
+
+- `untilDoneOrDead` wraps every await that can outlive a death: the in-loop `move`/`smart_move`
+  calls and the cross-map `advanceSmartMove("ent")`. None of them check `rip` internally, and a
+  move issued while dead can stay pending forever, which would stop the guard from ever being
+  reached again. It races the call against a `character.rip` poll, tracks completion so the poll
+  timer stops instead of recursing for the life of the session, and keeps a no-op `catch` on the
+  tracked promise so a rejection arriving after the race was abandoned isn't an unhandled one.
+- **No timeout on those moves.** A first attempt bounded them at 2s; a single leg with two ents
+  chasing legitimately takes anywhere from seconds to minutes, and the timeout just made the loop
+  reissue `move()` on top of itself. Death is the abort condition, not elapsed time.
+- `walkEntsToSpawn`'s `step()` body is wrapped in `try/catch` → `reject`, because it schedules its
+  next tick as its last line: any unexpected throw above that left the wrapping promise unsettled
+  (hang + leaked locks).
+
+Still open: a failed waypoint `move()` in `walkPromise` silently strands the step loop holding
+aggro — it now ends when the merchant dies or the priest drops, but not on a stuck walk.
 
 ## Equip batching vs `penalty_cd` (`equipBatch`, strategic_fn.11.js)
 
