@@ -4,24 +4,21 @@
 // Just set attack_mode to true and ENGAGE!
 
 if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts([
-      "adventure-land-scripts-backup/merchant_crafting.10.js",
-      "adventure-land-scripts-backup/merchant_service.19.js",
-    ])
-    .then(() => {
-      syncBankData();
-      bankLoop();
-      lureMechaGnome();
-      dragEnt();
-    });
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/merchant_crafting.10.js",
+    "adventure-land-scripts-backup/merchant_service.19.js",
+    "adventure-land-scripts-backup/merchant_frenzinesss.100.js",
+  ]);
 } else {
   load_code(10);
   load_code(19);
+  load_code(100);
 }
 
 // Global Vars
 var onDuty = false;
+// When the current unbroken hold started, 0 while nobody holds it
+var dutyHeldSince = 0;
 var isExeing = false;
 // Set when an exchange fails with inventory_full; makes the emergency banking
 // below run even if isInvFull() reads false. Cleared after the bank trip —
@@ -44,25 +41,6 @@ async function equipBroom() {
       offhand: "wbookhs",
     });
   }
-}
-
-function calculateMerchantEquipments() {
-  return {
-    helmet: isDraggingMobs ? "xhelmet" : "eear",
-    mainhand: isDraggingMobs ? "dartgun" : "broom",
-    offhand: isDraggingMobs ? "quiver" : "wbookhs",
-    amulet: isDraggingMobs ? "t2intamulet" : "warmscarf",
-    orb: "jacko",
-    chest: "tshirt4",
-    pants: "pants",
-    ring1: "solitaire",
-    ring2: isDraggingMobs ? "armorring" : "dexring",
-    shoes: "eslippers",
-    gloves: "gloves1",
-    belt: "sbelt",
-    earring1: "dexearring",
-    earring2: "dexearring",
-  };
 }
 
 function shouldGoChilling() {
@@ -152,6 +130,7 @@ async function exchangeSomething() {
     { name: "candycane", quantity: 1 },
     { name: "greenenvelope", quantity: 1 },
     { name: "brownenvelope", quantity: 1 },
+    { name: "xbox", quantity: 1 },
     { name: "goldenegg", quantity: 1 },
     { name: "5bucks", quantity: 1 },
     { name: "candypop", quantity: 10 },
@@ -229,7 +208,7 @@ async function moveHome() {
     log("Moving back Town!");
     await advanceSmartMove(homeLocation, {
       exact: true,
-      useScare: isLuringMobs,
+      useScare: !isLuringMobs,
     });
 
     if (locate_item("stand0") === -1 && !haveAComputer()) {
@@ -312,9 +291,6 @@ async function goMining() {
     isInvFull() ||
     smart.moving ||
     isAdvanceSmartMoving ||
-    character.q.compound ||
-    character.q.upgrade ||
-    character.q.exchange ||
     character.c.mining ||
     character.c.fishing ||
     is_on_cooldown("mining") ||
@@ -501,14 +477,17 @@ setInterval(async function () {
     return;
   }
 
-  if (character.moving && character.stand) {
+  // At an event the stand stays open even while moving — speed is 10 anyway,
+  // and idleAtEvent (merchant_frenzinesss.100.js) wants it up
+  if (character.moving && character.stand && !isFightingBoss) {
     close_stand();
     await equipBatch(calculateMerchantEquipments());
   } else if (
     !character.moving &&
     !character.stand &&
     !smart.moving &&
-    !isAdvanceSmartMoving
+    !isAdvanceSmartMoving &&
+    !isFightingBoss
   )
     open_stand();
 
@@ -525,7 +504,7 @@ setInterval(async function () {
     character.hp < character.max_hp - 1000 &&
     (!get_entity(PRIEST) || distance(character, get_entity(PRIEST)) > 150)
   ) {
-    send_cm(PRIEST, "party_heal");
+    requestPartyHeal();
   }
 
   await withTimeout(
@@ -570,14 +549,18 @@ setInterval(async function () {
     300000,
   );
 
-  if (!is_on_cooldown("mining")) goMining();
-  else if (!is_on_cooldown("fishing")) goFishing();
-  // else if (
-  //   locate_item("gemfragment") !== -1 &&
-  //   character.items[locate_item("gemfragment")]?.q >= 50
-  // )
-  //   exchangeMines();
-  else if (!character.c.mining && !character.c.fishing && !onDuty)
+  // Events outrank chilling: a rod cast we skip comes back on cooldown long
+  // before the next boss does (merchant_frenzinesss.100.js owns the fight)
+  const hasEventToJoin = !!getEventToJoin();
+
+  if (!hasEventToJoin && !is_on_cooldown("mining")) goMining();
+  else if (!hasEventToJoin && !is_on_cooldown("fishing")) goFishing();
+  else if (
+    !hasEventToJoin &&
+    !character.c.mining &&
+    !character.c.fishing &&
+    !onDuty
+  )
     await moveHome();
 
   if ((isInvFull() || invJammed) && !isAdvanceSmartMoving && !smart.moving) {
@@ -591,11 +574,21 @@ setInterval(async function () {
   }
 }, 750);
 
+/** Tells the watchdog below the duty is still being used */
+function renewDuty() {
+  dutyHeldSince = Date.now();
+}
+
+const DUTY_STALE_MS = 300000;
+const DUTY_WATCHDOG_INTERVAL = 30000;
+
 setInterval(function () {
-  // Recovery for a leaked onDuty (a duty that threw without resetting) — but
-  // never yank it away from an active lure/drag, whose movement would get
-  // hijacked by bankLoop and friends the moment the flag drops.
-  if (!isLuringMobs && !isDraggingMobs) onDuty = false;
+  if (!onDuty) dutyHeldSince = 0;
+  else if (!dutyHeldSince) renewDuty();
+  else if (Date.now() - dutyHeldSince > DUTY_STALE_MS) onDuty = false;
+}, DUTY_WATCHDOG_INTERVAL);
+
+setInterval(function () {
   use_skill("mluck", character);
 }, 300000);
 
@@ -611,37 +604,49 @@ function handle_death() {
   respawn().catch((e) => setTimeout(() => respawn(), e.ms + 300));
 }
 
-// Handler to buy from Ponty
+/**
+ * Handler to buy from Ponty.
+ * @type {{name: string, maxLevel?: number, minLevel?: number, property?: string}[]}
+ * maxLevel/minLevel/property are optional filters — when omitted that check is skipped.
+ * `property` matches the secondhands item's `p` field (e.g. "shiny", "glitched").
+ */
 const ITEM_NEEDED = [
-  "strring",
-  // "intring",
-  // "dexring",
-  "dexearring",
-  "bataxe",
-  "pinkie",
-  "ololipop",
-  "jacko",
-  "gcape",
-  "carrot",
-  "brownenvelope",
-  "harbringer",
-  "throwingstars",
-  "angelwings",
-  "smoke",
-  "gphelmet",
+  { name: "strring" },
+  // { name: "intring" },
+  // { name: "dexring" },
+  { name: "dexearring" },
+  { name: "bataxe" },
+  { name: "pinkie" },
+  { name: "ololipop" },
+  { name: "jacko" },
+  { name: "gcape" },
+  { name: "carrot" },
+  { name: "brownenvelope" },
+  { name: "harbringer" },
+  { name: "throwingstars", maxLevel: 0 },
+  { name: "angelwings" },
+  { name: "smoke" },
+  { name: "gphelmet" },
 ];
+
+/** @returns {boolean} whether the secondhands entry satisfies the wanted item's filters */
+function matchesWantedItem(item, wanted) {
+  const level = item.level || 0;
+  if (wanted.maxLevel !== undefined && level > wanted.maxLevel) return false;
+  if (wanted.minLevel !== undefined && level < wanted.minLevel) return false;
+  if (wanted.property !== undefined && item.p !== wanted.property) return false;
+  return true;
+}
 
 function secondhandsHandler(events) {
   if (isInvFull(6)) return false;
   for (const item of events) {
-    if (
-      item &&
-      ITEM_NEEDED.filter((item) => !SALE_ABLE.includes(item)).includes(
-        item.name,
-      )
-    ) {
-      parent.socket.emit("sbuy", { rid: item.rid });
-    }
+    if (!item) continue;
+    if (SALE_ABLE.includes(item.name)) continue;
+    const wanted = ITEM_NEEDED.find((w) => w.name === item.name);
+    if (!wanted) continue;
+    if (!matchesWantedItem(item, wanted)) continue;
+    parent.socket.emit("sbuy", { rid: item.rid });
   }
 }
 
@@ -651,6 +656,12 @@ function on_destroy() {
   clear_drawings(); // <-- Default in on_destroy
   clear_buttons(); // <-- Default in on_destroy
 }
+
+syncBankData();
+bankLoop();
+lureMechaGnome();
+dragEnt();
+merchantAttackLoop();
 
 // Register secondhands event handler
 parent.socket.on("secondhands", secondhandsHandler);

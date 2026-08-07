@@ -14,6 +14,9 @@ const BANK_FLOORS = {
   bank_b: { map: "bank_b", x: -210, y: -130 },
 };
 
+// Set once bankLoop's first run has walked every floor.
+var hasVisitedBank = false;
+
 /**
  * Slots to skip globally (gold, personal storage).
  * items10 is reserved for personal items and is never touched.
@@ -23,12 +26,21 @@ const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
 
 const KEEP_THRESHOLD = {
   firestars: 12,
-  harbringer: 12,
+  harbringer: 16,
   oozingterror: 12,
   pouchbow: 16,
   daggerofthedead: 16,
   bowofthedead: 16,
+  froststaff: 8, 
+  frankypants: 8,
   gphelmet: 12,
+
+  // lifted later
+  fury: 32,
+  starkillers: 32,
+  northstar: 10,
+  orboftemporal: 9,
+  t2quiver: 16,
 
   helmet: 3,
   pants: 3,
@@ -532,8 +544,8 @@ async function compoundInv() {
       (itemInfo.grades[0] > 0
         ? itemInfo.grades[0]
         : itemGrade >= 2
-        ? 0
-        : itemInfo.grades[0] + 2);
+          ? 0
+          : itemInfo.grades[0] + 2);
     const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
 
     // Skip if we don't have enough of this item yet
@@ -706,7 +718,9 @@ async function bankStoreRoutine() {
 async function bankLoop() {
   let delay = 120_000;
 
-  if (onDuty) {
+  // isFightingBoss is checked separately from onDuty: an event fight holds the
+  // duty, but this makes it explicit that banking waits for the fight to end
+  if (onDuty || (typeof isFightingBoss !== "undefined" && isFightingBoss)) {
     return setTimeout(bankLoop, 5_000);
   }
 
@@ -715,8 +729,15 @@ async function bankLoop() {
 
     // First run: build item level map then fetch items
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-      // Visit all floors to populate BANK_CACHE fully
-      await smart_move(BANK_FLOORS.bank);
+      // Walk every floor: character.bank only carries the packs of the floor
+      // we're standing on, so one visit per floor is what fills BANK_CACHE.
+      // goToBankFloor is forced — this runs at startup, before any other loop
+      // has taken the duty, and it updateBank()s on arrival.
+      for (const floor of Object.keys(BANK_FLOORS)) {
+        await goToBankFloor(floor, true);
+      }
+
+      hasVisitedBank = true;
 
       retrieveMaxItemsLevel();
       await retrievedBankItemToUpgrade();
@@ -764,8 +785,3 @@ const syncBankData = async () => {
     setTimeout(syncBankData, 60_000);
   }
 };
-
-if (!parent.caracAL) {
-  bankLoop();
-  syncBankData();
-}

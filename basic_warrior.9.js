@@ -8,15 +8,10 @@ const reduceCd = (skillName, isPingBased = true) => {
 
 // Load basic functions (unchanged)
 if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts([
-      "adventure-land-scripts-backup/basic_function.7.js",
-      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-    ])
-    .then(() => {
-      cleaveLoop();
-      mainLoop();
-    });
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/basic_function.7.js",
+    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+  ]);
 } else {
   load_code(7);
   load_code(8);
@@ -27,10 +22,114 @@ const originRangeRate = 0.9;
 rangeRate = originRangeRate;
 
 const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
+const CANDY_SWAP_FALLBACK_DELAY_MS = 150; // used when no projectile speed can be resolved
+const CANDY_MIN_HOLD_MS = 40; // dwell after the canes land, even if the ETA is spent
+
+/**
+ * ETA (ms) of the character's attack projectile against the target
+ * @param {Object} target - the entity the attack was fired at
+ * @returns {number} delay in ms (>= 0)
+ */
+function projectileEtaMs(target) {
+  const projectileKey =
+    item_info(character.slots.mainhand)?.projectile ||
+    G.classes[character.ctype].projectile;
+  const projectileSpeed = G.projectiles[projectileKey]?.speed;
+
+  if (!projectileSpeed || !target) return CANDY_SWAP_FALLBACK_DELAY_MS;
+
+  return Math.max(
+    20,
+    (simple_distance(character, target) / projectileSpeed) * 1000 + 7,
+  );
+}
+
+/**
+ * Momentarily swaps to candy cane(s) for the landing hit, then swaps back to
+ * the warrior's real weapon after the projectile connects.
+ * @param {Object} targetToAttack - the entity being attacked
+ * @returns {Promise|undefined} the equip promise, or undefined if not swapping
+ */
+function maybeCandySwap(targetToAttack) {
+  const characterAtkCycleMs = 1000 / character.frequency;
+  const shouldUseCandyCanes =
+    character.ping < 1000 &&
+    !isCleaving &&
+    !isEquipingItems &&
+    characterAtkCycleMs > 250 + character.ping &&
+    !character.s.sugarrush &&
+    (CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.offhand?.name) ||
+      CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.mainhand?.name)) &&
+    character.slots.offhand?.name !== "mshield" &&
+    character.cc < 100;
+
+  if (!shouldUseCandyCanes) return;
+
+  const candycane1 = findMaxLevelItem("candycanesword");
+  const candycane2 = findMaxLevelItem("candycanesword", 1);
+  const isFastAttacker = characterAtkCycleMs < 600;
+
+  // To avoid penalty_cd, fast attackers only swap the mainhand; slower
+  // attackers dual-wield candy canes when a second one is available.
+  const buildEquip = (mainhand, offhand) =>
+    isFastAttacker
+      ? [{ num: mainhand, slot: "mainhand" }]
+      : [
+          { num: mainhand, slot: "mainhand" },
+          { num: offhand, slot: "offhand" },
+        ];
+
+  const canCandySwap =
+    candycane1 !== -1 && (isFastAttacker || candycane2 !== -1);
+  if (!canCandySwap) return;
+
+  // One-way trip for an equip to take effect server-side
+  const equipLatencyMs = character.ping / 2;
+  const etaMs = projectileEtaMs(targetToAttack);
+
+  if (etaMs <= equipLatencyMs) return;
+
+  isEquipingItems = true;
+
+  const swapBackAt = Date.now() + etaMs;
+
+  const swapBackDeadline =
+    Date.now() +
+    characterAtkCycleMs -
+    equipLatencyMs -
+    CANDY_MIN_HOLD_MS -
+    EQUIP_PENALTY_MS * 2;
+
+  const candyEquip = equip_batch(buildEquip(candycane1, candycane2));
+
+  // Hold the canes until the hit lands, then release and let currentStrategy
+  // put the real weapons back on its own tick
+  const holdUntilSwapBack = () =>
+    new Promise((resolve) =>
+      setTimeout(
+        resolve,
+        Math.min(
+          Math.max(CANDY_MIN_HOLD_MS, swapBackAt - Date.now()),
+          Math.max(0, swapBackDeadline - Date.now()),
+        ),
+      ),
+    );
+
+  return Promise.allSettled([
+    candyEquip,
+    candyEquip.then(holdUntilSwapBack),
+  ]).finally(() => {
+    isEquipingItems = false;
+  });
+}
+
+/** @returns {boolean} whether the attack cooldown is up */
+const isAttackReady = () =>
+  ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
 // Main fight function
 async function fight(target) {
-  const blastRadius = character.explosion / 3.6 || BLAST_RADIUS;
+  const blastRadius = getSplashRadius();
   const attackRange = character.range + character.xrange;
   const attackFrequencyBeforeComponsate = character.frequency;
   const inRange = (entity, mult = 1) =>
@@ -105,183 +204,20 @@ async function fight(target) {
 
   const promisesToAwait = [];
 
-  // --- Attack & Warcry Logic ---
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-
-  if (!isAttackReady && inRange(target) && shouldAttack()) {
-    promisesToAwait.push(currentStrategy(target));
-  }
-
   const targetToAttack = inRange(target) ? target : altTarget;
-  if (isAttackReady && targetToAttack && shouldAttack()) {
+  if (isAttackReady() && targetToAttack && shouldAttack()) {
     set_message("Attacking");
-    // const xrangeUsed = distance(target, character) - character.range;
-    // if (xrangeUsed > 0) character.xrange -= xrangeUsed;
-    // Main attack execution
     promisesToAwait.push(
       attack(targetToAttack)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeComponsate);
-          reduceCd("attack");
+          reduceCd("attack", false);
         })
         .catch((e) => attackErrorHandler(e, targetToAttack)),
     );
 
-    // Offhand swap logic: Use Candy Canes for attacking
-    const shouldUseCandyCanes =
-      character.ping < 1000 &&
-      !isCleaving &&
-      !isEquipingItems &&
-      !character.s.sugarrush &&
-      (CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.offhand?.name) ||
-        CANDY_SWAP_WEAPON_ALLOW_LIST.includes(
-          character.slots.mainhand?.name,
-        )) &&
-      character.slots.offhand?.name !== "mshield" &&
-      character.cc < 100;
-
-    if (shouldUseCandyCanes) {
-      const candycane1 = findMaxLevelItem("candycanesword");
-      const candycane2 = findMaxLevelItem("candycanesword", 1);
-      const isFastAttacker = 1 / character.frequency < 0.6;
-
-      if (candycane1 !== -1) {
-        isEquipingItems = true;
-
-        // To avoid penalty_cd, fast attackers only equip one candy cane, while slower attackers can attempt dual wield if they have two candy canes.
-        const immediateEquip = isFastAttacker
-          ? [{ num: candycane1, slot: "mainhand" }]
-          : [
-              { num: candycane1, slot: "mainhand" },
-              { num: candycane2, slot: "offhand" },
-            ];
-
-        const delayedEquip = isFastAttacker
-          ? [{ num: candycane1, slot: "mainhand" }]
-          : [
-              { num: candycane1, slot: "mainhand" },
-              { num: candycane2, slot: "offhand" },
-            ];
-
-        // Only attempt dual wield if second candy cane exists
-        if (!isFastAttacker && candycane2 === -1) {
-          isEquipingItems = false;
-        } else {
-          const equipPromise = Promise.allSettled([
-            equip_batch(immediateEquip),
-            new Promise((resolve) => {
-              setTimeout(() => {
-                resolve(equip_batch(delayedEquip));
-              }, 150);
-            }),
-          ]).finally(() => {
-            isEquipingItems = false;
-          });
-
-          promisesToAwait.push(equipPromise);
-        }
-      }
-    }
-
-    // Warcry check (placed here to potentially benefit from a new attack)
-    const canWarcry =
-      character.mp > G.skills["warcry"].mp &&
-      !is_on_cooldown("warcry") &&
-      !character.s["warcry"];
-
-    if (canWarcry) {
-      promisesToAwait.push(
-        use_skill("warcry").then(() => reduceCd("warcry", false)), // Use full reduction for Warcry
-      );
-    }
-  }
-
-  // --- Defensive Abilities ---
-
-  // Hardshell
-  const shouldUseHardShell =
-    character.mp > G.skills["hardshell"].mp &&
-    !is_on_cooldown("hardshell") &&
-    avgDmgTaken(character) > 500 &&
-    character.hp < character.max_hp * 0.5;
-
-  if (shouldUseHardShell) {
-    promisesToAwait.push(use_skill("hardshell"));
-  }
-
-  // Warrior Stomp (Basher logic)
-  const hasBasherInInventory = locate_item("basher") !== -1;
-  const partyHasInjured = (
-    parent.party_list.length ? parent.party_list : [character]
-  )
-    .map((id) => get_player(id))
-    .filter((entity) => entity)
-    .some((player) => player.hp < player.max_hp * 0.4);
-
-  if (hasBasherInInventory && partyHasInjured) {
-    promisesToAwait.push(warriorStomp());
-  }
-
-  // --- Taunt Logic ---
-  const isTanker = isAssignedAsTanker();
-  const canTaunt =
-    isTanker && character.mp > G.skills["taunt"].mp && !is_on_cooldown("taunt");
-  const partyHealer = get_player(HEALER) || get_player(RANGER);
-  const isHealerAlive = partyHealer && !partyHealer.rip;
-
-  if (canTaunt && isHealerAlive) {
-    // --- If Mobs targeting allies
-    const mobsTargetingAlly = Object.values(parent.entities)
-      .filter(
-        (entity) =>
-          entity.type === "monster" &&
-          [...partyMems, partyMerchant].some(
-            (ally) => ally !== character.name && entity.target === ally,
-          ) &&
-          calculateDamage(entity, character) < 3000 && // Warrior can take the damage
-          !entity.cooperative &&
-          is_in_range(entity, "taunt"),
-      )
-      .sort((lhs, rhs) => rhs.attack - lhs.attack)
-      .shift();
-
-    if (mobsTargetingAlly) {
-      promisesToAwait.push(
-        use_skill("taunt", mobsTargetingAlly).then(() =>
-          reduceCd("taunt", false),
-        ), // Use full reduction for Taunt
-      );
-    }
-
-    // --- Taunt the current target if it's not already targeting the warrior and is weak enough
-    const shouldTauntTarget =
-      !target.target ||
-      (target.target !== character.name &&
-        partyMems.includes(target.target) &&
-        target.attack < 1500 &&
-        !target.cooperative &&
-        is_in_range(target, "taunt"));
-
-    if (mobsTargetingAlly === undefined && shouldTauntTarget) {
-      promisesToAwait.push(
-        use_skill("taunt", target).then(() => reduceCd("taunt", false)), // Use full reduction for Taunt
-      );
-    }
-  }
-
-  // --- Emergency Scare Logic ---
-  const isDangerouslyLow =
-    !partyHealer || partyHealer.rip || character.hp < character.max_hp * 0.3;
-  const isOverwhelmed =
-    Object.values(parent.entities).filter(
-      (mob) => mob.target === character.name,
-    ).length > 2;
-  const isReadyToScare =
-    !is_on_cooldown("scare") && character.mp > 100 && character.cc < 100;
-
-  if (character.fear || (isDangerouslyLow && isOverwhelmed && isReadyToScare)) {
-    promisesToAwait.push(scareAwayMobs());
+    const candySwap = maybeCandySwap(targetToAttack);
+    if (candySwap) promisesToAwait.push(candySwap);
   }
 
   // --- Kiting Rate Adjustment ---
@@ -304,14 +240,8 @@ async function fight(target) {
 
 async function cleaveLoop() {
   try {
-    const shouldCleave =
-      smart.moving ||
-      ms_to_next_skill("attack") > 0 ||
-      distance(character, get_targeted_monster()) >
-        character.range + character.xrange * 1.1;
-
     if (
-      shouldCleave &&
+      canAffordSwap(2) &&
       character.mp > 1720 &&
       !Object.keys(character.c).length
     ) {
@@ -329,7 +259,124 @@ async function cleaveLoop() {
   }
 }
 
-if (!parent.caracAL) cleaveLoop();
+// --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
+
+/**
+ * Defensive taunt target only: a mob to peel off an ally, or a weak current
+ * target attacking a party member (needs a live healer). Strategic pull-taunt
+ * stays in pull_strategy.13.js (driven by the strategy loop).
+ * @returns {Object|null} the mob to taunt, or null
+ */
+function getTauntTarget() {
+  if (!isAssignedAsTanker() || character.mp <= G.skills["taunt"].mp) return null;
+
+  const partyHealer = get_player(HEALER) || get_player(RANGER);
+  if (!partyHealer || partyHealer.rip) return null;
+
+  const mobsTargetingAlly = Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity.type === "monster" &&
+        [...partyMems, partyMerchant].some(
+          (ally) => ally !== character.name && entity.target === ally,
+        ) &&
+        calculateDamage(entity, character) < 3000 &&
+        !entity.cooperative &&
+        is_in_range(entity, "taunt"),
+    )
+    .sort((lhs, rhs) => rhs.attack - lhs.attack)[0];
+  if (mobsTargetingAlly) return mobsTargetingAlly;
+
+  const target = get_targeted_monster();
+  const shouldTauntTarget =
+    target &&
+    (!target.target ||
+      (target.target !== character.name &&
+        partyMems.includes(target.target) &&
+        target.attack < 1500 &&
+        !target.cooperative &&
+        is_in_range(target, "taunt")));
+  return shouldTauntTarget ? target : null;
+}
+
+/** @returns {boolean} whether the emergency scare should fire this tick */
+function shouldWarriorScare() {
+  const partyHealer = get_player(HEALER) || get_player(RANGER);
+  const isDangerouslyLow =
+    !partyHealer || partyHealer.rip || character.hp < character.max_hp * 0.3;
+  const isOverwhelmed =
+    Object.values(parent.entities).filter(
+      (mob) => mob.target === character.name,
+    ).length > 2;
+  const isReadyToScare = character.mp > 100 && character.cc < 100;
+  return character.fear || (isDangerouslyLow && isOverwhelmed && isReadyToScare);
+}
+
+function startSkillLoops() {
+  // runSkillLoop always calls canUse right before cast, so canUse stashes what
+  // it approved and cast reuses it instead of recomputing the scans.
+  let pendingTauntTarget = null;
+
+  // Strategy: gear + pull-strategy skills (agitate, pull-taunt) run on a fixed
+  // cadence via currentStrategy, decoupled from the attack loop.
+  runSkillLoop({
+    skill: "strategy",
+    floorMs: 50,
+    canUse: () => true,
+    cast: () => currentStrategy(get_target()),
+  });
+
+  runSkillLoop({
+    skill: "warcry",
+    canUse: () =>
+      character.mp > G.skills["warcry"].mp &&
+      !character.s["warcry"] &&
+      !!get_targeted_monster(),
+    cast: () => use_skill("warcry").then(() => reduceCd("warcry", false)),
+  });
+
+  runSkillLoop({
+    skill: "hardshell",
+    canUse: () =>
+      character.mp > G.skills["hardshell"].mp &&
+      avgDmgTaken(character) > 500 &&
+      character.hp < character.max_hp * 0.5,
+    cast: () => use_skill("hardshell"),
+  });
+
+  runSkillLoop({
+    skill: "stomp",
+    canUse: () => {
+      const hasBasher = locate_item("basher") !== -1;
+      const partyHasInjured = (
+        parent.party_list.length ? parent.party_list : [character]
+      )
+        .map((id) => get_player(id))
+        .filter((entity) => entity)
+        .some((player) => player.hp < player.max_hp * 0.4);
+      return hasBasher && partyHasInjured;
+    },
+    cast: () => warriorStomp(),
+  });
+
+  runSkillLoop({
+    skill: "taunt",
+    canUse: () => {
+      pendingTauntTarget = getTauntTarget();
+      return pendingTauntTarget != null;
+    },
+    cast: () =>
+      use_skill("taunt", pendingTauntTarget).then(() =>
+        reduceCd("taunt", false),
+      ),
+  });
+
+  runSkillLoop({
+    skill: "scare",
+    canUse: () => shouldWarriorScare(),
+    cast: () => scareAwayMobs(),
+  });
+}
 
 // Main control loop
 async function mainLoop() {
@@ -416,4 +463,6 @@ async function mainLoop() {
   }
 }
 
-if (!parent.caracAL) mainLoop();
+cleaveLoop();
+mainLoop();
+startSkillLoops();

@@ -1,15 +1,10 @@
 // Load basic functions from other code snippet
 
 if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts([
-      "adventure-land-scripts-backup/basic_function.7.js",
-      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-    ])
-    .then(() => {
-      mainLoop();
-      fuaLoop();
-    });
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/basic_function.7.js",
+    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+  ]);
 } else {
   load_code(7);
   load_code(8);
@@ -19,63 +14,82 @@ if (parent.caracAL) {
 var originRangeRate = 0.95;
 rangeRate = originRangeRate;
 
+const reduceCd = (skillName, isPingBased = true) =>
+  reduce_cooldown(
+    skillName,
+    isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
+  );
+
+// How far past attack range target selection is allowed to search
+const TARGET_SEARCH_RANGE_MULTIPLIER = 5;
+
+/**
+ * @param {Object} entity - the entity to measure against
+ * @param {number} [mult] - multiplier on attack range
+ * @returns {boolean} whether the entity is within that range
+ */
+const inRange = (entity, mult = 1) =>
+  !!entity &&
+  distance(entity, character) < (character.range + character.xrange) * mult;
+
+/** @returns {boolean} whether the attack cooldown is up */
+const isAttackReady = () =>
+  ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+
 async function fight(target) {
   // Snapshot for attackSpeedCompensate: weapon swaps mid-tick change frequency,
   // and the attack cooldown must be timed with the frequency at fire time.
   const attackFrequencyBeforeCompensate = character.frequency;
-  const inRange = (entity) =>
-    distance(entity, character) < character.range + character.xrange;
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+
+  const allAggroedByParty = Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity.type === "monster" &&
+        ([...partyMems, ...parent.party_list].includes(entity.target) ||
+          (entity.cooperative && entity.target)) &&
+        !MELEE_IGNORE_LIST.includes(entity.mtype) &&
+        inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
+    )
+    .sort((lhs, rhs) => {
+      const lhsHpPercentage = lhs.hp / lhs.max_hp;
+      const rhsHpPercentage = rhs.hp / rhs.max_hp;
+
+      if (lhs.cooperative && rhs.cooperative) {
+        if (lhs["1hp"]) return -1;
+        else return 1;
+      }
+      if (lhs.cooperative) return -1;
+      if (rhs.cooperative) return 1;
+
+      return rhsHpPercentage - lhsHpPercentage;
+    });
 
   if (
     typeof usePullStrategies === "function" &&
     currentStrategy === usePullStrategies
   ) {
-    const allAggroedByParty = Object.values(parent.entities)
-      .filter(
-        (entity) =>
-          entity.type === "monster" &&
-          ([...partyMems, ...parent.party_list].includes(entity.target) ||
-            (entity.cooperative && entity.target)) &&
-          !MELEE_IGNORE_LIST.includes(entity.mtype) &&
-          inRange(entity),
-      )
-      .sort((lhs, rhs) => {
-        const lhsHpPercentage = lhs.hp / lhs.max_hp;
-        const rhsHpPercentage = rhs.hp / rhs.max_hp;
-
-        if (lhs.cooperative && rhs.cooperative) {
-          if (lhs["1hp"]) return -1;
-          else return 1;
-        }
-        if (lhs.cooperative) return -1;
-        if (rhs.cooperative) return 1;
-
-        return rhsHpPercentage - lhsHpPercentage;
-      });
-
-    target = allAggroedByParty.shift() ?? target;
+    target = allAggroedByParty[0] ?? target;
   }
 
   if (!target) return;
 
+  // The picked target can sit outside our reach; rather than skip the swing,
+  // hit the best party-aggroed mob that is actually in range.
+  const attackTarget = inRange(target)
+    ? target
+    : allAggroedByParty.filter((mob) => mob !== target && inRange(mob))[0];
+
   const promisesToAwait = [];
 
-  if (!isAttackReady && inRange(target) && shouldAttack())
-    promisesToAwait.push(currentStrategy(target));
-
-  if (isAttackReady && inRange(target) && shouldAttack()) {
+  if (isAttackReady() && attackTarget && shouldAttack()) {
     if (!ms_to_next_skill("invis")) {
-      use_skill("invis").then(() =>
-        reduce_cooldown("invis", Math.min(...parent.pings)),
-      );
+      promisesToAwait.push(use_skill("invis").then(() => reduceCd("invis")));
     }
     promisesToAwait.push(
-      withTimeout(attack(target), 2500)
+      attack(attackTarget)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduce_cooldown("attack", Math.min(...parent.pings));
+          reduceCd("attack", false);
         })
         .catch((e) => {
           attackErrorHandler(e);
@@ -86,20 +100,21 @@ async function fight(target) {
   }
 
   try {
-    await Promise.allSettled(promisesToAwait);
+    await withTimeout(Promise.allSettled(promisesToAwait), 2500);
   } catch (e) {}
 }
 
-async function fuaLoop() {
-  try {
-    const currentTarget = get_target();
-    const promisesToAwait = [];
+// --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
 
-    const prioritized = prioritizedNames();
-    const playersNearbyWithoutRogueSpeed = [
-      ...Object.values(parent.entities),
-      character,
-    ]
+/**
+ * Nearby character (self included) whose rogue speed is missing or expiring,
+ * prioritized party members first.
+ * @returns {Object|null} the character to buff, or null
+ */
+function getRspeedBuffee() {
+  const prioritized = prioritizedNames();
+  return (
+    [...Object.values(parent.entities), character]
       .filter(
         (entity) =>
           entity.type === "character" &&
@@ -110,49 +125,80 @@ async function fuaLoop() {
         const lhsPriority = prioritized.includes(lhs.id || lhs.name) ? 1 : 0;
         const rhsPriority = prioritized.includes(rhs.id || rhs.name) ? 1 : 0;
         return rhsPriority - lhsPriority; // higher priority first
-      });
-
-    if (
-      playersNearbyWithoutRogueSpeed.length &&
-      ms_to_next_skill("rspeed") === 0 &&
-      character.mp > G.skills["rspeed"].mp &&
-      shouldAttack()
-    ) {
-      promisesToAwait.push(
-        use_skill("rspeed", playersNearbyWithoutRogueSpeed.shift()),
-      );
-    }
-
-    if (
-      distance(character, currentTarget) < character.range + character.xrange &&
-      ms_to_next_skill("quickstab") === 0 &&
-      character.mp > parent.G.skills["rspeed"].mp * 2
-    ) {
-      const currentMainhand = item_info(character.slots.mainhand);
-      const skillToBeUsed =
-        currentMainhand?.wtype === "dagger"
-          ? "quickstab"
-          : currentMainhand?.wtype === "fist"
-          ? "quickpunch"
-          : undefined;
-      if (skillToBeUsed) {
-        promisesToAwait.push(
-          use_skill(skillToBeUsed, currentTarget).then(() =>
-            reduce_cooldown(skillToBeUsed, Math.min(...parent.pings)),
-          ),
-        );
-      }
-    }
-
-    await withTimeout(Promise.allSettled(promisesToAwait), 500);
-  } catch (e) {
-    console.log("Error while FuA: ", e);
-  }
-
-  setTimeout(fuaLoop, Math.max(ms_to_next_skill("quickpunch"), 100));
+      })[0] ?? null
+  );
 }
 
-if (!parent.caracAL) fuaLoop();
+/**
+ * Follow-up attack the current mainhand supports; both share the "quickstab"
+ * cooldown key.
+ * @returns {string|undefined} "quickstab", "quickpunch", or undefined
+ */
+function getFollowUpAttackSkill() {
+  const currentMainhand = item_info(character.slots.mainhand);
+  if (currentMainhand?.wtype === "dagger") return "quickstab";
+  if (currentMainhand?.wtype === "fist") return "quickpunch";
+  return undefined;
+}
+
+function startSkillLoops() {
+  // runSkillLoop always calls canUse right before cast, so canUse stashes what
+  // it approved and cast reuses it instead of recomputing the scans.
+  let pendingRspeedBuffee = null;
+  let pendingFollowUpSkill = undefined;
+
+  // Gear only while the attack is on cooldown: equipping re-bases the attack
+  // cooldown, so swapping mid-window would delay the shot.
+  runSkillLoop({
+    skill: "strategy",
+    floorMs: 100,
+    canUse: () => {
+      const target = get_target();
+      return (
+        !isAttackReady() && !!target && inRange(target) && shouldAttack()
+      );
+    },
+    cast: () => currentStrategy(get_target()),
+  });
+
+  runSkillLoop({
+    skill: "rspeed",
+    whileMoving: true,
+    canUse: () => {
+      if (
+        ms_to_next_skill("rspeed") !== 0 ||
+        character.mp <= G.skills["rspeed"].mp ||
+        !shouldAttack()
+      )
+        return false;
+      pendingRspeedBuffee = getRspeedBuffee();
+      return pendingRspeedBuffee != null;
+    },
+    cast: () => use_skill("rspeed", pendingRspeedBuffee),
+  });
+
+  // Keyed on quickstab so the loop paces off that cooldown for either weapon.
+  runSkillLoop({
+    skill: "quickstab",
+    canUse: () => {
+      const target = get_target();
+      if (!target) return false;
+      if (
+        !inRange(target) ||
+        !shouldAttack(target) ||
+        ms_to_next_skill("quickstab") !== 0 ||
+        character.mp <= G.skills["rspeed"].mp * 2
+      )
+        return false;
+      pendingFollowUpSkill = getFollowUpAttackSkill();
+      return pendingFollowUpSkill != null;
+    },
+    cast: () =>
+      use_skill(pendingFollowUpSkill, get_target()).then(() =>
+        reduceCd(pendingFollowUpSkill),
+      ),
+  });
+}
 
 async function mainLoop() {
   try {
@@ -213,4 +259,5 @@ async function mainLoop() {
   setTimeout(mainLoop, getLoopInterval());
 }
 
-if (!parent.caracAL) mainLoop();
+mainLoop();
+startSkillLoops();

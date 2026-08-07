@@ -36,14 +36,21 @@ if (parent.caracAL) {
   parent.caracAL.load_scripts([
     "adventure-land-scripts-backup/basic_function.7.js",
     "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-  ]).then(() => {
-    mainLoop(); // kick off after dependencies are actually loaded
-  });
+  ]);
 } else {
   load_code(7); // native in-game CODE call, by slot number
   load_code(8);
 }
+
+// ...definitions...
+
+mainLoop(); // started at the bottom of the file, in both environments
 ```
+
+Both loaders are **synchronous**: everything pulled in, transitively, has finished evaluating by the
+time the call returns, so no readiness handshake is needed. Entry scripts start their loops
+unconditionally at the *bottom* of the file — at the top, module-scope `const`s declared further
+down are still in the TDZ.
 
 `load_code`/`load_scripts` execute the target file's top-level code into the *same* global scope — so
 functions and `var`/`let` globals defined in a loaded file become directly available, unqualified, in the
@@ -107,7 +114,7 @@ Standalone / auxiliary (not wired into the load graph above, used directly or ad
   delete it) when switching farming spots.
 - **Cross-character coordination happens over code-messages (`cm`)**, via `send_cm(targetName, { msg, ...})`
   / the `on_cm`-style listener in `other_class_msg_listener.8.js`. Message `msg` types already in use include
-  `buff_mluck`, `inv_full`, `buy_mana`, `buy_hp`, `elixir`, `xptome`, `dc-harakiri` — reuse these rather than
+  `buff_mluck`, `inv_full`, `buy_potions`, `elixir`, `xptome`, `dc-harakiri` — reuse these rather than
   inventing near-duplicates when a fighter needs something from the merchant.
 - **`parent.caracAL` is the environment switch.** Nearly every cross-file load, and some behavioral branches
   (e.g. server hopping only runs `if (!character.controller)` under native CODE), check
@@ -117,6 +124,9 @@ Standalone / auxiliary (not wired into the load graph above, used directly or ad
 - **Filenames are `<descriptive_name>.<slot_number>.js`.** When adding a new shared/loadable script, pick an
   unused slot number consistent with `CODE_SLOTS`/existing `load_code` call sites, and update every loader
   that should pull it in (both the `load_scripts` array and the `load_code` fallback).
+- **Comments are JSDoc blocks and short one-liners only.** Don't narrate an edit in a comment — no
+  "unlike X", "we do this because the old version…", no multi-line prose explaining a change. If the
+  *why* is non-obvious, it belongs in `REFERENCE.md`, not inline.
 - Strategy swapping uses feature-flag-style globals rather than branching call sites: e.g.
   `currentStrategy` is reassigned by `changeToPullStrategies()` / `changeToNormalStrategies()`
   (`basic_function.7.js`), and callers just invoke `currentStrategy()`.

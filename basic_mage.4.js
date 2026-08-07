@@ -1,14 +1,10 @@
 // Load basic functions from other code snippet
 
 if (parent.caracAL) {
-  parent.caracAL
-    .load_scripts([
-      "adventure-land-scripts-backup/basic_function.7.js",
-      "adventure-land-scripts-backup/other_class_msg_listener.8.js",
-    ])
-    .then(() => {
-      mainLoop();
-    });
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/basic_function.7.js",
+    "adventure-land-scripts-backup/other_class_msg_listener.8.js",
+  ]);
 } else {
   load_code(7);
   load_code(8);
@@ -18,8 +14,23 @@ if (parent.caracAL) {
 var originRangeRate = 0.4;
 rangeRate = originRangeRate;
 
-const reduceCd = (skillName) =>
-  reduce_cooldown(skillName, Math.min(...parent.pings));
+const reduceCd = (skillName, isPingBased = true) =>
+  reduce_cooldown(
+    skillName,
+    isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
+  );
+
+// How far past attack range target selection is allowed to search
+const TARGET_SEARCH_RANGE_MULTIPLIER = 1.5;
+
+/**
+ * @param {Object} entity - the entity to measure against
+ * @param {number} [mult] - multiplier on attack range
+ * @returns {boolean} whether the entity is within that range
+ */
+const inRange = (entity, mult = 1) =>
+  !!entity &&
+  distance(entity, character) <= (character.range + character.xrange) * mult;
 
 async function fight(target) {
   // Snapshot for attackSpeedCompensate: blaster's attack speed modifier means
@@ -27,33 +38,31 @@ async function fight(target) {
   // must be timed with the frequency the shot was actually fired at.
   const attackFrequencyBeforeCompensate = character.frequency;
 
+  // Filter: Find all aggroed mobs within a reasonable pull distance, excluding formidable ones
+  const aggroedMobs = Object.values(parent.entities).filter(
+    (entity) =>
+      entity.type === "monster" &&
+      entity.target && // Must be aggroed
+      !entity.dead &&
+      !entity.s?.fullguardx &&
+      !haveFormidableMonsterAroundTarget(entity) &&
+      inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
+  );
+
   if (
     currentStrategy === usePullStrategies &&
     !target?.mtype.includes("crabx")
   ) {
-    const attackRange = character.range + character.xrange;
-    const blastRadius = character.blast / 3.6 || BLAST_RADIUS;
-
-    // Filter: Find all aggroed mobs within a reasonable pull distance, excluding formidable ones
-    const aggroedMobs = Object.values(parent.entities)
-      .filter(
-        (entity) =>
-          entity.type === "monster" &&
-          entity.target && // Must be aggroed
-          !entity.dead &&
-          !entity.s?.fullguardx &&
-          !haveFormidableMonsterAroundTarget(entity) &&
-          distance(entity, character) <= attackRange,
-      )
-      // Map: Pre-calculate the cluster count (The performance optimization)
-      .map((mob) => {
-        mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
-        return mob;
-      });
+    const blastRadius = getSplashRadius();
 
     if (aggroedMobs.length) {
       // Sort: Find the best mob to target for cluster damage
       const bestTarget = aggroedMobs
+        // Map: Pre-calculate the cluster count (The performance optimization)
+        .map((mob) => {
+          mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
+          return mob;
+        })
         .sort((lhs, rhs) => {
           if (lhs.cooperative !== rhs.cooperative) {
             return lhs.cooperative ? -1 : 1;
@@ -64,8 +73,7 @@ async function fight(target) {
           }
           // If cluster counts are equal, prioritize highest HP to apply max damage
           return rhs.hp - lhs.hp;
-        })
-        .shift(); // Get the first (best) target
+        })[0]; // Get the first (best) target
 
       target = bestTarget ?? target;
       change_target(target);
@@ -75,96 +83,140 @@ async function fight(target) {
   // --- Early Exit ---
   if (!target) return;
 
-  const promisesToAwait = [];
-
-  // --- Energize Logic ---
-  const canEnergize = !is_on_cooldown("energize");
   const isAttackReady =
     ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-  const isTargetInAttackRange =
-    distance(target, character) <= character.range + character.xrange;
-  if (canEnergize) {
-    let energizeTarget = null;
 
-    const buffee = getLowestMana();
-    const shouldEnergizeBuffee =
-      buffee &&
-      buffee.max_mp - buffee.mp > 500 &&
-      buffee.mp < buffee.max_mp * 0.65 &&
-      character.mp > character.max_mp * 0.75 &&
-      is_in_range(buffee, "energize");
+  // The best target can sit outside our reach; rather than skip the shot, take
+  // the best aggroed mob that is actually in range instead.
+  const attackTarget = inRange(target)
+    ? target
+    : aggroedMobs.filter((mob) => mob !== target && inRange(mob))[0];
 
-    if (shouldEnergizeBuffee) {
-      energizeTarget = buffee;
-    } else if (isAttackReady && isTargetInAttackRange) {
-      energizeTarget = character;
-    }
+  // Attack, paired with self-energize (spare mp feeds the shot). Every other
+  // skill runs on its own loop (startSkillLoops).
+  if (isAttackReady && attackTarget && shouldAttack()) {
+    set_message("Attacking");
 
-    if (energizeTarget) {
+    const promisesToAwait = [];
+
+    if (!is_on_cooldown("energize")) {
       promisesToAwait.push(
         use_skill(
           "energize",
-          energizeTarget,
+          character,
           Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
         )
           .then(() => reduceCd("energize"))
           .catch((e) => attackErrorHandler(e)),
       );
     }
-  }
 
-  if (!isAttackReady && isTargetInAttackRange && shouldAttack()) {
-    promisesToAwait.push(currentStrategy(target));
-  }
-
-  if (isAttackReady && isTargetInAttackRange && shouldAttack()) {
-    set_message("Attacking");
     promisesToAwait.push(
-      // currentStrategy(target),
-      attack(target)
+      attack(attackTarget)
         .then(() => {
           attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduceCd("attack");
+          reduceCd("attack", false);
         })
-        .catch((e) => {
-          attackErrorHandler(e);
-        }),
+        .catch((e) => attackErrorHandler(e)),
     );
+
+    try {
+      await withTimeout(Promise.allSettled(promisesToAwait), 1000);
+    } catch (e) {
+      console.log(e);
+    }
   }
+}
 
-  // --- Await and Error Handling ---
-  try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
-  } catch (e) {
-    console.log(e);
-  }
+// --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
 
-  // --- Reflection Logic ---
-  const isMagicalTarget = target["damage_type"] === "magical";
-  const canUseReflection = !is_on_cooldown("reflection") && character.mp > 1000;
-  const targetAggroesParty = partyMems.includes(target.target);
+// Ally worth energizing: needs the mana, and we have spare to give.
+// (Self-energize is paired with the attack in fight, not here.)
+function getEnergizeBuffee() {
+  const buffee = getLowestMana();
+  const shouldEnergize =
+    buffee &&
+    buffee.max_mp - buffee.mp > 500 &&
+    buffee.mp < buffee.max_mp * 0.65 &&
+    character.mp > character.max_mp * 0.75 &&
+    is_in_range(buffee, "energize");
+  return shouldEnergize ? buffee : null;
+}
 
-  if (isMagicalTarget && canUseReflection && targetAggroesParty) {
-    use_skill("reflection", get_entity(target.target)).then(() =>
-      reduceCd("reflection"),
-    );
-  }
+// Party member (in reflection range) taking the most magical damage right now.
+function getReflectionBuffee() {
+  return prioritizedNames()
+    .map((name) => get_player(name))
+    .filter((player) => player && is_in_range(player, "reflection"))
+    .map((player) => ({ player, dmg: avgDmgTaken(player, "magical") }))
+    .filter(({ dmg }) => dmg > 0)
+    .sort((lhs, rhs) => rhs.dmg - lhs.dmg)[0]?.player;
+}
 
-  // if (character.mp > 2000 && !is_on_cooldown("alchemy") && !isInvFull()) {
-  //   const sellableSlot = character.items.findIndex((item) =>
-  //     SALE_ABLE.includes(item?.name)
-  //   );
+function startSkillLoops() {
+  // runSkillLoop always calls canUse right before cast, so canUse stashes what
+  // it approved and cast reuses it instead of recomputing the scans.
+  let pendingEnergizeBuffee = null;
+  let pendingReflectionBuffee = null;
 
-  //   if (sellableSlot !== -1) {
-  //     if (sellableSlot === 0 && SALE_ABLE.includes(character.items[0]?.name)) {
-  //       use_skill("alchemy");
-  //     } else {
-  //       swap(0, sellableSlot).then(() => {
-  //         if (SALE_ABLE.includes(character.items[0]?.name)) use_skill("alchemy");
-  //       });
-  //     }
-  //   }
-  // }
+  // Strategy: gear + pull-strategy skills (cburst) run on a fixed cadence via
+  // currentStrategy, decoupled from the attack loop.
+  runSkillLoop({
+    skill: "strategy",
+    floorMs: 100,
+    canUse: () => true,
+    cast: () => currentStrategy(get_target()),
+  });
+
+  runSkillLoop({
+    skill: "energize",
+    canUse: () => {
+      if (is_on_cooldown("energize")) return false;
+      pendingEnergizeBuffee = getEnergizeBuffee();
+      return pendingEnergizeBuffee != null;
+    },
+    cast: () =>
+      use_skill(
+        "energize",
+        pendingEnergizeBuffee,
+        Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
+      )
+        .then(() => reduceCd("energize"))
+        .catch((e) => attackErrorHandler(e)),
+  });
+
+  runSkillLoop({
+    skill: "reflection",
+    canUse: () => {
+      if (is_on_cooldown("reflection") || character.mp <= 1000) return false;
+      pendingReflectionBuffee = getReflectionBuffee();
+      return pendingReflectionBuffee != null;
+    },
+    cast: () =>
+      use_skill("reflection", pendingReflectionBuffee).then(() =>
+        reduceCd("reflection"),
+      ),
+  });
+
+  // scare: shake off mobs on a tanky target. Pull mode additionally requires
+  // the mage to actually be hurt before bailing.
+  runSkillLoop({
+    skill: "scare",
+    canUse: () => {
+      if (character.mp <= 100) return false;
+      const target = get_targeted_monster();
+      if (!target || target.max_hp <= 3000) return false;
+      const mobsOnMe = Object.values(parent.entities).some(
+        (entity) =>
+          entity.type === "monster" && entity.target === character.name,
+      );
+      if (!mobsOnMe) return false;
+      return currentStrategy === usePullStrategies
+        ? character.hp < character.max_hp * 0.7
+        : true;
+    },
+    cast: () => scareAwayMobs(),
+  });
 }
 
 async function mainLoop() {
@@ -181,29 +233,18 @@ async function mainLoop() {
       });
     }
 
-    // Save location data for other characters/storage once high level
-    if (character.max_mp > G.skills["magiport"].mp * 1.5) {
-      // Observer count for the merchant's ent lure: how many ents are already
-      // engaged with the party near the farm spawn? (avoids double-luring)
-      const { party_list } = parent;
-      const partyNames = new Set([...partyMems, partyMerchant, ...party_list]);
-      const entsTargetingPartyCount = Object.values(parent.entities).filter(
-        (entity) =>
-          entity &&
-          entity.type === "monster" &&
-          entity.mtype === "ent" &&
-          entity.target &&
-          partyNames.has(entity.target) &&
-          distance(entity, { x: mapX, y: mapY }) < 300,
-      ).length;
+    publishEntFieldReport();
 
+    // Save location data for magiport consumers once high level. The ent count
+    // moved to publishEntFieldReport (basic_function.7.js) so it survives the
+    // mage being swapped out of the party.
+    if (character.max_mp > G.skills["magiport"].mp * 1.5) {
       set("mageLocation", {
         mp: character.mp,
         map: character.map,
         x: character.x,
         y: character.y,
         time: Date.now(),
-        entsTargetingPartyCount,
       });
     }
 
@@ -267,4 +308,5 @@ async function mainLoop() {
   setTimeout(mainLoop, getLoopInterval());
 }
 
-if (!parent.caracAL) mainLoop();
+mainLoop();
+startSkillLoops();

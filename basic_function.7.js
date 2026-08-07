@@ -165,6 +165,23 @@ var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 // desired elixir named
 var desiredElixir = "elixirluck";
 
+// TRACKTRIX
+async function get_tracktrix_data() {
+  let resolve;
+  let prom = new Promise((r) => (resolve = r));
+  let prev = parent.socket._callbacks.$tracker[0];
+  parent.socket._callbacks.$tracker[0] = (data) => {
+    parent.socket._callbacks.$tracker[0] = prev;
+    resolve(data);
+  };
+  parent.socket.emit("tracker");
+  return prom;
+}
+
+async function getMaxScore(monsterId) {
+  return (await get_tracktrix_data()).max.monsters[monsterId];
+}
+
 //// INVENTORY functions
 function item_info(item) {
   if (!item) return undefined;
@@ -300,14 +317,22 @@ var IGNORE = [
   "staffofthedead",
   "swordofthedead",
   "supermittens",
+
   // "horsecapeg",
   "throwingstars",
   "computer",
   "ancientcomputer",
 
+  // avoid for manually upgrade/compound
+  "northstar",
+  "fallen",
+  "fury",
+  "starkillers",
+
   // avoid upgrading for selling
   "cape",
   "carrotsword",
+  "xgloves",
   ...BUYABLE,
   // .filter((id) => id !== "blade"),
 ];
@@ -405,9 +430,13 @@ const STORE_ABLE = [
   "mysterybox",
   "weaponbox",
   "armorbox",
-
   "fury",
   "snring",
+  "starkillers",
+  "northstar",
+  "orboftemporal",
+  "networkcard",
+  "electronics",
 ];
 
 const SALE_ABLE = [
@@ -415,7 +444,6 @@ const SALE_ABLE = [
   "vgloves",
   "mcape",
   "wbook0",
-  "quiver",
   "santasbelt",
   "mushroomstaff",
   "slimestaff",
@@ -485,6 +513,17 @@ const DISMANTLE_LIST = [
 
 var maxUpgrade = 7;
 var maxCompound = 3;
+
+// Mob weakness thresholds (damage ones are dps, like calculateDamage)
+const HARMLESS_MOB_DAMAGE = 300;
+const DANGEROUS_MOB_DAMAGE = 600;
+const FORMIDABLE_MOB_DAMAGE = 1100;
+const TRIVIAL_MOB_MAX_HP = 2000;
+const SHOT_DAMAGE_MARGIN = 0.9;
+// Cleave rolls 0.1 to 0.9 of the weapon's damage per hit — this is the midpoint
+const CLEAVE_ONE_HIT_MULTIPLIER = 0.5;
+// A burn tops out at 1.5x the attack that lit it (3x for the unlimited kind)
+const BURN_DAMAGE_MULTIPLIER = 1.5;
 
 // Smart move strategies
 var isAdvanceSmartMoving = false;
@@ -675,60 +714,47 @@ async function waitUntil(fn, timeout = 10_000, interval = 100) {
   }
 }
 
-async function buff() {
+function pickRestoreSkill() {
+  const isChanneling =
+    character.c.town || character.c.fishing || character.c.mining;
+
+  const shouldRestoreHp =
+    character.hp / character.max_hp < character.mp / character.max_mp ||
+    (character.hp < character.max_hp * 0.6 && character.mp > 1000);
+
+  const stat = shouldRestoreHp ? "hp" : "mp";
+  const missing = character[`max_${stat}`] - character[stat];
+  const regenMissing = stat === "hp" ? 50 : 100;
+
+  if (missing > 500 && !is_on_cooldown(`use_${stat}`) && !isChanneling)
+    return `use_${stat}`;
+  if (missing > regenMissing && !is_on_cooldown(`regen_${stat}`))
+    return `regen_${stat}`;
+
+  return undefined;
+}
+
+async function potionLoop() {
   try {
-    const isChanneling =
-      character.c.town || character.c.fishing || character.c.mining;
-    const minPing = Math.min(...parent.pings);
-    const adjustPotionsCooldown = () => {
+    const skillToUse = pickRestoreSkill();
+
+    if (skillToUse) {
+      await withTimeout(use_skill(skillToUse));
+
+      const minPing = Math.min(...parent.pings);
       reduce_cooldown("use_mp", minPing);
       reduce_cooldown("use_hp", minPing);
-    };
-
-    if (
-      character.hp / character.max_hp < character.mp / character.max_mp ||
-      (character.hp < character.max_hp * 0.6 && character.mp > 1000)
-    ) {
-      if (
-        character.hp < character.max_hp - 500 &&
-        !is_on_cooldown("use_hp") &&
-        !isChanneling
-      ) {
-        await withTimeout(use_skill("use_hp"), 500);
-        adjustPotionsCooldown();
-      } else if (
-        character.hp < character.max_hp - 50 &&
-        !is_on_cooldown("regen_hp")
-      ) {
-        await withTimeout(use_skill("regen_hp"), 500);
-        adjustPotionsCooldown();
-      }
-    } else {
-      if (
-        character.mp < character.max_mp - 500 &&
-        !is_on_cooldown("use_mp") &&
-        !isChanneling
-      ) {
-        await withTimeout(use_skill("use_mp"), 500);
-        adjustPotionsCooldown();
-      } else if (
-        character.mp < character.max_mp - 100 &&
-        !is_on_cooldown("regen_mp")
-      ) {
-        await withTimeout(use_skill("regen_mp"), 500);
-        adjustPotionsCooldown();
-      }
     }
   } catch (e) {}
   setTimeout(
-    buff,
+    potionLoop,
     Math.min(
       Math.max(ms_to_next_skill("use_mp"), 5),
       Math.max(ms_to_next_skill("use_hp"), 5),
     ),
   );
 }
-buff();
+potionLoop();
 
 function isMelee() {
   return character.range < 75;
@@ -834,7 +860,7 @@ function getLoopInterval() {
 
   return ms_to_next_skill("attack") <= dynamicInterval
     ? Math.max(ms_to_next_skill("attack"), 1)
-    : (dynamicInterval ?? frequencyInterval);
+    : dynamicInterval ?? frequencyInterval;
 }
 
 function ms_to_next_skill(skill) {
@@ -842,6 +868,42 @@ function ms_to_next_skill(skill) {
   if (next_skill == undefined) return 0;
   const ms = parent.next_skill[skill].getTime() - Date.now();
   return ms < 0 ? 0 : ms;
+}
+
+/**
+ * Self-rescheduling loop for one skill, decoupled from the attack loop.
+ * Reschedules on `ms_to_next_skill(skill)` (floored by `floorMs`); a non-skill
+ * name makes it a fixed `floorMs` loop.
+ * @param {string} skill - skill name to key the cooldown on
+ * @param {() => boolean} canUse - whether to cast this tick
+ * @param {() => Promise} cast - issues the skill; awaited to avoid double-casts
+ */
+// Skills used to sit in fight(), which mainLoop skipped while smart moving, so
+// loops stay silent then too. whileMoving opts back in the ones that used to
+// run from their own loop or before mainLoop's smart_move throw.
+function runSkillLoop({
+  skill,
+  canUse,
+  cast,
+  floorMs = 100,
+  timeoutMs = 1000,
+  whileMoving = false,
+}) {
+  async function loop() {
+    try {
+      const isMovingControlled =
+        (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
+
+      if (!character.rip && (whileMoving || !isMovingControlled) && canUse())
+        await withTimeout(cast(), timeoutMs);
+    } catch (e) {
+      console.log(`[skillLoop:${skill}]`, e);
+    } finally {
+      setTimeout(loop, Math.max(ms_to_next_skill(skill), floorMs));
+    }
+  }
+  loop();
+  return loop;
 }
 
 async function leaveJail() {
@@ -921,11 +983,31 @@ function shouldHoldWarriorPosition(target, radiusTotal) {
   const noAggro = allEntities
     .filter((entity) => entity.type === "monster")
     .every((mob) => mob.target !== character.name || mob["1hp"]);
-  const noNearbyPlayers = allEntities
-    .filter((entity) => entity.type === "character" && !entity.moving)
-    .every((char) => distance(character, char) >= 8);
+  const noStackRisk = allEntities
+    .filter((entity) => entity.type === "character")
+    .every((char) => !canStackWith(char));
 
-  return noAggro && noNearbyPlayers;
+  return noAggro && noStackRisk;
+}
+
+// Combo hits splash onto related players (party/team/account/coop, or anyone in
+// PvP) sharing the victim's 6x6px grid cell. Box instead of raw cell hash so we
+// don't sit on a boundary.
+const STACK_CELL = 6;
+function canStackWith(other) {
+  if (other.id === character.id || other.rip || other.hp <= 0) return false;
+  if (Math.abs(character.real_x - other.real_x) >= STACK_CELL) return false;
+  if (Math.abs(character.real_y - other.real_y) >= STACK_CELL) return false;
+
+  // PvP zone: relation is ignored, any overlapping player can stack.
+  if (typeof is_pvp === "function" && is_pvp()) return true;
+
+  return (
+    (other.owner && other.owner === character.owner) ||
+    (other.team && other.team === character.team) ||
+    other.cooperative ||
+    prioritizedNames().includes(other.name)
+  );
 }
 
 function faceTarget(target) {
@@ -1097,7 +1179,13 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   let nextDelay = loopInterval;
 
   if (character.cc >= 125) return setTimeout(hitAndRun, loopInterval);
-  if (!target || smart.moving || isAdvanceSmartMoving) {
+
+  // Merchant gonna do the moveAround while taking part in events
+  const isMerchantIdle =
+    isMerchant() &&
+    !(typeof shouldMerchantKite === "function" && shouldMerchantKite());
+
+  if (isMerchantIdle || !target || smart.moving || isAdvanceSmartMoving) {
     angle = undefined;
     lastKitingTargetId = undefined;
     return setTimeout(hitAndRun, loopInterval);
@@ -1140,7 +1228,8 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     setTimeout(hitAndRun, nextDelay);
   }
 }
-if (!isMerchant()) hitAndRun();
+// Starting Positioning loop
+hitAndRun();
 
 const HEAL_IGNORE = ["Geoffriel"];
 
@@ -1148,10 +1237,21 @@ function prioritizedNames() {
   return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
 }
 
+// Track max heal power so the threshold stays stable across gear swaps.
+let maxHealPower = 0;
+
+function getHealPower() {
+  maxHealPower = Math.max(
+    maxHealPower,
+    character.heal || character.attack * 2.5,
+  );
+  return maxHealPower;
+}
+
 function getPlayersToHeal() {
   const minHealMod = 0.9;
   const healThreshold = character.ctype === "priest" ? 0.8 : 0.65;
-  const healPower = character.heal || character.attack * 2.5;
+  const healPower = getHealPower();
   const prioritizedNamesList = new Set(prioritizedNames());
 
   const shouldHeal = (entity) => {
@@ -1187,6 +1287,11 @@ function getPlayersToHeal() {
 
       if (entity.type === "monster" || entity.citizen) return false;
       if (HEAL_IGNORE.includes(entity.name)) return false;
+
+      if (entity.name !== character.name) {
+        if (character.team && entity.team !== character.team) return false;
+        if (is_pvp() && !prioritizedNamesList.has(entity.name)) return false;
+      }
 
       return shouldHeal(entity);
     })
@@ -1233,6 +1338,17 @@ function handle_death() {
 function sleep(delay) {
   return new Promise((resolve) => setTimeout(resolve, delay));
 }
+
+// Potions every character keeps stocked; fighters name one of these in their
+// buy_potions cm, the merchant refuses anything else
+const desiredPotions = ["mpot1", "hpot1"];
+
+// Merchant's own potions: restock to POTION_STACK once it is nearly out
+const POTION_STACK = 20;
+const POTION_REFILL_AT = 2;
+
+// Fighters ask the merchant for a refill below this
+const POTION_REQUEST_AT = 200;
 
 const LOOTING_LIMIT = 15;
 var isLooting = false;
@@ -1287,7 +1403,7 @@ async function midasLooting(forced = false) {
                 booster: "goldbooster",
                 cape: "horsecapeg",
               },
-              true,
+              { preventPenaltizeNextAttack: false, preventKeySnatch: false },
             ),
             500,
           );
@@ -1375,7 +1491,18 @@ setInterval(async function () {
     parent.socket.emit("interaction", { type: "newyear_tree" });
   }
 
-  if (isMerchant()) return;
+  // The merchant has no merchant to ask — it buys its own stack instead of
+  // sending itself the buy_potions cm below
+  if (isMerchant()) {
+    if (haveAComputer() && !isInvFull(2)) {
+      for (const potionId of desiredPotions) {
+        const owned = getTotalQuantityOf(potionId);
+        if (owned >= POTION_REFILL_AT) continue;
+        await buy(potionId, POTION_STACK - owned).catch((e) => log(e));
+      }
+    }
+    return;
+  }
 
   // Fix a bug where character is stuck to corner
   const currentTarget =
@@ -1405,7 +1532,11 @@ setInterval(async function () {
             x: currentTarget.real_x,
             y: currentTarget.real_y,
           },
-          { useScare: ![TANKER, PRIEST].includes(character.name) },
+          {
+            useScare: ![TANKER, PRIEST].includes(character.name),
+            useTown: false,
+            speed: 200,
+          },
         );
     } else {
       if (can_move_to(currentTarget.x, currentTarget.y))
@@ -1471,22 +1602,21 @@ setInterval(async function () {
     );
   }
 
+  const potionToRestock = desiredPotions.find(
+    (potion) => getTotalQuantityOf(potion) < POTION_REQUEST_AT,
+  );
+
   // Inventory check and potions
   if (isInvFull(4)) {
     log("Inventory full! Calling our merchant!");
     send_cm(partyMerchant, { msg: "inv_full", ...obj });
-  } else if (
-    !isInvFull(2) &&
-    (locate_item("mpot1") === -1 || getTotalQuantityOf("mpot1") < 100)
-  ) {
-    log("Asking the merchant for some mana potions...");
-    send_cm(partyMerchant, { msg: "buy_mana", ...obj });
-  } else if (
-    !isInvFull(2) &&
-    (locate_item("hpot1") === -1 || getTotalQuantityOf("hpot1") < 100)
-  ) {
-    log("Asking the merchant for some health potions...");
-    send_cm(partyMerchant, { msg: "buy_hp", ...obj });
+  } else if (!isInvFull(2) && potionToRestock) {
+    log(`Asking the merchant for some ${potionToRestock}...`);
+    send_cm(partyMerchant, {
+      msg: "buy_potions",
+      potion: potionToRestock,
+      ...obj,
+    });
   } else if (!character.slots.elixir || !character.slots.elixir.name) {
     log("Drinking Elixir");
 
@@ -1653,7 +1783,7 @@ function serverCurrentlyHasLiveEvent() {
 }
 
 const RSPEED_DURATION = G.conditions["rspeed"].duration;
-const RSPEED_MARGIN = 2 * 60 * 1000; // 2 minutes
+const RSPEED_MARGIN = 0.75 * 60 * 1000; // 45 seconds
 
 const setRogueSpeedLastDeployment = () => {
   const last = get("rogueLastDeployed");
@@ -1668,7 +1798,59 @@ const setRogueSpeedLastDeployment = () => {
   set("rogueLastDeployed", new Date());
 };
 
+const ENT_FIELD_MAX_FOR_ROGUE = 2;
+const ENT_FIELD_STALE_MS = 15 * 1000;
+const ENT_FIELD_REPORT_RANGE = 500;
+const ENT_FIELD_AGGRO_RANGE = 300;
+
+/**
+ * Publishes how many ents are engaged with the party at the farm spot, for the
+ * merchant's lure gate and the rogue swap. Called from the watchers' mainLoop
+ * so the count stays live; any class can report, not just the mage.
+ */
+function publishEntFieldReport() {
+  if (isMerchant()) return;
+
+  const farmSpot = { x: mapX, y: mapY, map };
+  if (
+    character.map !== map ||
+    distance(character, farmSpot) > ENT_FIELD_REPORT_RANGE
+  )
+    return;
+
+  const partyNames = new Set([
+    ...partyMems,
+    partyMerchant,
+    ...parent.party_list,
+  ]);
+  const entsTargetingPartyCount = Object.values(parent.entities).filter(
+    (entity) =>
+      entity &&
+      entity.type === "monster" &&
+      entity.mtype === "ent" &&
+      entity.target &&
+      partyNames.has(entity.target) &&
+      distance(entity, farmSpot) < ENT_FIELD_AGGRO_RANGE,
+  ).length;
+
+  set("entFieldReport", {
+    reporter: character.name,
+    entsTargetingPartyCount,
+    time: Date.now(),
+  });
+}
+
 const shouldDeployRogue = () => {
+  // Check if it's safe to deploy rogue in place of the priest while farming ents
+  const entField = get("entFieldReport");
+  if (
+    !entField ||
+    mssince(new Date(entField.time)) > ENT_FIELD_STALE_MS ||
+    entField.entsTargetingPartyCount > ENT_FIELD_MAX_FOR_ROGUE
+  ) {
+    return false;
+  }
+
   const last = get("rogueLastDeployed");
   const lastDate = last ? new Date(last) : null;
 
@@ -1688,28 +1870,50 @@ const DYNAMIC_PARTY_PRESETS = {
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
+      return [WARRIOR, RANGER, ROGUE];
     },
-    USII: () => {
+    ASIAI: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
+      return [WARRIOR, RANGER, ROGUE];
     },
-    default: [WARRIOR, PRIEST, MAGE],
+    default: [WARRIOR, PRIEST, ROGUE],
   },
   mrpumpkin: "mrgreen", // share config
-  franky: () => {
-    // const isAggroed = !!parent.S.franky?.target;
-    // HEALER = PRIEST;
-    return [WARRIOR, PRIEST, ROGUE];
+  franky: {
+    EUII: () => {
+      RANGER = RANGER2;
+      return [RANGER2, PRIEST, ROGUE];
+    },
+    ASIAI: () => {
+      RANGER = RANGER1;
+      return [RANGER1, PRIEST, ROGUE];
+    },
+    default: () => {
+      // const isAggroed = !!parent.S.franky?.target;
+      // HEALER = PRIEST;
+      return [WARRIOR, PRIEST, ROGUE];
+    },
   },
-  icegolem: () => {
-    HEALER = PRIEST;
-    return [PRIEST, ROGUE, MAGE];
+  icegolem: {
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = RANGER2;
+      return [RANGER2, ROGUE, MAGE];
+    },
+    ASIAI: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER1;
+      return [RANGER, ROGUE, MAGE];
+    },
+    default: () => {
+      HEALER = PRIEST;
+      return [PRIEST, ROGUE, MAGE];
+    },
   },
   dragold: {
     USI: [WARRIOR, PRIEST, ROGUE],
-    EUI: () => {
+    ASIAI: () => {
       RANGER = RANGER1;
       HEALER = PRIEST;
       return [WARRIOR, RANGER, PRIEST];
@@ -1725,18 +1929,26 @@ const DYNAMIC_PARTY_PRESETS = {
     },
     default: [WARRIOR, PRIEST, ROGUE],
   },
-  crabxx: () => {
-    // const isAggroed = !!parent.S.crabxx?.target;
-    // if (isAggroed) RANGER = RANGER1;
-    // HEALER = isAggroed ? RANGER1 : PRIEST;
-    // return [WARRIOR, isAggroed ? RANGER1 : PRIEST, isAggroed ? RANGER2 : MAGE];
-    RANGER = RANGER1;
-    return [WARRIOR, PRIEST, MAGE];
+  crabxx: {
+    EUII: () => {
+      RANGER = RANGER2;
+      return [WARRIOR, RANGER, PRIEST];
+    },
+    ASIAI: () => {
+      RANGER = RANGER1;
+      return [WARRIOR, RANGER, PRIEST];
+    },
+    USI: () => {
+      return [WARRIOR, ROGUE, PRIEST];
+    },
+    default: () => {
+      return [WARRIOR, PRIEST, MAGE];
+    },
   },
   pinkgoo: {
     USI: [MAGE, PRIEST, ROGUE],
     USII: [WARRIOR, MAGE, PRIEST],
-    EUI: () => {
+    ASIAI: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
       return [WARRIOR, RANGER, MAGE];
@@ -1776,6 +1988,16 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER;
       return [WARRIOR, RANGER, MAGE];
     },
+    USI: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, ROGUE];
+    },
+    USIII: () => {
+      RANGER = RANGER1;
+      HEALER = PRIEST;
+      return [WARRIOR, RANGER, PRIEST];
+    },
     default: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
@@ -1784,25 +2006,23 @@ const DYNAMIC_PARTY_PRESETS = {
   },
 
   default: () => {
-    // const globalParty = get("currentParty");
-    // const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
-
-    // if (
-    //   globalParty &&
-    //   globalParty.some((id) => knownTankers.includes(id)) &&
-    //   !serverCurrentlyHasLiveEvent()
-    // ) {
-    //   setRogueSpeedLastDeployment();
-    //   if (shouldDeployRogue()) {
-    //     return [WARRIOR, ROGUE, MAGE];
-    //   } else {
-    //     // RANGER = RANGER1;
-    //     HEALER = PRIEST;
-    //     return [WARRIOR, PRIEST, MAGE];
-    //   }
-    // }
-
+    const globalParty = get("currentParty");
+    const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
     HEALER = PRIEST;
+
+    if (
+      globalParty &&
+      globalParty.some((id) => knownTankers.includes(id)) &&
+      !serverCurrentlyHasLiveEvent()
+    ) {
+      setRogueSpeedLastDeployment();
+      if (shouldDeployRogue()) {
+        return [WARRIOR, ROGUE, MAGE];
+      } else {
+        return [WARRIOR, PRIEST, MAGE];
+      }
+    }
+
     return [WARRIOR, PRIEST, MAGE];
   },
 };
@@ -1834,8 +2054,33 @@ function dynamicParty() {
 dynamicParty();
 setInterval(dynamicParty, 3000);
 
-//// Daily Events
-// var pinkGooVisitedBoundary = [];
+// Crabxx helper
+const getCrabsForCrabxx = () => {
+  const entities = Object.values(parent.entities);
+  const crabxList = [];
+  let crabxxInstance;
+
+  for (const entity of entities) {
+    if (!entity || entity.rip) continue;
+
+    if (entity.mtype === "crabxx" && !crabxxInstance) {
+      crabxxInstance = entity;
+    }
+
+    const incomingNumber =
+      PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
+
+    const predictedHp =
+      entity.name === character.name ? entity.hp : entity.hp + incomingNumber;
+    entity.predictedHp = predictedHp;
+
+    if (entity.mtype === "crabx") {
+      crabxList.push(entity);
+    }
+  }
+  return { crabxxInstance, crabxList };
+};
+
 async function changeToDailyEventTargets() {
   let target = getTarget();
   rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
@@ -1941,35 +2186,7 @@ async function changeToDailyEventTargets() {
     const inRange = (entity) =>
       distance(entity, character) < character.range + character.xrange * 0.8;
 
-    const getCrabs = () => {
-      const entities = Object.values(parent.entities);
-      const crabxList = [];
-      let crabxxInstance;
-
-      for (const entity of entities) {
-        if (!entity || entity.rip) continue;
-
-        if (entity.mtype === "crabxx" && !crabxxInstance) {
-          crabxxInstance = entity;
-        }
-
-        const incomingNumber =
-          PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
-
-        const predictedHp =
-          entity.name === character.name
-            ? entity.hp
-            : entity.hp + incomingNumber;
-        entity.predictedHp = predictedHp;
-
-        if (entity.mtype === "crabx") {
-          crabxList.push(entity);
-        }
-      }
-      return { crabxxInstance, crabxList };
-    };
-
-    let { crabxxInstance, crabxList } = getCrabs();
+    let { crabxxInstance, crabxList } = getCrabsForCrabxx();
 
     if (!crabxxInstance) {
       if (character.s.hopsickness) {
@@ -1978,7 +2195,7 @@ async function changeToDailyEventTargets() {
         await join("crabxx");
         await sleep(character.ping);
       }
-      ({ crabxxInstance, crabxList } = getCrabs());
+      ({ crabxxInstance, crabxList } = getCrabsForCrabxx());
 
       if (!crabxxInstance) return;
     }
@@ -2025,7 +2242,12 @@ async function changeToDailyEventTargets() {
 
     let targetCrab;
 
-    if (character.ctype === "warrior") {
+    // The shell ("1hp") is what decides the target, not whether crabx happen to
+    // be standing around: while it's up every hit on the boss lands for 1, and
+    // the moment it drops the boss is worth more than any crabx.
+    if (!crabxxInstance["1hp"]) {
+      targetCrab = crabxxInstance;
+    } else if (character.ctype === "warrior") {
       targetCrab = bestClusteredCrabx || crabxxInstance;
     } else {
       targetCrab =
@@ -2113,7 +2335,7 @@ async function changeToDailyEventTargets() {
     else if (snowmanInstance.s?.fullguardx) change_target(beeToAttack);
     else change_target(snowmanInstance);
 
-    return (grinchInstance ?? snowmanInstance.s?.fullguardx)
+    return grinchInstance ?? snowmanInstance.s?.fullguardx
       ? beeToAttack
       : snowmanInstance;
   }

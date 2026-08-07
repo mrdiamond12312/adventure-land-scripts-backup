@@ -16,6 +16,7 @@ async function usePullStrategies(target) {
   switch (character.ctype) {
     case "mage":
       const suggestedMageItems = calculateMageItems(target);
+
       if (
         Object.keys(suggestedMageItems).some(
           (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
@@ -24,7 +25,11 @@ async function usePullStrategies(target) {
         promises.push(equipBatch(suggestedMageItems));
       }
 
-      if (
+      // Spend spare mp to help the priest keep the party topped off, but only
+      // when the healer is close, healthy and actually a priest. Only a batch
+      // worth of sleeping mobs pays for the mp — the blaster keeps the mage
+      // starved, so lone stragglers are left to the priest's zapper.
+      const canAffordCBurst =
         ms_to_next_skill("cburst") === 0 &&
         character.mp > 400 &&
         !get_targeted_monster()?.["1hp"] &&
@@ -32,28 +37,17 @@ async function usePullStrategies(target) {
         partyHealer.ctype === "priest" &&
         distance(partyHealer, character) <
           (partyHealer.range ?? character.range * 0.7) &&
-        partyHealer?.hp > 0.6 * partyHealer?.max_hp &&
-        getMonstersToCBurst().length >= 1
-      ) {
+        partyHealer.hp > 0.6 * partyHealer.max_hp;
+
+      const mobsToCBurst = canAffordCBurst ? getMonstersToCBurst() : [];
+
+      if (mobsToCBurst.length >= CBURST_MIN_BATCH) {
         promises.push(
-          use_skill("cburst", getMonstersToCBurst()).then(() =>
-            reduce_cooldown("cburst", -2000),
+          use_skill("cburst", mobsToCBurst).then(() =>
+            reduce_cooldown("cburst", -6000),
           ),
         );
       }
-
-      if (
-        character.mp > 100 &&
-        !is_on_cooldown("scare") &&
-        target.max_hp > 3000 &&
-        character.hp < character.max_hp * 0.7 &&
-        Object.values(parent.entities).some(
-          (entity) =>
-            entity.type === "monster" && entity.target === character.name,
-        )
-      )
-        promises.push(scareAwayMobs());
-
       break;
 
     case "warrior":
@@ -219,8 +213,8 @@ async function usePullStrategies(target) {
               (mob.damage_type === "physical"
                 ? physicalMobsTargetingSelf.length < character.courage
                 : mob.damage_type === "magical"
-                ? magicalMobsTargetingSelf.length < character.mcourage
-                : pureMobsTargetingSelf.length < character.pcourage),
+                  ? magicalMobsTargetingSelf.length < character.mcourage
+                  : pureMobsTargetingSelf.length < character.pcourage),
           );
 
         if (mobToPull)
@@ -261,6 +255,7 @@ async function usePullStrategies(target) {
 
     case "priest":
       const suggestedPriestItems = calculatePriestItems(target);
+
       if (
         Object.keys(suggestedPriestItems).some(
           (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
@@ -268,17 +263,8 @@ async function usePullStrategies(target) {
       ) {
         promises.push(equipBatch(suggestedPriestItems));
       }
-
-      if (
-        avgPartyDmgTaken(partyMems) >
-          character.heal * 0.95 * character.frequency &&
-        character.hp < (isAssignedAsTanker() ? 0.3 : 0.5) * character.max_hp &&
-        !is_on_cooldown("scare") &&
-        character.cc < 100
-      ) {
-        promises.push(scareAwayMobs());
-      }
       break;
+
     default:
       break;
   }

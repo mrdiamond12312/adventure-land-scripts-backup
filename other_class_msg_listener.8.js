@@ -38,17 +38,18 @@ character.on("cm", async function ({ name, message }) {
       send_cm(partyMerchant, "inv_ok");
       break;
 
-    case "buy_mana_merchant_near":
-      log("Thanks for the potions merchant!");
-      send_gold(partyMerchant, 1500000);
-      break;
-
-    case "buy_hp_merchant_near":
+    case "buy_potions_merchant_near":
       log("Thanks for the potions merchant!");
       send_gold(partyMerchant, 1500000);
       break;
 
     case "party_heal":
+      if (
+        is_on_cooldown("partyheal") ||
+        character.mp <= G.skills["partyheal"].mp
+      )
+        break;
+
       log(`Remotely heal ${name}!`);
       use_skill("partyheal").then(() =>
         reduce_cooldown("partyheal", character.ping * 0.95),
@@ -62,13 +63,13 @@ character.on("cm", async function ({ name, message }) {
       break;
 
     case "dc-harakiri":
-      midasLooting();
-      parent.socket.emit("harakiri");
+      // midasLooting();
+      // parent.socket.emit("harakiri");
       break;
 
     case "loot-before-hopping":
       midasLooting(true);
-      parent.socket.emit("harakiri");
+      // parent.socket.emit("harakiri");
       break;
 
     default:
