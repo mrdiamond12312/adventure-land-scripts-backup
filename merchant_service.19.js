@@ -63,7 +63,7 @@ character.on("cm", async function ({ name, message }) {
 
 const POTION_SHOP = { map: "main", x: 56, y: -122 };
 // Amounts handed to a fighter per request; POTION_STACK stays behind for the merchant itself
-const POTION_DELIVERY = 9899;
+const POTION_DELIVERY = 9799;
 const ELIXIR_DELIVERY = 10;
 
 /**
@@ -461,7 +461,10 @@ async function aggroEnt(entId, dartgunRange) {
 
     const d = distance(character, ent);
     if (!is_on_cooldown("attack") && d <= dartgunRange) {
-      await withTimeout(attack(ent).catch(() => {}), 300);
+      await withTimeout(
+        attack(ent).catch(() => {}),
+        300,
+      );
     } else if (d > dartgunRange) {
       await untilDoneOrDead(
         move(
