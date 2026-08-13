@@ -76,7 +76,7 @@ async function fight(target, isMovingControlled = false) {
       (character.slots.orb?.name === "test_orb" ||
         character.slots.mainhand?.name === "oozingterror") &&
       !target?.cooperative
-        ? (mobsInRange
+        ? mobsInRange
             .filter(
               (mob) =>
                 !mob.s.poisoned && prioritizedCharacter.includes(mob.target),
@@ -87,7 +87,7 @@ async function fight(target, isMovingControlled = false) {
               }
               return rhs.attack - lhs.attack;
             })
-            .shift() ?? target)
+            .shift() ?? target
         : target;
 
     target = targetToTaunt ?? targetToPoison;
@@ -115,15 +115,17 @@ async function fight(target, isMovingControlled = false) {
     if (healee) {
       set_message(`Heal ${healee.name}`);
       promisesToAwait.push(
-        use_skill("heal", healee).then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduceCd("heal");
-        }),
+        use_skill("heal", healee)
+          .then(() => {
+            attackSpeedCompensate(attackFrequencyBeforeCompensate);
+            reduceCd("attack", false);
+          })
+          .catch((e) => attackErrorHandler(e)),
       );
     } else if (attackTarget && shouldAttack()) {
       set_message("Attacking");
       promisesToAwait.push(
-        attack(attackTarget)
+        use_skill("attack", attackTarget)
           .then(() => {
             attackSpeedCompensate(attackFrequencyBeforeCompensate);
             reduceCd("attack", false);
@@ -150,7 +152,7 @@ async function fight(target, isMovingControlled = false) {
 
   // --- Await All Actions ---
   try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 2500);
+    await withTimeout(Promise.allSettled(promisesToAwait));
   } catch (e) {
     console.error(e);
   }
@@ -245,7 +247,7 @@ function getZapTarget() {
 
   if (
     mpPct < 0.6 ||
-    character.penalty_cd ||
+    character.s.penalty_cd ||
     !hasZapper ||
     Object.keys(character.c).length
   )

@@ -357,6 +357,14 @@ Findings from the "warrior attacks slower than his frequency" session (2026-07-2
   reduction" warcry/taunt use). Trade-off: over-reducing risks a `"cooldown"` rejection handled in
   `attackErrorHandler`; there was headroom because no such rejections were occurring.
 
+- **Anything sharing the attack cooldown must reduce the `"attack"` key, not its own name.** The
+  priest's heal `.then` used `reduceCd("heal")`, which writes to `parent.next_skill.heal` — a timer
+  the server never sets (heal's `skill_timeout` is registered under `attack`, see "heal *shares* the
+  attack cooldown" below) and that `ms_to_next_skill` reports as 0 for. So the shave landed nowhere
+  and every heal cycle ran a full ping longer than every attack cycle — the priest looked like he
+  hesitated before healing while his attacks kept pace. Now `reduceCd("attack", false)`, matching
+  every other class's shared-cooldown action.
+
 - **The candy swap re-bases the attack cooldown server-side and WIPES the client-side reduction —
   so the ping shave has to be re-applied in the swap-back, not (only) the attack `.then`.** Server
   mechanic (from the server source): every equip runs `calculate_player_stats`, and when
