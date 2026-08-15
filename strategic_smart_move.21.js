@@ -143,8 +143,8 @@ class StrategicSmartMove {
   async unsafeMove(goingX, goingY) {
     character.from_x = character.real_x;
     character.from_y = character.real_y;
-    character.going_x = x;
-    character.going_y = y;
+    character.going_x = goingX;
+    character.going_y = goingY;
     character.moving = true;
     parent.calculate_vxy(character);
     parent.socket.emit("move", {
