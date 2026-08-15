@@ -141,21 +141,16 @@ class StrategicSmartMove {
    * @param {number} goingY - Destination y coordinate
    */
   async unsafeMove(goingX, goingY) {
-    character.from_x = character.real_x;
-    character.from_y = character.real_y;
-    character.going_x = goingX;
-    character.going_y = goingY;
-    character.moving = true;
-    parent.calculate_vxy(character);
-    parent.socket.emit("move", {
-      x: character.real_x,
-      y: character.real_y,
-      going_x: goingX,
-      going_y: goingY,
-      m: character.m,
-    });
-    parent.resolve_deferreds("move", { reason: "interrupted" }); // flush any pending move
-    return parent.push_deferred("move");
+    const map = parent.character.map;
+    const geo = parent.G.geometry[map];
+    delete parent.G.geometry[map];
+    let promise;
+    try {
+      promise = parent.move(goingX, goingY, true);
+    } finally {
+      parent.G.geometry[map] = geo;
+    }
+    return promise;
   }
 
   /**
