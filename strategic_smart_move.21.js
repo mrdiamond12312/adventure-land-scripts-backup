@@ -136,6 +136,29 @@ class StrategicSmartMove {
   }
 
   /**
+   * Unsafe move - using within Strategic Smart Move for crossing smap wall
+   * @param {number} goingX - Destination x coordinate
+   * @param {number} goingY - Destination y coordinate
+   */
+  async unsafeMove(goingX, goingY) {
+    character.from_x = character.real_x;
+    character.from_y = character.real_y;
+    character.going_x = x;
+    character.going_y = y;
+    character.moving = true;
+    parent.calculate_vxy(character);
+    parent.socket.emit("move", {
+      x: character.real_x,
+      y: character.real_y,
+      going_x: goingX,
+      going_y: goingY,
+      m: character.m,
+    });
+    parent.resolve_deferreds("move", { reason: "interrupted" }); // flush any pending move
+    return parent.push_deferred("move");
+  }
+
+  /**
    * Use town to teleport back to the first spawn of the map with retries
    * @param {Object} [options={}] - Optional configuration.
    * @param {number} [options.maxRetries=SMART_MOVE_CONFIG.TOWN_MAX_RETRIES] - Maximum number of retry attempts.
@@ -275,7 +298,7 @@ class StrategicSmartMove {
               toPosition.y,
             )
           )
-            await move(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
+            await this.unsafeMove(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
           this.cleanUp(session);
           this.stopTownChanneling();
           return;
@@ -380,7 +403,7 @@ class StrategicSmartMove {
         this.stopTownChanneling();
         await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
         await sleep(SMART_MOVE_CONFIG.BLINK_SETTLE_MS);
-        await move(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
+        await this.unsafeMove(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
         progress.segmentIndex = lastIndex + 1;
       }
     } catch (e) {
@@ -679,7 +702,7 @@ class StrategicSmartMove {
           //     `Expected map ${segment.map}, currently on ${character.map}`,
           //   );
           // }
-          await move(segment.x, segment.y);
+          await this.unsafeMove(segment.x, segment.y);
           progress.segmentIndex++;
           continue;
         }
