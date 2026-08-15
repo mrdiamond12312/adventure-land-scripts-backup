@@ -40,6 +40,7 @@ class StrategicSmartMove {
   constructor() {
     this.pathfinder = parent.caracAL.ALPathfinder;
     this.pathfinder.prepare(parent.G, ["bank_u"]);
+    this.pathfinder.addCheatPath("winterland", 721, 277, 737, 352);
     this.scareInterval = undefined;
     this.isDoingSomethingMagical = false;
     this.blinkLoop = undefined;
