@@ -124,7 +124,7 @@ function rawAttackMultiplier() {
  */
 function effectiveAttackWith(weaponInfo) {
   const currentAttack = character.slots.mainhand
-    ? (item_info(character.slots.mainhand).attack ?? 0)
+    ? item_info(character.slots.mainhand).attack ?? 0
     : 0;
 
   return (
@@ -476,8 +476,8 @@ function calculateWarriorItems() {
     orb: feelingLucky
       ? "rabbitsfoot"
       : feelingWise
-        ? "talkingskull"
-        : "orbofstr",
+      ? "talkingskull"
+      : "orbofstr",
     chest: getWarriorChest(feelingLucky, isTanker),
     // pants: isTanker ? "frankypants" : "fallen",
     pants: "fallen",
@@ -734,8 +734,8 @@ function calculateRangerItems(target) {
     orb: feelingLucky
       ? "rabbitsfoot"
       : feelingWise
-        ? "talkingskull"
-        : "orbofdex",
+      ? "talkingskull"
+      : "orbofdex",
     amulet: feelingWise ? "spookyamulet" : "dexamulet",
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
@@ -848,8 +848,8 @@ function calculateRogueItems(target) {
     fieryWeaponSlot !== -1
       ? character.items[fieryWeaponSlot]
       : character.slots.offhand?.name === fieryWeapon
-        ? character.slots.offhand
-        : undefined;
+      ? character.slots.offhand
+      : undefined;
 
   const equipItemAttackOffset =
     (item_info(character.slots.offhand)?.attack ?? 0) -
@@ -1131,7 +1131,7 @@ function buildEquipPromises(suggestedItems, options) {
       const count = usedCounts[id] || 0;
       const num = findMaxLevelItem(id, count);
       usedCounts[id] = count + 1;
-      return { slot, num: num >= 0 ? num : (fallback[slot] ?? -1) };
+      return { slot, num: num >= 0 ? num : fallback[slot] ?? -1 };
     })
     .filter((equipInfo) => equipInfo.num >= 0);
 
@@ -1186,7 +1186,7 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
     case "magical": {
       const monsterRpiercing =
         fromEntity.type === "monster"
-          ? (G.monsters[fromEntity.mtype].rpiercing ?? 0)
+          ? G.monsters[fromEntity.mtype].rpiercing ?? 0
           : 0;
 
       const reflectionDmg =
@@ -1211,7 +1211,7 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
     case "physical": {
       const monsterApiercing =
         fromEntity.type === "monster"
-          ? (G.monsters[fromEntity.mtype].apiercing ?? 0)
+          ? G.monsters[fromEntity.mtype].apiercing ?? 0
           : 0;
       const hardshellArmor = toEntity.s["hardshell"]
         ? G.conditions.hardshell.armor
@@ -1304,9 +1304,9 @@ function avgDmgTaken(characterEntity, dmgType = null) {
           ? characterEntity.armor -
               (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
           : highestBurningMob.damage_type === "magical"
-            ? characterEntity.resistance -
-              (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
-            : 1,
+          ? characterEntity.resistance -
+            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
+          : 1,
       ) *
       ((100 - fireResist) / 100) *
       (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
@@ -1314,7 +1314,7 @@ function avgDmgTaken(characterEntity, dmgType = null) {
     : 0;
 
   const currentBurnIntensity = highestBurningMob
-    ? (characterEntity.s.burned?.intensity ?? 0)
+    ? characterEntity.s.burned?.intensity ?? 0
     : 0;
 
   return (
@@ -1749,7 +1749,7 @@ async function scareAwayMobs() {
       use_skill("scare").then(() =>
         reduce_cooldown("scare", 0.95 * character.ping),
       ),
-    ]);
+    ]).catch((e) => console.warn("useScare errors:", e));
   }
 }
 
