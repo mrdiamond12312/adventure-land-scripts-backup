@@ -578,9 +578,7 @@ async function walkEntsToSpawn(entIds) {
             ) &&
             !ms_to_next_skill("scare")
           ) {
-            await withTimeout(use_skill("scare"), 300)
-              .then(() => reduce_cooldown("scare", character.ping * 0.95))
-              .catch(() => {});
+            await scareAwayMobs();
           }
 
           if (!is_on_cooldown("attack")) {
