@@ -31,7 +31,7 @@ const KEEP_THRESHOLD = {
   pouchbow: 16,
   daggerofthedead: 16,
   bowofthedead: 16,
-  froststaff: 8, 
+  froststaff: 8,
   frankypants: 8,
   gphelmet: 12,
 
@@ -544,8 +544,8 @@ async function compoundInv() {
       (itemInfo.grades[0] > 0
         ? itemInfo.grades[0]
         : itemGrade >= 2
-          ? 0
-          : itemInfo.grades[0] + 2);
+        ? 0
+        : itemInfo.grades[0] + 2);
     const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
 
     // Skip if we don't have enough of this item yet
@@ -664,8 +664,9 @@ async function upgradeInv() {
  * Main bank loop: visits all accessible floors, stores qualifying items,
  * then retrieves items to upgrade/compound.
  * Skips if onDuty. Reschedules itself on completion or error.
+ * @param {Boolean} forced to force storing weapons without checking its level
  */
-async function bankStoreRoutine() {
+async function bankStoreRoutine(forced = false) {
   // Determine which items to store
   const toStore = character.items
     .map((item, index) => ({ item, index }))
@@ -680,7 +681,8 @@ async function bankStoreRoutine() {
       const shouldIgnore = IGNORE.includes(item.name);
 
       return (
-        (!shouldIgnore && (isRare || (isEquipable && isHighLevel))) ||
+        (!shouldIgnore &&
+          (isRare || (isEquipable && (forced || isHighLevel)))) ||
         isStoreable ||
         RETRIEVE_HISTORY.includes(item.name)
       );

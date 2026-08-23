@@ -566,7 +566,7 @@ setInterval(async function () {
   if ((isInvFull() || invJammed) && !isAdvanceSmartMoving && !smart.moving) {
     onDuty = true;
     try {
-      await bankStoreRoutine();
+      await bankStoreRoutine(true);
       invJammed = false;
     } finally {
       onDuty = false;
