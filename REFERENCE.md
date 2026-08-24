@@ -1049,6 +1049,34 @@ would hide the finished ingredient sitting in the bank, and the merchant would r
 start climbing a second one. `getItemBankSlots` grew an `includeRare` flag for the target paths that
 still use it.
 
+### `craftQuantity` is a ceiling, not a demand (`getCoveredCraftQuantity`, 2026-08-25)
+
+The call sites size a batch off free inventory space — `craft("firestars", character.esize - 6, …)`
+— meaning *at most this many*, so the merchant can't craft itself out of slots. The ingredient
+check reads it as a demand instead: it asks for `quantity * craftQuantity` of everything and is
+all-or-nothing. Two throwing stars and a batch of six therefore crafted **nothing**, silently,
+rather than the two that were possible — the more free space the merchant had, the less it could
+craft.
+
+`craft()` now clamps the batch to `getCoveredCraftQuantity` before the checks run: the floor of
+owned-over-required across the recipe's flat ingredients. Buyable entries are skipped (a vendor
+tops those up, bounded by `MAX_CRAFT_BUY`), and so are levelled ones — registering a target for an
+ingredient we *don't* have yet is exactly what starts the climb, so letting one bound the batch
+would stall it. For the same reason a covered quantity of 0 leaves `craftQuantity` alone and falls
+through to the old path: the checks still run, the climbs still register, the craft still fails
+this tick.
+
+Counting goes through `countItemsAtLevel` (inventory + `BANK_CACHE`, no rare filter), and
+`hasFlatIngredient`'s bank count now passes `includeRare` to match. The two must agree — a clamp
+that sees a rare bank ingredient while the check that follows it does not would arrive at a batch
+size the craft then refuses. The reasoning is the one already recorded above for
+`forEachOwnedItem`: an ingredient we own is stock, not loot to be shielded while gold is low.
+
+`craftQuantity < 1` replaced `!craftQuantity` as the guard. A merchant with fewer free slots than
+the offset passes a negative batch, which slipped past the falsy check, ran the whole ingredient
+machinery — registering targets, buying base items — and then crafted zero times through a `for`
+loop that never entered.
+
 ### Targeted climbs never burn a primling
 
 `isRareItem` is forced false for a targeted item in both `upgradeInv` and `compoundInv`. A break on

@@ -202,7 +202,11 @@ function hasFlatIngredient(name, quantity, fromBank, vendorBuy) {
   const slots = character.items.filter(
     (item) => item && item.name === name && !item.level,
   );
-  const bankSlots = getItemBankSlots(name, true).filter((item) => !item.level);
+  // includeRare: an ingredient we already own is stock, not loot the rare-grade
+  // filter should hide from us while gold is low — same call as forEachOwnedItem
+  const bankSlots = getItemBankSlots(name, true, true).filter(
+    (item) => !item.level,
+  );
 
   const totalQuantityOfSlotItem = slots.reduce(
     (accumulator, current) => accumulator + (current.q ?? 1),
@@ -287,6 +291,27 @@ function hasLeveledIngredient(name, level, quantity, fromBank, targetBuy) {
   return false;
 }
 
+/**
+ * How many copies the flat ingredients already on hand cover. Buyable entries
+ * don't bound it (a vendor tops them up) and levelled ones can't — their climb
+ * is what registering the target is *for*.
+ * @param {string} item
+ * @param {number} wanted
+ * @returns {number} copies coverable, capped at `wanted`
+ */
+function getCoveredCraftQuantity(item, wanted) {
+  let covered = wanted;
+
+  for (const [quantity, name, level] of G.craft[item].items) {
+    if (level || BUYABLE.includes(name)) continue;
+
+    const owned = countItemsAtLevel(name, 0);
+    covered = Math.min(covered, Math.floor(owned / quantity));
+  }
+
+  return covered;
+}
+
 async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   // Check if craftable
   if (
@@ -294,7 +319,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     isInvFull(4) ||
     character.c.mining ||
     character.c.fishing ||
-    !craftQuantity
+    craftQuantity < 1
   )
     return;
 
@@ -302,6 +327,12 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     log("Uncraftable/Invalid item id!");
     return;
   }
+
+  // The ingredient check below is all-or-nothing, so a batch bigger than what
+  // we hold skips the craft entirely rather than making the few we can. Falls
+  // through unclamped at 0 so the levelled ingredients still register a climb.
+  const coveredQuantity = getCoveredCraftQuantity(item, craftQuantity);
+  if (coveredQuantity >= 1) craftQuantity = coveredQuantity;
 
   const fromBank = [];
   const vendorBuy = [];
