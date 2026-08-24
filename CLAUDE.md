@@ -70,7 +70,7 @@ shared library pulled in transitively.
 
 ```
 basic_function.7.js          [SHARED — the core library]
-  loaded by every fighter entry script AND merchant_crafting.10.js;
+  loaded by every fighter entry script AND merchant_upgrade.10.js;
   itself loads, based on class/config:
     strategic_fn.11.js           combat math: damage/heal calc, gear selection, cleave/blast targeting
     normal_strategy.12.js        \_ farming strategy variants, swapped via
@@ -90,11 +90,26 @@ Fighter entry scripts (one pasted per character's CODE slot):
   each: loads 7 + 8, then defines its own fight()/mainLoop() and class-specific skill rotation
 
 Merchant entry script:
-  basic_merchant.5.js    loads merchant_crafting.10.js + merchant_service.19.js, then
-                          syncBankData() -> bankLoop() -> lureMechaGnome()
-    merchant_crafting.10.js  upgrading/compounding/crafting logic (also loads basic_function.7.js)
-    merchant_service.19.js   duty fulfillment for fighters' cm requests (potions, elixir, item pickup),
-                              crypt-opening, mob luring/dragging helpers
+  basic_merchant.5.js    globals, moveHome, the 750ms tick, duty watchdog, Ponty buying;
+                          loads every module below, then
+                          syncBankData() -> bankLoop() -> lureMechaGnome() -> dragEnt()
+                          -> merchantAttackLoop()
+    merchant_upgrade.10.js   scrolls/offerings/massproduction, ITEMS_HIGHEST_LEVEL,
+                              compoundInv/upgradeInv (also loads basic_function.7.js — the ONLY
+                              edge to slot 7 in the merchant graph, so it is listed first)
+    merchant_bank.17.js      BANK_CACHE, floors, retrieve/store, bankStoreRoutine/bankLoop, syncBankData
+    merchant_craft.18.js     CRAFT_LEVEL_TARGETS registry, ingredient counting, craft()
+    merchant_service.19.js   duty fulfillment for fighters' cm requests (potions, elixir, item pickup)
+                              and crypt-opening
+    merchant_gathering.22.js equipBroom/shouldGoChilling, goFishing, goMining, dismantleSomething
+    merchant_exchange.23.js  holidayExchange, exchangeSomething
+    merchant_luring.24.js    lureMechaGnome, and the ent train (dragEnt and friends)
+    merchant_frenzinesss.100.js  event/boss participation (merchantAttackLoop)
+
+  The merchant modules do not load each other: basic_merchant.5.js pulls them all in, and every
+  cross-module reference is inside a function body, so it resolves at call time. Nothing in the repo
+  loads the same file twice, so loader de-duplication is UNPROVEN — do not add a second edge to
+  basic_function.7.js (its top-level consts would be redeclared).
 
 Standalone / auxiliary (not wired into the load graph above, used directly or ad hoc):
   basic_with_regen.s.1.js   minimal regen-only script (note the "s.1" slot naming, distinct from "N")

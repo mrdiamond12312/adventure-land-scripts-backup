@@ -118,7 +118,7 @@ session (2026-07-19):
   so "re-path from current position on mismatch" was considered and rejected (the commented-out
   map assertion in the walk loop is a leftover of that).
 
-## Gnome luring: why the merchant must not scare (`lureMechaGnome`, merchant_service.19.js)
+## Gnome luring: why the merchant must not scare (`lureMechaGnome`, merchant_luring.24.js)
 
 `isLuringMobs` exists to suppress `scareAwayMobs()` — scare is the one skill that undoes a lure,
 and the merchant is always *able* to scare: `calculateMerchantEquipments` keeps jacko on the orb
@@ -156,7 +156,7 @@ Residual, deliberate: if the 10s handoff wait times out with gnomes still on the
 lure gives up, `isLuringMobs` drops, and the merchant scares them off rather than tanking them
 indefinitely.
 
-## Ent luring (`dragEnt`, merchant_service.19.js)
+## Ent luring (`dragEnt`, merchant_luring.24.js)
 
 Self-rescheduling loop on the merchant, same shape as `lureMechaGnome`. Goes and aggroes a wild
 `ent` with a dartgun (long range, low commitment), then walks it home along a fixed waypoint path
@@ -216,7 +216,7 @@ making a second trip. Per tick, with one attack available:
 `positionAtEntAimPoint`/`aggroEnt` still operate on the seed ent only — the extra ents are picked
 up during the walk, not at the aim point.
 
-## Self-rescheduling loop discipline (`dragEnt`/`lureMechaGnome`, merchant_service.19.js)
+## Self-rescheduling loop discipline (`dragEnt`/`lureMechaGnome`, merchant_luring.24.js)
 
 These loops keep themselves alive via `setTimeout(self, delay)`. Debugging "dragEnt stopped but
 lureMechaGnome kept going" (2026-07-17) established the failure taxonomy:
@@ -790,7 +790,7 @@ rather than fought through.
   didn't, event or not — a nearly-dead mob in reach is free, and waiting on a tank or walking in
   are exactly the ticks with a spare attack. It can't steal the boss' cooldown because it only
   runs on the `attacked: false` path.
-  **The reach it scans with is computed, not read** (`getAttackWeaponReach`, merchant_service.19.js
+  **The reach it scans with is computed, not read** (`getAttackWeaponReach`, merchant_luring.24.js
   — shared with `dragEnt`, which used to inline `character.range + character.xrange * 0.8`).
   `character.range` is the *broom's* outside a fight (`calculateMerchantEquipments` only hands over
   the dartgun while `isFightingBoss` or `isDraggingMobs`), so a live check would never see a mob
@@ -835,7 +835,7 @@ rather than fought through.
   front of `goMining`/`goFishing`/`moveHome` in the main loop: a live event outranks chilling, and
   a skipped rod cast is back off cooldown long before the next boss spawns.
 - **Banking and fighting are mutually exclusive, in both directions.** The startup bank walk wins
-  first: `hasVisitedBank` (merchant_crafting.10.js, set at the end of `bankLoop`'s first run) is in
+  first: `hasVisitedBank` (merchant_bank.17.js, set at the end of `bankLoop`'s first run) is in
   `isMerchantBusy`, so no event can start before the cache the rest of the merchant reads even
   exists. After that the fight wins: `bankLoop` waits while `isFightingBoss`, and the main loop's
   emergency `bankStoreRoutine` skips too. A full inventory (or `invJammed`) is therefore a
@@ -934,3 +934,91 @@ Weakness that is genuinely class-specific stays local: `MAGE_WEAK_MOB_TYPES` /
 `WARRIOR_WEAK_MOB_TYPES` are named event mobs, not a computed property. The mage's pinkie swap no
 longer guesses from `max_hp` either — it asks `canOneShotWithWeapon` with the pinkie actually
 carried, the same question the ranger asks when picking a bow.
+
+## Levelled craft ingredients (`CRAFT_LEVEL_TARGETS`, merchant_craft.18.js)
+
+A `G.craft` recipe entry is `[quantity, name, level?]`. The third element was ignored: `craft()`
+matched ingredients by name only and filtered bank slots to `!item.level`, so a recipe like
+t2quiver's `[1, "alloyquiver", 5]` could never be satisfied — the `+5` was invisible on both sides
+of the check.
+
+Meanwhile `upgradeInv`/`compoundInv` have no notion of a wanted level. They push toward the highest
+level they can reach and skip everything in `IGNORE` (which swallows all of `BUYABLE`), so the two
+halves worked against each other: the ingredient the craft needed was either never lifted, or lifted
+straight past the level the recipe pinned.
+
+`CRAFT_LEVEL_TARGETS` (`name -> { [level]: quantity }`) is the handshake between them. Keying by
+level rather than holding one `{ level, quantity }` pair is load-bearing in two ways.
+
+It keeps sibling recipes apart. `threadneedle` wants `blade +5`, `brinefang` wants `+7`, `wblade`
+wants `+9`; a single pair taking the deepest of the three would strand threadneedle behind a climb it
+never needed. Each level stands on its own, and `getCraftTargetLevel` (the deepest key) is what caps
+the climb.
+
+And it makes level 0 expressible, which is what protects the plain items. `[1, "staff"]` in the
+pickaxe recipe registers `staff: { 0: 1 }`; add `gstaff` and it becomes `staff: { 0: 1, 8: 1 }` —
+`countCraftStockNeeded` sums to two staves, `countSpareAtLevel` reserves the plain one, and the climb
+buys and consumes the other. Reservations are why `upgradeInv` and `compoundInv` check
+`countSpareAtLevel` before spending a copy: an item at a level someone is holding is not fuel.
+
+`craft()` is the only writer:
+
+- ingredient already on hand at that level → pull the exact-level copies from the bank, craft fires.
+  The entry is deliberately *not* released: having reached the level, it becomes the reservation that
+  stops a deeper climb of the same item from eating it;
+- not on hand but reachable → the registration stands, and the craft fails *this tick* while the
+  upgrade and compound routines do the climbing;
+- not reachable → `releaseCraftLevel` drops that one level (siblings survive), craft fails for good.
+
+`hasFlatIngredient` counts inventory at level 0 only, matching the filter the bank side always had.
+The asymmetry it replaces was unreachable before targets existed — nothing was ever above `+0` while
+`IGNORE` held — but with a climb in flight, an unfiltered count let `craft("pickaxe")` hand a
+half-climbed `staff +5` to `auto_craft`.
+
+Everything else reads the map: upgrade/compound bypass `IGNORE` for a targeted name, stop at
+`target.level` instead of chasing max, and take priority over the ordinary lowest-level pick;
+`retrievedBankItemToUpgrade` pulls targeted stock ahead of its count-based rotation and ignores
+`KEEP_THRESHOLD` for it; a level-0 reservation alone never bypasses `IGNORE` (`isCraftTargeted` asks
+for a level above 0) — it only withholds copies from being consumed; `bankStoreRoutine` won't ship a half-climbed ingredient back to the bank;
+the `SALE_ABLE` sweep won't sell one (`shield` is in both `BUYABLE` and `SALE_ABLE`, so a bought
+target would otherwise be sold back the same tick).
+
+### Reachability is measured in level-0 equivalents
+
+`countCraftStock` weighs a compound item as `3 ** level`, because a compound eats three items per
+level — one `+2` really is worth nine `+0`. Upgrades consume one item per attempt, so there every
+copy counts as one. `countCraftStockNeeded` mirrors it. The subtraction of the two is the shortfall,
+and the shortfall is what decides feasibility: covered by stock, or buyable within `MAX_CRAFT_BUY`
+(27, i.e. a compound pyramid three levels deep), or the target is released.
+
+This is why a deep compound target self-releases rather than draining gold: `3 ** 5 = 243` is past
+the cap on the first check, before a single purchase.
+
+Upgrades get no such pricing, deliberately. One owned copy is one attempt's worth whatever the target
+level, so `wblade`'s `[1, "blade", 9]` stays feasible off a single vendor blade and the merchant
+re-buys after every break. That is the intended trade: the scroll grade tracks the item's grade, not
+its level, so a grade-0 blade climbs on `scroll0` the whole way and the retry costs ~1k gold a go.
+What it does spend is upgrade tempo — targeted items outrank everything in `upgradeInv`, so a deep
+climb starves ordinary upgrading until the craft lands or the target is released.
+
+Counting deliberately reads `BANK_CACHE` directly (`forEachOwnedItem`) instead of going through
+`getItemBankSlots`, whose rare-grade filter drops grade >= 2 items whenever gold is under
+`IGNORE_RARE_GOLD_THRESHOLD`. `worldrootcrook`'s `harbringer +8` is exactly that case: the filter
+would hide the finished ingredient sitting in the bank, and the merchant would register a target and
+start climbing a second one. `getItemBankSlots` grew an `includeRare` flag for the target paths that
+still use it.
+
+### Targeted climbs never burn a primling
+
+`isRareItem` is forced false for a targeted item in both `upgradeInv` and `compoundInv`. A break on
+the way to a craft ingredient costs one more base item — which the next tick re-buys or re-registers
+— whereas an offering spent to protect it is gone either way. The same reasoning suppresses the
+post-upgrade `storeToBankFloor`: a targeted item mid-climb belongs in the inventory, and its
+`ITEMS_HIGHEST_LEVEL` entry is often absent (it was `IGNORE`d until the target existed), which would
+have made `e.level >= (highest ?? 0) - 1` true for every single level.
+
+### `map` before `every`
+
+`craft()` builds `isEnoughIngredients` with `.map(...).every(Boolean)` rather than `.every(...)`.
+A short-circuit at the first unsatisfied ingredient would skip the level check on every later one,
+so their targets would never be registered and their climb would never start.

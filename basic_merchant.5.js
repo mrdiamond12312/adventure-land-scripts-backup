@@ -1,17 +1,22 @@
-// Hey there!
-// This is CODE, lets you control your character with code.
-// If you don't know how to code, don't worry, It's easy.
-// Just set attack_mode to true and ENGAGE!
-
 if (parent.caracAL) {
   parent.caracAL.load_scripts([
-    "adventure-land-scripts-backup/merchant_crafting.10.js",
+    "adventure-land-scripts-backup/merchant_upgrade.10.js",
+    "adventure-land-scripts-backup/merchant_bank.17.js",
+    "adventure-land-scripts-backup/merchant_craft.18.js",
     "adventure-land-scripts-backup/merchant_service.19.js",
+    "adventure-land-scripts-backup/merchant_gathering.22.js",
+    "adventure-land-scripts-backup/merchant_exchange.23.js",
+    "adventure-land-scripts-backup/merchant_luring.24.js",
     "adventure-land-scripts-backup/merchant_frenzinesss.100.js",
   ]);
 } else {
   load_code(10);
+  load_code(17);
+  load_code(18);
   load_code(19);
+  load_code(22);
+  load_code(23);
+  load_code(24);
   load_code(100);
 }
 
@@ -30,170 +35,6 @@ const miningLocation = { map: "tunnel", x: -279, y: -148 };
 const homeLocation = { map: "main", x: -152, y: -137 };
 const haveAComputer = () =>
   locate_item("computer") !== -1 || locate_item("ancientcomputer") !== -1;
-
-async function equipBroom() {
-  const currentWeapon = character.slots.mainhand;
-  if (!currentWeapon || currentWeapon.name !== "broom") {
-    const broom = findMaxLevelItem("broom");
-    if (broom === -1) await retrieveBankItem("broom");
-    return equipBatch({
-      mainhand: "broom",
-      offhand: "wbookhs",
-    });
-  }
-}
-
-function shouldGoChilling() {
-  return (
-    (!is_on_cooldown("fishing") &&
-      (locate_item("rod") !== -1 ||
-        character.slots.mainhand?.name === "rod")) ||
-    (!is_on_cooldown("mining") &&
-      (locate_item("pickaxe") !== -1 ||
-        character.slots.mainhand?.name === "pickaxe")) ||
-    character.c.mining ||
-    character.c.fishing
-  );
-}
-
-function shouldGoExchangeXmas() {
-  return !(
-    onDuty ||
-    isInvFull(6) ||
-    character.q.exchange ||
-    smart.moving ||
-    isAdvanceSmartMoving ||
-    shouldGoChilling()
-  );
-}
-
-async function holidayExchange() {
-  if (!shouldGoExchangeXmas() || !parent.S["holidayseason"]) return;
-
-  const holidayItems = [
-    {
-      name: "ornament",
-      npc: "ornaments",
-      quantity: 20,
-      keep: 10,
-    },
-    {
-      name: "mistletoe",
-      npc: "mistletoe",
-      quantity: 1,
-      keep: 0,
-    },
-    {
-      name: "candycane",
-      npc: "santa",
-      quantity: 1,
-      keep: 0,
-    },
-  ];
-
-  const exchangableItem = holidayItems.find((item) => {
-    const itemName = item.name;
-    const slot = locate_item(itemName);
-    if (slot === -1 && getItemBankSlots(itemName, true).length) {
-      retrieveBankItem(itemName);
-    }
-
-    if (slot === -1) return false;
-    return character.items[slot]?.q >= item.quantity + item.keep;
-  });
-
-  if (!exchangableItem || smart.moving) return;
-
-  if (get_nearest_npc()?.npc !== exchangableItem.npc && !haveAComputer()) {
-    await equipBroom();
-    await smart_move(find_npc(exchangableItem.npc));
-  }
-
-  return exchange(locate_item(exchangableItem.name)).catch((e) => {
-    switch (e.response) {
-      case "inventory_full":
-        invJammed = true;
-    }
-  });
-}
-
-async function exchangeSomething() {
-  if (isInvFull(6)) return;
-
-  const itemName = [
-    { name: "candy1", quantity: 1 },
-    { name: "candy0", quantity: 1 },
-    { name: "gem0", quantity: 1 },
-    { name: "weaponbox", quantity: 1 },
-    { name: "armorbox", quantity: 1 },
-    { name: "mistletoe", quantity: 1 },
-    { name: "candycane", quantity: 1 },
-    { name: "greenenvelope", quantity: 1 },
-    { name: "brownenvelope", quantity: 1 },
-    { name: "xbox", quantity: 1 },
-    { name: "goldenegg", quantity: 1 },
-    { name: "5bucks", quantity: 1 },
-    { name: "candypop", quantity: 10 },
-    { name: "basketofeggs", quantity: 1 },
-    { name: "seashell", quantity: 20, npc: "fisherman" },
-    { name: "leather", quantity: 40, npc: "leathermerchant" },
-    { name: "gemfragment", quantity: 50, npc: "gemmerchant" },
-  ];
-  let slot = undefined;
-  for (const item of itemName) {
-    if (
-      !onDuty &&
-      getItemBankSlots(item.name).length &&
-      locate_item(item.name) === -1
-    ) {
-      await retrieveBankItem(item.name);
-    }
-
-    const slotIndex = locate_item(item.name);
-    if (slotIndex !== -1 && character.items[slotIndex].q >= item.quantity) {
-      slot = slotIndex;
-
-      if (
-        item.npc &&
-        !haveAComputer() &&
-        !onDuty &&
-        !isAdvanceSmartMoving &&
-        !smart.moving
-      ) {
-        await advanceSmartMove(find_npc(item.npc));
-      }
-
-      break;
-    }
-  }
-
-  if (slot === undefined) return;
-
-  if (
-    character.mp > 400 &&
-    !is_on_cooldown("massexchangepp") &&
-    !character.s.massexchangepp
-  ) {
-    if (character.mp < 1000 && locate_item("mpot1") === -1) {
-      buy("mpot1", 1);
-    }
-    use_skill("massexchangepp");
-  }
-
-  if (
-    character.mp > 50 &&
-    !is_on_cooldown("massexchange") &&
-    !character.s.massexchange
-  )
-    use_skill("massexchange");
-
-  return exchange(slot).catch((e) => {
-    switch (e.response) {
-      case "inventory_full":
-        invJammed = true;
-    }
-  });
-}
 
 async function moveHome() {
   if (
@@ -219,255 +60,6 @@ async function moveHome() {
       await town();
     }
     console.warn("movehome error:", e);
-  }
-}
-
-async function goFishing() {
-  if (
-    isInvFull() ||
-    smart.moving ||
-    isAdvanceSmartMoving ||
-    character.c.mining ||
-    character.c.fishing ||
-    is_on_cooldown("fishing") ||
-    onDuty
-  )
-    return;
-
-  const rodItemId = "rod";
-  const availableRodsInBank = getItemBankSlots(rodItemId);
-
-  if (
-    availableRodsInBank.length > 0 &&
-    character.slots.mainhand?.name !== rodItemId &&
-    !isInvFull(2) &&
-    locate_item(rodItemId) === -1
-  ) {
-    return retrieveBankItem(rodItemId);
-  }
-
-  if (
-    locate_item(rodItemId) === -1 &&
-    character.slots.mainhand?.name !== rodItemId &&
-    availableRodsInBank.length === 0 &&
-    !isInvFull(4)
-  ) {
-    return craft(rodItemId);
-  }
-
-  if (
-    character.slots.mainhand?.name !== rodItemId &&
-    locate_item(rodItemId) === -1
-  )
-    return;
-
-  if (
-    character.real_x != fishingLocation.x ||
-    character.real_y != fishingLocation.y ||
-    character.map !== fishingLocation.map
-  ) {
-    await equipBroom();
-    await advanceSmartMove(fishingLocation, {
-      useBlink: false,
-      useMagiport: false,
-      exact: true,
-    });
-  }
-
-  if (character.mp > 120) {
-    log("Fishin!");
-    return Promise.all([
-      equipBatch({
-        mainhand: rodItemId,
-        offhand: undefined,
-      }),
-      use_skill("fishing"),
-    ]);
-  }
-}
-
-async function goMining() {
-  if (
-    isInvFull() ||
-    smart.moving ||
-    isAdvanceSmartMoving ||
-    character.c.mining ||
-    character.c.fishing ||
-    is_on_cooldown("mining") ||
-    onDuty
-  )
-    return;
-
-  const pickaxeItemId = "pickaxe";
-  const availablePickaxesInBank = getItemBankSlots(pickaxeItemId, true);
-
-  if (
-    availablePickaxesInBank.length > 0 &&
-    character.slots.mainhand?.name !== pickaxeItemId &&
-    !isInvFull(2) &&
-    locate_item(pickaxeItemId) === -1
-  ) {
-    return retrieveBankItem(pickaxeItemId);
-  }
-
-  if (
-    locate_item(pickaxeItemId) === -1 &&
-    character.slots.mainhand?.name !== pickaxeItemId &&
-    availablePickaxesInBank.length === 0 &&
-    !isInvFull(4)
-  ) {
-    return craft(pickaxeItemId);
-  }
-
-  if (
-    character.slots.mainhand?.name !== pickaxeItemId &&
-    locate_item(pickaxeItemId) === -1
-  )
-    return;
-
-  if (
-    character.real_x != miningLocation.x ||
-    character.real_y != miningLocation.y ||
-    character.map !== miningLocation.map
-  ) {
-    await equipBroom();
-    await advanceSmartMove(miningLocation, {
-      useBlink: false,
-      useMagiport: false,
-      exact: true,
-    });
-  }
-
-  if (character.mp > 120) {
-    log("Mining!");
-    return Promise.all([
-      equipBatch({
-        mainhand: pickaxeItemId,
-        offhand: undefined,
-      }),
-      use_skill("mining"),
-    ]);
-  }
-}
-
-async function dismantleSomething() {
-  if (
-    onDuty ||
-    isInvFull(4) ||
-    smart.moving ||
-    isAdvanceSmartMoving ||
-    character.c.mining ||
-    character.c.fishing ||
-    isSortingInventory ||
-    Math.max(...parent.pings) > 300
-  )
-    return;
-
-  const itemToDismantle = DISMANTLE_LIST.find((id) => locate_item(id) !== -1);
-  if (!itemToDismantle) return;
-
-  if (get_nearest_npc()?.name !== "Leo" && !haveAComputer()) {
-    await advanceSmartMove(find_npc("craftsman"));
-  }
-
-  return dismantle(locate_item(itemToDismantle));
-}
-
-async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
-  // Check if craftable
-  if (
-    onDuty ||
-    isInvFull(4) ||
-    character.c.mining ||
-    character.c.fishing ||
-    !craftQuantity
-  )
-    return;
-
-  if (!G.craft[item]) {
-    log("Uncraftable/Invalid item id!");
-    return;
-  }
-
-  const fromBank = [];
-  const vendorBuy = [];
-
-  const isEnoughIngredients = G.craft[item].items.every(([quantity, name]) => {
-    quantity = quantity * craftQuantity;
-    const slots = character.items.filter((item) => item && item.name === name);
-    const bankSlots = getItemBankSlots(name, true).filter(
-      (item) => !item.level,
-    );
-
-    const totalQuantityOfSlotItem = slots.reduce(
-      (accumulator, current) => accumulator + (current.q ?? 1),
-      0,
-    );
-
-    const totalQuantityOfBankItem = bankSlots.reduce(
-      (accumulator, current) => accumulator + (current.q ?? 1),
-      0,
-    );
-
-    let numberOfItemMissing = quantity - totalQuantityOfSlotItem;
-
-    if (
-      BUYABLE.includes(name) &&
-      totalQuantityOfBankItem < numberOfItemMissing
-    ) {
-      for (
-        let count = 0;
-        count < numberOfItemMissing - totalQuantityOfBankItem;
-        count++
-      ) {
-        vendorBuy.push(name);
-        numberOfItemMissing--;
-      }
-    }
-
-    if (numberOfItemMissing > 0 && totalQuantityOfBankItem > 0) {
-      for (const bankItem of bankSlots) {
-        if (numberOfItemMissing <= 0) break;
-
-        const available = bankItem.q ?? 1;
-        const takeAmount = Math.min(available, numberOfItemMissing);
-
-        fromBank.push({ name, level: bankItem.level });
-
-        numberOfItemMissing -= takeAmount;
-      }
-    }
-
-    return (
-      totalQuantityOfSlotItem + totalQuantityOfBankItem >= quantity ||
-      BUYABLE.includes(name)
-    );
-  });
-
-  if (vendorBuy.length && isEnoughIngredients) {
-    await Promise.all(vendorBuy.map((id) => buy(id)));
-  }
-
-  if (fromBank.length && isEnoughIngredients) {
-    for (const item of fromBank) {
-      await retrieveBankItem(item.name);
-    }
-  }
-
-  if (isEnoughIngredients) {
-    const hasComputer = haveAComputer();
-
-    if (
-      !isAdvanceSmartMoving &&
-      !smart.moving &&
-      ((!hasComputer && get_nearest_npc()?.name !== "Leo") ||
-        (hasComputer && character.map.includes("bank")))
-    ) {
-      await advanceSmartMove(place, { useBlink: false, useMagiport: false });
-    }
-
-    for (let trial = 0; trial < craftQuantity; trial++) await auto_craft(item);
-    return;
   }
 }
 
@@ -517,6 +109,8 @@ setInterval(async function () {
       dismantleSomething(),
       craft("xbox", 1, homeLocation),
       craft("orba", 1, homeLocation),
+      craft("armorring", 1, homeLocation),
+      craft("resistancering", 1, homeLocation),
       craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
       craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
       craft("wingedboots", character.esize - 8, { map: "main", x: -2, y: 295 }),
@@ -537,6 +131,7 @@ setInterval(async function () {
           Array.from({ length: 42 }, (_, i) => i)
             .filter((i) => {
               if (!character.items[i]) return false;
+              if (isCraftIngredient(character.items[i].name)) return false;
               return (
                 SALE_ABLE.includes(character.items[i].name) &&
                 !character.items[i].shiny &&
@@ -627,6 +222,8 @@ const ITEM_NEEDED = [
   { name: "angelwings" },
   { name: "smoke" },
   { name: "gphelmet" },
+  { name: "vitring", maxLevel: 2 },
+  { name: "vitearring", maxLevel: 2 },
 ];
 
 /** @returns {boolean} whether the secondhands entry satisfies the wanted item's filters */
