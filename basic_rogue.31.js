@@ -41,11 +41,12 @@ async function fight(target) {
   // and the attack cooldown must be timed with the frequency at fire time.
   const attackFrequencyBeforeCompensate = character.frequency;
 
+  const party = getAlliedNames();
   const allAggroedByParty = Object.values(parent.entities)
     .filter(
       (entity) =>
         entity.type === "monster" &&
-        ([...partyMems, ...parent.party_list].includes(entity.target) ||
+        (party.has(entity.target) ||
           (entity.cooperative && entity.target)) &&
         !MELEE_IGNORE_LIST.includes(entity.mtype) &&
         inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),

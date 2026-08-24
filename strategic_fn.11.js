@@ -272,6 +272,8 @@ function shouldWearLuckGear() {
 }
 
 function shouldWearExpGear() {
+  const party = getAlliedNames();
+
   return Object.values(parent.entities).some(
     (mob) =>
       mob.type === "monster" &&
@@ -279,7 +281,7 @@ function shouldWearExpGear() {
       !mob.rip &&
       !mob.dead &&
       mob.hp > 0 &&
-      (parent.party_list.includes(mob.target) || mob.cooperative) &&
+      (party.has(mob.target) || mob.cooperative) &&
       mob.hp <= Math.min(mob.max_hp * 0.1, 300000) &&
       mob.max_hp > calculateDamage(character, mob, false) * 2,
   );
@@ -1717,7 +1719,7 @@ function shouldAttack(target = get_target()) {
     calculateDamage(target, character, false) > DANGEROUS_MOB_DAMAGE &&
     (!target.target || target.target === character.name)
   ) {
-    const partyPriests = [...parent.party_list, ...partyMems]
+    const partyPriests = [...getAlliedNames()]
       .map((id) => get_player(id))
       .filter((player) => player?.ctype === "priest");
 

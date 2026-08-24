@@ -688,6 +688,44 @@ The reporter must **be able to see the field**: it returns early unless the char
 and within `ENT_FIELD_REPORT_RANGE` of `{mapX, mapY}`. A distant fighter would otherwise report `0`
 ents and hand the merchant the same false green light in a new form.
 
+## Two party rosters, one definition each (`getMyCharacters`/`getAlliedNames`)
+
+There are two different questions and they had been spelled out by hand, differently, at a dozen
+call sites:
+
+- **`getMyCharacters()` — `[...partyMems, partyMerchant]`, our own characters.** `partyMems` alone
+  is the *fighting roster*; the merchant is a member of the party too (`deployCharacters` invites
+  exactly this list every 10s). Use it for "is this one of mine".
+- **`getAlliedNames()` — ours plus `parent.party_list`, as a `Set`, self included.** Use it for
+  "is this mob being held by someone on our side", where an outsider sharing the party counts.
+
+**The bug that prompted it (debugged 2026-08-25): the warrior never agitated.**
+`wontStealOrBreakCoop` derived its outsiders as `parent.party_list.filter(name =>
+!partyMems.includes(name))`, so our **own merchant** read as an outsider. The merchant stands at
+the farm spot with dragged ents attached to it more or less permanently, which made
+`mobsTargetingExternalParty` true on nearly every tick; the only escape clause is being more than
+300px from the farm spot, which the tanker never is. Joining `trustedPartners`' party sharpened it
+— their mobs are on our field by design — but the merchant alone was already enough to hold
+agitate off for good. The same `partyMems` test inside the cooperative clause had the same hole.
+
+Two callers keep `parent.party_list` deliberately: the priest's `shouldPartyHeal`, because
+`partyheal` only reaches actual party members, and the party-management interval, which is what
+maintains the list in the first place.
+
+**What the pull is judged on is `mobsInAgitateRange`, not everything in view.** `mobsList` is every
+monster the client can see (~a screen wide); agitate has a radius. `formidableMonsterAppeared` used
+the former, so a single mob over `MAX_MOB_DPS` — or a `porcupine` — anywhere on screen disabled the
+pull even though agitate could never reach it. It and `currentAggroDamage` now share one in-range
+scan. The counts that stay screen-wide are the ones about mobs *already* on us
+(`havePulledEnoughMobs`, the per-damage-type courage tallies): a mob chasing us counts against our
+load wherever it currently stands.
+
+Still deliberate, and still the first thing to check if agitate stays quiet at an ent farm: the
+cooperative clause refuses when *any* untargeted coop mob is in range. `ent` is cooperative, so a
+fresh one standing at the spawn blocks the pull — waking an unowned ent by accident is exactly what
+`dragEnt` exists to do on purpose. `mobsTargetingExternalParty` also still scans every monster on
+screen rather than the ones agitate could reach.
+
 ## Splash safety: one scan, three thresholds (`hasUntargetedMonsterAround`)
 
 An unaggroed mob inside a blast radius is a mob you are about to *wake*. Three call sites wanted

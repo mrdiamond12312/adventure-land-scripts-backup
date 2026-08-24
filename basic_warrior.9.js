@@ -273,11 +273,12 @@ function getTauntTarget() {
   const partyHealer = get_player(HEALER) || get_player(RANGER);
   if (!partyHealer || partyHealer.rip) return null;
 
+  const myCharacters = getMyCharacters();
   const mobsTargetingAlly = Object.values(parent.entities)
     .filter(
       (entity) =>
         entity.type === "monster" &&
-        [...partyMems, partyMerchant].some(
+        myCharacters.some(
           (ally) => ally !== character.name && entity.target === ally,
         ) &&
         calculateDamage(entity, character) < 3000 &&

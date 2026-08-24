@@ -66,6 +66,23 @@ const CODE_SLOTS = {
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
 
+/** @returns {string[]} our own characters — the current roster plus the merchant */
+function getMyCharacters() {
+  return [...partyMems, partyMerchant];
+}
+
+/**
+ * Everyone we fight alongside — ours, plus whatever outsider shares the party.
+ * @returns {Set<string>}
+ */
+function getAlliedNames() {
+  return new Set([
+    character.name,
+    ...getMyCharacters(),
+    ...(parent.party_list ?? []),
+  ]);
+}
+
 //  run and hit
 const movementHistory = [];
 var flipRotation = 1;
@@ -761,7 +778,7 @@ function isMelee() {
 function getTarget() {
   const leader = get_entity(TANKER) ?? get_entity(partyMems[0]);
   const declared = getMonstersOnDeclares();
-  const party = new Set([...partyMems, partyMerchant, ...parent.party_list]);
+  const party = getAlliedNames();
 
   let target =
     declared && declared.cooperative ? declared : get_targeted_monster();
@@ -1244,7 +1261,7 @@ hitAndRun();
 const HEAL_IGNORE = ["Geoffriel"];
 
 function prioritizedNames() {
-  return [...new Set([...partyMems, partyMerchant, ...parent.party_list])];
+  return [...getAlliedNames()];
 }
 
 // Track max heal power so the threshold stays stable across gear swaps.
@@ -1373,7 +1390,7 @@ async function midasLooting(forced = false) {
   const promises = [];
 
   const bestLooterCharacter = bestLooter();
-  const partyMidasUsers = [...parent.party_list, ...partyMems, character.name]
+  const partyMidasUsers = [...getAlliedNames()]
     .map((id) => get_player(id))
     .filter((player) => player && MIDAS_CHARACTER.includes(player.name));
 
@@ -1672,7 +1689,7 @@ function deployCharacters() {
   //// Deploy characters which arent active
   const loadedCharacters = get_active_characters();
   const loadedCharactersNames = Object.keys(loadedCharacters);
-  const allCharacters = [...partyMems, partyMerchant];
+  const allCharacters = getMyCharacters();
 
   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
     if (character.ctype === "merchant" && parent.caracAL.siblings.length)
@@ -1721,7 +1738,7 @@ setInterval(async () => {
     whitelistPartyMembers.some((whitelisted) => whitelisted.name === member),
   );
 
-  const myMemberList = [...partyMems, partyMerchant];
+  const myMemberList = getMyCharacters();
 
   const characterNotInOutsiderParty = serverCharacters.filter(
     (char) =>
@@ -1833,11 +1850,7 @@ function publishEntFieldReport() {
   )
     return;
 
-  const partyNames = new Set([
-    ...partyMems,
-    partyMerchant,
-    ...parent.party_list,
-  ]);
+  const partyNames = getAlliedNames();
   const entsTargetingPartyCount = Object.values(parent.entities).filter(
     (entity) =>
       entity &&

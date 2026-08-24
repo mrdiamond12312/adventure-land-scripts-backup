@@ -296,7 +296,7 @@ function getHuntersMarkTarget() {
   if (character.mp < SURGE_MP_OFFSET || is_on_cooldown("huntersmark"))
     return null;
 
-  const party = new Set([...partyMems, partyMerchant, ...parent.party_list]);
+  const party = getAlliedNames();
 
   return (
     Object.values(parent.entities)

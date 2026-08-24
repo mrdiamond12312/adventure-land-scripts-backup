@@ -61,7 +61,12 @@ async function usePullStrategies(target) {
         promises.push(equipBatch(suggestedWarriorItems));
       }
 
-      const formidableMonsterAppeared = mobsList.find(
+      // Everything agitate would reach — what the pull is judged on
+      const mobsInAgitateRange = mobsList.filter((mob) =>
+        is_in_range(mob, "agitate"),
+      );
+
+      const formidableMonsterAppeared = mobsInAgitateRange.find(
         (mob) =>
           calculateDamage(mob, character) > MAX_MOB_DPS ||
           MELEE_IGNORE_LIST.includes(mob.mtype),
@@ -73,8 +78,8 @@ async function usePullStrategies(target) {
         MAX_TARGET;
 
       // Monsters that are in range of 'agitate' but *not* currently targeting the character
-      const listOfNoTargetMonsterInRange = mobsList.filter(
-        (mob) => is_in_range(mob, "agitate") && mob.target !== character.name,
+      const listOfNoTargetMonsterInRange = mobsInAgitateRange.filter(
+        (mob) => mob.target !== character.name,
       );
 
       // Count mobs targeting self
@@ -140,8 +145,9 @@ async function usePullStrategies(target) {
       );
 
       // Mob Target Check: Agitate won't steal from others or cooperative mobs
+      const myCharacters = getMyCharacters();
       const externalPartyMembers = parent.party_list.filter(
-        (name) => !partyMems.includes(name),
+        (name) => !myCharacters.includes(name),
       );
 
       const mobsTargetingExternalParty = mobsList.some((mob) =>
@@ -153,7 +159,7 @@ async function usePullStrategies(target) {
           (mob) =>
             mob.cooperative &&
             !mob["1hp"] &&
-            (!partyMems.includes(mob.target) ||
+            (!myCharacters.includes(mob.target) ||
               externalPartyMembers.includes(mob.target)),
         ) &&
         (!mobsTargetingExternalParty ||
@@ -163,13 +169,8 @@ async function usePullStrategies(target) {
       const willNotBeFeared = !isFearedAfterAgitating;
 
       // Damage Check
-      const currentAggroDamage = Object.values(parent.entities)
-        .filter(
-          (entity) =>
-            entity.type === "monster" &&
-            is_in_range(entity, "agitate") &&
-            !partyMems.includes(entity.target),
-        )
+      const currentAggroDamage = mobsInAgitateRange
+        .filter((mob) => !partyMems.includes(mob.target))
         .reduce((prev, curr) => prev + calculateDamage(curr, character), 0);
 
       const damageIsAcceptable =

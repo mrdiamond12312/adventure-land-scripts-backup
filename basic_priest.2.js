@@ -186,7 +186,7 @@ function getCurseTarget() {
 // A party member (not us, not the tank) in absorb range and holding aggro.
 function getAbsorbTarget() {
   if (character.mp < G.skills["absorb"].mp + 600) return null;
-  const vulnerableMems = [...partyMems, partyMerchant].filter(
+  const vulnerableMems = getMyCharacters().filter(
     (id) => id !== character.name && id !== TANKER,
   );
   for (const memberId of vulnerableMems) {
