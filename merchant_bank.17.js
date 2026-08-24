@@ -172,6 +172,84 @@ async function retrieveBankItem(searchId, level = 0) {
   return bank_retrieve(targetPack, targetSlot).then(updateBank);
 }
 
+// Bag space the gear trip leaves alone for scrolls, offerings and loot
+const MERCHANT_GEAR_FREE_SLOTS = 4;
+
+/**
+ * Pulls one copy of every item calculateMerchantEquipments can ask for out of
+ * the bank: locked first, then highest level. Only the swap that matches our
+ * current state ever gets equipped, but the pieces for the others have to be in
+ * the bag already — a swap mid-lure or mid-boss can't wait for a bank trip.
+ * @returns {Promise<void>}
+ */
+async function retrieveMerchantGear() {
+  if (character.ctype !== "merchant" || !BANK_CACHE) return;
+
+  const carried = new Set(
+    [
+      ...Object.entries(character.slots)
+        .filter(([slot]) => !slot.startsWith("trade"))
+        .map(([, item]) => item),
+      ...character.items,
+    ]
+      .filter(Boolean)
+      .map((item) => item.name),
+  );
+
+  const targets = [];
+  for (const name of getMerchantGearNames()) {
+    if (carried.has(name)) continue;
+
+    // A locked copy is the one set aside for us on purpose; level only breaks ties
+    const best = getItemBankSlots(name, true, true)
+      .sort(
+        (lhs, rhs) =>
+          (lhs.l ? 1 : 0) - (rhs.l ? 1 : 0) ||
+          (lhs.level ?? 0) - (rhs.level ?? 0),
+      )
+      .pop();
+
+    if (best?.floor) targets.push(best);
+  }
+
+  // Grouped by floor so the trip walks each one once
+  targets.sort((lhs, rhs) => lhs.floor.localeCompare(rhs.floor));
+
+  // Retrieved by pack/slot, not by name+level: a same-level unlocked twin would
+  // otherwise be what the search hands back
+  for (const target of targets) {
+    if (character.esize <= MERCHANT_GEAR_FREE_SLOTS) return;
+    if (!(await goToBankFloor(target.floor))) continue;
+
+    await bank_retrieve(target.pack, target.slot).catch((error) =>
+      console.warn(`Failed retrieving ${target.name}`, error),
+    );
+  }
+
+  return updateBank();
+}
+
+/**
+ * Inventory indices holding the copy of each merchant-gear item we keep — the
+ * highest level one. Spares stay bankable, so the upgrade rotation still gets
+ * them and only what a swap would reach for is pinned to the bag.
+ * @returns {Set<number>}
+ */
+function getMerchantGearKeepIndices() {
+  if (character.ctype !== "merchant") return new Set();
+
+  const gear = getMerchantGearNames();
+  const keepers = {};
+
+  character.items.forEach((item, index) => {
+    if (!item || !gear.has(item.name)) return;
+    if ((item.level ?? 0) <= (keepers[item.name]?.level ?? -1)) return;
+    keepers[item.name] = { level: item.level ?? 0, index };
+  });
+
+  return new Set(Object.values(keepers).map((keeper) => keeper.index));
+}
+
 /**
  * Stores an inventory item into the bank.
  * Tries the current floor first, then falls back to other accessible floors.
@@ -205,7 +283,10 @@ async function storeToBankFloor(inventoryIndex) {
   console.warn(`Could not store item at index ${inventoryIndex} on any floor.`);
 }
 
-async function storeMatchingItemsOnFloor(toStoreItemSet) {
+async function storeMatchingItemsOnFloor(
+  toStoreItemSet,
+  keepIndices = new Set(),
+) {
   const floorItems = getItemNamesOnCurrentFloor();
 
   if (!floorItems.size) return;
@@ -216,6 +297,7 @@ async function storeMatchingItemsOnFloor(toStoreItemSet) {
   for (let i = 0; i < character.items.length; i++) {
     const item = character.items[i];
     if (!item) continue;
+    if (keepIndices.has(i)) continue;
     if (!toStoreItemSet.has(item.name)) continue;
     if (floorItems.has(item.name)) {
       indices.push(i);
@@ -242,12 +324,16 @@ async function storeMatchingItemsOnFloor(toStoreItemSet) {
  * @param {Boolean} forced to force storing weapons without checking its level
  */
 async function bankStoreRoutine(forced = false) {
+  // Indices stay valid for the whole routine: storing leaves a hole behind
+  const keepIndices = getMerchantGearKeepIndices();
+
   // Determine which items to store
   const toStore = character.items
     .map((item, index) => ({ item, index }))
-    .filter(({ item }) => {
+    .filter(({ item, index }) => {
       if (!item) return false;
       if (item.l) return false; // skip locked items
+      if (keepIndices.has(index)) return false;
 
       const targetLevel = getCraftTargetLevel(item.name);
       if (targetLevel > 0 && (item.level ?? 0) < targetLevel) return false;
@@ -273,7 +359,7 @@ async function bankStoreRoutine(forced = false) {
   const floors = Object.keys(BANK_FLOORS);
   for (const floor of floors) {
     await goToBankFloor(floor, true);
-    await storeMatchingItemsOnFloor(toStoreItemSet);
+    await storeMatchingItemsOnFloor(toStoreItemSet, keepIndices);
   }
 
   // Backward pass (leftovers get another chance)
@@ -283,6 +369,7 @@ async function bankStoreRoutine(forced = false) {
     for (let i = 0; i < character.items.length; i++) {
       const item = character.items[i];
       if (!item) continue;
+      if (keepIndices.has(i)) continue;
 
       if (toStoreItemSet.has(item.name)) {
         promises.push(
@@ -321,6 +408,7 @@ async function bankLoop() {
       hasVisitedBank = true;
 
       retrieveMaxItemsLevel();
+      await retrieveMerchantGear();
       await retrievedBankItemToUpgrade();
       delay = 60_000;
       return;
@@ -329,6 +417,7 @@ async function bankLoop() {
     await bankStoreRoutine();
 
     retrieveMaxItemsLevel();
+    await retrieveMerchantGear();
     await retrievedBankItemToUpgrade();
   } catch (e) {
     console.warn("bank loop error:", e);

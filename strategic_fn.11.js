@@ -952,36 +952,72 @@ function getMerchantOffhand(isArmed, feelingLucky) {
   return getBestQuiver()?.name ?? ATTACK_OFFHAND;
 }
 
-function getMerchantAmulet(feelingLucky) {
+function getMerchantAmulet(feelingLucky, isBusy) {
   if (feelingLucky) return "spookyamulet";
-  return isLuringMobs || isFightingBoss ? "t2intamulet" : "warmscarf";
+  return isBusy ? "t2intamulet" : "warmscarf";
+}
+
+/**
+ * The three questions the merchant gear table branches on.
+ * @returns {{isArmed: boolean, feelingLucky: boolean, isBusy: boolean}}
+ */
+function getMerchantGearState() {
+  return {
+    isArmed: shouldHoldAttackWeapon(),
+    feelingLucky: shouldWearLuckGear(),
+    isBusy: !!(isLuringMobs || isFightingBoss),
+  };
 }
 
 /**
  * Merchant-only
+ * @param {{isArmed: boolean, feelingLucky: boolean, isBusy: boolean}} [state]
+ *  defaults to what we are actually doing — pass a state to ask what some other
+ *  situation would want
  */
-function calculateMerchantEquipments() {
-  const isArmed = shouldHoldAttackWeapon();
-  const feelingLucky = shouldWearLuckGear();
+function calculateMerchantEquipments(state = getMerchantGearState()) {
+  const { isArmed, feelingLucky, isBusy } = state;
 
   return {
-    helmet: isLuringMobs || isFightingBoss ? "xhelmet" : "eear",
+    helmet: isBusy ? "xhelmet" : "eear",
     // Dartgun keeps us out of the boss' melee range while still landing hits
     mainhand: isArmed ? ATTACK_WEAPON : "broom",
     offhand: getMerchantOffhand(isArmed, feelingLucky),
-    amulet: getMerchantAmulet(feelingLucky),
+    amulet: getMerchantAmulet(feelingLucky, isBusy),
     // scareAwayMobs re-equips jacko itself when something actually aggroes us
     orb: feelingLucky ? "rabbitsfoot" : "jacko",
     chest: "tshirt4",
     pants: "pants",
     ring1: "solitaire",
-    ring2: isLuringMobs || isFightingBoss ? "armorring" : "dexring",
+    ring2: isBusy ? "armorring" : "dexring",
     shoes: "eslippers",
     gloves: "gloves1",
     belt: "sbelt",
     earring1: "dexearring",
     earring2: "dexearring",
   };
+}
+
+/**
+ * Every item calculateMerchantEquipments can ask for, whichever way its branches
+ * fall — the whole state space evaluated, so nothing here can drift out of sync
+ * with the table above.
+ * @returns {Set<string>}
+ */
+function getMerchantGearNames() {
+  const names = new Set();
+
+  for (let state = 0; state < 8; state++) {
+    const equipments = calculateMerchantEquipments({
+      isArmed: !!(state & 1),
+      feelingLucky: !!(state & 2),
+      isBusy: !!(state & 4),
+    });
+
+    for (const name of Object.values(equipments)) names.add(name);
+  }
+
+  return names;
 }
 
 function calculateBestItems(characterClass = character.ctype) {

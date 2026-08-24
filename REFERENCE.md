@@ -900,6 +900,24 @@ rather than fought through.
   `mshield` while it's up — the range loss is deliberate, since what makes us lucky is a mob that
   is nearly dead anyway — plus `rabbitsfoot`/`spookyamulet`. Losing `jacko` off the orb is safe:
   `scareAwayMobs` re-equips it itself before casting.
+- **The bank trip stocks every branch, not the current one.** A swap happens mid-lure or mid-boss,
+  where walking to the bank for the missing piece is not an option, so `retrieveMerchantGear`
+  (merchant_bank.17.js, run from `bankLoop` while the duty is held) pulls one copy of the whole
+  table. The union comes from `getMerchantGearNames`, which *evaluates*
+  `calculateMerchantEquipments` over all eight states rather than listing names — which is why the
+  three branch inputs became an explicit `state` parameter (`getMerchantGearState` supplies the
+  live one). A hand-kept list would drift the first time a slot changed. Per name it takes the
+  **locked copy first**, level only breaking ties — a lock is a deliberate "this one is the
+  merchant's", while the highest level may well be upgrade fodder in flight. That is also why it
+  retrieves by pack/slot instead of `retrieveBankItem`'s name+level search, which would hand back
+  a same-level unlocked twin. Retrieval alone isn't
+  enough: `bankStoreRoutine` would ship the spares straight back on the next pass, since a bagged
+  `broom`/`jacko` reads as high-level and equipable. `getMerchantGearKeepIndices` pins the
+  *highest level copy of each* by inventory index — by name would starve the upgrade rotation of
+  `dexearring`/`solitaire`/`pants` fodder, and the store passes work off names, so the index set
+  has to be threaded through `storeMatchingItemsOnFloor` and the backward pass too. Indices stay
+  valid mid-routine because storing leaves a hole rather than compacting. `ensureDartgun` stays as
+  the just-in-time path for the one piece a drag cannot start without.
 - **The home/boss ping-pong (debugged 2026-08-02).** Symptom: at snowman with `fullguardx` up,
   the merchant walked home and back, repeatedly. `fullguardx` was only the trigger — with nothing
   to shoot, the merchant idles at the event, so the 750ms main loop's `compoundInv`/`upgradeInv`
