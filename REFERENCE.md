@@ -166,8 +166,8 @@ travel out to it. A run can bring back up to `MAX_CONCURRENT_ENT` of them (see b
 Guards before/during a run:
 - Only runs at all while farming `desertland` (`map === ENT_LURE_MAP`).
 - Skips if already busy (`onDuty`/`isLuringMobs`/smart-moving/chilling), a live server event is
-  running, or the field report says `MAX_ENT` ents are already engaged with the party at spawn
-  (`hasMaxEntsEngagedAtSpawn`, see "Field reports must fail closed") — avoids double-luring.
+  running, or the field report says the party already has `getMaxEntAtSpawn()` ents engaged at
+  spawn (`hasMaxEntsEngagedAtSpawn`, see "Field reports must fail closed") — avoids double-luring.
 - Requires the party's own `PRIEST` to be an online sibling (`isPriestOnline()`), checked both
   before starting and repeatedly mid-lure — if `dynamicParty()` swaps PRIEST out for ROGUE while
   an ent is being dragged, the lure aborts cleanly rather than bringing home an unhealed tank.
@@ -215,6 +215,29 @@ making a second trip. Per tick, with one attack available:
 
 `positionAtEntAimPoint`/`aggroEnt` still operate on the seed ent only — the extra ents are picked
 up during the walk, not at the aim point.
+
+### Both ent caps are a question, not a constant (`getMaxEntAtSpawn`/`getMaxConcurrentEnt`)
+
+`MAX_ENT` (3) and `MAX_CONCURRENT_ENT` (2) are what the party can hold *with an outsider tank* —
+one of `trustedPartners` sharing the field. On our own, the same numbers are what gets the party
+killed, so both collapse to `SOLO_MAX_ENT` (1): one ent at spawn, one ent per run.
+
+The signal is **a partner standing with the field observer**, not a name in the party list. Being
+partied with someone farming elsewhere tanks nothing for us, so `publishEntFieldReport` — already
+the only script that has eyes on the farm spot — also reports `trustedPartnerNearby` (a live,
+non-rip partner within `ENT_FIELD_PARTNER_RANGE` of the reporter), and the merchant reads it off
+the same report it already reads the ent count from. That also means the caps inherit the report's
+fail-closed rule: a stale report reads as *no partner*, i.e. the solo caps, matching
+`hasMaxEntsEngagedAtSpawn`'s "assume the field is full rather than lure blind".
+
+Both are asked per tick rather than resolved once per run, so a partner logging off mid-drag stops
+the train from being topped up. It cannot *shrink* a train already aggroed — there is no way to
+drop an ent but scare, which the walk is already doing for damage.
+
+`trustedPartners` moved to the config block in basic_function.7.js when the fighters started
+needing it for the report. It must live in exactly one file: slot 7 and slot 24 are evaluated into
+the same global scope on the merchant, so a second `const` of that name is a redeclaration error
+that takes the whole merchant down.
 
 ## Self-rescheduling loop discipline (`dragEnt`/`lureMechaGnome`, merchant_luring.24.js)
 
@@ -577,6 +600,24 @@ Which skills opt in is decided by **where the code used to live**, not by taste:
 
 Deliberate divergence: rogue `quickstab` used to run while moving (it was in `fuaLoop`) and is now
 blocked anyway.
+
+## `smartmoveDebug` must be passed as an option, not just set (debugged 2026-08-25)
+
+`smartmoveDebug` is the exemption from that `isMovingControlled` gate: the three kite-internal
+smart moves in basic_function.7.js (the franky/nerfedmummy corner anchor in `resolveKiteTarget`,
+the tanker's path-around-an-obstacle in `resolveDestination`, the stuck-while-kiting nudge) are
+*repositioning inside a fight*, not travel, so the main loop and the skill loops must keep running
+through them.
+
+Setting the global before the call only works on the native path. `StrategicSmartMove.smartMove`
+(the `parent.caracAL` path) assigns `smartmoveDebug = options.smartmoveDebug` — default `false` —
+right before it starts walking, so a caller that set the global by hand had it clobbered one line
+later. Symptom: the priest tanking franky walked it to the corner with target selection skipped
+for the whole trip, so `changeToDailyEventTargets`' per-tick `scareAwayMobs()` never ran, and the
+trip's own `useScare: false` meant nothing scared either — the tank ate the entire lure. Callers
+now pass `smartmoveDebug: true` in the options *and* set the global (the native
+`oldAdvanceSmartMove` ignores the option), and reset it in a `finally`: `smartMove` throws on an
+unfindable path, which used to skip the reset and leave every later travel move un-gated.
 
 ## `canUse` stashes what `cast` uses
 

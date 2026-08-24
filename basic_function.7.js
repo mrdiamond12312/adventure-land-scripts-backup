@@ -25,6 +25,9 @@ var TANKER =
 
 const MIDAS_CHARACTER = [MAGE, "CrownPriest"];
 
+// Outsiders we team up with — their tank changes what the party can hold
+const trustedPartners = ["earthPri", "earthWar"];
+
 const CODE_SLOTS = {
   MoohThatCow: {
     homeServer: "EUII",
@@ -943,13 +946,17 @@ async function resolveKiteTarget(target) {
   ) {
     if (distance(FRANKY_PREFER_SPOT, character) > 100) {
       smartmoveDebug = true;
-      await advanceSmartMove(FRANKY_PREFER_SPOT, {
-        speed: 200,
-        useScare: false,
-        useMagiport: false,
-        useBlink: false,
-      });
-      smartmoveDebug = false;
+      try {
+        await advanceSmartMove(FRANKY_PREFER_SPOT, {
+          speed: 200,
+          useScare: false,
+          useMagiport: false,
+          useBlink: false,
+          smartmoveDebug: true,
+        });
+      } finally {
+        smartmoveDebug = false;
+      }
     }
     return withFixedSpot(target, FRANKY_PREFER_SPOT);
   }
@@ -1107,11 +1114,19 @@ async function resolveDestination(desired, orbit, radiusTotal) {
 
   if (orbit.isTankerHoldingFarmMob) {
     smartmoveDebug = true;
-    await advanceSmartMove(
-      { x: desired.x, y: desired.y, map: character.map },
-      { useScare: false, speed: 200, useTown: false },
-    );
-    smartmoveDebug = false;
+    try {
+      await advanceSmartMove(
+        { x: desired.x, y: desired.y, map: character.map },
+        {
+          useScare: false,
+          speed: 200,
+          useTown: false,
+          smartmoveDebug: true,
+        },
+      );
+    } finally {
+      smartmoveDebug = false;
+    }
     return null;
   }
 
@@ -1514,40 +1529,43 @@ setInterval(async function () {
   ) {
     smartmoveDebug = true;
     log("Debug being stuck while kiting");
-    if (parent.caracAL) {
-      if (can_move_to(currentTarget.x, currentTarget.y))
-        await move(
-          (currentTarget.real_x + character.real_x) / 2,
-          (currentTarget.real_y + character.real_y) / 2,
-        );
-      else
-        await advanceSmartMove(
-          {
+    try {
+      if (parent.caracAL) {
+        if (can_move_to(currentTarget.x, currentTarget.y))
+          await move(
+            (currentTarget.real_x + character.real_x) / 2,
+            (currentTarget.real_y + character.real_y) / 2,
+          );
+        else
+          await advanceSmartMove(
+            {
+              map: character.map,
+              x: currentTarget.real_x,
+              y: currentTarget.real_y,
+            },
+            {
+              useScare: ![TANKER, PRIEST].includes(character.name),
+              useTown: false,
+              speed: 200,
+              smartmoveDebug: true,
+            },
+          );
+      } else {
+        if (can_move_to(currentTarget.x, currentTarget.y))
+          await move(
+            (currentTarget.real_x + character.real_x) / 2,
+            (currentTarget.real_y + character.real_y) / 2,
+          );
+        else
+          await advanceSmartMove({
             map: character.map,
             x: currentTarget.real_x,
             y: currentTarget.real_y,
-          },
-          {
-            useScare: ![TANKER, PRIEST].includes(character.name),
-            useTown: false,
-            speed: 200,
-          },
-        );
-    } else {
-      if (can_move_to(currentTarget.x, currentTarget.y))
-        await move(
-          (currentTarget.real_x + character.real_x) / 2,
-          (currentTarget.real_y + character.real_y) / 2,
-        );
-      else
-        await advanceSmartMove({
-          map: character.map,
-          x: currentTarget.real_x,
-          y: currentTarget.real_y,
-        });
+          });
+      }
+    } finally {
+      smartmoveDebug = false;
     }
-
-    smartmoveDebug = false;
   }
 
   const obj = {
@@ -1797,11 +1815,13 @@ const ENT_FIELD_MAX_FOR_ROGUE = 2;
 const ENT_FIELD_STALE_MS = 15 * 1000;
 const ENT_FIELD_REPORT_RANGE = 500;
 const ENT_FIELD_AGGRO_RANGE = 300;
+const ENT_FIELD_PARTNER_RANGE = 400;
 
 /**
- * Publishes how many ents are engaged with the party at the farm spot, for the
- * merchant's lure gate and the rogue swap. Called from the watchers' mainLoop
- * so the count stays live; any class can report, not just the mage.
+ * Publishes how many ents are engaged with the party at the farm spot, plus
+ * whether a trusted partner is standing with us, for the merchant's lure gate
+ * and the rogue swap. Called from the watchers' mainLoop so the count stays
+ * live; any class can report, not just the mage.
  */
 function publishEntFieldReport() {
   if (isMerchant()) return;
@@ -1828,9 +1848,19 @@ function publishEntFieldReport() {
       distance(entity, farmSpot) < ENT_FIELD_AGGRO_RANGE,
   ).length;
 
+  const trustedPartnerNearby = trustedPartners.some((name) => {
+    const partner = get_player(name);
+    return (
+      partner &&
+      !partner.rip &&
+      distance(character, partner) < ENT_FIELD_PARTNER_RANGE
+    );
+  });
+
   set("entFieldReport", {
     reporter: character.name,
     entsTargetingPartyCount,
+    trustedPartnerNearby,
     time: Date.now(),
   });
 }
@@ -2002,7 +2032,7 @@ const DYNAMIC_PARTY_PRESETS = {
 
   default: () => {
     const globalParty = get("currentParty");
-    const knownTankers = ["CrownPriest", "earthPri", "earthWar"];
+    const knownTankers = ["CrownPriest", ...trustedPartners];
     HEALER = PRIEST;
 
     if (

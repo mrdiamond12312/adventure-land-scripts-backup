@@ -2,7 +2,6 @@
 
 var isLuringMobs = false;
 var isDraggingMobs = false;
-const trustedPartners = ["earthPriest", "earthWar"];
 
 async function lureMechaGnome() {
   let nextDelay = 1000;
@@ -109,6 +108,7 @@ const ENT_TICK = 10;
 const ENT_DEATH_POLL = 100;
 const MAX_ENT = 3; // party can engage up to this many ents at once near spawn
 const MAX_CONCURRENT_ENT = 2; // ents dragged at once in a single run
+const SOLO_MAX_ENT = 1; // both caps, while no trusted partner tanks with us
 // px around the avg distance of the dragged ents; 999 = effectively off, drop
 // it back to ~10 if a staggered pack outruns the scare cooldown
 const ENT_PICKUP_TOLERANCE = 999;
@@ -130,9 +130,32 @@ function getEntWaypoints() {
   ];
 }
 
+/**
+ * Whether a trusted partner is standing at the farm spot with the reporter — a
+ * partner in the party list but somewhere else isn't tanking anything for us.
+ * A stale report reads as no partner, so the caps fall back to the solo ones.
+ * @returns {boolean}
+ */
+function isTrustedPartnerAtSpawn() {
+  const report = get("entFieldReport");
+  if (!report || Date.now() - report.time >= ENT_FIELD_STALE_MS) return false;
+
+  return !!report.trustedPartnerNearby;
+}
+
+/** @returns {number} ents the party may hold at the farm spot */
+function getMaxEntAtSpawn() {
+  return isTrustedPartnerAtSpawn() ? MAX_ENT : SOLO_MAX_ENT;
+}
+
+/** @returns {number} ents one run may drag at once */
+function getMaxConcurrentEnt() {
+  return isTrustedPartnerAtSpawn() ? MAX_CONCURRENT_ENT : SOLO_MAX_ENT;
+}
+
 // Whoever is standing at the farm spot reports how many ents are already
 // engaged with the party there (publishEntFieldReport in basic_function.7.js) —
-// avoids luring past MAX_ENT concurrent ents at home.
+// avoids luring past the current cap of concurrent ents at home.
 function hasMaxEntsEngagedAtSpawn() {
   const report = get("entFieldReport");
 
@@ -140,7 +163,7 @@ function hasMaxEntsEngagedAtSpawn() {
   // rather than luring blind.
   if (!report || Date.now() - report.time >= ENT_FIELD_STALE_MS) return true;
 
-  return report.entsTargetingPartyCount >= MAX_ENT;
+  return report.entsTargetingPartyCount >= getMaxEntAtSpawn();
 }
 
 async function ensureDartgun() {
@@ -383,12 +406,12 @@ async function walkEntsToSpawn(entIds) {
             const avgDistance =
               distances.reduce((sum, d) => sum + d, 0) / distances.length;
 
-            // Slipped aggro first, then top the train up to MAX_CONCURRENT_ENT.
+            // Slipped aggro first, then top the train up to the current cap.
             const target =
               ents.find(
                 (ent, i) => !ent.target && isInEntAggroBand(distances[i]),
               ) ||
-              (ents.length < MAX_CONCURRENT_ENT &&
+              (ents.length < getMaxConcurrentEnt() &&
                 getEntToPickUp(entIds, avgDistance, currentWaypoint));
 
             if (target) {
