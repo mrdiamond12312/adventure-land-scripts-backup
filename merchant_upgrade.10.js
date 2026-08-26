@@ -332,13 +332,34 @@ async function retrievedBankItemToUpgrade() {
 // Compound
 // ---------------------------------------------------------------------------
 
+/**
+ * Three unlocked inventory slots holding the same item at the same level.
+ * compound() takes arbitrary slots, so they need not sit side by side.
+ * @param {string} itemName
+ * @param {number} level
+ * @returns {number[] | undefined}
+ */
+function findCompoundSet(itemName, level) {
+  const slots = [];
+
+  for (let i = 0; i < character.items.length && slots.length < 3; i++) {
+    const item = character.items[i];
+    if (!item || item.l) continue;
+    if (item.name !== itemName || (item.level ?? 0) !== level) continue;
+
+    slots.push(i);
+  }
+
+  return slots.length === 3 ? slots : undefined;
+}
+
 /** Attempts to compound the first valid set of 3 identical items in inventory. */
 async function compoundInv() {
   if (character.q.compound || character.q.exchange) return;
 
-  for (let i = 0; i < 42; i++) {
+  for (let i = 0; i < character.items.length; i++) {
     const item = character.items[i];
-    if (!item) break;
+    if (!item || item.l) continue;
 
     const itemName = item.name;
     const itemLevel = item.level ?? 0;
@@ -354,18 +375,8 @@ async function compoundInv() {
     // Don't eat the copies another recipe wants at this exact level
     if (countSpareAtLevel(itemName, itemLevel) < 3) continue;
 
-    // Validate set of 3
-    const nameSet = new Set([
-      itemName,
-      character.items[i + 1]?.name,
-      character.items[i + 2]?.name,
-    ]);
-    const levelSet = new Set([
-      item.level,
-      character.items[i + 1]?.level,
-      character.items[i + 2]?.level,
-    ]);
-    if (nameSet.size !== 1 || levelSet.size !== 1) continue;
+    const compoundSlots = findCompoundSet(itemName, itemLevel);
+    if (!compoundSlots) continue;
 
     const itemGrade = item_grade(item);
     const isRareItem =
@@ -402,7 +413,7 @@ async function compoundInv() {
       !havePrimlingInBank || !isRareItem || offeringSlot !== undefined;
     if (!offeringReady) continue;
 
-    return compound(i, i + 1, i + 2, scrollSlot, offeringSlot).catch(() => {});
+    return compound(...compoundSlots, scrollSlot, offeringSlot).catch(() => {});
   }
 }
 

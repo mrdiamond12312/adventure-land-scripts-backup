@@ -938,6 +938,17 @@ rather than fought through.
   actually yields. Its clamp matters too: `slice(0, length - keep)` goes *negative* for a pile
   under its threshold, and a negative end counts from the end — so a pile of 5 with a keep of 8
   used to hand back 2 instead of nothing.
+- **A compound set is three slots, not three neighbours** (`findCompoundSet`). `compound()` takes
+  arbitrary inventory slots; the old `items[i+1]`/`items[i+2]` scan required them side by side and
+  `break`-ed at the first empty slot, so nothing past a hole was even examined. Storing leaves
+  exactly such a hole, and a retrieved set fills it plus slots at the end — the copies were there
+  and the compound still never fired. The scan skips locked items now too, which the adjacency
+  check never did: with merchant gear pinned by `.l`, a locked piece was compoundable fodder.
+  This is the other half of letting a stranded ingredient rejoin the pile: `bankStoreRoutine` only
+  pins a craft ingredient while `isFodder` says the climb can happen, and
+  `retrievedBankItemToUpgrade` hands the call back to the count rotation when the targeted climb
+  yields nothing — otherwise a single under-level copy in the bank matched `targetedItemId` every
+  cycle and stalled every retrieval.
 - **The home/boss ping-pong (debugged 2026-08-02).** Symptom: at snowman with `fullguardx` up,
   the merchant walked home and back, repeatedly. `fullguardx` was only the trigger — with nothing
   to shoot, the merchant idles at the event, so the 750ms main loop's `compoundInv`/`upgradeInv`
