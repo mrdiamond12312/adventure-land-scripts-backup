@@ -272,7 +272,10 @@ async function retrievedBankItemToUpgrade() {
     ? selectRetrievableItems(targetedItemId, true, inventoryEmptySlots)
     : [];
 
-  if (!targetedItemId) {
+  // A climb that can't be advanced this trip hands the call back to the rotation
+  if (!desiredItems.length) {
+    desiredItemId = undefined;
+
     // Items with biggest count (total number of item, despise the level) first
     const candidates = Object.keys(ITEMS_HIGHEST_LEVEL)
       .filter((id) => {
@@ -298,7 +301,7 @@ async function retrievedBankItemToUpgrade() {
 
   if (!desiredItemId || !desiredItems.length) return;
 
-  if (!targetedItemId) {
+  if (desiredItemId !== targetedItemId) {
     RETRIEVE_HISTORY.push(desiredItemId);
     if (
       RETRIEVE_HISTORY.length >=
