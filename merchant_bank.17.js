@@ -338,16 +338,24 @@ async function bankStoreRoutine(forced = false) {
       const targetLevel = getCraftTargetLevel(item.name);
       if (targetLevel > 0 && (item.level ?? 0) < targetLevel) return false;
 
+      const info = item_info(item);
       const isRare = item_grade(item) >= 2;
       const isHighLevel =
         item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
       const isStoreable = STORE_ABLE.includes(item.name);
-      const isEquipable = item_info(item).compound || item_info(item).upgrade;
+      const isEquipable = info.compound || info.upgrade;
       const shouldIgnore = IGNORE.includes(item.name);
+
+      // Keeping a low copy out only pays while something can still eat it: a
+      // compound wants three at that level, an upgrade wants nothing but the
+      // item. Anything else is stranded and belongs with the rest of the pile.
+      const isFodder = info.compound
+        ? countInventoryAtLevel(item.name, item.level ?? 0) >= 3
+        : !!info.upgrade;
 
       return (
         (!shouldIgnore &&
-          (isRare || (isEquipable && (forced || isHighLevel)))) ||
+          (isRare || (isEquipable && (forced || isHighLevel || !isFodder)))) ||
         isStoreable ||
         RETRIEVE_HISTORY.includes(item.name)
       );

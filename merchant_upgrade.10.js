@@ -221,64 +221,91 @@ function filterCompoundableSets(items, inventoryEmptySlots) {
 }
 
 /**
+ * Bank slots worth pulling for one item id, or an empty array when none are:
+ * locked copies, the KEEP_THRESHOLD tail and incomplete compound sets all
+ * disqualify, and any of them can empty a pile that looked big from its count.
+ * @param {string} itemId
+ * @param {boolean} isTargeted - a pending craft wants it at a level
+ * @param {number} inventoryEmptySlots
+ * @returns {Array<object>}
+ */
+function selectRetrievableItems(itemId, isTargeted, inventoryEmptySlots) {
+  let items = getItemBankSlots(itemId, true, isTargeted).filter(
+    (item) => !item.l,
+  );
+
+  if (isTargeted) {
+    const targetLevel = getCraftTargetLevel(itemId);
+    items = items.filter((item) => (item.level ?? 0) < targetLevel);
+  } else {
+    // Clamped: a pile under its threshold keeps everything, and a bare
+    // slice(0, negative) would count from the end and pull the low copies anyway
+    const keep = getKeepThreshold(itemId);
+    items = items.slice(0, Math.max(0, items.length - keep));
+  }
+
+  if (item_info({ name: itemId }).compound) {
+    items = filterCompoundableSets(items, inventoryEmptySlots);
+  }
+
+  return items;
+}
+
+/**
  * Selects and retrieves the best batch of items from the bank to upgrade/compound.
- * Visits each floor as needed. Keeps at least 4 inventory slots free for scrolls/offerings.
+ * Keeps at least 4 inventory slots free for scrolls/offerings.
  * Respects KEEP_THRESHOLD and RETRIEVE_HISTORY to rotate selections.
  * @returns {Promise<void>}
  */
 async function retrievedBankItemToUpgrade() {
   let inventoryEmptySlots = character.esize - 4; // reserve 4 slots for scrolls/offerings
 
-  // A pending craft outranks the count-based rotation: without its ingredient
-  // at level the craft can never fire, while the rotation only trades tempo.
-  let desiredItemId = Object.keys(CRAFT_LEVEL_TARGETS).find((id) =>
+  // Crafting materials will outrank normal updates/compounds.
+  const targetedItemId = Object.keys(CRAFT_LEVEL_TARGETS).find((id) =>
     getItemBankSlots(id, true, true).some(
       (item) => !item.l && (item.level ?? 0) < getCraftTargetLevel(id),
     ),
   );
-  const isTargeted = !!desiredItemId;
-  let maxItemCount = 0;
 
-  if (!isTargeted) {
-    for (const id in ITEMS_HIGHEST_LEVEL) {
-      const info = item_info({ name: id });
-      if (!info) continue;
-      if (info.compound && inventoryEmptySlots < 3) continue;
-      if (
-        ITEMS_HIGHEST_LEVEL[id].count > maxItemCount &&
-        !RETRIEVE_HISTORY.includes(id)
-      ) {
-        maxItemCount = ITEMS_HIGHEST_LEVEL[id].count;
-        desiredItemId = id;
-      }
+  let desiredItemId = targetedItemId;
+  let desiredItems = targetedItemId
+    ? selectRetrievableItems(targetedItemId, true, inventoryEmptySlots)
+    : [];
+
+  if (!targetedItemId) {
+    // Items with biggest count (total number of item, despise the level) first
+    const candidates = Object.keys(ITEMS_HIGHEST_LEVEL)
+      .filter((id) => {
+        const info = item_info({ name: id });
+        if (!info) return false;
+        if (info.compound && inventoryEmptySlots < 3) return false;
+        return !RETRIEVE_HISTORY.includes(id);
+      })
+      .sort(
+        (lhs, rhs) =>
+          ITEMS_HIGHEST_LEVEL[rhs].count - ITEMS_HIGHEST_LEVEL[lhs].count,
+      );
+
+    for (const id of candidates) {
+      const items = selectRetrievableItems(id, false, inventoryEmptySlots);
+      if (!items.length) continue;
+
+      desiredItemId = id;
+      desiredItems = items;
+      break;
     }
   }
 
-  if (!desiredItemId) return;
+  if (!desiredItemId || !desiredItems.length) return;
 
-  if (!isTargeted) {
+  if (!targetedItemId) {
     RETRIEVE_HISTORY.push(desiredItemId);
-    if (RETRIEVE_HISTORY.length >= Object.keys(ITEMS_HIGHEST_LEVEL).length / 5) {
+    if (
+      RETRIEVE_HISTORY.length >=
+      Object.keys(ITEMS_HIGHEST_LEVEL).length / 5
+    ) {
       RETRIEVE_HISTORY.shift();
     }
-  }
-
-  let desiredItems = getItemBankSlots(desiredItemId, true, isTargeted).filter(
-    (item) => !item.l,
-  );
-
-  if (isTargeted) {
-    const targetLevel = getCraftTargetLevel(desiredItemId);
-    desiredItems = desiredItems.filter(
-      (item) => (item.level ?? 0) < targetLevel,
-    );
-  } else {
-    const keep = getKeepThreshold(desiredItemId);
-    desiredItems = desiredItems.slice(0, desiredItems.length - keep);
-  }
-
-  if (item_info({ name: desiredItemId }).compound) {
-    desiredItems = filterCompoundableSets(desiredItems, inventoryEmptySlots);
   }
 
   // Group items by floor so we only travel to each floor once

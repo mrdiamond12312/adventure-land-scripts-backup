@@ -918,6 +918,26 @@ rather than fought through.
   has to be threaded through `storeMatchingItemsOnFloor` and the backward pass too. Indices stay
   valid mid-routine because storing leaves a hole rather than compacting. `ensureDartgun` stays as
   the just-in-time path for the one piece a drag cannot start without.
+- **A low-level copy is only kept out of the bank while something can eat it** (`isFodder` in
+  `bankStoreRoutine`). `isHighLevel` alone used to decide it, which stranded compoundables: a lone
+  `talkingskull +0` under a `+2` in the bank reads as fodder, but `upgradeInv` skips it (a
+  compoundable has no `upgrade`), `compoundInv` needs three at that level side by side, and
+  `filterCompoundableSets` only ever pulls complete sets *from the bank* — so nothing could consume
+  it and it held a bag slot forever. The question to ask is therefore per mechanism: three unlocked
+  copies at that exact level for a compound (`countInventoryAtLevel`), nothing but the item itself
+  for an upgrade. Upgradables are unaffected, and the `IGNORE`/craft-target gates still run first —
+  `bow` stays in the bag because it is `BUYABLE` (so `IGNORE`), and `vitring` because
+  `craft("armorring")` registers a climb target for it.
+- **A pick that yields nothing must not spend the retrieve call.** `retrievedBankItemToUpgrade`
+  ranks by raw copy count, but count is not the same question as *retrievable*: locked copies, the
+  `KEEP_THRESHOLD` tail and `filterCompoundableSets`' set-of-3 grouping each empty a pile that
+  looked big — nine `+0` and one `+8` under a keep of 8 leaves two `+0`s and no set. The old code
+  pushed the id onto `RETRIEVE_HISTORY` *before* computing the items, so a pile in that state
+  burned a rotation slot every visit and starved the rest. `selectRetrievableItems` answers the
+  real question for one id, and the rotation now walks the count-ordered candidates until one
+  actually yields. Its clamp matters too: `slice(0, length - keep)` goes *negative* for a pile
+  under its threshold, and a negative end counts from the end — so a pile of 5 with a keep of 8
+  used to hand back 2 instead of nothing.
 - **The home/boss ping-pong (debugged 2026-08-02).** Symptom: at snowman with `fullguardx` up,
   the merchant walked home and back, repeatedly. `fullguardx` was only the trigger — with nothing
   to shoot, the merchant idles at the event, so the 750ms main loop's `compoundInv`/`upgradeInv`
