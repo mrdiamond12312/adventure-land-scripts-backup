@@ -17,6 +17,9 @@ const KEEP_THRESHOLD = {
   frankypants: 8,
   gphelmet: 12,
 
+  // new stuffs!
+  cloverstud: 16,
+
   // lifted later
   fury: 32,
   starkillers: 32,

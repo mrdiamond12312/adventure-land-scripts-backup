@@ -451,6 +451,14 @@ const STORE_ABLE = [
   "orboftemporal",
   "networkcard",
   "electronics",
+
+  // New expansion items
+  "ashleaf",
+  "stormfeather",
+  "frostcore",
+  "verdantcore",
+  "embercore",
+  "reefglass",
 ];
 
 const SALE_ABLE = [
