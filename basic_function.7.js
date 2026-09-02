@@ -465,7 +465,6 @@ const SALE_ABLE = [
   // "smoke",
   "vgloves",
   "mcape",
-  "wbook0",
   "santasbelt",
   "mushroomstaff",
   "slimestaff",

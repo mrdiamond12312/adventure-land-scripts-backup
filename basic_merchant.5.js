@@ -124,6 +124,7 @@ setInterval(async function () {
       craft("elixirvit1", 1, { map: "main", x: -2, y: 295 }),
       craft("elixirvit2", 1, { map: "main", x: -2, y: 295 }),
       craft("cloverstud ", 1, { map: "main", x: -2, y: 295 }),
+      craft("scribeorb ", 1, { map: "main", x: -2, y: 295 }),
       // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("basketofeggs", 1, homeLocation),
@@ -223,8 +224,9 @@ const ITEM_NEEDED = [
   { name: "angelwings" },
   { name: "smoke" },
   { name: "gphelmet" },
-  { name: "vitring", maxLevel: 2 },
-  { name: "vitearring", maxLevel: 2 },
+  { name: "vitring", maxLevel: 3 },
+  { name: "vitearring", maxLevel: 3 },
+  { name: "wbook0", maxLevel: 4 },
 ];
 
 /** @returns {boolean} whether the secondhands entry satisfies the wanted item's filters */
