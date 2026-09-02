@@ -111,7 +111,7 @@ setInterval(async function () {
       craft("orba", 1, homeLocation),
       craft("armorring", 1, homeLocation),
       craft("resistancering", 1, homeLocation),
-      craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
+      // craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
       craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
       craft("wingedboots", character.esize - 8, { map: "main", x: -2, y: 295 }),
       craft("pouchbow", character.esize - 8, { map: "main", x: -2, y: 295 }),
@@ -125,6 +125,7 @@ setInterval(async function () {
       craft("elixirvit2", 1, { map: "main", x: -2, y: 295 }),
       craft("cloverstud ", 1, { map: "main", x: -2, y: 295 }),
       craft("scribeorb ", 1, { map: "main", x: -2, y: 295 }),
+      craft("glacierseal ", 1, { map: "main", x: -2, y: 295 }),
       // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("basketofeggs", 1, homeLocation),
@@ -209,7 +210,7 @@ function handle_death() {
  */
 const ITEM_NEEDED = [
   { name: "strring" },
-  // { name: "intring" },
+  { name: "intring" },
   // { name: "dexring" },
   { name: "dexearring" },
   { name: "bataxe" },
