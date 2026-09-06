@@ -412,7 +412,6 @@ const STORE_ABLE = [
   "funtoken",
   "gem1",
   "rfangs",
-  "whiteegg",
   "sstinger",
   "spores",
   "snakefang",
@@ -509,7 +508,6 @@ const SALE_ABLE = [
   "harmor",
   "hpants",
   "glolipop",
-  "whiteegg",
   "hboots",
   "sword",
   "spear",
@@ -1408,7 +1406,12 @@ async function midasLooting(forced = false) {
   const chests = Object.values(parent.chests);
 
   // Early exit: do NOT touch isLooting here
-  if ((isLooting && !forced) || !chests.length || character.s.penalty_cd)
+  if (
+    (isLooting && !forced) ||
+    !chests.length ||
+    // Only the midas swap spends penalty_cd; opening a chest costs nothing
+    (character.s.penalty_cd && MIDAS_CHARACTER.includes(character.name))
+  )
     return;
 
   let shouldReset = false;

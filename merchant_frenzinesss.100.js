@@ -18,13 +18,10 @@ const EVENT_SWITCH_MARGIN = 0.001;
 
 // Sniping mobs
 const SNIPE_MAX_PREDICTED_HP = 200;
-// loot after this interval if not in a party
-const LOOT_INTERVAL = 50;
 
 var isFightingBoss = false;
 // Set only when *this* loop took onDuty, so it never clears a duty it didn't acquire
 var holdsEventDuty = false;
-var lastLootTime = 0;
 var lastPartyHealRequest = 0;
 
 // The event this loop is currently committed to, for the switch margin above
@@ -397,18 +394,6 @@ function snipeNearbyWeakMob(promisesToAwait) {
 }
 
 /**
- * Solo, there is no midas looter in the party to defer to
- */
-function lootIfSolo() {
-  if (parent.party_list?.length) return;
-  if (Date.now() - lastLootTime < LOOT_INTERVAL) return;
-  if (!Object.keys(parent.chests).length) return;
-
-  lastLootTime = Date.now();
-  return loot();
-}
-
-/**
  * Our priest nearby?
  * @returns {Object|undefined}
  */
@@ -532,8 +517,6 @@ async function merchantAttackLoop() {
       releaseEventDuty();
       return;
     }
-
-    promisesToAwait.push(lootIfSolo());
 
     for (const strategy of merchantStrategies) {
       if (await strategy(promisesToAwait)) break;

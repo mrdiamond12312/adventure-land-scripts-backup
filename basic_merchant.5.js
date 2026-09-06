@@ -123,7 +123,7 @@ setInterval(async function () {
       craft("elixirstr2", 1, { map: "main", x: -2, y: 295 }),
       craft("elixirvit1", 1, { map: "main", x: -2, y: 295 }),
       craft("elixirvit2", 1, { map: "main", x: -2, y: 295 }),
-      craft("cloverstud ", 1, { map: "main", x: -2, y: 295 }),
+      craft("cloverstud", 1, { map: "main", x: -2, y: 295 }),
       craft("scribeorb", 1, { map: "main", x: -2, y: 295 }),
       craft("glacierseal", 1, { map: "main", x: -2, y: 295 }),
       // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),

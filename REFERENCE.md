@@ -485,6 +485,13 @@ fits in the time left before the next attack, minus:
 
 Sliced-off items aren't lost — the next `equipBatch` tick picks them up.
 
+`midasLooting`'s own `penalty_cd` bail is scoped to `MIDAS_CHARACTER` for the same reason in
+reverse: only its first branch spends penalty, by swapping into the midas set. The other two
+branches just call `open_chest`/`loot()`, which cost nothing. Unscoped, the guard starved the
+merchant specifically — his gear table flips on `shouldHoldAttackWeapon()`, so killing the mob
+that dropped the chest is itself what re-equips the broom, and the resulting ~240-480ms of
+penalty covers exactly the window where the chest exists.
+
 Booster handling: a caller-suggested booster wins outright; the luck/xp auto-swap only runs when
 no booster was suggested (previously a suggested-but-already-equipped booster fell through and
 got swapped away). `suggestedItems.booster` is always deleted afterward because "booster" is not
@@ -1228,9 +1235,11 @@ rather than fought through.
   whole fight, not just at the end. The clamp lands at registration, so a projectile fired while
   the shell was up stays worth 1 even if the shell breaks first; flight time is well under a
   second, so it is not worth re-reading on every query.
-- **`lootIfSolo`** runs every tick, floored at `LOOT_INTERVAL`. `midasLooting` (basic_function.7.js)
-  is a party arrangement — it defers to whoever carries handofmidas and never has the merchant
-  open anything — so a partyless merchant would otherwise leave its own chests on the ground.
+- **The loop does not loot.** `midasLooting`'s third branch already covers the merchant: with no
+  `partyMems` entity in vision `bestLooter()` returns undefined, which is what qualifies him to
+  `loot()` — no midas gear involved. The `lootIfSolo` that used to live here keyed off
+  `parent.party_list`, so a merchant partied with fighters two maps away never looted; what
+  actually blocked the branch was the `penalty_cd` guard, see "Equip batching vs `penalty_cd`".
 - The loop is self-rescheduling with the reschedule as the last statement of `finally`, per
   "Self-rescheduling loop discipline". A guard-blocked tick releases duty (it owns the check) and
   just waits `EVENT_IDLE_TICK`.
