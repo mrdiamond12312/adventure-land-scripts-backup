@@ -55,7 +55,7 @@ function shouldMerchantKite() {
 
 /** @returns {boolean} whether someone other than us is holding the boss' aggro */
 function isEventTanked(eventName) {
-  const eventInfo = parent.S[eventName];
+  const eventInfo = server.status[eventName];
   if (!eventInfo) return false;
 
   const instance = get_nearest_monster({ type: eventName });
@@ -88,13 +88,13 @@ function isSafeToHit(target) {
  */
 const bossConfigs = {
   crabxx: {
-    shouldJoin: () => isEventTanked("crabxx") && !!parent.S.crabxx?.live,
+    shouldJoin: () => isEventTanked("crabxx") && !!server.status.crabxx?.live,
     shouldAttack: isSafeToHit,
     strategy: async () => {
       let { crabxxInstance } = getCrabsForCrabxx();
 
       if (!crabxxInstance) {
-        await advanceSmartMove(parent.S.crabxx);
+        await advanceSmartMove(server.status.crabxx);
         ({ crabxxInstance } = getCrabsForCrabxx());
       }
 
@@ -102,12 +102,12 @@ const bossConfigs = {
     },
   },
   snowman: {
-    shouldJoin: () => parent.S.snowman?.live,
+    shouldJoin: () => server.status.snowman?.live,
     shouldAttack: (target) => !!target && !target.s?.fullguardx,
     strategy: async () => {
       let snowmanInstance = get_nearest_monster({ type: "snowman" });
       if (!snowmanInstance) {
-        await advanceSmartMove(parent.S.snowman);
+        await advanceSmartMove(server.status.snowman);
         snowmanInstance = get_nearest_monster({ type: "snowman" });
       }
       return snowmanInstance;
@@ -119,7 +119,7 @@ const bossConfigs = {
     strategy: async () => {
       let frankyInstance = get_nearest_monster({ type: "franky" });
       if (!frankyInstance) {
-        await advanceSmartMove(parent.S.franky);
+        await advanceSmartMove(server.status.franky);
         frankyInstance = get_nearest_monster({ type: "franky" });
       }
       return frankyInstance;
@@ -131,7 +131,7 @@ const bossConfigs = {
     strategy: async () => {
       let icegolemInstance = get_nearest_monster({ type: "icegolem" });
       if (!icegolemInstance) {
-        await advanceSmartMove(parent.S.icegolem);
+        await advanceSmartMove(server.status.icegolem);
         icegolemInstance = get_nearest_monster({ type: "icegolem" });
       }
       return icegolemInstance;
@@ -143,7 +143,7 @@ const bossConfigs = {
     strategy: async () => {
       let dragoldInstance = get_nearest_monster({ type: "dragold" });
       if (!dragoldInstance) {
-        await advanceSmartMove(parent.S.dragold);
+        await advanceSmartMove(server.status.dragold);
         dragoldInstance = get_nearest_monster({ type: "dragold" });
       }
       return dragoldInstance;
@@ -155,7 +155,7 @@ const bossConfigs = {
     strategy: async () => {
       let pumpkinInstance = get_nearest_monster({ type: "mrpumpkin" });
       if (!pumpkinInstance) {
-        await advanceSmartMove(parent.S.mrpumpkin);
+        await advanceSmartMove(server.status.mrpumpkin);
         pumpkinInstance = get_nearest_monster({ type: "mrpumpkin" });
       }
       return pumpkinInstance;
@@ -167,31 +167,31 @@ const bossConfigs = {
     strategy: async () => {
       let greenInstance = get_nearest_monster({ type: "mrgreen" });
       if (!greenInstance) {
-        await advanceSmartMove(parent.S.mrgreen);
+        await advanceSmartMove(server.status.mrgreen);
         greenInstance = get_nearest_monster({ type: "mrgreen" });
       }
       return greenInstance;
     },
   },
   wabbit: {
-    shouldJoin: () => !!parent.S.wabbit?.live && !!parent.S.wabbit?.x,
+    shouldJoin: () => !!server.status.wabbit?.live && !!server.status.wabbit?.x,
     shouldAttack: (target) => !!target,
     strategy: async () => {
       let wabbitInstance = get_nearest_monster({ type: "wabbit" });
       if (!wabbitInstance) {
-        await advanceSmartMove(parent.S.wabbit);
+        await advanceSmartMove(server.status.wabbit);
         wabbitInstance = get_nearest_monster({ type: "wabbit" });
       }
       return wabbitInstance;
     },
   },
   pinkgoo: {
-    shouldJoin: () => !!parent.S.pinkgoo?.live && !!parent.S.pinkgoo?.x,
+    shouldJoin: () => !!server.status.pinkgoo?.live && !!server.status.pinkgoo?.x,
     shouldAttack: (target) => !!target,
     strategy: async () => {
       let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
       if (!pinkgooInstance) {
-        await advanceSmartMove(parent.S.pinkgoo);
+        await advanceSmartMove(server.status.pinkgoo);
         pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
       }
       return pinkgooInstance;
@@ -204,7 +204,7 @@ const bossConfigs = {
  * @returns {number} 0..1, defaulting to 1 (full) when the event reports no hp
  */
 function getEventHpRatio(eventName) {
-  const eventInfo = parent.S[eventName];
+  const eventInfo = server.status[eventName];
   const instance = get_nearest_monster({ type: eventName });
   const source = instance ?? eventInfo;
 
@@ -218,7 +218,7 @@ function getEventHpRatio(eventName) {
 
 /** @returns {boolean} whether the event is still running */
 function isEventStillLive(eventName) {
-  return !!parent.S[eventName] || !!get_nearest_monster({ type: eventName });
+  return !!server.status[eventName] || !!get_nearest_monster({ type: eventName });
 }
 
 /**

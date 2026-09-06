@@ -1386,7 +1386,7 @@ function assignRoles() {
   const currentTarget = get_targeted_monster();
 
   if (
-    parent.S.franky?.live &&
+    server.status.franky?.live &&
     ["franky", "nerfedmummy"].includes(currentTarget?.mtype)
   ) {
     TANKER = PRIEST;

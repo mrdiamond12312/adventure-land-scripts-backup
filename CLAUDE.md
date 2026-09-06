@@ -75,6 +75,9 @@ basic_function.7.js          [SHARED — the core library]
     strategic_fn.11.js           combat math: damage/heal calc, gear selection, cleave/blast targeting
     normal_strategy.12.js        \_ farming strategy variants, swapped via
     pull_strategy.13.js          /  changeToPullStrategies()/changeToNormalStrategies()
+    server_hop_utilities.25.js   realm identity (HOME_SERVER), the cross-realm ServerRealmData
+                                 distributor, and realm-fatigue hop policy; loaded just before
+                                 14, which consults it
     server_hop.14.js             server-hopping automation (only if caracALconfig enables the character)
     crypt_strategy.16.js         crypt-specific movement/strategy
     strategic_smart_move.21.js   \_ pathing layered on top of

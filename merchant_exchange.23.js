@@ -1,7 +1,7 @@
 // Exchanging: seasonal token turn-ins and the general exchange queue.
 
 /**
- * Seasonal turn-ins, only live while parent.S.holidayseason is set.
+ * Seasonal turn-ins, only live while server.status.holidayseason is set.
  * `keep` is held back from the exchange; `quantity` is what one turn-in costs.
  * @type {{name: string, npc: string, quantity: number, keep: number}[]}
  */
@@ -48,7 +48,7 @@ function shouldGoExchangeXmas() {
 }
 
 async function holidayExchange() {
-  if (!shouldGoExchangeXmas() || !parent.S["holidayseason"]) return;
+  if (!shouldGoExchangeXmas() || !server.status["holidayseason"]) return;
 
   const exchangableItem = HOLIDAY_EXCHANGES.find((item) => {
     const itemName = item.name;

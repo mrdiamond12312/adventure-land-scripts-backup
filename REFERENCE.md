@@ -91,6 +91,177 @@ unhandled rejection there (e.g. `move()` interrupted by the magiport itself land
 parks `smartMove()` forever, which in turn holds whatever duty flags the caller took
 (observed as lureMechaGnome stuck with `onDuty`/`isLuringMobs` true).
 
+## The merchant cm handler's trust boundary (`merchant_service.19.js`)
+
+Adventure Land's own MCP guidance is explicit that a cm is untrusted input — the sender is
+whoever felt like typing our name — so each duty has to decide for itself whether a stranger may
+trigger it. Two lists, checked *before* `onDuty` is taken:
+
+- **`OPEN_DUTIES` (`buy_potions`, `buff_mluck`) — anyone.** Deliberate. Handing a passer-by a
+  stack of potions or an mluck is the point; it costs us a walk and some gold we have plenty of.
+  Same spirit as the fighter listener's `magiport` case, which is likewise open to anyone.
+- **`OWNED_DUTIES` (`inv_full`, `elixir`, `xptome`) — `isOwnedCharacter` only.** These move *our*
+  items: `inv_full` makes the merchant collect a character's whole inventory, and the two stock
+  duties spend bank items and gold on a named recipient.
+
+`isOwnedCharacter` (basic_function.7.js) tests `CODE_SLOTS`, not `partyMems`/`getMyCharacters()`
+— see "Two party rosters" below, this is a third and wider question. An off-roster character of
+ours filling its bags still deserves a pickup; it just has to be ours. `elixir`/`xptome` keep
+their inner `partyMems` check on top, because those are roster-specific stock.
+
+**Gating ahead of the lock is the load-bearing half.** The old handler took `onDuty` for *every*
+incoming cm and only then looked at `message.msg`. Two consequences: the fighters' own `"inv_ok"`
+reply (a bare string, so `message.msg` is `undefined`) grabbed and dropped the duty lock on every
+inventory handover; and anyone at all could send `{msg:"inv_full", map, x, y}` and park the
+merchant on a cross-map `advanceSmartMove` — holding the lock against banking, crafting and
+lures for the whole trip, then `await sleep(5000)`. The watchdog would eventually reclaim it, but
+only after `DUTY_STALE_MS`. Neither is reachable now that an unlisted `msg` returns before the
+acquire.
+
+The `default:` branch is kept even though the gate makes it unreachable for unknown messages: it
+still fires if a duty is added to one of the lists and the `case` is forgotten.
+
+## Realm fatigue and home-drop hopping (`server_hop_utilities.25.js`)
+
+**The mechanic** (`G.conditions.realmfatigue`, and the `events-and-home` guide). At your home
+realm your contribution against cooperative monsters grows **5x** faster before rewards are
+shared, and selected monsters carry an extra drop table. If another **non-merchant** character on
+the account visited a different server in the previous 30 minutes, you get `realmfatigue` on
+entry: 30 minutes (`duration: 1800000`, `persistent`), during which normal rewards continue but
+the home multiplier and the home-only drops do not. **Switching again renews it.** Merchants are
+ignored.
+
+Our hop routine moves the whole squad at once, so every hop re-arms the condition for all of us —
+the mechanic is aimed squarely at what `server_hop.14.js` does. Being *settled* at home is the
+asset, and it costs 30 uninterrupted minutes to buy.
+
+**Which monsters actually care** — `G.drops.monsters_home_server`, read live rather than copied,
+so a patch that adds one is picked up for free. As of data version 6732 it is `crabxx`,
+`icegolem`, `dragold`, `franky`, `mrpumpkin`, `mrgreen`, `phoenix`, `rharpy`. Six of those are
+already hop targets; `grinch`, `pinkgoo`, `snowman` and `wabbit` have no home table, which makes
+them the *cheap* ones to chase. Chasing one of the six abroad is the worst trade available: it
+renews the fatigue **and** lands us where its best table cannot roll.
+
+**Reading other realms without logging into them (`ServerRealmData`).** An unauthenticated
+socket.io v4 connection to any realm is enough. On connect it answers `welcome`, whose `S` has
+the same shape as `server.status`; it then pushes **`server_info`** carrying the whole `S` again
+roughly every 24 seconds, for as long as the socket lives. Measured on EUPVP with a snowman up:
+
+```
+[  1.0s] welcome      S: {schedule, snowman:{live,hp,max_hp,x,y}}
+[  4.0s] server_info  {schedule, snowman:{... x:1172.9, y:-804.8}}
+[ 28.3s] server_info  {schedule, snowman:{... x:1028.8, y:-809.9}}
+[ 52.0s] server_info  {schedule, snowman:{... x: 884.6, y:-815.1}}
+```
+
+So the sockets are **held open**, not reopened per query — `welcome` fires once per connection,
+and a connect/disconnect probe would be pure churn for one stale snapshot. `_absorb` replaces a
+realm's cached `S` wholesale on every pulse, because that is what the pulse carries.
+`get_servers()` supplies `address`/`path`. `query({types, avoidServers, requireTarget,
+maxHpFraction})` returns live special monsters across every realm still inside `REALM_STALE_MS`,
+each row carrying its realm alongside the status fields.
+
+**Our own realm is fed *into* the distributor, not spliced in beside it.** `_syncLocalRealm`
+absorbs `server.status` under the current realm's key at the top of `query()` and `status()`. We
+are connected to that realm, so the live global beats its own socket copy, which can be a pulse
+old — but the fix belongs in the one object that owns realm state, not in each caller. That makes
+`query()` uniformly correct for all eight realms and collapses three call sites: the hop loop is
+now a bare `query().filter().sort()`, `getHomeRealmStatus` lost its `isAtHomeServer()` special
+case, and `collectSightings()` disappeared entirely. It also means a missing `parent.io` degrades
+gracefully — the local realm still populates from `server.status`, so the at-home policies keep
+working even with no sockets at all.
+
+**This replaced aldata as the hop candidate source.** `server_hop.14.js` no longer fetches
+`aldata.earthiverse.ca` every 10s. Two workarounds died with the fetch — `estimatedRespawn`/`id` presence checks, since
+`query` only ever returns `live` entries, and the `FLICKERING_BOSSES` patch for grinch and
+pinkgoo, which existed because the API was flaky about them. Reading each realm's own
+`server_info` has no such gap. The only remaining earthiverse call is the bank-data *push* in
+merchant_bank.17.js, which is unrelated.
+
+Sockets cost eight per holder and every CODE frame is separate, so `shouldOwnRealmSockets` keeps
+them on **the first character `caracALconfig` enables** — deliberately the same set
+basic_function.7.js loads this file for, so the owner always exists and always runs the hop loop.
+Keying it off `partyMems[0]` would have been wrong: that character need not be an enabled hopper,
+and with aldata gone a hopper without realm data cannot hop at all. Non-owners get `undefined`
+from `getRealmData()` and skip the decision entirely rather than hopping home spuriously —
+which is consistent with `hopToServer`, since under caracAL it shuts down every sibling and
+redeploys the group, so only one character was ever really driving. Under native CODE each
+character owns its own sockets.
+
+**Predicting the next window.** `server.status.schedule` is `{time_offset, dailies, nightlies,
+night}`; `dailies`/`nightlies` are hours on that realm's own clock, which is UTC shifted by
+`time_offset`. The offset is **per region** — measured EU `+1`, US `-5`, ASIA `+7`, with
+`dailies: [13, 20]` and `nightlies: [23]` everywhere — which is exactly why the home realm has to
+be watched rather than reading the schedule off whatever realm we happen to be standing on.
+`msUntilNextScheduledEvent` works in the shifted frame and checks today and tomorrow, so it never
+returns a past boundary.
+
+The schedule says *when*, not *which*: `G.events` marks `crabxx` daily and `franky`/`icegolem`
+nightly, and all three carry home tables, so a window is worth being home for. `dragold`,
+`mrpumpkin` and `mrgreen` are seasonal and absent from `G.events` — they are caught by the live
+`S` scan instead, not the clock.
+
+**The two policies**, both behind `FATIGUE_AWARE_HOPPING`:
+
+- `shouldHoldAtHome()` — refuse to leave home when a home-table boss is live or `spawn`-scheduled
+  here, or when the next window is within `HOME_HOLD_LEAD_MS`.
+- `shouldReturnHomeToSettle()` — while away, go home once the next home window is within
+  `HOME_RETURN_LEAD_MS` (fatigue + 2 min slack). It deliberately does **nothing** below
+  `REALM_FATIGUE_MS`: under 30 minutes it is already too late to settle, so burning the trip buys
+  a fatigued arrival and we may as well keep racing.
+**Guard order in the hop tick is load-bearing.** `shouldReturnHomeToSettle` runs *before*
+`hasSoftenedBossHere`/`hasEventWorthStayingFor`, and getting this backwards silently defeats the
+whole feature: the settle band is only `HOME_SETTLE_MARGIN_MS` wide and it expires, so a boss
+softened on the realm we happen to be standing on would hold us there through the entire window
+and we would arrive home fatigued with nothing to show. A foreign boss pays no home drops; the
+scheduled home one does. Only an open `cryptInstance` outranks the settle hop — that is paid-for
+content we would forfeit. The at-home path is unaffected either way, since
+`shouldReturnHomeToSettle` returns false the moment `isAtHomeServer()` is true.
+
+- `homeDropRank()` reweights the candidate sort. A home-table boss on our own realm jumps ahead of
+  the HP race entirely; a home-table boss abroad drops to last **after** HP, replacing the old
+  plain home tie-break which only ever broke exact HP ties.
+
+**Where home actually is.** `HOME_SERVER` lives in slot 25 with `getCurrentServer`/`getHomeServer`/
+`isAtHomeServer`, moved out of slot 14 so the dependency runs one way (14 consults 25, 25 loads
+first). It is a hand-maintained mirror of what Bean was told — **CODE cannot read the real home
+realm**; there is no `character.home`, nothing in `runner_functions.js`, and `set_home()` returns
+nothing useful. Every policy here is only as correct as that constant, so it is the first thing to
+check if the guards misfire.
+
+## TODO: the merchant tick wants to be per-concern loops (`basic_merchant.5.js`)
+
+Not done — recorded so the next person doesn't have to rediscover the shape.
+
+The 750ms `setInterval` in basic_merchant.5.js has no overlap lock, and its body awaits
+`withTimeout(Promise.allSettled([...twenty crafts, compound, upgrade, exchange, dismantle,
+sells...]), 300000)`. Two problems, the same two that `runSkillLoop` was built to solve for the
+fighters (see "Splitting a class into attack loop + per-skill loops"):
+
+- **Everything runs at the pace of the slowest member.** One craft that has to walk to the
+  craftsman holds the entire `allSettled`, so compounding, selling and equip all wait on it —
+  exactly the `fight()` bundling problem, one layer up.
+- **A slow pass overlaps itself.** At 750ms against a ceiling of five minutes, hundreds of
+  invocations can be in flight at once. Most sub-routines bail early on their own guards
+  (`onDuty`, `character.q.*`, `isSortingInventory`, `pendingItemMutations`), which is why this has
+  been survivable rather than catastrophic, but those guards are each protecting one routine — no
+  one is bounding the total.
+
+**The shape to move to**, mirroring `runSkillLoop`: one self-rescheduling loop per concern, each
+with its own cadence and its own lock released in a `finally` —
+
+- `craftLoop` — the craft table, slow cadence (they mostly no-op on ingredients anyway).
+- `improveLoop` — `compoundInv` + `upgradeInv`, which already hold `pendingItemMutations`.
+- `disposalLoop` — `sell`, `dismantleSomething`, `exchangeSomething`, `holidayExchange`.
+- `upkeepLoop` — stand open/close, `equipBatch`, `sortInv`, potion top-up, `scareAwayMobs`.
+- Leave the gathering/`moveHome`/emergency-banking tail where it is; it is already sequential and
+  duty-aware.
+
+The generic driver already exists and is class-agnostic — `runSkillLoop` with a made-up `skill`
+name and a `floorMs` is exactly the "fixed-interval, awaited, non-overlapping" primitive these
+need (that is how the fighters' `"gear"` and `"strategy"` loops work). Reuse it rather than
+writing a fifth bespoke `setInterval`.
+
 ## smartMove sessions and magiport (`strategic_smart_move.21.js`)
 
 Findings from the "bots ask for magiport though the mage isn't near the destination" debugging
@@ -813,7 +984,7 @@ rather than fought through.
 
 - **It only shoots what somebody else is tanking.** `isSafeToHit` requires `target.target` to be
   set and to not be us — an *untargeted* boss is the dangerous case, because our hit is what
-  aggroes it. `isEventTanked` prefers the local entity's `target` over `parent.S[name].target`
+  aggroes it. `isEventTanked` prefers the local entity's `target` over `server.status[name].target`
   (the S copy lags, and is absent entirely before the boss is rendered). The exceptions are listed
   in `UNTANKED_OK` (snowman/wabbit/pinkgoo) — harmless enough to hit solo, and gated on nothing
   but their own `shouldAttack`.
@@ -982,7 +1153,7 @@ rather than fought through.
   `open_stand()` in basic_merchant.5.js.
 - **Concurrent bosses: lowest hp share wins** (`getEventHpRatio`/`getEventToJoin`), the same
   measure `changeToDailyEventTargets` sorts on — mrgreen/mrpumpkin in particular overlap. The
-  local entity's hp beats the `parent.S` copy once we're on the map, and an event reporting no hp
+  local entity's hp beats the `server.status` copy once we're on the map, and an event reporting no hp
   reads as full so it never jumps the queue by accident. Unlike the fighters, though, re-picking
   costs the merchant a **whole map trip**, so `currentEventName` only loses its slot when another
   boss is `EVENT_SWITCH_MARGIN` (15pp) lower — two bosses melting in lockstep would otherwise
@@ -992,7 +1163,7 @@ rather than fought through.
   `isEventTanked`, which reads the boss' *momentary* `target`. A boss between targets — franky
   retargets constantly, and its adds pull aggro — reads untanked for a tick, `getEventToJoin()`
   returns undefined, `fightCurrentEvent` releases the duty, and the main loop walks home before
-  the next tick re-acquires. The `?? eventInfo.target` fallback doesn't save it: the `parent.S`
+  the next tick re-acquires. The `?? eventInfo.target` fallback doesn't save it: the `server.status`
   entry has no `target` field. Fix: `getEventToJoin` re-adds `currentEventName` to the joinable
   list while `isEventStillLive`, so only the boss actually ending (or `mustAbandonFight`) unseats
   us. The general rule is the one above, applied to the *join* decision and not just the blockers:
@@ -1163,6 +1334,34 @@ size the craft then refuses. The reasoning is the one already recorded above for
 the offset passes a negative batch, which slipped past the falsy check, ran the whole ingredient
 machinery — registering targets, buying base items — and then crafted zero times through a `for`
 loop that never entered.
+
+### Sorting must not run between picking a slot and spending it (`pendingItemMutations`)
+
+`upgradeInv` picks `itemIndex` from a scan, then awaits `ensureScroll` (which can retrieve from
+the bank or `buy`) and `ensureOffering`, and only then calls `upgrade(itemIndex, ...)`.
+`compoundInv` has the same gap between `findCompoundSet` and `compound(...)`. Meanwhile `sortInv`
+issues real `swap()` calls that permute slots, and it is dispatched from the same unlocked 750ms
+tick — so it can start during those awaits and move the item out from under the pending call.
+
+The rejection is mostly silent rather than destructive: the server revalidates item details and
+answers `mismatch` or `no_item` (see the `upgrade` contract), and both call sites end in
+`.catch(() => {})`. So the observable symptom was upgrade/compound throughput quietly stalling,
+with nothing in the logs.
+
+`isSortingInventory` alone doesn't close it — it only stops `sortInv` re-entering *itself*, and
+the dangerous window is `sortInv` starting *after* the slots were picked. The fix is a pair:
+
+- `upgradeInv`/`compoundInv` refuse to start while `isSortingInventory`, and each wraps its body
+  (`findAndUpgrade`/`findAndCompound`) in `pendingItemMutations++` / `finally --`.
+- `sortInv` refuses to start while `pendingItemMutations` is non-zero.
+
+**A count, not a flag.** The two run concurrently by design — they are dispatched together in the
+tick's `Promise.allSettled`, and they never contend for the same item because an item is either
+compoundable or upgradeable, not both. A boolean would have serialised them for no reason.
+
+The bodies had to be split into separate `findAnd*` functions so the `try/finally` wraps every
+exit from a loop full of `continue`/`break`/`return`, and the inner `return await` is load-bearing
+— returning the promise unawaited would drop the count before the mutation settled.
 
 ### Targeted climbs never burn a primling
 

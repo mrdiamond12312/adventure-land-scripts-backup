@@ -1,4 +1,17 @@
+/** Duties a passer-by may ask for — buffing and stocking strangers is deliberate */
+const OPEN_DUTIES = ["buy_potions", "buff_mluck"];
+/** Duties that move our own items, so they need one of our characters behind them */
+const OWNED_DUTIES = ["inv_full", "elixir", "xptome"];
+
 character.on("cm", async function ({ name, message }) {
+  const msg = message?.msg;
+  const isServiceable =
+    OPEN_DUTIES.includes(msg) ||
+    (OWNED_DUTIES.includes(msg) && isOwnedCharacter(name));
+
+  // Gated ahead of the lock so an unwanted msg can't park the merchant on a route
+  if (!isServiceable) return;
+
   if (isInvFull()) {
     return;
   }
@@ -9,7 +22,7 @@ character.on("cm", async function ({ name, message }) {
   try {
     equipBroom();
 
-    switch (message.msg) {
+    switch (msg) {
       case "inv_full":
         console.warn(`Go collecting ${name}'s inventory at ${message.map}`);
         await advanceSmartMove(message);
@@ -54,7 +67,7 @@ character.on("cm", async function ({ name, message }) {
         break;
 
       default:
-        console.warn(`Unidentified '${message.msg}'`);
+        console.warn(`Listed but unhandled duty '${msg}'`);
     }
   } finally {
     onDuty = false;

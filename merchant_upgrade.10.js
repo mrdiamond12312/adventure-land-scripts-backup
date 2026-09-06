@@ -359,7 +359,18 @@ function findCompoundSet(itemName, level) {
 /** Attempts to compound the first valid set of 3 identical items in inventory. */
 async function compoundInv() {
   if (character.q.compound || character.q.exchange) return;
+  if (isSortingInventory) return;
 
+  pendingItemMutations++;
+  try {
+    return await findAndCompound();
+  } finally {
+    pendingItemMutations--;
+  }
+}
+
+/** @returns {Promise<unknown>} compoundInv's body, run while it holds the sort hold-off */
+async function findAndCompound() {
   for (let i = 0; i < character.items.length; i++) {
     const item = character.items[i];
     if (!item || item.l) continue;
@@ -427,7 +438,18 @@ async function compoundInv() {
 /** Attempts to upgrade the lowest level upgradeable item in inventory. */
 async function upgradeInv() {
   if (character.q.upgrade || character.q.exchange) return;
+  if (isSortingInventory) return;
 
+  pendingItemMutations++;
+  try {
+    return await findAndUpgrade();
+  } finally {
+    pendingItemMutations--;
+  }
+}
+
+/** @returns {Promise<unknown>} upgradeInv's body, run while it holds the sort hold-off */
+async function findAndUpgrade() {
   // Find the lowest level upgradeable candidate, skipping disqualified items
   let itemIndex = -1;
   let lowestLevel = Infinity;

@@ -72,6 +72,15 @@ function getMyCharacters() {
 }
 
 /**
+ * Every character on the account, roster or not.
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isOwnedCharacter(name) {
+  return name in CODE_SLOTS;
+}
+
+/**
  * Everyone we fight alongside — ours, plus whatever outsider shares the party.
  * @returns {Set<string>}
  */
@@ -258,12 +267,14 @@ if (parent.caracAL) {
   }
 }
 
-// Server hoping
+// Server hoping — 25 defines the policy 14 consults, so it loads first
 if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
   parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/server_hop_utilities.25.js",
     "adventure-land-scripts-backup/server_hop.14.js",
   ]);
 } else if (!character.controller) {
+  load_code(25);
   load_code(14);
 }
 
@@ -579,9 +590,16 @@ async function advanceSmartMove(props, options = { useScare: true }) {
 // Pre-set function
 var isSortingInventory = false;
 
+/**
+ * How many routines are mid-flight between picking inventory slots and spending
+ * them. A count rather than a flag so compound and upgrade still overlap freely.
+ */
+var pendingItemMutations = 0;
+
 async function sortInv() {
   if (
     isSortingInventory ||
+    pendingItemMutations ||
     character.q.upgrade ||
     character.q.compound ||
     character.q.exchange
@@ -1519,7 +1537,7 @@ setInterval(() => {
 // Code Messaging
 setInterval(async function () {
   // Xmas buffs
-  if (parent.S["holidayseason"] && !character.s.holidayspirit) {
+  if (server.status["holidayseason"] && !character.s.holidayspirit) {
     log("Ting ting ting");
     await advanceSmartMove({ map: "main", x: -152, y: -137 });
     parent.socket.emit("interaction", { type: "newyear_tree" });
@@ -1753,16 +1771,17 @@ setInterval(async () => {
       !partyWhitelistRegex.some((regex) => regex.test(char.party)),
   );
 
+  // The whitelist matches on party name; only an earth* character gets the ask
+  const inviteTarget = whitelistPartyMembers.find((member) =>
+    partyWhitelistRegex.some((regex) => regex.test(member.name)),
+  );
+
   if (
-    whitelistPartyMembers.length &&
+    inviteTarget &&
     whitelistPartyMembers.length + characterNotInOutsiderParty.length <= 10 &&
     (!currentPartySize || !hasWhitelistedMember)
   ) {
-    send_party_request(
-      whitelistPartyMembers.find((member) =>
-        partyWhitelistRegex.some((regex) => regex.test(member.name)),
-      ).name,
-    );
+    send_party_request(inviteTarget.name);
   } else if (
     currentPartySize &&
     hasWhitelistedMember &&
@@ -1816,7 +1835,7 @@ const PARTICIPATABLE_EVENTS = [
 ];
 
 function serverCurrentlyHasLiveEvent() {
-  return PARTICIPATABLE_EVENTS.some((eventName) => parent.S[eventName]?.live);
+  return PARTICIPATABLE_EVENTS.some((eventName) => server.status[eventName]?.live);
 }
 
 const RSPEED_DURATION = G.conditions["rspeed"].duration;
@@ -1935,7 +1954,7 @@ const DYNAMIC_PARTY_PRESETS = {
       return [RANGER1, PRIEST, ROGUE];
     },
     default: () => {
-      // const isAggroed = !!parent.S.franky?.target;
+      // const isAggroed = !!server.status.franky?.target;
       // HEALER = PRIEST;
       return [WARRIOR, PRIEST, ROGUE];
     },
@@ -2086,7 +2105,7 @@ function getPresetMembers(preset, currentServer) {
 function dynamicParty() {
   const currentServer = `${server.region}${server.id}`;
   const activeEvent =
-    Object.keys(DYNAMIC_PARTY_PRESETS).find((name) => parent.S[name]?.live) ??
+    Object.keys(DYNAMIC_PARTY_PRESETS).find((name) => server.status[name]?.live) ??
     "default";
 
   if (!activeEvent) return;
@@ -2131,7 +2150,7 @@ async function changeToDailyEventTargets() {
   rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
 
   if (
-    (parent.S.goobrawl || get_nearest_monster({ type: "bgoo" })) &&
+    (server.status.goobrawl || get_nearest_monster({ type: "bgoo" })) &&
     !character.s["hopsickness"]
   ) {
     changeToPullStrategies();
@@ -2155,12 +2174,12 @@ async function changeToDailyEventTargets() {
     return target || rgooInstance || bgooInstance;
   }
 
-  if (parent.S.dragold?.live) {
+  if (server.status.dragold?.live) {
     changeToPullStrategies();
 
     const dragoldInstance = get_nearest_monster({ type: "dragold" });
     if (!dragoldInstance) {
-      await advanceSmartMove(parent.S.dragold);
+      await advanceSmartMove(server.status.dragold);
       change_target(get_nearest_monster({ type: "dragold" }));
       return get_nearest_monster({ type: "dragold" });
     } else {
@@ -2171,25 +2190,25 @@ async function changeToDailyEventTargets() {
 
   const activeBosses = [];
 
-  if (parent.S.mrpumpkin?.live) {
+  if (server.status.mrpumpkin?.live) {
     activeBosses.push({
-      ...parent.S.mrpumpkin,
+      ...server.status.mrpumpkin,
       type: "mrpumpkin",
       strategy: changeToPullStrategies,
     });
   }
 
-  if (parent.S.mrgreen?.live) {
+  if (server.status.mrgreen?.live) {
     activeBosses.push({
-      ...parent.S.mrgreen,
+      ...server.status.mrgreen,
       type: "mrgreen",
       strategy: changeToPullStrategies,
     });
   }
 
-  if (parent.S.icegolem?.live) {
+  if (server.status.icegolem?.live) {
     activeBosses.push({
-      ...parent.S.icegolem,
+      ...server.status.icegolem,
       type: "icegolem",
       strategy: changeToNormalStrategies,
     });
@@ -2221,10 +2240,10 @@ async function changeToDailyEventTargets() {
   }
 
   if (
-    parent.S.crabxx?.live
-    // parent.S.crabxx.hp < parent.S.crabxx.max_hp &&
-    // parent.S.crabxx?.target &&
-    // !partyMems.includes(parent.S.crabxx.target)
+    server.status.crabxx?.live
+    // server.status.crabxx.hp < server.status.crabxx.max_hp &&
+    // server.status.crabxx?.target &&
+    // !partyMems.includes(server.status.crabxx.target)
   ) {
     if (character.range > 100) rangeRate = 0.3;
 
@@ -2235,7 +2254,7 @@ async function changeToDailyEventTargets() {
 
     if (!crabxxInstance) {
       if (character.s.hopsickness) {
-        await advanceSmartMove(parent.S.crabxx);
+        await advanceSmartMove(server.status.crabxx);
       } else {
         await join("crabxx");
         await sleep(character.ping);
@@ -2323,7 +2342,7 @@ async function changeToDailyEventTargets() {
     return targetCrab;
   }
 
-  if (parent.S.franky?.live) {
+  if (server.status.franky?.live) {
     if (character.ctype === "warrior") changeToPullStrategies();
     else changeToNormalStrategies();
 
@@ -2331,7 +2350,7 @@ async function changeToDailyEventTargets() {
     if (!frankyInstance) {
       await join("franky").catch((e) => console.warn(e));
       await sleep(character.ping);
-      await advanceSmartMove(parent.S.franky);
+      await advanceSmartMove(server.status.franky);
       frankyInstance = get_nearest_monster({ type: "franky" });
       change_target(frankyInstance);
     }
@@ -2343,12 +2362,12 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.pinkgoo?.live) {
+  if (server.status.pinkgoo?.live) {
     changeToPullStrategies();
     let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
     if (!pinkgooInstance) {
-      if (parent.S.pinkgoo?.x) {
-        await advanceSmartMove(parent.S.pinkgoo);
+      if (server.status.pinkgoo?.x) {
+        await advanceSmartMove(server.status.pinkgoo);
         change_target(get_nearest_monster({ type: "pinkgoo" }));
         return get_nearest_monster({ type: "pinkgoo" });
       }
@@ -2359,13 +2378,13 @@ async function changeToDailyEventTargets() {
     }
   }
 
-  if (parent.S.snowman?.live) {
+  if (server.status.snowman?.live) {
     changeToPullStrategies();
 
     let snowmanInstance = get_nearest_monster({ type: "snowman" });
 
     if (!snowmanInstance) {
-      await advanceSmartMove(parent.S.snowman);
+      await advanceSmartMove(server.status.snowman);
       snowmanInstance = get_nearest_monster({ type: "snowman" });
     }
 
@@ -2385,7 +2404,7 @@ async function changeToDailyEventTargets() {
       : snowmanInstance;
   }
 
-  if (parent.S.abtesting && !character.s.hopsickness) {
+  if (server.status.abtesting && !character.s.hopsickness) {
     if (character.map != "abtesting") join("abtesting");
 
     changeToNormalStrategies();
@@ -2437,15 +2456,15 @@ async function changeToDailyEventTargets() {
     return pvpTarget.entity;
   }
 
-  if (parent.S.wabbit?.live) {
+  if (server.status.wabbit?.live) {
     changeToPullStrategies();
     if (character.range < 100) rangeRate = 0.1;
     else rangeRate = 0.4;
     const wabbitInstance = get_nearest_monster({ type: "wabbit" });
 
     if (!wabbitInstance) {
-      if (parent.S.wabbit?.x) {
-        await advanceSmartMove(parent.S.wabbit);
+      if (server.status.wabbit?.x) {
+        await advanceSmartMove(server.status.wabbit);
         change_target(get_nearest_monster({ type: "wabbit" }));
         return get_nearest_monster({ type: "wabbit" });
       }
