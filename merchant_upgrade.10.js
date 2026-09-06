@@ -403,13 +403,13 @@ async function findAndCompound() {
           : itemInfo.grades[0] + 2);
     const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
 
-    // Skip if we don't have enough of this item yet
+    // Skip if we don't have enough of this item yet: a compound burns three of
+    // the pile for one, so the tail has to survive it
     if (
-      isRareItem &&
+      !targeted &&
       ITEMS_HIGHEST_LEVEL[itemName] &&
-      ITEMS_HIGHEST_LEVEL[itemName].quantity <
-        (getKeepThreshold(itemName) + 3 ?? 5) &&
-      item.level === ITEMS_HIGHEST_LEVEL[itemName].level
+      ITEMS_HIGHEST_LEVEL[itemName].quantity < getKeepThreshold(itemName) + 3 &&
+      itemLevel === ITEMS_HIGHEST_LEVEL[itemName].level
     ) {
       continue;
     }

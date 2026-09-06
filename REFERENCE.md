@@ -1417,6 +1417,23 @@ post-upgrade `storeToBankFloor`: a targeted item mid-climb belongs in the invent
 `ITEMS_HIGHEST_LEVEL` entry is often absent (it was `IGNORE`d until the target existed), which would
 have made `e.level >= (highest ?? 0) - 1` true for every single level.
 
+### `KEEP_THRESHOLD` is not a rare-item rule (`compoundInv`, debugged 2026-09-07)
+
+Symptom: `cloverstud: 16` in `KEEP_THRESHOLD`, an empty bank, five `+0` studs in the bag — and the
+merchant compounded three of them. `compoundInv` hung its threshold check off `isRareItem`, which is
+`item.level >= grades[0]`; `cloverstud` grades are `[1,5,6,7]`, so a `+0` copy is grade 0 and the
+whole check was skipped. Every compoundable is grade 0 at `+0`, so the tail was only ever protected
+once a pile had already climbed a level — the opposite of what a keep threshold is for.
+
+`isRareItem` answers "is this worth a primling", nothing more, and it is *also* forced false for a
+targeted climb. Gating the threshold on it therefore conflated three questions. The check now keys
+off `!targeted`, matching `upgradeInv`'s `haveEnoughToSpare`, which never had the rare condition.
+
+The `+ 3` is the difference from the upgrade side: an upgrade risks one copy, a compound spends
+three for one, so the pile has to clear the threshold *by a set* or the compound lands under it.
+(The old `getKeepThreshold(itemName) + 3 ?? 5` fallback was dead — `+` binds tighter than `??`, and
+`getKeepThreshold` already defaults to 2.)
+
 ### `map` before `every`
 
 `craft()` builds `isEnoughIngredients` with `.map(...).every(Boolean)` rather than `.every(...)`.
