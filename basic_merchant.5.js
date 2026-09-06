@@ -228,6 +228,7 @@ const ITEM_NEEDED = [
   { name: "vitring", maxLevel: 3 },
   { name: "vitearring", maxLevel: 3 },
   { name: "wbook0", maxLevel: 4 },
+  { name: "embercore" },
 ];
 
 /** @returns {boolean} whether the secondhands entry satisfies the wanted item's filters */
