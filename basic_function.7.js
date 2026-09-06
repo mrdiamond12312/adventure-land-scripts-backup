@@ -273,7 +273,7 @@ if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
     "adventure-land-scripts-backup/server_hop_utilities.25.js",
     "adventure-land-scripts-backup/server_hop.14.js",
   ]);
-} else if (!character.controller) {
+} else if (!parent.caracAL && !character.controller) {
   load_code(25);
   load_code(14);
 }
@@ -1731,7 +1731,7 @@ function deployCharacters() {
       .forEach((id) => {
         parent.caracAL.deploy(id, null, caracALconfig.characters[id].script);
       });
-  } else if (!character.controller) {
+  } else if (!parent.caracAL && !character.controller) {
     loadedCharactersNames
       .filter(
         (id) => loadedCharacters[id] !== "self" && !allCharacters.includes(id),

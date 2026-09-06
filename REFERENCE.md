@@ -955,6 +955,42 @@ covers a synchronous throw, with `withTimeout(..., EQUIP_TIMEOUT_MS)` bounding t
 latch. `Promise.allSettled` rather than `Promise.all`, so one rejected equip no longer rejects the
 whole batch — no caller reads the resolved value.
 
+## The native branch must exclude caracAL, not just `enabled` (debugged 2026-09-06)
+
+Both `parent.caracAL` forks in basic_function.7.js were written as
+
+```js
+if (parent.caracAL && caracALconfig.characters[character.name].enabled) { ... }
+else if (!character.controller) { ...native CODE path... }
+```
+
+which is wrong the moment a character runs **under caracAL with `enabled: false`**. It fails the
+first test, falls into the `else`, and starts behaving like a browser tab. Today only
+`MerchantMooh` is enabled — it is the root that deploys the other three — so all three fighters
+were taking the native path.
+
+**The symptom was an `already_running` flood.** Every fighter ran `deployCharacters`' native
+branch every 30s and called `start_character(id, CODE_SLOTS[id].script)` for all of
+`getMyCharacters()`, because `get_active_characters()` does not report caracAL peers, so nothing
+survived the `!loadedCharacters[id]` filter. Three fighters x three peers = nine rejections a
+cycle, each printed by caracAL's unhandled-rejection handler.
+
+Worth knowing where that string comes from, because it is easy to blame the game: `already_running`
+appears nowhere in the shipped `runner_functions.js`, and the deployed `start_character` contract
+says it *resolves* "immediately when it already has a local runner" and that "repeated calls for
+the same local character share its startup or reuse its active runner instead of creating
+duplicates". The real runner never rejects for this. It is caracAL's `start_character_runner`
+shim, reached through the public `start_character` wrapper.
+
+The fix on both branches is `else if (!parent.caracAL && !character.controller)`. The second
+fork mattered too: the fighters were calling `load_code(25)`/`load_code(14)`, the native slot
+loader, under caracAL — either a silent no-op or three extra server-hop loops.
+
+**The trap when reading this code**: `enabled` gates *server hopping and deployment authority*,
+not *whether caracAL is running the character*. A disabled character is still a caracAL
+character. Any new `parent.caracAL && ...enabled` fork needs the same `!parent.caracAL` on its
+`else`, or it hands caracAL characters the browser code path.
+
 ## Script loading is synchronous in both environments (2026-08-02)
 
 caracAL's `load_scripts` is now synchronous, matching the native `load_code`, and a failed load
