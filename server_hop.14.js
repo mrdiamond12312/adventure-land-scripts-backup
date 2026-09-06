@@ -132,7 +132,7 @@ function hasEventWorthStayingFor() {
 
 /** @param {string} reason */
 async function hopHome(reason) {
-  log(`Hopping home — ${reason}`);
+  console.warn(`Hopping home — ${reason}`);
   set("currentParty", undefined);
   await hopToServer(HOME_SERVER.serverRegion, HOME_SERVER.serverIdentifier);
 }
@@ -151,7 +151,7 @@ setInterval(async () => {
 
   const holdReason = shouldHoldAtHome();
   if (holdReason) {
-    log(`Staying home — ${holdReason}`);
+    console.warn(`Staying home — ${holdReason}`);
     return;
   }
 
@@ -168,17 +168,16 @@ setInterval(async () => {
     return;
   }
 
-  console.log(
+  console.warn(
     candidates.map(
-      (candidate) =>
-        `${realmOf(candidate)} ${candidate.type} ${candidate.hp}`,
+      (candidate) => `${realmOf(candidate)} ${candidate.type} ${candidate.hp}`,
     ),
   );
 
   const target = candidates[0];
   if (realmOf(target) === getCurrentServer()) return;
 
-  log(`Hopping to ${realmOf(target)}`);
+  console.warn(`Hopping to ${realmOf(target)}`);
   set("currentParty", undefined);
   await hopToServer(target.serverRegion, target.serverIdentifier);
 }, 10000);
