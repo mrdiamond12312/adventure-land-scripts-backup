@@ -1258,6 +1258,49 @@ The merchant reads the same flag from the other end (`bossConfigs.crabxx.shouldA
 merchant_frenzinesss.100.js) — it parks with the stand open while `"1hp"` is set rather than
 spending shots for 1 damage each.
 
+## `homeLocation` is a Merrit parcel spot, not just a parking space (2026-09-08)
+
+Merrit (`G.npcs.citizen22`, `citizen_behavior: "market_patron"`) patrols the Mainland square and
+leaves a `marketparcel` — plus a small SHELL roll — to anyone holding an open, stocked stand he walks
+past. So the merchant's idle spot is load-bearing, and every constraint lives in
+`G.npcs.citizen22.market`: inside one of the two `areas`, within `handoff` (32px) of his route
+through `stops`, more than `npc_clearance` (40) from a stationary NPC, `stand_clearance` (10) from
+another stand and out of the `front_clearance` box in front of one, parked for `settle_ms` (2 min)
+within `anchor_tolerance` (4px), with a real listing and a free inventory slot. One parcel per
+account per `hour_ms`.
+
+**Park by a `stop`, not by a line between two.** The 32px handoff is against wherever he actually
+walks, and his pathing between stops is not in `G` — only the seven stops themselves are, each held
+for `delay` (5s). A spot measured against interpolated stop-to-stop segments assumes a straight-line
+walk the data never promises; a spot within ~20px of a real stop is safe under any pathing. Every
+entry in `MERRIT_SPOTS` is picked that way, which is why none of them are the square's centre —
+stop `[0,0]` is the one with a fixed NPC inside the 40px clearance.
+
+**The spot list is a rotation, not a constant.** `stand_clearance`/`front_clearance` are contested —
+another player's stand parked on our spot silently costs us every parcel — so `getStandSpot()` walks
+`MERRIT_SPOTS` in order and takes the first that `isSpotTaken()` clears, with `homeLocation`
+(the first entry) as both the preferred spot and the fallback. It is deliberately re-evaluated on
+every `moveHome`, so a neighbour arriving moves us on and a neighbour leaving brings us back; the
+order being fixed is what keeps that from oscillating. Off `main` there is nothing to see, so it
+returns `homeLocation` and re-decides on arrival.
+
+`moveHome`'s arrival slack had to come down from 150px to `STAND_ANCHOR_SLACK` (24) for any of this
+to mean anything — 150px of drift is five times the handoff, so the careful spot was decoration.
+That is safe because `advanceSmartMove`'s `exact: true` appends a literal `move` to the coordinates
+(strategic_smart_move.21.js), so the merchant lands on the spot rather than near it.
+
+`parent.character.merrit` is the authority when it still goes wrong — `.reasons[]` carries the
+server's own codes (`area`, `closed`, `listing`, `inventory`, `warming`, `cooldown`, `npc`,
+`stand_close`, `stand_front`, `unreachable`), refreshed by
+`socket.emit("interaction", {type: "merrit_info"})`. A receipt also fires the CODE event
+`character.on("merrit", ...)` with `{item: "marketparcel", quantity: 1, shells}`.
+
+The parcel itself is an ordinary `e: 1` gem with no `quest` field, so it exchanges like `gem0` — from
+a computer, no NPC trip — which is why its `EXCHANGE_QUEUE` entry needs no `npc`. Exchanging rolls
+`G.drops.marketparcel`: mostly `scroll0`/`cscroll0`/`seashell`/`leather`, with `offeringp` at 0.4%
+and five 0.022% Merrit exclusives (`duskweavehood`, `caravanbrigandine`, `mirrorsteelgauntlet`,
+`ironheelboots`, `tollkeeperspike`).
+
 ## The anniversary visit is a ticket, not a boss (2026-09-07)
 
 `server.status.anniversary` features one player per 30-minute round and hands everyone else a

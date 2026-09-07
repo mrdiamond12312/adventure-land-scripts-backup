@@ -20,6 +20,7 @@ const EXCHANGE_QUEUE = [
   { name: "candy1", quantity: 1 },
   { name: "candy0", quantity: 1 },
   { name: "gem0", quantity: 1 },
+  { name: "marketparcel", quantity: 1 },
   { name: "weaponbox", quantity: 1 },
   { name: "armorbox", quantity: 1 },
   { name: "mistletoe", quantity: 1 },

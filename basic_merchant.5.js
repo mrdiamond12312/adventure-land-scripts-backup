@@ -32,13 +32,66 @@ var invJammed = false;
 
 const fishingLocation = { map: "main", x: -1367, y: -82 };
 const miningLocation = { map: "tunnel", x: -279, y: -148 };
-const homeLocation = { map: "main", x: -65, y: -50 };
+
+// Merrit parcel spots, each parked by one of his stops and clear of every
+// fixed NPC. Tried in order, so the first is home unless somebody took it.
+const MERRIT_SPOTS = [
+  { map: "main", x: -116, y: 0 },
+  { map: "main", x: 0, y: 140 },
+  { map: "main", x: 104, y: 122 },
+  { map: "main", x: -174, y: 96 },
+  { map: "main", x: 32, y: 220 },
+  { map: "main", x: -16, y: 308 },
+];
+const homeLocation = MERRIT_SPOTS[0];
+
+// Close enough to count as parked, under Merrit's 32px handoff
+const STAND_ANCHOR_SLACK = 24;
+
 const haveAComputer = () =>
   locate_item("computer") !== -1 || locate_item("ancientcomputer") !== -1;
 
+/**
+ * @param {{x: number, y: number}} spot
+ * @returns {boolean} whether another open stand rules this spot out
+ */
+function isSpotTaken(spot) {
+  const market = G.npcs.citizen22.market;
+
+  for (const id in parent.entities) {
+    const entity = parent.entities[id];
+    if (entity?.type !== "character" || !entity.stand) continue;
+    if (entity.name === character.name) continue;
+
+    const sideways = Math.abs(spot.x - entity.real_x);
+    const southwards = spot.y - entity.real_y;
+
+    if (Math.hypot(sideways, southwards) <= market.stand_clearance) return true;
+
+    // The strip in front of a stand is refused too
+    if (
+      sideways <= market.front_width &&
+      southwards > 0 &&
+      southwards <= market.front_clearance
+    )
+      return true;
+  }
+
+  return false;
+}
+
+/** @returns {Object} the first parcel spot nobody else has taken */
+function getStandSpot() {
+  if (character.map !== homeLocation.map) return homeLocation;
+
+  return MERRIT_SPOTS.find((spot) => !isSpotTaken(spot)) ?? homeLocation;
+}
+
 async function moveHome() {
+  const spot = getStandSpot();
+
   if (
-    distance(character, homeLocation) < 150 ||
+    distance(character, spot) < STAND_ANCHOR_SLACK ||
     smart.moving ||
     isAdvanceSmartMoving ||
     isDraggingMobs
@@ -47,7 +100,7 @@ async function moveHome() {
 
   try {
     log("Moving back Town!");
-    await advanceSmartMove(homeLocation, {
+    await advanceSmartMove(spot, {
       exact: true,
       useScare: !isLuringMobs,
     });
