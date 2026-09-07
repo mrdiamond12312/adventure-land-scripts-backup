@@ -505,7 +505,30 @@ async function fightCurrentEvent(promisesToAwait) {
   return true;
 }
 
-const merchantStrategies = [fightCurrentEvent, snipeNearbyWeakMob];
+/**
+ * The round's Anniversary Visit, once nothing else wants the merchant. Takes
+ * the plain duty, not the event one — there is nothing to shoot.
+ * @returns {Promise<boolean>} whether the trip owns this tick
+ */
+async function visitAnniversary() {
+  // Any live boss outranks it, including one we already committed to
+  if (getEventToJoin() || isMerchantBusy()) return false;
+  if (!hasAnniversaryVisitToMake()) return false;
+
+  onDuty = true;
+  renewDuty();
+  try {
+    return await visitAnniversaryPlayer();
+  } finally {
+    onDuty = false;
+  }
+}
+
+const merchantStrategies = [
+  fightCurrentEvent,
+  snipeNearbyWeakMob,
+  visitAnniversary,
+];
 // Merchant main attack loop
 async function merchantAttackLoop() {
   const promisesToAwait = [];

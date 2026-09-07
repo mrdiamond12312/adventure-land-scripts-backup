@@ -1258,6 +1258,50 @@ The merchant reads the same flag from the other end (`bossConfigs.crabxx.shouldA
 merchant_frenzinesss.100.js) — it parks with the stand open while `"1hp"` is set rather than
 spending shots for 1 damage each.
 
+## The anniversary visit is a ticket, not a boss (2026-09-07)
+
+`server.status.anniversary` features one player per 30-minute round and hands everyone else a
+five-minute `anniversary_visit` condition. Spending it is `use_skill("ikissyou", state.id)` within
+`G.skills.ikissyou.range` (80) of them — no attack, no monster, so it can't be a `bossConfigs` entry
+or a `changeToDailyEventTargets` return value. Both hooks therefore return *no target* and are placed
+**last**: any live boss outranks it, including one the merchant already committed to
+(`getEventToJoin()` keeps `currentEventName` while it lives, which is what the merchant's guard
+reads).
+
+**The condition is the "have we kissed yet" flag.** The kiss consumes it, so `canAnniversaryVisit()`
+is both the eligibility test and the done test — no separate bookkeeping, and nothing to reset
+between rounds. It mirrors the client's `anniversary_can_visit()` field for field, and every one of
+those fields earns its place: `ticket.round == state.round` stops a ticket carrying into the next
+round, and `ticket.realm == \`${server.region} ${server.id}\`` (**with the space** — unlike
+`getCurrentRealm()`'s `${region}${id}`) stops a hop from making a foreign ticket look spendable.
+`state.available === false` means the host walked somewhere unreachable; the round's timer keeps
+running, so the check is skip-this-tick, not give-up.
+
+**The destination is a player, so it moves.** `state.x`/`state.y` is only where the round announced
+them, and a pathfind plans against wherever they stood when it started — arriving is not the same as
+being in range. So `visitAnniversaryPlayer` **holds until the kiss lands** rather than taking one
+approach per tick: a single pass ends at the spot the host has just walked off, and the caller would
+set off again from scratch next tick, forever. Each pass re-reads the entity and picks a half: off
+screen, `advanceSmartMove` to the announced spot; on screen, the repo's `can_move_to` → `move` /
+else pathfind idiom against the live `real_x`/`real_y`.
+
+The loop needs no give-up timer of its own — the ticket is the timer, since `hasAnniversaryVisitToMake()`
+heads every pass and goes false on a landed kiss, a five-minute expiry, and a host who steps out of
+reach alike. What it does need is for **every branch to await**: standing inside
+`ANNIVERSARY_SEARCH_RADIUS` of the announced spot with nobody in sight, and waiting out the 10s
+`ikissyou` cooldown, both poll on `ANNIVERSARY_RETRY_MS` instead of re-pathing to a place we are
+already standing. `character.rip` is the other exit: dying mid-chase would otherwise keep walking a
+corpse. Note the cost of holding — a priest on a chase is not healing, which is the other reason
+the hook sits behind every boss.
+
+The `use_skill` call is not the confirmation — a rejected one just leaves the ticket standing and the
+next tick retries. `is_on_cooldown("ikissyou")` (10s) is what stops a fast loop from spamming sends
+into the window between the kiss and the condition clearing.
+
+The merchant's `visitAnniversary` takes the plain `onDuty` lock rather than `acquireEventDuty()`:
+the duty is what makes `goMining`/`goFishing`/`moveHome` yield for the walk, while the event duty
+would also set `isFightingBoss` and swap in the dartgun for a trip with nothing to shoot.
+
 ## One definition of a weak mob
 
 The thresholds live in basic_function.7.js next to the other config (`HARMLESS_MOB_DAMAGE`,

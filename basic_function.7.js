@@ -2148,6 +2148,104 @@ const getCrabsForCrabxx = () => {
   return { crabxxInstance, crabxList };
 };
 
+// Anniversary: stop short of the kiss range, so drift still lands it
+const ANNIVERSARY_ARRIVAL_SLACK = 0.8;
+
+// Close enough to the announced spot to call the host gone
+const ANNIVERSARY_SEARCH_RADIUS = 200;
+
+const ANNIVERSARY_RETRY_MS = 500;
+
+/**
+ * The live anniversary round, or undefined.
+ * @returns {Object|undefined}
+ */
+function getAnniversaryEvent() {
+  const state = server.status.anniversary;
+  if (!state?.active || !state.live || !state.id) return undefined;
+
+  return Date.now() < state.expires ? state : undefined;
+}
+
+/**
+ * Whether our Anniversary Visit is still unspent for this round.
+ * @returns {boolean}
+ */
+function canAnniversaryVisit() {
+  const state = getAnniversaryEvent();
+  const ticket = character.s.anniversary_visit;
+
+  return !!(
+    state &&
+    ticket &&
+    ticket.ms > 0 &&
+    ticket.round === state.round &&
+    ticket.realm === `${server.region} ${server.id}` &&
+    Date.now() < ticket.expires
+  );
+}
+
+/**
+ * Whether there is a featured player we still owe a visit.
+ * @returns {boolean}
+ */
+function hasAnniversaryVisitToMake() {
+  const state = getAnniversaryEvent();
+
+  return !!(
+    state &&
+    state.available !== false &&
+    state.id !== character.name &&
+    canAnniversaryVisit()
+  );
+}
+
+/**
+ * Chases the featured player until the kiss lands or the ticket runs out.
+ * @returns {Promise<boolean>} whether the trip owned the caller's tick
+ */
+async function visitAnniversaryPlayer() {
+  if (!hasAnniversaryVisitToMake()) return false;
+
+  const kissRange = G.skills.ikissyou.range * ANNIVERSARY_ARRIVAL_SLACK;
+
+  // The kiss clears the ticket, so the condition is the whole exit test
+  while (hasAnniversaryVisitToMake() && !character.rip) {
+    const state = getAnniversaryEvent();
+    const host = get_entity(state.id);
+
+    // Out of vision: the announced spot is all we have
+    if (!host) {
+      const spot = { map: state.map, x: state.x, y: state.y };
+
+      if (distance(character, spot) < ANNIVERSARY_SEARCH_RADIUS)
+        await sleep(ANNIVERSARY_RETRY_MS);
+      else await advanceSmartMove(spot);
+
+      continue;
+    }
+
+    if (distance(character, host) <= kissRange) {
+      if (is_on_cooldown("ikissyou")) await sleep(ANNIVERSARY_RETRY_MS);
+      else await use_skill("ikissyou", state.id).catch((e) => console.warn(e));
+
+      continue;
+    }
+
+    // Re-read each pass — a pathfind plans against a spot they walk off
+    if (can_move_to(host))
+      await move(host.real_x, host.real_y).catch((e) => console.warn(e));
+    else
+      await advanceSmartMove({
+        map: character.map,
+        x: host.real_x,
+        y: host.real_y,
+      });
+  }
+
+  return true;
+}
+
 async function changeToDailyEventTargets() {
   let target = getTarget();
   rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
@@ -2476,6 +2574,9 @@ async function changeToDailyEventTargets() {
       return wabbitInstance;
     }
   }
+
+  // Last: every live boss above outranks the kiss
+  if (await visitAnniversaryPlayer()) return undefined;
 
   const thirdPartyHealerId = parent.party_list.find((id) => {
     const player = get_player(id);
