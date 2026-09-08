@@ -342,7 +342,7 @@ const ITEM_NEEDED = [
   { name: "harbringer" },
   { name: "throwingstars", maxLevel: 0 },
   { name: "angelwings" },
-  { name: "smoke" },
+  // { name: "smoke" },
   { name: "gphelmet" },
   { name: "vitring", maxLevel: 3 },
   { name: "vitearring", maxLevel: 3 },
