@@ -791,7 +791,7 @@ Setting the global before the call only works on the native path. `StrategicSmar
 (the `parent.caracAL` path) assigns `smartmoveDebug = options.smartmoveDebug` — default `false` —
 right before it starts walking, so a caller that set the global by hand had it clobbered one line
 later. Symptom: the priest tanking franky walked it to the corner with target selection skipped
-for the whole trip, so `changeToDailyEventTargets`' per-tick `scareAwayMobs()` never ran, and the
+for the whole trip, so `useEventStrategy`'s per-tick `scareAwayMobs()` never ran, and the
 trip's own `useScare: false` meant nothing scared either — the tank ate the entire lure. Callers
 now pass `smartmoveDebug: true` in the options *and* set the global (the native
 `oldAdvanceSmartMove` ignores the option), and reset it in a `finally`: `smartMove` throws on an
@@ -1195,7 +1195,7 @@ rather than fought through.
   `isFightingBoss` is the separate cosmetic flag: it swaps gear to dartgun/armorring and suppresses
   `open_stand()` in basic_merchant.5.js.
 - **Concurrent bosses: lowest hp share wins** (`getEventHpRatio`/`getEventToJoin`), the same
-  measure `changeToDailyEventTargets` sorts on — mrgreen/mrpumpkin in particular overlap. The
+  measure `useEventStrategy` sorts on — mrgreen/mrpumpkin in particular overlap. The
   local entity's hp beats the `server.status` copy once we're on the map, and an event reporting no hp
   reads as full so it never jumps the queue by accident. Unlike the fighters, though, re-picking
   costs the merchant a **whole map trip**, so `currentEventName` only loses its slot when another
@@ -1244,7 +1244,59 @@ rather than fought through.
   "Self-rescheduling loop discipline". A guard-blocked tick releases duty (it owns the check) and
   just waits `EVENT_IDLE_TICK`.
 
-## Crabxx targeting keys off the shell, not the crabx (`changeToDailyEventTargets`)
+## Fighter targeting is a strategy chain (`selectFightTarget`, basic_function.7.js)
+
+`fighterStrategies` is walked in priority order — `useEventStrategy` (daily_event_fighter_strat.26.js),
+`useCryptStrategy` (crypt_fighter_strat.16.js), `useFarmingStrategy` (farming_fighter_strat.27.js) —
+and the first one to return `true` owns the tick, exactly like `merchantStrategies`. Events outrank
+the crypt: a crypt key keeps until tomorrow, a live boss does not.
+
+**Why a boolean and not the target.** A strategy that spends its tick *travelling* has no target but
+still has to stop the ones below it from running. The old `changeToDailyEventTargets` returned
+`undefined` for both "nothing here" and "I am on my way to the boss", so the entry script read the
+second as the first and smart-moved back to the farming spot — the two moves fought each other, and
+a live-but-out-of-sight boss could never be reached. The pick therefore travels out of band:
+`commitTarget()` stores it in `fighterTarget` (and only re-`change_target`s when it actually
+changed), `selectFightTarget()` hands it back, and "owns the tick" stays a separate answer from
+"has something to hit".
+
+**Each strategy carries its own move.** Walking into the crypt belongs to the crypt strategy,
+regrouping on `mapX`/`mapY` to the farming one, chasing an announced boss spot to the event one. The
+entry scripts keep only `const target = await selectFightTarget(); if (target) await fight(target);`
+— the per-class copies of the "no target, so move somewhere" block are gone, and with them the
+drift between them (warrior wanted leader *and* far, everyone else leader *or* far).
+
+**Off the spot, only `mobsToFarm` holds us (`isFarmMob`).** A boss dies and the field it drew stays
+full of mobs, so plain targeting kept finding something to splash and the party farmed the event site
+instead of the spot — indefinitely, since each kill woke the next. Past `FARM_SPOT_SLACK` the target
+therefore has to be one we came for (`mobsToFarm`, or the character's own `ownTargets`); anything else
+is left standing and the walk home starts on that tick. Tying it to where we are rather than to the
+event that took us there keeps the crypt reachable: a crypt run is a strategy above farming, not a
+debt farming has to spend before it can start.
+
+**One empty tick is not idle (`FARM_REGROUP_IDLE_MS`).** `getFarmTarget()` goes empty for entirely
+normal reasons — the mob just died, it walked out of vision, or a follower's aggroed mob sits outside
+its own `range + xrange` mid-pull. Acting on a single such tick started a walk home, and the walk is
+the expensive half: `isAdvanceSmartMoving` short-circuits mainLoop until it lands, so one unlucky
+frame abandoned a live fight (a warrior still on a megatron, but every class hits this). The strategy
+therefore stamps `lastEngagementAt` whenever it has a target or `isPartyEngaged()` — a monster in
+vision holding any ally, or a `mobsToFarm` mob standing right here — and regroups only after that has
+been quiet for 5s. Distance is the wrong signal for this: "do not leave when far from home" is exactly
+backwards, since far from home is when coming back matters most. `FARM_SPOT_SLACK` still decides
+*whether* a follower has drifted, not *when* it is safe to act.
+
+**Any class can farm its own spot.** `ownMap`/`ownMapX`/`ownMapY`/`ownTargets` default to `undefined`
+in farming_fighter_strat.27.js and fall back to the party's `map`/`mapX`/`mapY` and `getTarget()`, so an
+entry script overrides them by declaring them at its top and everyone else pays nothing. They were
+`rangerMap`/`rangerTarget` plus a copy of the shortlist scan in each ranger file, which is why
+basic_ranger.32.js never got either. The trip needs no `scareAwayMobs()` loop of its own: both
+`advanceSmartMove` implementations already scare for the whole move unless passed `useScare: false`.
+
+**Goobrawl holds the map.** The brawl is empty between waves, so the branch owns the tick on
+`server.status.goobrawl` alone rather than on a goo being in sight — leaving for the farming spot
+mid-brawl costs the whole event.
+
+## Crabxx targeting keys off the shell, not the crabx (`useEventStrategy`)
 
 `crabxx` carries `"1hp"` while its shell is up: every hit lands for exactly 1, whoever throws it.
 Target selection therefore branches on that flag first — shell down means the boss outranks any
@@ -1306,8 +1358,9 @@ and five 0.022% Merrit exclusives (`duskweavehood`, `caravanbrigandine`, `mirror
 `server.status.anniversary` features one player per 30-minute round and hands everyone else a
 five-minute `anniversary_visit` condition. Spending it is `use_skill("ikissyou", state.id)` within
 `G.skills.ikissyou.range` (80) of them — no attack, no monster, so it can't be a `bossConfigs` entry
-or a `changeToDailyEventTargets` return value. Both hooks therefore return *no target* and are placed
-**last**: any live boss outranks it, including one the merchant already committed to
+or a target. Both hooks therefore commit *no target* — the fighter one owns the tick with
+`return true` so nothing walks back to the farming spot behind it — and both are placed **last**:
+any live boss outranks it, including one the merchant already committed to
 (`getEventToJoin()` keeps `currentEventName` while it lives, which is what the merchant's guard
 reads).
 
@@ -1358,8 +1411,8 @@ ranger, priest, mage and gear code:
 - `isWeakMob(mob, multiplier)` — a free target: dying to our shot, or already someone else's problem.
 
 Note the damage thresholds are **dps**, not per-hit: `calculateDamage` multiplies by `frequency`.
-Mixing in a per-hit number (the ranger's old `character.attack * 0.6`, still in basic_archer.3.js
-and solo_ranger.15.js) is comparing different units.
+Mixing in a per-hit number (the ranger's old `character.attack * 0.6`, still in basic_archer.3.js)
+is comparing different units.
 
 Weakness that is genuinely class-specific stays local: `MAGE_WEAK_MOB_TYPES` /
 `WARRIOR_WEAK_MOB_TYPES` are named event mobs, not a computed property. The mage's pinkie swap no

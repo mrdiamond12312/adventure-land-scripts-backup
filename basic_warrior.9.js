@@ -416,43 +416,11 @@ async function mainLoop() {
       });
     }
 
-    // --- Target Selection ---
-    let target = getTarget();
+    // --- Target Selection --- events, then the crypt, then the farming spot
+    const target = await selectFightTarget();
 
-    // Prioritize Crypt/Event targets
-    if (get("cryptInstance")) {
-      target = await useCryptStrategy(target);
-    } else {
-      target = await changeToDailyEventTargets();
-    }
-
-    // --- Movement Logic ---
-    if (!target) {
-      const needsToEnterCrypt =
-        get("cryptInstance") && character.map !== "crypt";
-      const isPartyLeaderOrAlone =
-        partyMems[0] === character.name || !get_entity(partyMems[0]);
-      const isFarFromFarmingSpot =
-        distance(character, { x: mapX, y: mapY, map }) > 500;
-
-      // Only move to farm location if not doing crypt and either the leader/alone or far away.
-      const needsToMoveToFarmLocation =
-        !get("cryptInstance") && isPartyLeaderOrAlone && isFarFromFarmingSpot;
-
-      if (needsToEnterCrypt) {
-        advanceSmartMove(CRYPT_STARTING_LOCATION);
-      } else if (needsToMoveToFarmLocation) {
-        changeToNormalStrategies(); // Ensure correct strategy is set before move
-        advanceSmartMove({
-          map,
-          x: mapX,
-          y: mapY,
-        });
-      }
-    } else {
-      // Target found, engage in combat
-      await fight(target);
-    }
+    // Target found, engage in combat
+    if (target) await fight(target);
   } catch (e) {
     // Only log unhandled errors
     if (e.cause !== "smart_move" && e.cause !== "death") {

@@ -79,7 +79,9 @@ basic_function.7.js          [SHARED — the core library]
                                  distributor, and realm-fatigue hop policy; loaded just before
                                  14, which consults it
     server_hop.14.js             server-hopping automation (only if caracALconfig enables the character)
-    crypt_strategy.16.js         crypt-specific movement/strategy
+    daily_event_fighter_strat.26.js  \_ the fighter targeting chain, walked in this
+    crypt_fighter_strat.16.js         | order by selectFightTarget(); each one carries
+    farming_fighter_strat.27.js      /  its own smart move and owns the tick or defers
     strategic_smart_move.21.js   \_ pathing layered on top of
     advance_smart_move.20.js     /  the native smart_move
 
@@ -89,7 +91,6 @@ other_class_msg_listener.8.js [SHARED] cross-class code-message (cm) listener, l
 Fighter entry scripts (one pasted per character's CODE slot):
   basic_warrior.9.js    basic_priest.2.js    basic_mage.4.js
   basic_archer.3.js     basic_ranger.32.js   basic_rogue.31.js
-  solo_ranger.15.js     (solo/no-party variant of ranger)
   each: loads 7 + 8, then defines its own fight()/mainLoop() and class-specific skill rotation
 
 Merchant entry script:
@@ -118,7 +119,7 @@ Standalone / auxiliary (not wired into the load graph above, used directly or ad
   basic_with_regen.s.1.js   minimal regen-only script (note the "s.1" slot naming, distinct from "N")
   bank_sort.49.js           bank inventory sorting utility
   sort_inv.6.js             character inventory sorting utility
-  crypt_strategy.16 - Copy.js  backup/scratch copy of crypt_strategy.16.js — not loaded by anything
+  crypt_strategy.16 - Copy.js  backup/scratch copy of crypt_fighter_strat.16.js — not loaded by anything
   archive.60.js             graveyard of commented-out/retired snippets, kept for reference only
 ```
 

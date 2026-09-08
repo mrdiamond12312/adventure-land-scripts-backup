@@ -42,9 +42,17 @@ function getMobsListNearTarget(mob) {
   );
 }
 
-async function useCryptStrategy(target) {
-  if (!get("cryptInstance") || character.map !== "crypt") return;
+async function useCryptStrategy() {
+  if (!get("cryptInstance")) return undefined;
+
+  if (character.map !== "crypt") {
+    changeToNormalStrategies();
+    advanceSmartMove(CRYPT_STARTING_LOCATION);
+    return travelling();
+  }
+
   rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
+  let target = getTarget();
   const defeatedCryptMobs = get("cryptDefeatedMobs") ?? [];
 
   if (
@@ -53,7 +61,7 @@ async function useCryptStrategy(target) {
       defeatableBosses.length
   ) {
     set("cryptInstance", undefined);
-    return;
+    return undefined;
   }
 
   // Check for 7 vbats
@@ -296,7 +304,7 @@ async function useCryptStrategy(target) {
       break;
   }
 
-  return target;
+  return engage(target);
 }
 
 function addToDefeatedList(mobs) {

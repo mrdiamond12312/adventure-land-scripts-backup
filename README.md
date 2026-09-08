@@ -60,7 +60,7 @@ into shared ones, so the classes stopped keeping their own copies of the same lo
   - `normal_strategy` -- fight whatever is in front of you
   - `pull_strategy` -- monster stacking. The tanker `agitate`/`taunt`s mobs into one pile, but only while
     the healer can keep up with the damage, and it will not pull anything that `burn`s or `stone`s
-  - `crypt_strategy` -- crypt runs, moving junction by junction and remembering what is already dead
+  - `crypt_fighter_strat` -- crypt runs, moving junction by junction and remembering what is already dead
 
 - Gears are picked every tick from the whole inventory instead of holding one weapon (`strategic_fn`) --
   luck gear when a monster is nearly dead, exp gear when it is worth it, splash weapons only when the

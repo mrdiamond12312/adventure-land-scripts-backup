@@ -433,35 +433,11 @@ async function mainLoop() {
     // Target Selection — skipped during controlled moves (getTarget can
     // reposition us); target stays undefined then and fight() only heals.
     let target;
-    if (!isMovingControlled) {
-      target = getTarget();
-      if (get("cryptInstance")) {
-        target = await useCryptStrategy(target);
-      } else {
-        target = await changeToDailyEventTargets();
-      }
-    }
+    if (!isMovingControlled) target = await selectFightTarget();
 
     // Heal (always) XOR attack (when we have a target). Runs every tick so the
     // priest keeps healing with no mob in reach or while smart-moving.
     await fight(target, isMovingControlled);
-
-    // Movement Logic — only when idle with nothing to fight.
-    if (!isMovingControlled && !target) {
-      const cryptKey = get("cryptInstance");
-      const isPartyLeaderOrAlone =
-        partyMems[0] === character.name || !get_entity(partyMems[0]);
-      const isFarFromFarm =
-        distance(character, { x: mapX, y: mapY, map }) > 500;
-
-      if (cryptKey && character.map !== "crypt") {
-        changeToNormalStrategies();
-        advanceSmartMove(CRYPT_STARTING_LOCATION);
-      } else if (!cryptKey && (isPartyLeaderOrAlone || isFarFromFarm)) {
-        changeToNormalStrategies();
-        advanceSmartMove({ map, x: mapX, y: mapY });
-      }
-    }
   } catch (e) {
     if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
   }

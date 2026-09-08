@@ -80,6 +80,8 @@ async function fight(target) {
     ? target
     : allAggroedByParty.filter((mob) => mob !== target && inRange(mob))[0];
 
+  if (attackTarget) change_target(attackTarget);
+
   const promisesToAwait = [];
 
   if (isAttackReady() && attackTarget && shouldAttack()) {
@@ -220,39 +222,10 @@ async function mainLoop() {
         cause: "smart_move",
       });
 
-    let target = getTarget();
+    //// EVENTS, THE CRYPT, THEN THE FARMING SPOT
+    const target = await selectFightTarget();
 
-    //// THE CRYPT & EVENTS
-    if (get("cryptInstance")) target = await useCryptStrategy(target);
-    else target = await changeToDailyEventTargets();
-
-    //// Logic to targets and farm places
-    if (!target) {
-      if (
-        !smart.moving &&
-        !isAdvanceSmartMoving &&
-        get("cryptInstance") &&
-        character.map !== "crypt"
-      ) {
-        changeToNormalStrategies();
-        advanceSmartMove(CRYPT_STARTING_LOCATION);
-      } else if (
-        !smart.moving &&
-        !isAdvanceSmartMoving &&
-        !get("cryptInstance") &&
-        (partyMems[0] === character.name ||
-          !get_entity(partyMems[0]) ||
-          distance(character, { x: mapX, y: mapY, map }) > 500)
-      ) {
-        log("Moving to farming location");
-        changeToNormalStrategies();
-        advanceSmartMove({
-          map,
-          x: mapX,
-          y: mapY,
-        });
-      }
-    } else await fight(target);
+    if (target) await fight(target);
   } catch (e) {
     if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
   }

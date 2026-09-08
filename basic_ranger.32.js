@@ -485,44 +485,11 @@ async function mainLoop() {
       });
     }
 
-    // Default target
-    let target = getTarget();
+    // Events, the crypt, then the farming spot — each carries its own move
+    const target = await selectFightTarget();
 
-    // Crypt & Events
-    if (get("cryptInstance")) {
-      target = await useCryptStrategy(target);
-    } else {
-      target = await changeToDailyEventTargets();
-    }
-
-    // Smartmove if needed
-    if (!target) {
-      const needsToEnterCrypt =
-        get("cryptInstance") && character.map !== "crypt";
-      const isPartyLeaderOrAlone =
-        partyMems[0] === character.name || !get_entity(partyMems[0]);
-      const isFarFromFarmingSpot =
-        distance(character, { x: mapX, y: mapY, map }) > 500;
-
-      const needsToMoveToFarmLocation =
-        !get("cryptInstance") && (isPartyLeaderOrAlone || isFarFromFarmingSpot);
-
-      if (needsToEnterCrypt) {
-        changeToNormalStrategies();
-        advanceSmartMove(CRYPT_STARTING_LOCATION);
-      } else if (needsToMoveToFarmLocation) {
-        log("Moving to farming location");
-        changeToNormalStrategies();
-        advanceSmartMove({
-          map,
-          x: mapX,
-          y: mapY,
-        });
-      }
-    } else if (!isDeterminedToBeCupid) {
-      // Target found, engage in combat
-      await fight(target);
-    }
+    // Target found, engage in combat
+    if (target && !isDeterminedToBeCupid) await fight(target);
   } catch (e) {
     // Only log unhandled errors
     if (e.cause !== "smart_move" && e.cause !== "death") {

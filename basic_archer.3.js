@@ -15,22 +15,16 @@ var originRangeRate = 0.7;
 var rangeRate = 0.7;
 const loopInterval = ((1 / character.frequency) * 1000) / 4;
 
-var rangerTarget = undefined;
-var rangerMap = undefined;
-var rangerMapX = undefined;
-var rangerMapY = undefined;
+// Own farming spot and shortlist, overriding the party defaults in slot 7
+var ownTargets = undefined;
+var ownMap = undefined;
+var ownMapX = undefined;
+var ownMapY = undefined;
 
-function getRangerTarget() {
-  if (rangerTarget && rangerTarget.length) {
-    for (const monsterName of rangerTarget) {
-      const monsterInstance = get_nearest_monster({ type: monsterName });
-      if (monsterInstance) return monsterInstance;
-    }
-  }
-  return undefined;
-}
 async function fight(target) {
   let currentAction = undefined;
+
+  if (target) change_target(target);
 
   if (ms_to_next_skill("attack") === 0) {
     set_message("Attacking");
@@ -204,29 +198,8 @@ setInterval(async function () {
     await scareAwayMobs();
   }
 
-  let target = getRangerTarget() || getTarget();
-
-  //// EVENTS
-  target = (await changeToDailyEventTargets()) ?? getRangerTarget();
-
-  //// Logic to targets and farm places
-  if (
-    !smart.moving &&
-    !isAdvanceSmartMoving &&
-    !target &&
-    (partyMems[0] == character.name || !get_entity(partyMems[0]))
-  ) {
-    const scareInterval = setInterval(() => {
-      scareAwayMobs();
-    }, 5000);
-    changeToNormalStrategies();
-    await advanceSmartMove({
-      map: rangerMap || map,
-      x: rangerMapX || mapX,
-      y: rangerMapY || mapY,
-    });
-    clearInterval(scareInterval);
-  }
+  //// EVENTS, THE CRYPT, THEN THE FARMING SPOT
+  const target = await selectFightTarget();
 
   if (character.hp < 0.6 * character.max_hp && !get_entity(HEALER)) {
     send_cm(HEALER, "party_heal");

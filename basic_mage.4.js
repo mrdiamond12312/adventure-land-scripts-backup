@@ -257,45 +257,11 @@ async function mainLoop() {
       });
     }
 
-    // --- Target Selection ---
-    let target = getTarget();
+    // --- Target Selection --- events, then the crypt, then the farming spot
+    const target = await selectFightTarget();
 
-    // Prioritize Crypt/Event targets
-    if (get("cryptInstance")) {
-      target = await useCryptStrategy(target);
-    } else {
-      target = await changeToDailyEventTargets();
-    }
-
-    // --- Movement Logic ---
-    if (!target) {
-      const cryptKey = get("cryptInstance");
-      const needsToEnterCrypt = cryptKey && character.map !== "crypt";
-      const isPartyLeaderOrAlone =
-        TANKER === character.name || !get_entity(TANKER);
-      const isFarFromFarmingSpot =
-        distance(character, { x: mapX, y: mapY, map }) > 500;
-
-      const needsToMoveToFarmLocation =
-        !cryptKey && (isPartyLeaderOrAlone || isFarFromFarmingSpot);
-
-      if (needsToEnterCrypt) {
-        // Move to Crypt start if a crypt instance is active but we aren't there
-        advanceSmartMove(CRYPT_STARTING_LOCATION);
-      } else if (needsToMoveToFarmLocation) {
-        // Move to the designated farming spot
-        log("Moving to farming location");
-        changeToNormalStrategies();
-        advanceSmartMove({
-          map,
-          x: mapX,
-          y: mapY,
-        });
-      }
-    } else {
-      // Target found, chilling with my staff :cow2:
-      await fight(target);
-    }
+    // Target found, chilling with my staff :cow2:
+    if (target) await fight(target);
   } catch (e) {
     // If the error is 'smart_move' or 'death', it was handled internally (by the throw)
     // If it's a real runtime error, log it
