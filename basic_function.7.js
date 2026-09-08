@@ -461,6 +461,7 @@ const STORE_ABLE = [
   "orboftemporal",
   "networkcard",
   "electronics",
+  "drapes",
 
   // New expansion items
   "ashleaf",
@@ -469,6 +470,11 @@ const STORE_ABLE = [
   "verdantcore",
   "embercore",
   "reefglass",
+
+  // anniversary items
+  "slice_mint",
+  "slice_blueberry",
+  "anniversarygift",
 ];
 
 const SALE_ABLE = [
@@ -1850,7 +1856,9 @@ const PARTICIPATABLE_EVENTS = [
 ];
 
 function serverCurrentlyHasLiveEvent() {
-  return PARTICIPATABLE_EVENTS.some((eventName) => server.status[eventName]?.live);
+  return PARTICIPATABLE_EVENTS.some(
+    (eventName) => server.status[eventName]?.live,
+  );
 }
 
 const RSPEED_DURATION = G.conditions["rspeed"].duration;
@@ -2120,8 +2128,9 @@ function getPresetMembers(preset, currentServer) {
 function dynamicParty() {
   const currentServer = `${server.region}${server.id}`;
   const activeEvent =
-    Object.keys(DYNAMIC_PARTY_PRESETS).find((name) => server.status[name]?.live) ??
-    "default";
+    Object.keys(DYNAMIC_PARTY_PRESETS).find(
+      (name) => server.status[name]?.live,
+    ) ?? "default";
 
   if (!activeEvent) return;
 
