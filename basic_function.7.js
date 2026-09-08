@@ -318,6 +318,7 @@ const BUYABLE = [
 
 var IGNORE = [
   "staff",
+  "blade",
   "hpot0",
   "mpot0",
   "cscroll0",
@@ -358,8 +359,7 @@ var IGNORE = [
   "cape",
   "carrotsword",
   "xgloves",
-  ...BUYABLE,
-  // .filter((id) => id !== "blade"),
+  "shield",
 ];
 
 const STORE_ABLE = [

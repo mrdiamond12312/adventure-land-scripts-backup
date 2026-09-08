@@ -1195,7 +1195,7 @@ rather than fought through.
   it and it held a bag slot forever. The question to ask is therefore per mechanism: three unlocked
   copies at that exact level for a compound (`countInventoryAtLevel`), nothing but the item itself
   for an upgrade. Upgradables are unaffected, and the `IGNORE`/craft-target gates still run first —
-  `bow` stays in the bag because it is `BUYABLE` (so `IGNORE`), and `vitring` because
+  `carrotsword` stays in the bag because it is `IGNORE`d for the sell sweep, and `vitring` because
   `craft("armorring")` registers a climb target for it.
 - **A pick that yields nothing must not spend the retrieve call.** `retrievedBankItemToUpgrade`
   ranks by raw copy count, but count is not the same question as *retrievable*: locked copies, the
@@ -1482,8 +1482,8 @@ t2quiver's `[1, "alloyquiver", 5]` could never be satisfied — the `+5` was inv
 of the check.
 
 Meanwhile `upgradeInv`/`compoundInv` have no notion of a wanted level. They push toward the highest
-level they can reach and skip everything in `IGNORE` (which swallows all of `BUYABLE`), so the two
-halves worked against each other: the ingredient the craft needed was either never lifted, or lifted
+level they can reach and skip everything in `IGNORE`, which at the time swallowed all of `BUYABLE`,
+so the two halves worked against each other: the ingredient the craft needed was either never lifted, or lifted
 straight past the level the recipe pinned.
 
 `CRAFT_LEVEL_TARGETS` (`name -> { [level]: quantity }`) is the handshake between them. Keying by
@@ -1519,7 +1519,7 @@ Everything else reads the map: upgrade/compound bypass `IGNORE` for a targeted n
 `retrievedBankItemToUpgrade` pulls targeted stock ahead of its count-based rotation and ignores
 `KEEP_THRESHOLD` for it; a level-0 reservation alone never bypasses `IGNORE` (`isCraftTargeted` asks
 for a level above 0) — it only withholds copies from being consumed; `bankStoreRoutine` won't ship a half-climbed ingredient back to the bank;
-the `SALE_ABLE` sweep won't sell one (`shield` is in both `BUYABLE` and `SALE_ABLE`, so a bought
+the `SALE_ABLE` sweep won't sell one (`shield` is both `BUYABLE` and `SALE_ABLE`, so a bought
 target would otherwise be sold back the same tick).
 
 ### Reachability is measured in level-0 equivalents
@@ -1574,6 +1574,36 @@ size the craft then refuses. The reasoning is the one already recorded above for
 the offset passes a negative batch, which slipped past the falsy check, ran the whole ingredient
 machinery — registering targets, buying base items — and then crafted zero times through a `for`
 loop that never entered.
+
+### Vendor gear became upgradable once reservations existed (2026-09-08)
+
+`IGNORE` used to spread all of `BUYABLE` into itself, so the four gates reading it — the
+`ITEMS_HIGHEST_LEVEL` scan, `findAndUpgrade`, `findAndCompound`, and `bankStoreRoutine`'s
+`shouldIgnore` — treated vendor gear as untouchable. That was right while nothing reserved a plain
+copy: an upgrade could eat the staff `craft("pickaxe")` needed.
+
+`CRAFT_LEVEL_TARGETS` removed the hazard. The only `buy()` of a `BUYABLE` id is inside `craft()`
+(`vendorBuy`/`targetBuy`), and both paths call `requestCraftLevel` first, so `countSpareAtLevel`
+already withholds every copy a recipe holds. There is no path by which the merchant buys shop stock
+and then feeds it to its own upgrade rotation.
+
+What made it worth changing is `weaponbox`/`armorbox` in `EXCHANGE_QUEUE`: they print vendor gear
+faster than anything consumed it, and `shouldIgnore` blocked the *store* path too, so the pile had
+nowhere to go but the merchant's bag. Removing the spread hands them to the ordinary machinery —
+`KEEP_THRESHOLD` already carries type-level entries (`helmet`/`pants`/`gloves`/`shoes` 3,
+`weapon`/`shield` 2) that only resolve once `ITEMS_HIGHEST_LEVEL` tracks the name.
+
+Two guards had to move with it:
+
+- `shield` is now pinned explicitly under "avoid upgrading for selling". It was `IGNORE`d only
+  through `BUYABLE`, and it is `SALE_ABLE` — unpinned, `upgradeInv` would climb it past the sweep's
+  `level <= 2` cutoff and it would never sell.
+- `isRareItem` in `findAndUpgrade` excludes `BUYABLE`. Vendor gear is grade 0, so `level >= 6` alone
+  would have qualified it for a primling — the scarcest upgrade resource spent on something
+  re-bought for a few hundred gold.
+
+`staff` keeps its own `IGNORE` line, so weaponbox staves are still skipped; `gstaff`'s `staff +8`
+climb reaches them through `isCraftTargeted` as before.
 
 ### Sorting must not run between picking a slot and spending it (`pendingItemMutations`)
 

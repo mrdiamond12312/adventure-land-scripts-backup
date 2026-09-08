@@ -501,9 +501,11 @@ async function findAndUpgrade() {
 
   const item = character.items[itemIndex];
   const itemName = item.name;
-  // Targeted climbs never burn a primling: a break just costs another base item
+  // Neither a targeted climb nor vendor gear burns a primling: a break just
+  // costs another base item, re-bought for a few hundred gold
   const isRareItem =
     !selectedTargeted &&
+    !BUYABLE.includes(itemName) &&
     (item.level >= 6 ||
       (item.level >= 4 && selectedGrade >= 1) ||
       selectedGrade >= 2);
