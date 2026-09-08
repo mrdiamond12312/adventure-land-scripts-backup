@@ -121,6 +121,34 @@ acquire.
 The `default:` branch is kept even though the gate makes it unreachable for unknown messages: it
 still fires if a duty is added to one of the lists and the `case` is forgotten.
 
+### Duties stop at the action's reach, not at the requester's coordinates (2026-09-08)
+
+Every duty used to `advanceSmartMove(message)` all the way to the `x`/`y` the fighter sent. A
+fighter is *farming* — by the time the merchant crosses two maps it is nowhere near that spot, so
+the merchant walked the final stretch to an empty patch of ground and then acted at a target that
+had drifted. `moveInReachOf(name, message, range)` keeps the cm coordinates as the route but ends
+it as soon as `get_entity(name)` is within reach:
+
+- **`buff_mluck`** → `G.skills.mluck.range` (320, a flat skill range, not a weapon range).
+- **`inv_full`, `buy_potions`, `elixir`, `xptome`** → `DELIVERY_RANGE` (400, what the server allows
+  `send_item`/`send_gold`; `runner_functions.js` checks nothing client-side, it just emits `send`).
+
+Both are then taken at `REQUESTEE_DRIFT_SLACK` (0.75), because the requester keeps moving during
+the last seconds of our walk and stopping at the exact edge means arriving out of range.
+
+**The hook is `stopWatcher`**, an option `smartMove` already documented and nobody passed. It has
+to be that and not an external `stop()`: `smartMove`'s segment loop keeps issuing `unsafeMove` for
+the remaining segments, so only the watcher branch — which also clears `isSmartMoving` — actually
+ends the walk. The native `oldAdvanceSmartMove` has no watcher, so `advanceSmartMove` now runs the
+predicate on a 250ms interval and calls `stop("move")` for that branch; the option name means the
+same thing in both environments. `stop("move")` rejects the underlying `smart_move`, which is why
+`moveInReachOf` swallows a rejection whenever we ended up in reach anyway.
+
+`get_entity` returning nothing means the requester is off-screen or gone, so the watcher stays
+false and we walk the whole route, as before. `buff_mluck` re-reads the entity after arriving for
+the same reason: without it a requester who wandered off left `use_skill("mluck", undefined)` to
+fall back on `get_target()`.
+
 ## Realm fatigue and home-drop hopping (`server_hop_utilities.25.js`)
 
 **The mechanic** (`G.conditions.realmfatigue`, and the `events-and-home` guide). At your home
@@ -756,6 +784,33 @@ promisesToAwait.push(currentStrategy(target))`).
 `fuaLoop` split into an `rspeed` loop and a follow-up-attack loop **keyed on `"quickstab"`** —
 quickstab and quickpunch share that cooldown, so one key paces either weapon
 (`getFollowUpAttackSkill()` picks by `wtype`).
+
+### Merchant: `mluck` and `drop_egg` (2026-09-08)
+
+The merchant gets the same `startSkillLoops()` treatment as the fighters, replacing a bare
+5-minute `setInterval(() => use_skill("mluck", character))`. Self is just `candidates[0]` in the
+same scan now, so the merchant tops itself up on the same rule as everyone else.
+
+**Two different questions, one loop.** `getMluckTarget()` scans `parent.entities` for characters
+in range (`is_in_range(entity, "mluck")`, a flat 320 from `G.skills`, and it also covers
+`visible`) and splits on `isOwnedCharacter`:
+
+- **Ours** — refresh at `ms < MLUCK_REFRESH_MS` (30 min of the buff's 3600000 duration). Deliberately
+  *not* `buff.f !== character.name`: another merchant's luck is the same +12, so a bot lucked by a
+  passer-by is left alone until it decays. Worth revisiting if the caster's 2% duplicate-loot roll
+  turns out to matter more than the wasted casts.
+- **Strangers** — cast unless `buff.strong`, which cannot be overwritten, so an attempt is pure
+  waste. `mluckAimedAt` throttles the rest to one attempt per 15s **per aim, not per success**:
+  the timestamp is written in `cast` before `use_skill`, so a rejected cast still counts. Without
+  that the loop would re-pick the same unlucky stranger every 250ms.
+
+Ours sort ahead of strangers, then by lowest remaining `ms`.
+
+**Emotes are real skills.** `drop_egg` is a `G.skills` entry (`type: "skill"`, `emote: "drop_egg"`,
+`cooldown: 2000`) — one of 16 — with no class, level, or mp gate. So it goes through
+`use_skill("drop_egg")` and `is_on_cooldown`/`ms_to_next_skill` pace it like any other loop; the old
+`parent.socket.emit("emotion", {name})` is not needed. It keeps the `character.moving` gate from the
+commented-out interval it replaced, which is what leaves an egg trail rather than a pile.
 
 ## Skill loops must opt in to running while smart-moving (`whileMoving`)
 

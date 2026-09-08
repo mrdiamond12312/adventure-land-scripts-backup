@@ -25,7 +25,7 @@ character.on("cm", async function ({ name, message }) {
     switch (msg) {
       case "inv_full":
         console.warn(`Go collecting ${name}'s inventory at ${message.map}`);
-        await advanceSmartMove(message);
+        await moveInReachOf(name, message, DELIVERY_RANGE);
         send_cm(name, "inv_full_merchant_near");
         await sleep(5000);
         break;
@@ -38,12 +38,14 @@ character.on("cm", async function ({ name, message }) {
         await sleep(5000);
         break;
 
-      case "buff_mluck":
-        await advanceSmartMove(message);
-        if (!is_on_cooldown("mluck") && character.mp > 20) {
-          use_skill("mluck", get_entity(name));
+      case "buff_mluck": {
+        await moveInReachOf(name, message, G.skills.mluck.range);
+        const requester = get_entity(name);
+        if (requester && !is_on_cooldown("mluck") && character.mp > 20) {
+          use_skill("mluck", requester);
         }
         break;
+      }
 
       case "elixir":
         if (!partyMems.includes(name)) break;
@@ -73,6 +75,42 @@ character.on("cm", async function ({ name, message }) {
     onDuty = false;
   }
 });
+
+/** Requesters drift while we walk, so we close in well inside the bare reach */
+const REQUESTEE_DRIFT_SLACK = 0.75;
+/** What send_item/send_gold reach — server-side, nothing client-side checks it */
+const DELIVERY_RANGE = 400;
+
+/**
+ * @param {string} name requesting character
+ * @param {number} reach how close we need to be
+ * @returns {boolean} whether they are in reach right now
+ */
+function isRequesterInReach(name, reach) {
+  const requester = get_entity(name);
+  return !!requester && distance(character, requester) <= reach;
+}
+
+/**
+ * Walks to where the requester asked from, dropping the rest of the route once
+ * they are close enough to act on — they rarely wait where they sent the cm.
+ * @param {string} name requesting character
+ * @param {object} message the requester's cm, whose map/x/y is the walk target
+ * @param {number} range the action's reach, before slack
+ */
+async function moveInReachOf(name, message, range) {
+  const reach = range * REQUESTEE_DRIFT_SLACK;
+  if (isRequesterInReach(name, reach)) return;
+
+  try {
+    await advanceSmartMove(message, {
+      useScare: true,
+      stopWatcher: () => isRequesterInReach(name, reach),
+    });
+  } catch (e) {
+    if (!isRequesterInReach(name, reach)) throw e;
+  }
+}
 
 const POTION_SHOP = { map: "main", x: 56, y: -122 };
 // Amounts handed to a fighter per request; POTION_STACK stays behind for the merchant itself
@@ -115,7 +153,7 @@ async function deliverStock(name, itemId, message, options) {
   const shortfall = deliver + reserve - getTotalQuantityOf(itemId);
   if (shortfall > 0) await restock(shortfall).catch((e) => log(e));
 
-  await advanceSmartMove(message);
+  await moveInReachOf(name, message, DELIVERY_RANGE);
 
   const slot = biggestStackSlot(itemId);
   const deliverable =

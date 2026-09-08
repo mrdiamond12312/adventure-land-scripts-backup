@@ -580,8 +580,20 @@ async function advanceSmartMove(props, options = { useScare: true }) {
 
   if (parent.caracAL) {
     return smartMove(props, options);
-  } else {
-    return oldAdvanceSmartMove(props, options);
+  }
+
+  if (!options.stopWatcher) return oldAdvanceSmartMove(props, options);
+
+  // oldAdvanceSmartMove has no watcher of its own, and stop("move") is what
+  // ends a native smart_move — it rejects, so callers passing one must catch
+  const watcher = setInterval(() => {
+    if (options.stopWatcher()) stop("move");
+  }, 250);
+
+  try {
+    return await oldAdvanceSmartMove(props, options);
+  } finally {
+    clearInterval(watcher);
   }
 }
 

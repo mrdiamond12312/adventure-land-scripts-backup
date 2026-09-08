@@ -239,13 +239,79 @@ setInterval(function () {
   else if (Date.now() - dutyHeldSince > DUTY_STALE_MS) onDuty = false;
 }, DUTY_WATCHDOG_INTERVAL);
 
-setInterval(function () {
-  use_skill("mluck", character);
-}, 300000);
+// --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
 
-// setInterval(() => {
-//   if (character.moving) parent.socket.emit("emotion", { name: "drop_egg" });
-// }, 2000);
+// Merchant's Luck lasts an hour; ours get topped up with half of it left
+const MLUCK_REFRESH_MS = 1800000;
+// A stranger we aimed at is passed over this long, whether the cast landed or not
+const MLUCK_RETRY_MS = 15000;
+
+/** character name -> when we last aimed an mluck at them */
+const mluckAimedAt = {};
+
+/**
+ * @param {Object} entity - a character within mluck range
+ * @returns {boolean} whether they still want our luck
+ */
+function wantsMluck(entity) {
+  const buff = entity.s?.mluck;
+
+  if (isOwnedCharacter(entity.name))
+    return !buff || buff.ms < MLUCK_REFRESH_MS;
+
+  // Strong luck can't be overwritten, so it isn't worth an attempt
+  if (buff?.strong) return false;
+
+  return Date.now() - (mluckAimedAt[entity.name] ?? 0) > MLUCK_RETRY_MS;
+}
+
+/** @returns {Object} the character most worth lucking, ours first */
+function getMluckTarget() {
+  const candidates = [character];
+
+  for (const id in parent.entities) {
+    const entity = parent.entities[id];
+    if (entity?.type !== "character" || entity.npc || entity.rip) continue;
+    if (!is_in_range(entity, "mluck")) continue;
+    candidates.push(entity);
+  }
+
+  return candidates.filter(wantsMluck).sort((lhs, rhs) => {
+    const lhsOurs = isOwnedCharacter(lhs.name);
+    const rhsOurs = isOwnedCharacter(rhs.name);
+    if (lhsOurs !== rhsOurs) return lhsOurs ? -1 : 1;
+
+    return (lhs.s?.mluck?.ms ?? 0) - (rhs.s?.mluck?.ms ?? 0);
+  })[0];
+}
+
+function startSkillLoops() {
+  // runSkillLoop always calls canUse right before cast, so canUse stashes what
+  // it approved and cast reuses it instead of recomputing the scan.
+  let pendingMluckTarget = null;
+
+  runSkillLoop({
+    skill: "mluck",
+    floorMs: 250,
+    whileMoving: true,
+    canUse: () => {
+      if (character.mp < G.skills.mluck.mp) return false;
+      pendingMluckTarget = getMluckTarget();
+      return pendingMluckTarget != null;
+    },
+    cast: () => {
+      mluckAimedAt[pendingMluckTarget.name] = Date.now();
+      return use_skill("mluck", pendingMluckTarget);
+    },
+  });
+
+  runSkillLoop({
+    skill: "drop_egg",
+    whileMoving: true,
+    canUse: () => character.moving && !is_on_cooldown("drop_egg"),
+    cast: () => use_skill("drop_egg"),
+  });
+}
 
 function on_party_invite(name) {
   if (name === partyMems[0]) accept_party_invite(name);
@@ -317,6 +383,7 @@ bankLoop();
 lureMechaGnome();
 dragEnt();
 merchantAttackLoop();
+startSkillLoops();
 
 // Register secondhands event handler
 parent.socket.on("secondhands", secondhandsHandler);
