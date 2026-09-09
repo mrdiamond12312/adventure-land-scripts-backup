@@ -59,7 +59,7 @@ async function lureMechaGnome() {
       throw new Error("Mage did not have mana / not online");
     }
 
-    parent.socket.emit("eval", { command: "mooooooh" });
+    await mainframe_command("mooooooooooh", character.ping);
     await advanceSmartMove(get("mageLocation"), { useScare: false });
 
     await waitUntil(
