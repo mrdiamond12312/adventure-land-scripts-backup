@@ -382,6 +382,16 @@ const STORE_ABLE = [
   "egg6",
   "egg7",
   "egg8",
+  "candy",
+  "candy0",
+  "candycane",
+  "mistletoe",
+  "bronzeingot",
+  "bronzenugget",
+  "goldingot",
+  "goldnugget",
+  "platinumnugget",
+  "platinumingot",
   "essenceofether",
   "spidersilk",
   "feather0",
@@ -462,6 +472,7 @@ const STORE_ABLE = [
   "networkcard",
   "electronics",
   "drapes",
+  "smoke",
 
   // New expansion items
   "ashleaf",
@@ -474,7 +485,13 @@ const STORE_ABLE = [
   // anniversary items
   "slice_mint",
   "slice_blueberry",
+  "slice_strawberry",
+  "slice_citrus",
+  "slice_honey",
+  "slice_nightberry",
   "anniversarygift",
+  "confetti",
+  "gift0",
 ];
 
 const SALE_ABLE = [
