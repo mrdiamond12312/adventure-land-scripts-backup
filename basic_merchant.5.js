@@ -340,7 +340,7 @@ const ITEM_NEEDED = [
   { name: "carrot" },
   { name: "brownenvelope" },
   { name: "harbringer" },
-  { name: "throwingstars", maxLevel: 0 },
+  // { name: "throwingstars", maxLevel: 0 },
   { name: "angelwings" },
   // { name: "smoke" },
   { name: "gphelmet" },
