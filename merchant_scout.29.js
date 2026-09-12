@@ -97,6 +97,9 @@ async function scoutSweep() {
 
 async function merchantScoutingLoop() {
   if (
+    // The startup bank walk builds ITEMS_HIGHEST_LEVEL and fetches our gear;
+    // a sweep taken before it lands would hold the duty right through it
+    !hasVisitedBank ||
     onDuty ||
     isAdvanceSmartMoving ||
     smart.moving ||
