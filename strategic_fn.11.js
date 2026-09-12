@@ -1954,10 +1954,6 @@ const TEMPORAL_SURGE_CONFIG = {
 
   /** Default gap before the next drain when nothing more specific applies */
   RETRY_MS: 1000,
-
-  /** What one surge does to a remaining respawn, straight from the server */
-  HASTEN_FACTOR: 0.85,
-  HASTEN_FLAT_MS: 1000,
 };
 
 /** Estimated respawn ETA per pending entity id */
@@ -2059,20 +2055,44 @@ async function drainPendingSurges() {
     // the spawn would beat the next cooldown home
     const nextCooldown = ms_to_next_skill("temporalsurge");
 
-    for (const [id] of inRange) {
-      const remaining = Math.max(0, pendingSurgeEta[id] - Date.now());
-      const hastened =
-        remaining * TEMPORAL_SURGE_CONFIG.HASTEN_FACTOR -
-        TEMPORAL_SURGE_CONFIG.HASTEN_FLAT_MS;
+    // times is the server's own remainder after hastening, so it replaces the
+    // seeded guess outright. The largest is the mini-boss: nothing else sharing
+    // a spawn area comes close to a two minute respawn
+    const remaining = times.length ? Math.max(...times) : 0;
 
-      if (hastened <= nextCooldown) dropPendingSurge(id);
-      else pendingSurgeEta[id] = Date.now() + hastened;
+    for (const [id, entity] of inRange) {
+      if (remaining <= nextCooldown) dropPendingSurge(id);
+      else {
+        pendingSurgeEta[id] = Date.now() + remaining;
+        publishRespawnEta(id, entity);
+      }
     }
 
     retryDelay = nextCooldown + 100;
   } finally {
     if (Object.keys(pendingSurgeSpots).length) scheduleSurgeRetry(retryDelay);
   }
+}
+
+/**
+ * Publishes a surge-derived respawn estimate for a watched mini-boss. Only
+ * called with a time straight off the server, never with the seeded guess, so
+ * the scout store never carries an estimate the fighters cannot trust.
+ * checkedAt moves with it: we just watched this one die.
+ *
+ * @param {string} id entity id
+ * @param {object} entity
+ */
+function publishRespawnEta(id, entity) {
+  if (!SPECIAL_MOB_IDS.includes(entity.mtype)) return;
+  // Roamers like goldenbat carry respawn -1: they never come back on a timer,
+  // so any eta for them is meaningless
+  if (!(G.monsters[entity.mtype]?.respawn > 0)) return;
+
+  updateStoreEntry(SCOUT_LS_KEY, entity.mtype, {
+    respawnEta: pendingSurgeEta[id],
+    checkedAt: Date.now(),
+  });
 }
 
 /** @param {string} id */

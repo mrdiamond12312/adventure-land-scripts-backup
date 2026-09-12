@@ -3,6 +3,12 @@
 /** A sighting older than this is not worth the walk */
 const SPECIAL_MOB_SIGHTING_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * respawnEta is published straight from the surge response, which carries the
+ * server's own remainder — this only covers the walk and the message round trip.
+ */
+const SPECIAL_MOB_RESPAWN_PADDING_MS = 30 * 1000;
+
 /** Standing this close to a reported spot counts as having checked it */
 const SPECIAL_MOB_ARRIVAL_SLACK = 200;
 
@@ -55,6 +61,19 @@ function getSpecialMobSighting() {
     if (!report?.seenAt || !report.seenSpot) continue;
     if (Date.now() - report.seenAt > SPECIAL_MOB_SIGHTING_TTL_MS) continue;
     if (isTakenBySomeoneElse(report.target)) continue;
+
+    // A respawnEta only means anything while it is the newer of the two: seeing
+    // it alive since the scout surged its corpse settles the question
+    // Roamers have no timed respawn, so a stale eta must not hold them back
+    const isDownUntil =
+      G.monsters[mtype]?.respawn > 0 &&
+      report.respawnEta &&
+      report.seenAt <= (report.checkedAt ?? 0);
+    if (
+      isDownUntil &&
+      Date.now() < report.respawnEta + SPECIAL_MOB_RESPAWN_PADDING_MS
+    )
+      continue;
     if (best && report.seenAt <= best.seenAt) continue;
 
     best = { mtype, seenAt: report.seenAt, ...report.seenSpot };
