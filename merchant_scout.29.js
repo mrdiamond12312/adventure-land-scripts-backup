@@ -7,7 +7,7 @@
  * A mini-boss the scout looking for
  * @typedef {object} ScoutTarget
  * @property {SpawnSpot[]} [spotsToCheck] spawn to check for
- * @property {boolean} [isSpecial=false] random spawn special mobs
+ * @property {boolean} [goServerhopping=false] scout via realm socket and force a serverhopping - havent implemented
  * @property {boolean} [useTeleportation] allow town-scroll hops between spots
  */
 
@@ -26,34 +26,40 @@
  * @satisfies {Record<string, ScoutTarget>}
  */
 const MINI_BOSSES_TO_SCOUT = {
+  cutebee: {
+    spotsToCheck: [
+      ...getMonsterSpawns("crab"),
+      ...getMonsterSpawns("crabx"),
+      ...getMonsterSpawns("hawk"),
+    ],
+    useTeleportation: false,
+  },
   skeletor: {
     spotsToCheck: getMonsterSpawns("skeletor"),
-    isSpecial: false,
     useTeleportation: true,
   },
   mvampire: {
     spotsToCheck: getMonsterSpawns("mvampire"),
-    isSpecial: false,
     useTeleportation: false, // Moving on his bare foot to check for goldenbat
   },
   goldenbat: {
     spotsToCheck: undefined,
-    isSpecial: true,
     useTeleportation: true,
   },
   phoenix: {
     spotsToCheck: undefined,
-    isSpecial: true,
     useTeleportation: true,
   },
   fvampire: {
     spotsToCheck: getMonsterSpawns("fvampire"),
-    isSpecial: false,
     useTeleportation: true,
   },
   stompy: {
     spotsToCheck: getMonsterSpawns("stompy"),
-    isSpecial: false,
+    useTeleportation: true,
+  },
+  goldenbot: {
+    spotsToCheck: getMonsterSpawns("goldenbot"),
     useTeleportation: true,
   },
 };
@@ -124,8 +130,8 @@ async function merchantScoutingLoop() {
     // The priority is currently following the order defined in the config
     for (const miniBossKey of SCOUT_CONFIG.MINI_BOSSES_KEYS) {
       const miniBossConfig = MINI_BOSSES_TO_SCOUT[miniBossKey];
-      if (miniBossConfig.isSpecial) continue;
-      for (const spotToCheck of miniBossConfig.spotsToCheck ?? []) {
+      if (!miniBossConfig.spotsToCheck) continue;
+      for (const spotToCheck of miniBossConfig.spotsToCheck) {
         await advanceSmartMove(spotToCheck, {
           useTown: miniBossConfig.useTeleportation,
           speed: miniBossConfig.useTeleportation ? character.speed : 250, // prevent town

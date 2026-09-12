@@ -146,12 +146,14 @@ function updateStoreEntry(key, entryId, fields) {
  * cannot drift apart.
  */
 const SPECIAL_MOB_IDS = [
+  "cutebee",
   "skeletor",
   "mvampire",
   "fvampire",
   "stompy",
   "goldenbat",
   "phoenix",
+  "goldenbot",
 ];
 
 // var map = "main";
