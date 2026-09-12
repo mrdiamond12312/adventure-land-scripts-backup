@@ -66,32 +66,6 @@ function isPartyEngaged() {
 }
 
 /**
- * Pulls only while a healthy tanker and a healer are up to hold what we pull.
- */
-function adaptStrategyToParty() {
-  const thirdPartyHealerId = parent.party_list.find((id) => {
-    const player = get_player(id);
-    return !partyMems.includes(id) && player?.ctype === "priest";
-  });
-  const partyHealer =
-    get_entity(HEALER) ||
-    (thirdPartyHealerId && get_player(thirdPartyHealerId)) ||
-    undefined;
-  const partyTanker = get_entity(TANKER);
-
-  if (
-    partyTanker &&
-    partyTanker.hp > partyTanker.max_hp * 0.35 &&
-    partyHealer &&
-    !partyHealer.rip &&
-    character.ping < 600 &&
-    (get_targeted_monster()?.level < 5 || get_target()?.attack < 500)
-  )
-    changeToPullStrategies();
-  else changeToNormalStrategies();
-}
-
-/**
  * Fights what stands on the farming spot, and heads back as soon as nothing off
  * it is worth farming — followers only regroup after drifting off the spot.
  * @returns {Promise<object|undefined>} the farming outcome, if it owns this tick

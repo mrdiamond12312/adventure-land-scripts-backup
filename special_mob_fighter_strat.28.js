@@ -96,7 +96,7 @@ async function useSpecialMobStrategy() {
   }
 
   log(`Hunting ${sighting.mtype}`);
-  changeToNormalStrategies();
+  adaptStrategyToParty();
   advanceSmartMove(sighting);
 
   return travelling();
