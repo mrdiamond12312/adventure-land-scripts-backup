@@ -63,9 +63,9 @@ const SCOUT_CONFIG = {
   MINI_BOSSES_KEYS: /** @type {(keyof typeof MINI_BOSSES_TO_SCOUT)[]} */ (
     Object.keys(MINI_BOSSES_TO_SCOUT)
   ),
-  TIMEOUT: 30 * 60 * 1000,
+  NEXT_TICK: 15 * 60 * 1000,
   FAIL_TIMEOUT: 6 * 60 * 1000,
-  REJECT_TIMEOUT: 0.5 * 60 * 1000,
+  REJECT_TIMEOUT: 15 * 1000,
 };
 
 /**
@@ -107,7 +107,7 @@ async function merchantScoutingLoop() {
     return;
   }
 
-  let nextDelay = SCOUT_CONFIG.TIMEOUT;
+  let nextDelay = SCOUT_CONFIG.NEXT_TICK;
 
   onDuty = true;
   // A full sweep outlasts DUTY_STALE_MS, so the watchdog needs telling
