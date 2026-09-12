@@ -13,15 +13,14 @@ const SMART_MOVE_CONFIG = Object.freeze({
   MAGIPORT_MAGE_NEAR_DEST_DISTANCE: 200, // mage counts as "parked at the destination" within this
   MAGIPORT_MIN_WORTH_DISTANCE: 100, // closer than this to the mage, walking is cheaper than a port
   MAGIPORT_MP_RESERVE_CASTS: 2, // mage keeps mp for this many magiport casts (the other fighters)
-  MAGIPORT_LANDING_WAIT_MS: 1500, // wait after send_cm before checking whether the port landed
+  MAGIPORT_WAIT_TIMEOUT: 3500, // wait after send_cm before checking whether the port landed
   MAGIPORT_ARRIVAL_DISTANCE: 300, // landed within this of the destination = the port worked
 
   // Blink (_blinkCheck and the in-path blink segment)
   BLINK_CHECK_INTERVAL_MS: 200,
   BLINK_MIN_WORTH_DISTANCE: 200, // shorter jumps than this aren't worth the mp/cooldown
-  BLINK_SETTLE_MS: 250, // wait after blink before correcting position with move()
   BLINK_MP_WAIT_TIMEOUT_MS: 15_000, // how long a blink path segment waits for mp/cooldown
-  BLINK_SETTLE_PING_RATE: 0.7, // in-path blink settles for ping * this before the next segment
+  BLINK_SEGMENT_MAX_ATTEMPTS: 3, // give up on a required blink segment after this many failures
 
   // Scare / stop watcher
   SCARE_INTERVAL_MS: 1000,
@@ -47,7 +46,7 @@ class StrategicSmartMove {
     this.magiportLoop = undefined;
     this.watcherInterval = undefined;
     this.isSmartMoving = true;
-    this.stopTownSession = null;
+    this.townEpoch = 0;
   }
 
   /**
@@ -163,49 +162,53 @@ class StrategicSmartMove {
     maxRetries = SMART_MOVE_CONFIG.TOWN_MAX_RETRIES,
     retryDelay = SMART_MOVE_CONFIG.TOWN_RETRY_DELAY_MS,
   } = {}) {
+    const epoch = this.townEpoch;
+    const session = this.smartMoveSession;
+    const aborted = () =>
+      this.townEpoch !== epoch || session !== this.smartMoveSession;
+
     let attempts = 0;
-    let mapData = parent.G.maps[character.map];
+    const mapData = parent.G.maps[character.map];
 
     while (attempts++ < maxRetries) {
-      if (this.stopTownSession === this.smartMoveSession) {
-        return true;
-      }
+      if (aborted()) return false;
+
       await town();
-      await waitUntil(() => {
-        return !character.c.town;
-      }, SMART_MOVE_CONFIG.TOWN_CHANNEL_TIMEOUT_MS);
+      await waitUntil(
+        () => !character.c.town,
+        SMART_MOVE_CONFIG.TOWN_CHANNEL_TIMEOUT_MS,
+      );
       await sleep(retryDelay);
-      if (mapData.spawns?.length) {
-        if (
-          distance(character, {
-            map: character.map,
-            x: mapData.spawns[0][0],
-            y: mapData.spawns[0][1],
-          }) > SMART_MOVE_CONFIG.TOWN_SPAWN_ARRIVAL_DISTANCE
-        ) {
-          continue;
-        }
+
+      if (aborted()) return false;
+      // No spawn data to verify against - assume the channel did its job
+      if (!mapData.spawns?.length) return true;
+
+      if (
+        distance(character, {
+          map: character.map,
+          x: mapData.spawns[0][0],
+          y: mapData.spawns[0][1],
+        }) <= SMART_MOVE_CONFIG.TOWN_SPAWN_ARRIVAL_DISTANCE
+      ) {
         return true;
       }
     }
 
-    if (
-      mapData.spawns?.length &&
-      this.stopTownSession !== this.smartMoveSession
-    ) {
+    if (mapData.spawns?.length && !aborted()) {
       await smart_move({
         map: character.map,
         x: mapData.spawns[0][0],
         y: mapData.spawns[0][1],
       });
     }
-
     return false;
   }
 
-  stopTownChanneling() {
-    this.stopTownSession = this.smartMoveSession;
-    stop("town");
+  /** Cancel any in-flight town channel + retry loop. Does NOT disable future towns. */
+  cancelTown() {
+    this.townEpoch++;
+    stop("town").catch(() => {}); // returns a deferred; swallow it
   }
 
   // Mage Utils
@@ -242,10 +245,7 @@ class StrategicSmartMove {
 
   /**
    * Recurring check (1s) that asks the mage for a magiport once it is parked
-   * near the destination. Verifies the port actually landed before ending the
-   * smartMove session — if the mage never casts, the walk keeps going and the
-   * check keeps retrying. While the mage is offline the loop just idles, so it
-   * picks the port back up if the mage comes online mid-walk.
+   * near the destination.
    * @param {number} session - the smartMove session this loop belongs to
    * @param {Object} toPosition - resolved destination with `map`, `x`, `y`
    */
@@ -277,7 +277,10 @@ class StrategicSmartMove {
         console.warn(`Whoosh! #${session}`);
         send_cm(MAGE, "magiport");
         stop();
-        await sleep(SMART_MOVE_CONFIG.MAGIPORT_LANDING_WAIT_MS);
+        await this.waitForNewMap(
+          "magiport",
+          SMART_MOVE_CONFIG.MAGIPORT_WAIT_TIMEOUT,
+        ).catch((e) => console.warn("magiport timeout error", e));
 
         if (
           character.map === toPosition.map &&
@@ -295,7 +298,7 @@ class StrategicSmartMove {
           )
             await this.unsafeMove(toPosition.x, toPosition.y); // Move after magiport to correct position in case of random spawn
           this.cleanUp(session);
-          this.stopTownChanneling();
+          this.cancelTown();
           return;
         }
 
@@ -331,6 +334,17 @@ class StrategicSmartMove {
       clearTimeout(this.blinkLoop);
       return;
     }
+
+    const reschedule = () => {
+      if (session !== this.smartMoveSession || !this.isSmartMoving) return;
+      this.blinkLoop = setTimeout(
+        () => this._blinkCheck(session, pathFindingResult, progress),
+        SMART_MOVE_CONFIG.BLINK_CHECK_INTERVAL_MS,
+      );
+    };
+
+    // The walk loop is mid-blink/magiport - don't stack a second cast on top of it
+    if (this.isDoingSomethingMagical) return reschedule();
 
     if (SMART_MOVE_CONFIG.LOOP_DEBUG) console.warn("blink tick", session);
 
@@ -372,11 +386,7 @@ class StrategicSmartMove {
         console.log(
           `No spawn data for town segment ${blinkSegment.map}, skipping blink`,
         );
-        this.blinkLoop = setTimeout(
-          () => this._blinkCheck(session, pathFindingResult, progress),
-          SMART_MOVE_CONFIG.BLINK_CHECK_INTERVAL_MS,
-        );
-        return;
+        return reschedule();
       }
     }
 
@@ -392,14 +402,14 @@ class StrategicSmartMove {
           SMART_MOVE_CONFIG.BLINK_MIN_WORTH_DISTANCE
       ) {
         console.warn(
-          `Blinking to ${blinkSegment.map} (${blinkSegment.x}, ${blinkSegment.y})`,
+          `Blinking to ${blinkLocation.map} (${blinkLocation.x}, ${blinkLocation.y})`,
         );
         this.isDoingSomethingMagical = true;
-        this.stopTownChanneling();
-        await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
-        await sleep(SMART_MOVE_CONFIG.BLINK_SETTLE_MS);
-        await this.unsafeMove(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
-        progress.segmentIndex = lastIndex;
+        this.cancelTown();
+        await use_skill("blink", [blinkLocation.x, blinkLocation.y]);
+        await this.waitForNewMap("blink").catch((e) => console.warn(e));
+        await this.unsafeMove(blinkLocation.x, blinkLocation.y); // Blink has random position, move after blink to correct it
+        progress.segmentIndex = lastIndex + 1;
       }
     } catch (e) {
       console.warn("Error while blinking:", e);
@@ -407,26 +417,26 @@ class StrategicSmartMove {
       this.isDoingSomethingMagical = false;
     }
 
-    if (session !== this.smartMoveSession || !this.isSmartMoving) return;
-    this.blinkLoop = setTimeout(
-      () => this._blinkCheck(session, pathFindingResult, progress),
-      SMART_MOVE_CONFIG.BLINK_CHECK_INTERVAL_MS,
-    );
+    reschedule();
   }
 
-  waitForNewMap(timeout = SMART_MOVE_CONFIG.NEW_MAP_TIMEOUT_MS) {
+  waitForNewMap(effect, timeout = SMART_MOVE_CONFIG.NEW_MAP_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        parent.socket.off("new_map", handler);
-        reject(new Error("new_map timeout"));
-      }, timeout);
-
-      function handler(data) {
+      let timer;
+      const cleanup = () => {
         clearTimeout(timer);
+        parent.socket.off("new_map", handler);
+      };
+      function handler(data) {
+        if (effect !== undefined && data.effect !== effect) return; // not ours, keep waiting
+        cleanup();
         resolve(data);
       }
-
-      parent.socket.once("new_map", handler);
+      timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("new_map timeout"));
+      }, timeout);
+      parent.socket.on("new_map", handler); // .on, not .once
     });
   }
 
@@ -450,7 +460,6 @@ class StrategicSmartMove {
 
     const waitPromise = this.waitForNewMap();
     parent.socket.emit("transport", { to: map, s: spawn });
-    parent.push_deferred("transport");
 
     try {
       await waitPromise;
@@ -473,7 +482,7 @@ class StrategicSmartMove {
     // Stop any existing smart move
     if (this.isSmartMoving) {
       this.cleanUp();
-      this.stopTownChanneling();
+      this.cancelTown();
     }
 
     console.warn(toPosition);
@@ -523,6 +532,10 @@ class StrategicSmartMove {
         }
       }
     } else {
+      // Never mutate the caller's object - a reused location literal would keep
+      // whatever map/x/y we stamp on and silently target the wrong place next call
+      toPosition = { ...toPosition };
+
       /* Position filler */
       // Fill map first
       if (
@@ -561,14 +574,11 @@ class StrategicSmartMove {
 
       pathFindingResult = this.pathfinderGetPath(toPosition, options.speed);
 
-      // Standable fallback (for example: icegolem spawn): when no direct path
-      // exists but the point itself is standable, reroute via spawn 0 and hop
-      // the last leg. Gated on useTown so short in-combat moves (kiting/tanking
-      // pass useTown:false) bail with an empty path instead of trekking the
-      // warrior all the way to spawn 0 mid-fight.
+      // Standable fallback
       if (
         (!pathFindingResult || !pathFindingResult.length) &&
         options.useTown &&
+        character.ctype === "mage" &&
         mapData?.spawns?.length &&
         this.isStandablePoint(toPosition)
       ) {
@@ -681,6 +691,9 @@ class StrategicSmartMove {
       }, SMART_MOVE_CONFIG.STOP_WATCHER_INTERVAL_MS);
     }
 
+    let moveError;
+    let blinkAttempts = 0;
+
     try {
       while (progress.segmentIndex < pathFindingResult.length) {
         if (!this.isSmartMoving || session !== this.smartMoveSession) break;
@@ -690,55 +703,88 @@ class StrategicSmartMove {
           continue;
         }
 
-        const segment = pathFindingResult[progress.segmentIndex];
+        const idx = progress.segmentIndex;
+        const segment = pathFindingResult[idx];
+        // Only advance if the blink loop hasn't moved the cursor while we awaited
+        const advance = () => {
+          if (progress.segmentIndex === idx) progress.segmentIndex++;
+        };
+
         if (segment.method === "move") {
-          // if (segment.map !== character.map) {
-          //   throw new Error(
-          //     `Expected map ${segment.map}, currently on ${character.map}`,
-          //   );
-          // }
           await this.unsafeMove(segment.x, segment.y);
-          progress.segmentIndex++;
+          advance();
           continue;
         }
 
         if (segment.method === "door" || segment.method === "transport") {
           await this.transport(segment.map, segment.spawn);
-          progress.segmentIndex++;
+          advance();
           continue;
         }
 
         if (segment.method === "town") {
           await this.useTownWithRetry();
-          progress.segmentIndex++;
+          advance();
           continue;
         }
 
         if (segment.method === "leave") {
           await leave();
-          progress.segmentIndex++;
+          advance();
           continue;
         }
 
-        if (segment.method === "blink" && character.ctype === "mage") {
-          if (!this.hasMpToBlink()) {
-            await waitUntil(
-              () => this.hasMpToBlink(),
-              SMART_MOVE_CONFIG.BLINK_MP_WAIT_TIMEOUT_MS,
+        if (segment.method === "blink") {
+          // Not recoverable - no amount of retrying makes a warrior a mage
+          if (character.ctype !== "mage") {
+            throw new Error(
+              `Path requires a blink segment but ${character.name} is a ${character.ctype}`,
             );
           }
 
-          if (this.hasMpToBlink() && character.map === segment.map) {
+          // Claim the cast before the mp wait, otherwise _blinkCheck can burn
+          // the mp/cooldown we are sitting here waiting for
+          this.isDoingSomethingMagical = true;
+          let blinked = false;
+          try {
+            if (!this.hasMpToBlink()) {
+              await waitUntil(
+                () => this.hasMpToBlink(),
+                SMART_MOVE_CONFIG.BLINK_MP_WAIT_TIMEOUT_MS,
+              );
+            }
+            if (!this.hasMpToBlink()) {
+              throw new Error("Timed out waiting for mp/cooldown to blink");
+            }
+            if (character.map !== segment.map) {
+              throw new Error(
+                `Blink segment expects map ${segment.map}, currently on ${character.map}`,
+              );
+            }
+
             await use_skill("blink", [segment.x, segment.y]);
-            await sleep(
-              character.ping * SMART_MOVE_CONFIG.BLINK_SETTLE_PING_RATE,
-            );
-            progress.segmentIndex++;
-            continue;
+            await this.waitForNewMap("blink").catch((e) => console.warn(e));
+            blinked = true;
+          } catch (e) {
+            console.warn("Blink segment failed:", e);
+          } finally {
+            this.isDoingSomethingMagical = false;
           }
+
+          if (blinked) {
+            blinkAttempts = 0;
+            advance();
+          } else if (
+            ++blinkAttempts >= SMART_MOVE_CONFIG.BLINK_SEGMENT_MAX_ATTEMPTS
+          ) {
+            throw new Error(
+              `Blink segment failed after ${blinkAttempts} attempts`,
+            );
+          }
+          continue;
         }
 
-        progress.segmentIndex++;
+        advance();
       }
     } catch (e) {
       console.warn("smartMove error:", e);
@@ -749,7 +795,7 @@ class StrategicSmartMove {
 
   /**
    * Tears down timers and stops movement. When a session is given, only cleans
-   * up if that session is still the current one — a finished old session must
+   * up if that session is still the current one - a finished old session must
    * not kill the timers of a newer smartMove that already took over.
    * @param {number} [session] - the smartMove session this cleanup belongs to
    */
