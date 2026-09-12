@@ -59,7 +59,7 @@ const MINI_BOSSES_TO_SCOUT = {
     useTeleportation: true,
   },
   goldenbot: {
-    spotsToCheck: getMonsterSpawns("goldenbot"),
+    spotsToCheck: getMonsterSpawns("sparkbot"),
     useTeleportation: true,
   },
 };
