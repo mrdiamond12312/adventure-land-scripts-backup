@@ -29,6 +29,7 @@ const MINI_BOSSES_TO_SCOUT = {
   skeletor: {
     spotsToCheck: getMonsterSpawns("skeletor"),
     isSpecial: false,
+    useTeleportation: true,
   },
   mvampire: {
     spotsToCheck: getMonsterSpawns("mvampire"),
@@ -38,18 +39,22 @@ const MINI_BOSSES_TO_SCOUT = {
   goldenbat: {
     spotsToCheck: undefined,
     isSpecial: true,
+    useTeleportation: true,
   },
   phoenix: {
     spotsToCheck: undefined,
     isSpecial: true,
+    useTeleportation: true,
   },
   fvampire: {
     spotsToCheck: getMonsterSpawns("fvampire"),
     isSpecial: false,
+    useTeleportation: true,
   },
   stompy: {
     spotsToCheck: getMonsterSpawns("stompy"),
     isSpecial: false,
+    useTeleportation: true,
   },
 };
 
@@ -114,7 +119,7 @@ async function merchantScoutingLoop() {
       for (const spotToCheck of miniBossConfig.spotsToCheck ?? []) {
         await advanceSmartMove(spotToCheck, {
           useTown: miniBossConfig.useTeleportation,
-          speed: miniBossConfig.useTeleportation ? 200 : character.speed,
+          speed: miniBossConfig.useTeleportation ? character.speed : 250, // prevent town
         });
 
         updateScoutInfo(miniBossKey, { checkedAt: Date.now() });

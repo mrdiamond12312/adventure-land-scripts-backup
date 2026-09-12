@@ -525,6 +525,7 @@ const STORE_ABLE = [
   "verdantcore",
   "embercore",
   "reefglass",
+  "voidthread",
 
   // anniversary items
   "slice_mint",
