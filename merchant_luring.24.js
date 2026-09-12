@@ -455,26 +455,28 @@ async function runEntLure() {
 }
 
 async function dragEnt() {
+  if (
+    map !== ENT_LURE_MAP ||
+    isLuringMobs ||
+    onDuty ||
+    isAdvanceSmartMoving ||
+    smart.moving ||
+    shouldGoChilling() ||
+    serverCurrentlyHasLiveEvent() ||
+    !isMyPriestOnline() ||
+    hasMaxEntsEngagedAtSpawn()
+  ) {
+    setTimeout(dragEnt, 10_000);
+    return;
+  }
+
   let nextDelay = 10_000;
 
-  try {
-    if (
-      map !== ENT_LURE_MAP ||
-      isLuringMobs ||
-      onDuty ||
-      isAdvanceSmartMoving ||
-      smart.moving ||
-      shouldGoChilling() ||
-      serverCurrentlyHasLiveEvent() ||
-      !isMyPriestOnline() ||
-      hasMaxEntsEngagedAtSpawn()
-    ) {
-      return;
-    }
+  onDuty = true;
+  isLuringMobs = true;
+  isDraggingMobs = true;
 
-    onDuty = true;
-    isLuringMobs = true;
-    isDraggingMobs = true;
+  try {
     // Tell the rest of the party we're actively dragging this in — see
     // getMonstersOnDeclares() in basic_function.7.js, which skips declaring it
     // as a farm target while it's still being walked in from elsewhere.

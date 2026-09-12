@@ -96,7 +96,13 @@ async function scoutSweep() {
 }
 
 async function merchantScoutingLoop() {
-  if (onDuty) {
+  if (
+    onDuty ||
+    isAdvanceSmartMoving ||
+    smart.moving ||
+    shouldGoChilling() ||
+    serverCurrentlyHasLiveEvent()
+  ) {
     setTimeout(merchantScoutingLoop, SCOUT_CONFIG.REJECT_TIMEOUT);
     return;
   }
