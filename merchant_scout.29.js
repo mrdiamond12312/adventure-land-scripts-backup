@@ -69,10 +69,7 @@ const SCOUT_CONFIG = {
  * @param {ScoutReport} mobData - the info of its wherabouts
  */
 function updateScoutInfo(mobId, mobData) {
-  let currentScoutData = get(SCOUT_LS_KEY);
-  if (!currentScoutData) currentScoutData = {};
-  currentScoutData[mobId] = { ...currentScoutData[mobId], ...mobData };
-  set(SCOUT_LS_KEY, currentScoutData);
+  updateStoreEntry(SCOUT_LS_KEY, mobId, mobData);
 }
 
 /**

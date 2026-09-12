@@ -113,10 +113,53 @@ class ServerRealmData {
       reconnectionDelayMax: 120000,
     });
 
-    socket.on("welcome", (data) => this._absorb(key, entry, data?.S));
+    // Only the home realm earns an entity feed: its mini-bosses are the ones
+    // worth walking to, and eleven live feeds is a lot of traffic for sightings
+    // we would have to hop for anyway
+    const isHomeRealm = key === getHomeServer();
+
+    socket.on("welcome", (data) => {
+      this._absorb(key, entry, data?.S);
+      // Promotes the connection to an observer, which the server then feeds
+      // entity updates for wherever it has parked us
+      if (isHomeRealm) socket.emit("loaded", {});
+    });
     socket.on("server_info", (data) => this._absorb(key, entry, data));
 
+    // new_map lands on every relocation, entities on each delta after that
+    if (isHomeRealm) {
+      socket.on("new_map", (data) => this._absorbEntities(key, data?.entities));
+      socket.on("entities", (data) => this._absorbEntities(key, data));
+    }
+
     return socket;
+  }
+
+  /**
+   * Records any watched mini-boss the observer can currently see.
+   *
+   * @param {string} key e.g. "USII"
+   * @param {{monsters?: object[], map?: string}} [data]
+   */
+  _absorbEntities(key, data) {
+    // Raw socket data, so the wire field is `type` rather than the client's mtype
+    const seen = (data?.monsters ?? []).filter((monster) =>
+      SPECIAL_MOB_IDS.includes(monster.type),
+    );
+    if (!seen.length) return;
+
+    for (const monster of seen) {
+      updateStoreEntry(REALM_SIGHTINGS_LS_KEY, monster.type, {
+        realm: key,
+        map: data.map,
+        x: monster.x,
+        y: monster.y,
+        // hp is only on the wire when it differs from the G default
+        hp: monster.hp ?? G.monsters[monster.type]?.hp,
+        target: monster.target,
+        seenAt: Date.now(),
+      });
+    }
   }
 
   /** Replaces a realm's cached status; server_info always carries the whole object. */

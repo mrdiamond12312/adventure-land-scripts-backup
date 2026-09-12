@@ -114,6 +114,46 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // localStorage's Scout info key
 const SCOUT_LS_KEY = "scoutInfo";
 
+// localStorage's cross-realm sighting key, written by the realm observers
+const REALM_SIGHTINGS_LS_KEY = "realmSightings";
+
+/**
+ * Reads a localStorage-backed record store, keyed by entry id.
+ * @param {string} key
+ * @returns {Object<string, object>}
+ */
+function readStore(key) {
+  return get(key) ?? {};
+}
+
+/**
+ * Merges fields into one entry of a store, leaving the rest of it alone.
+ * A field set to undefined drops out, since JSON.stringify omits it — that is
+ * how an entry forgets something without clearing the whole record.
+ * @param {string} key
+ * @param {string} entryId
+ * @param {object} fields
+ */
+function updateStoreEntry(key, entryId, fields) {
+  const store = readStore(key);
+  store[entryId] = { ...store[entryId], ...fields };
+  set(key, store);
+}
+
+/**
+ * Mini-bosses every part of the chain cares about — the scout sweeps them, the
+ * fighters hunt them, the realm observers watch for them. Shared so the three
+ * cannot drift apart.
+ */
+const SPECIAL_MOB_IDS = [
+  "skeletor",
+  "mvampire",
+  "fvampire",
+  "stompy",
+  "goldenbat",
+  "phoenix",
+];
+
 // var map = "main";
 // var mapX = 1248;
 // var mapY = -63;

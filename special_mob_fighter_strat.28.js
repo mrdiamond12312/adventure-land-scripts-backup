@@ -1,19 +1,5 @@
 // Hunting scouted special mobs, ahead of ordinary farming.
 
-/**
- * Mobs worth breaking off the farming spot for. Mirrors MINI_BOSSES_TO_SCOUT in
- * merchant_scout.29.js, which is what fills the reports read below — the two
- * live in separate load graphs, so they are kept in step by hand.
- */
-const SPECIAL_MOBS_TO_HUNT = [
-  "skeletor",
-  "mvampire",
-  "fvampire",
-  "stompy",
-  "goldenbat",
-  "phoenix",
-];
-
 /** A sighting older than this is not worth the walk */
 const SPECIAL_MOB_SIGHTING_TTL_MS = 5 * 60 * 1000;
 
@@ -25,7 +11,17 @@ const SPECIAL_MOB_ARRIVAL_SLACK = 200;
  * @returns {Object<string, {seenAt?: number, seenSpot?: {map: string, x: number, y: number}}>}
  */
 function getScoutReports() {
-  return get(SCOUT_LS_KEY) ?? {};
+  return readStore(SCOUT_LS_KEY);
+}
+
+/**
+ * Whether someone outside our own crew already holds it — their kill, not ours.
+ * One that turned on us is ours to finish regardless of who started it.
+ * @param {string} [target]
+ * @returns {boolean}
+ */
+function isTakenBySomeoneElse(target) {
+  return !!target && !getAlliedNames().has(target);
 }
 
 /**
@@ -39,7 +35,8 @@ function getSpecialMobInVision() {
       (entity) =>
         entity.type === "monster" &&
         !entity.dead &&
-        SPECIAL_MOBS_TO_HUNT.includes(entity.mtype),
+        SPECIAL_MOB_IDS.includes(entity.mtype) &&
+        !isTakenBySomeoneElse(entity.target),
     )
     .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
 }
@@ -52,11 +49,12 @@ function getSpecialMobSighting() {
   const reports = getScoutReports();
   let best;
 
-  for (const mtype of SPECIAL_MOBS_TO_HUNT) {
+  for (const mtype of SPECIAL_MOB_IDS) {
     const report = reports[mtype];
 
     if (!report?.seenAt || !report.seenSpot) continue;
     if (Date.now() - report.seenAt > SPECIAL_MOB_SIGHTING_TTL_MS) continue;
+    if (isTakenBySomeoneElse(report.target)) continue;
     if (best && report.seenAt <= best.seenAt) continue;
 
     best = { mtype, seenAt: report.seenAt, ...report.seenSpot };
@@ -71,12 +69,10 @@ function getSpecialMobSighting() {
  * @param {string} mtype
  */
 function forgetSpecialMobSighting(mtype) {
-  const reports = getScoutReports();
-  if (!reports[mtype]) return;
-
-  delete reports[mtype].seenAt;
-  delete reports[mtype].seenSpot;
-  set(SCOUT_LS_KEY, reports);
+  updateStoreEntry(SCOUT_LS_KEY, mtype, {
+    seenAt: undefined,
+    seenSpot: undefined,
+  });
 }
 
 /**
