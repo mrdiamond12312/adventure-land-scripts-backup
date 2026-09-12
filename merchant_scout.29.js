@@ -26,14 +26,6 @@
  * @satisfies {Record<string, ScoutTarget>}
  */
 const MINI_BOSSES_TO_SCOUT = {
-  cutebee: {
-    spotsToCheck: [
-      ...getMonsterSpawns("crab"),
-      ...getMonsterSpawns("crabx"),
-      ...getMonsterSpawns("hawk"),
-    ],
-    useTeleportation: false,
-  },
   skeletor: {
     spotsToCheck: getMonsterSpawns("skeletor"),
     useTeleportation: true,
@@ -57,6 +49,14 @@ const MINI_BOSSES_TO_SCOUT = {
   stompy: {
     spotsToCheck: getMonsterSpawns("stompy"),
     useTeleportation: true,
+  },
+  cutebee: {
+    spotsToCheck: [
+      ...getMonsterSpawns("crab"),
+      ...getMonsterSpawns("crabx"),
+      ...getMonsterSpawns("hawk"),
+    ],
+    useTeleportation: false,
   },
   goldenbot: {
     spotsToCheck: getMonsterSpawns("sparkbot"),
