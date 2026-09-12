@@ -8,6 +8,7 @@ if (parent.caracAL) {
     "adventure-land-scripts-backup/merchant_exchange.23.js",
     "adventure-land-scripts-backup/merchant_luring.24.js",
     "adventure-land-scripts-backup/merchant_frenzinesss.100.js",
+    "adventure-land-scripts-backup/merchant_scout.29.js",
   ]);
 } else {
   load_code(10);
@@ -18,6 +19,7 @@ if (parent.caracAL) {
   load_code(23);
   load_code(24);
   load_code(100);
+  load_code(29);
 }
 
 // Global Vars
@@ -256,8 +258,7 @@ const mluckAimedAt = {};
 function wantsMluck(entity) {
   const buff = entity.s?.mluck;
 
-  if (isOwnedCharacter(entity.name))
-    return !buff || buff.ms < MLUCK_REFRESH_MS;
+  if (isOwnedCharacter(entity.name)) return !buff || buff.ms < MLUCK_REFRESH_MS;
 
   // Strong luck can't be overwritten, so it isn't worth an attempt
   if (buff?.strong) return false;
@@ -383,6 +384,7 @@ bankLoop();
 lureMechaGnome();
 dragEnt();
 merchantAttackLoop();
+merchantScoutingLoop();
 startSkillLoops();
 
 // Register secondhands event handler

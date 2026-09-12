@@ -1,0 +1,143 @@
+/**
+ * A spawn midpoint, as returned by getMonsterSpawns
+ * @typedef {{ map: string, x: number, y: number }} SpawnSpot
+ */
+
+/**
+ * A mini-boss the scout looking for
+ * @typedef {object} ScoutTarget
+ * @property {SpawnSpot[]} [spotsToCheck] spawn to check for
+ * @property {boolean} [isSpecial=false] random spawn special mobs
+ * @property {boolean} [useTeleportation] allow town-scroll hops between spots
+ */
+
+/**
+ * What the scout has learned about one mini-boss.
+ * @typedef {object} ScoutReport
+ * @property {number} [seenAt] Date.now() of the last sighting
+ * @property {SpawnSpot} [seenSpot] where it was last seen
+ * @property {number} [checkedAt] Date.now() of the last visit to a spot
+ * @property {number} [respawnEta] Date.now() plus the longest surge timer
+ * @property {string} [target] who it was last seen fighting
+ */
+
+/**
+ * Mini-bosses the scout sweeps, keyed by monster id
+ * @satisfies {Record<string, ScoutTarget>}
+ */
+const MINI_BOSSES_TO_SCOUT = {
+  skeletor: {
+    spotsToCheck: getMonsterSpawns("skeletor"),
+    isSpecial: false,
+  },
+  mvampire: {
+    spotsToCheck: getMonsterSpawns("mvampire"),
+    isSpecial: false,
+    useTeleportation: false, // Moving on his bare foot to check for goldenbat
+  },
+  goldenbat: {
+    spotsToCheck: undefined,
+    isSpecial: true,
+  },
+  phoenix: {
+    spotsToCheck: undefined,
+    isSpecial: true,
+  },
+  fvampire: {
+    spotsToCheck: getMonsterSpawns("fvampire"),
+    isSpecial: false,
+  },
+  stompy: {
+    spotsToCheck: getMonsterSpawns("stompy"),
+    isSpecial: false,
+  },
+};
+
+const SCOUT_CONFIG = {
+  MINI_BOSSES_TO_SCOUT,
+  MINI_BOSSES_KEYS: /** @type {(keyof typeof MINI_BOSSES_TO_SCOUT)[]} */ (
+    Object.keys(MINI_BOSSES_TO_SCOUT)
+  ),
+  TIMEOUT: 30 * 60 * 1000,
+  FAIL_TIMEOUT: 6 * 60 * 1000,
+  REJECT_TIMEOUT: 0.5 * 60 * 1000,
+};
+
+/**
+ * Update Scout info to localStorage, merging into whatever is already stored
+ * @param {keyof typeof MINI_BOSSES_TO_SCOUT} mobId - the mob to update
+ * @param {ScoutReport} mobData - the info of its wherabouts
+ */
+function updateScoutInfo(mobId, mobData) {
+  let currentScoutData = get(SCOUT_LS_KEY);
+  if (!currentScoutData) currentScoutData = {};
+  currentScoutData[mobId] = { ...currentScoutData[mobId], ...mobData };
+  set(SCOUT_LS_KEY, currentScoutData);
+}
+
+/**
+ * Sweeping around for information, used within a scheduler/loop
+ */
+async function scoutSweep() {
+  const mobsNearby = Object.values(parent.entities).filter(
+    (entity) => entity.type === "monster",
+  );
+  for (const mob of mobsNearby) {
+    if (!(mob.mtype in MINI_BOSSES_TO_SCOUT)) continue;
+
+    updateScoutInfo(mob.mtype, {
+      seenAt: Date.now(),
+      seenSpot: { map: character.map, x: mob.real_x, y: mob.real_y },
+      target: mob.target,
+    });
+  }
+}
+
+async function merchantScoutingLoop() {
+  if (onDuty) {
+    setTimeout(merchantScoutingLoop, SCOUT_CONFIG.REJECT_TIMEOUT);
+    return;
+  }
+
+  let nextDelay = SCOUT_CONFIG.TIMEOUT;
+
+  onDuty = true;
+  // A full sweep outlasts DUTY_STALE_MS, so the watchdog needs telling
+  const scoutSweepInterval = setInterval(() => {
+    renewDuty();
+    scoutSweep();
+  }, 500);
+
+  try {
+    // Moving around spots to sweep to mini bosses
+    // The priority is currently following the order defined in the config
+    for (const miniBossKey of SCOUT_CONFIG.MINI_BOSSES_KEYS) {
+      const miniBossConfig = MINI_BOSSES_TO_SCOUT[miniBossKey];
+      if (miniBossConfig.isSpecial) continue;
+      for (const spotToCheck of miniBossConfig.spotsToCheck ?? []) {
+        await advanceSmartMove(spotToCheck, {
+          useTown: miniBossConfig.useTeleportation,
+          speed: miniBossConfig.useTeleportation ? 200 : character.speed,
+        });
+
+        updateScoutInfo(miniBossKey, { checkedAt: Date.now() });
+
+        // Trash sharing the spawn area respawns far faster, so the longest
+        // timer is the mini-boss we came for
+        const times = await useTemporalSurge();
+        if (times && times.length) {
+          updateScoutInfo(miniBossKey, {
+            respawnEta: Date.now() + Math.max(...times),
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`Scout Routine is postponed`, e);
+    nextDelay = SCOUT_CONFIG.FAIL_TIMEOUT;
+  } finally {
+    onDuty = false;
+    clearInterval(scoutSweepInterval);
+    setTimeout(merchantScoutingLoop, nextDelay);
+  }
+}

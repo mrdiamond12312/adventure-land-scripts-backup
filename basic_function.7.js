@@ -110,6 +110,10 @@ var max_att = 2000;
 
 // Ignore mob with high d-return
 const MELEE_IGNORE_LIST = ["porcupine"];
+
+// localStorage's Scout info key
+const SCOUT_LS_KEY = "scoutInfo";
+
 // var map = "main";
 // var mapX = 1248;
 // var mapY = -63;
@@ -2293,16 +2297,19 @@ if (character.ctype !== "merchant") {
   if (parent.caracAL) {
     parent.caracAL.load_scripts([
       "adventure-land-scripts-backup/daily_event_fighter_strat.26.js",
+      "adventure-land-scripts-backup/special_mob_fighter_strat.28.js",
       "adventure-land-scripts-backup/farming_fighter_strat.27.js",
     ]);
   } else {
     load_code(26);
+    load_code(28);
     load_code(27);
   }
 
   var fighterStrategies = [
     useEventStrategy,
     useCryptStrategy,
+    useSpecialMobStrategy,
     useFarmingStrategy,
   ];
 }

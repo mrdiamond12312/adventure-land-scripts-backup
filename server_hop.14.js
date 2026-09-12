@@ -2,7 +2,9 @@ const HOP_SERVERS = ["US", "ASIA", "EU"];
 
 const ignoreServer = [];
 
-const tankableBoss = ["snowman"];
+const tankableBoss = [
+  // "snowman" // Commented out so newbies has time to find out about this little guy
+];
 
 const bosses = {
   grinch: { type: "grinch", threshold: 0.7, hoppable: 1 },
@@ -18,7 +20,7 @@ const bosses = {
 const waitForEvent = ["wabbit"];
 
 async function hopToServer(serverRegion, serverIdentifier) {
-  if (parent.caracAL) { 
+  if (parent.caracAL) {
     send_cm(parent.caracAL.siblings, "loot-before-hopping");
     await midasLooting(true);
     await sleep(1000);
@@ -113,14 +115,18 @@ function hasSoftenedBossHere() {
     const engaged =
       state.target || bosses[boss].hoppable === 1 || boss === "pinkgoo";
 
-    return engaged && state.hp < (bosses[boss].threshold ?? 0.93) * state.max_hp;
+    return (
+      engaged && state.hp < (bosses[boss].threshold ?? 0.93) * state.max_hp
+    );
   });
 }
 
 /** @returns {boolean} whether something here outranks anything another realm offers */
 function hasEventWorthStayingFor() {
   const brawling =
-    (server.status.goobrawl?.live || server.status.abtesting) &&
+    (server.status.goobrawl ||
+      server.status.abtesting ||
+      canAnniversaryVisit()) &&
     !character.s.hopsickness;
 
   const liveHere = [...tankableBoss, ...waitForEvent].some(

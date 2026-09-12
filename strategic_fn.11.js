@@ -999,13 +999,20 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
 }
 
 /**
+ * Carried but never in the table above: a skill swaps these in on demand, so
+ * the bag has to hold one even though no equipment state asks for it.
+ * @type {string[]}
+ */
+const MERCHANT_CARRIED_EXTRAS = ["orboftemporal"];
+
+/**
  * Every item calculateMerchantEquipments can ask for, whichever way its branches
  * fall — the whole state space evaluated, so nothing here can drift out of sync
- * with the table above.
+ * with the table above — plus the on-demand extras.
  * @returns {Set<string>}
  */
 function getMerchantGearNames() {
-  const names = new Set();
+  const names = new Set(MERCHANT_CARRIED_EXTRAS);
 
   for (let state = 0; state < 8; state++) {
     const equipments = calculateMerchantEquipments({
@@ -1791,7 +1798,42 @@ async function scareAwayMobs() {
   }
 }
 
+/**
+ * Resolves with the respawn timers the surge reports back.
+ * The server answers without a request_id, so use_skill's outcome map can't
+ * match it and this listens on the socket instead.
+ *
+ * @param {number} [timeoutMs]
+ * @returns {Promise<number[]>} remaining respawn times in ms, empty when nothing was hastened
+ */
+function awaitTemporalSurgeTimes(timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const finish = (times) => {
+      clearTimeout(timer);
+      parent.socket.off("game_response", onResponse);
+      resolve(times);
+    };
+
+    const onResponse = (data) => {
+      if (data === "temporalsurge_none") finish([]);
+      else if (data?.response === "temporalsurge") finish(data.times ?? []);
+    };
+
+    const timer = setTimeout(() => finish([]), timeoutMs);
+    parent.socket.on("game_response", onResponse);
+  });
+}
+
+/** Serializes surges so overlapping kills can't fire several at once */
+let isSurging = false;
+
+/**
+ * Hastens nearby spawns when a surge is worthwhile.
+ *
+ * @returns {Promise<number[] | false>} remaining respawn times in ms, or false when skipped
+ */
 async function useTemporalSurge() {
+  if (isSurging) return false;
   if (isAdvanceSmartMoving || smart.moving) return false;
 
   if (
@@ -1842,9 +1884,13 @@ async function useTemporalSurge() {
     (spawn) => G.monsters[spawn.type].spawns,
   );
 
-  const promises = [];
+  if (!nearbySpawn.length || nearbySpawnWithSpawnMechanic.length) return false;
 
-  if (nearbySpawn.length && nearbySpawnWithSpawnMechanic.length === 0) {
+  isSurging = true;
+
+  try {
+    const promises = [];
+
     if (character.slots.orb?.name !== "orboftemporal") {
       promises.push(
         equipBatch(
@@ -1853,17 +1899,188 @@ async function useTemporalSurge() {
         ),
       );
     }
-    promises.push(use_skill("temporalsurge"));
-  }
 
-  return withTimeout(Promise.allSettled(promises)).finally(() => {
-    reduce_cooldown("temporalsurge", 0.95 * character.ping);
-  });
+    const times = awaitTemporalSurgeTimes();
+    promises.push(use_skill("temporalsurge"));
+
+    await withTimeout(Promise.allSettled(promises)).finally(() => {
+      reduce_cooldown("temporalsurge", 0.95 * character.ping);
+    });
+
+    return await times;
+  } finally {
+    isSurging = false;
+  }
 }
 
-setInterval(async () => {
-  await useTemporalSurge();
-}, 1000);
+const TEMPORAL_SURGE_CONFIG = {
+  /** Temporal surge only reaches spawns this close, per the server check */
+  RANGE: 160,
+
+  /** Past this a kill was someone else's fight rather than our own kiting */
+  KITE_RANGE: 300,
+
+  /** G stores respawn in seconds; below this a surge is not worth the mp */
+  MIN_RESPAWN_S: 120,
+
+  /** Give up on a kill spot after this many refusals, so retries can't spin */
+  MAX_ATTEMPTS: 3,
+
+  /** Default gap before the next drain when nothing more specific applies */
+  RETRY_MS: 1000,
+
+  /** What one surge does to a remaining respawn, straight from the server */
+  HASTEN_FACTOR: 0.85,
+  HASTEN_FLAT_MS: 1000,
+};
+
+/** Estimated respawn ETA per pending entity id */
+const pendingSurgeEta = {};
+
+/** Dead entities still owed a surge, keyed by entity id */
+const pendingSurgeSpots = {};
+
+/** Refusals per entity id, so a spot that never surges is eventually dropped */
+const pendingSurgeAttempts = {};
+
+/** @type {NodeJS.Timeout | undefined} */
+let pendingSurgeTimer = undefined;
+
+/** When the armed timer is due, so an earlier wake-up can replace it */
+let pendingSurgeDueAt = 0;
+
+/**
+ * @param {string} mtype
+ * @returns {number} respawn in ms, 0 when the type never respawns on a timer
+ */
+function monsterRespawnMs(mtype) {
+  const respawn = G.monsters[mtype]?.respawn ?? 0;
+  return respawn > 0 ? respawn * 1000 : 0;
+}
+
+/**
+ * The server rolls respawn * (720..1200) above 200s, respawn * 1000 + 0..900
+ * below it, so the midpoint is the best blind guess at the initial timer.
+ *
+ * @param {string} mtype
+ * @returns {number} estimated respawn in ms
+ */
+function estimateRespawnMs(mtype) {
+  const respawn = G.monsters[mtype]?.respawn ?? 0;
+  if (respawn <= 0) return 0;
+  return respawn > 200 ? respawn * 960 : respawn * 1000 + 450;
+}
+
+/** @param {string} mtype */
+function isWorthSurging(mtype) {
+  return monsterRespawnMs(mtype) > TEMPORAL_SURGE_CONFIG.MIN_RESPAWN_S * 1000;
+}
+
+/**
+ * Surges for whatever mobs are still respawning, and reschedules itself while
+ * the cooldown is shorter than the respawn it is racing.
+ */
+async function drainPendingSurges() {
+  clearTimeout(pendingSurgeTimer);
+  pendingSurgeTimer = undefined;
+
+  let retryDelay = TEMPORAL_SURGE_CONFIG.RETRY_MS;
+
+  try {
+    for (const [id, entity] of Object.entries(pendingSurgeSpots)) {
+      if (
+        entity.type !== "monster" ||
+        !isWorthSurging(entity.mtype) ||
+        distance(character, entity) > TEMPORAL_SURGE_CONFIG.KITE_RANGE
+      )
+        dropPendingSurge(id);
+      else pendingSurgeEta[id] ??= Date.now() + estimateRespawnMs(entity.mtype);
+    }
+
+    const inRange = Object.entries(pendingSurgeSpots).filter(
+      ([, entity]) =>
+        distance(character, entity) <= TEMPORAL_SURGE_CONFIG.RANGE,
+    );
+
+    const cooldown = ms_to_next_skill("temporalsurge");
+    if (cooldown > 0) {
+      // Anything back on its feet before the cooldown ends cannot be hastened,
+      // but only that spot is lost — the rest keep waiting
+      for (const id of Object.keys(pendingSurgeSpots))
+        if (pendingSurgeEta[id] - Date.now() <= cooldown) dropPendingSurge(id);
+
+      retryDelay = cooldown + 1000;
+      return;
+    }
+
+    // Out of surge range but still close means we are kiting, so keep it queued
+    if (!inRange.length) return;
+
+    const times = await useTemporalSurge();
+
+    // Refused for mp, movement or a latched surge: let it go after a few tries
+    if (times === false) {
+      for (const [id] of inRange) {
+        pendingSurgeAttempts[id] = (pendingSurgeAttempts[id] ?? 0) + 1;
+        if (pendingSurgeAttempts[id] >= TEMPORAL_SURGE_CONFIG.MAX_ATTEMPTS)
+          dropPendingSurge(id);
+      }
+      return;
+    }
+
+    // times cannot be attributed back to an entity, but the hasten itself is
+    // deterministic, so apply it to our own estimate and keep hastening until
+    // the spawn would beat the next cooldown home
+    const nextCooldown = ms_to_next_skill("temporalsurge");
+
+    for (const [id] of inRange) {
+      const remaining = Math.max(0, pendingSurgeEta[id] - Date.now());
+      const hastened =
+        remaining * TEMPORAL_SURGE_CONFIG.HASTEN_FACTOR -
+        TEMPORAL_SURGE_CONFIG.HASTEN_FLAT_MS;
+
+      if (hastened <= nextCooldown) dropPendingSurge(id);
+      else pendingSurgeEta[id] = Date.now() + hastened;
+    }
+
+    retryDelay = nextCooldown + 100;
+  } finally {
+    if (Object.keys(pendingSurgeSpots).length) scheduleSurgeRetry(retryDelay);
+  }
+}
+
+/** @param {string} id */
+function dropPendingSurge(id) {
+  delete pendingSurgeSpots[id];
+  delete pendingSurgeAttempts[id];
+  delete pendingSurgeEta[id];
+}
+
+/**
+ * Arms the next drain, keeping whichever wake-up lands first.
+ * @param {number} delayMs
+ */
+function scheduleSurgeRetry(delayMs) {
+  const dueAt = Date.now() + delayMs;
+  if (pendingSurgeTimer && pendingSurgeDueAt <= dueAt) return;
+
+  clearTimeout(pendingSurgeTimer);
+  pendingSurgeDueAt = dueAt;
+  pendingSurgeTimer = setTimeout(drainPendingSurges, delayMs);
+}
+
+// Any kill in vision counts, not just ours. The corpse lingers in
+// parent.entities while it fades, and the object keeps its position after,
+// so the loop can read everything it needs off the entity itself
+parent.socket.on("hit", (data) => {
+  if (!data?.kill) return;
+
+  const entity = parent.entities[data.id];
+  if (!entity) return;
+
+  pendingSurgeSpots[data.id] = entity;
+  drainPendingSurges();
+});
 
 class ProjectileManagement {
   constructor(socket) {
