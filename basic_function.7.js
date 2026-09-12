@@ -152,7 +152,7 @@ const SPECIAL_MOB_IDS = [
   "fvampire",
   "stompy",
   "goldenbat",
-  "phoenix",
+  // "phoenix",
   "goldenbot",
 ];
 
