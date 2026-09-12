@@ -399,7 +399,7 @@ class StrategicSmartMove {
         await use_skill("blink", [blinkSegment.x, blinkSegment.y]);
         await sleep(SMART_MOVE_CONFIG.BLINK_SETTLE_MS);
         await this.unsafeMove(blinkSegment.x, blinkSegment.y); // Blink has random position, move after blink to correct it
-        progress.segmentIndex = lastIndex + 1;
+        progress.segmentIndex = lastIndex;
       }
     } catch (e) {
       console.warn("Error while blinking:", e);
