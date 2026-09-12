@@ -38,10 +38,10 @@ const MINI_BOSSES_TO_SCOUT = {
     spotsToCheck: undefined,
     useTeleportation: true,
   },
-  phoenix: {
-    spotsToCheck: undefined,
-    useTeleportation: true,
-  },
+  // phoenix: {
+  //   spotsToCheck: undefined,
+  //   useTeleportation: true,
+  // },
   fvampire: {
     spotsToCheck: getMonsterSpawns("fvampire"),
     useTeleportation: true,
