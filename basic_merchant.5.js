@@ -246,7 +246,7 @@ setInterval(function () {
 // Merchant's Luck lasts an hour; ours get topped up with half of it left
 const MLUCK_REFRESH_MS = 1800000;
 // A stranger we aimed at is passed over this long, whether the cast landed or not
-const MLUCK_RETRY_MS = 15000;
+const MLUCK_RETRY_MS = 1000;
 
 /** character name -> when we last aimed an mluck at them */
 const mluckAimedAt = {};

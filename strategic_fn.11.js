@@ -979,7 +979,7 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
   const { isArmed, feelingLucky, isBusy } = state;
 
   return {
-    helmet: isBusy ? "xhelmet" : "eear",
+    helmet: isBusy ? "xhelmet" : "partyhat",
     // Dartgun keeps us out of the boss' melee range while still landing hits
     mainhand: isArmed ? ATTACK_WEAPON : "broom",
     offhand: getMerchantOffhand(isArmed, feelingLucky),
