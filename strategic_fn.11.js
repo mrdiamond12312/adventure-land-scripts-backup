@@ -1739,8 +1739,13 @@ async function warriorStomp() {
   });
 }
 
-/** Pull only while the mob lands less than this on the tanker, per second */
-const PULL_MAX_TANKER_DPS = 500;
+/**
+ * Pull only while the mob lands less than this dps on current TANKER
+ */
+const PULL_MAX_TANKER_DPS = 900;
+
+/** A mob this low is harmless whatever it would otherwise hit for */
+const PULL_MAX_MOB_LEVEL = 5;
 
 /**
  * Raw attack says nothing on its own — what lands on the tanker we actually
@@ -1752,6 +1757,7 @@ const PULL_MAX_TANKER_DPS = 500;
  */
 function isWeakEnoughToUsePullStrategy(mob, tanker) {
   if (!mob) return false;
+  if (mob.level <= PULL_MAX_MOB_LEVEL) return true;
 
   // With nobody assigned to hold it, the damage would be coming at us
   const holder = tanker ?? character;
