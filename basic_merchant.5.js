@@ -258,10 +258,14 @@ const mluckAimedAt = {};
 function wantsMluck(entity) {
   const buff = entity.s?.mluck;
 
-  if (isOwnedCharacter(entity.name)) return !buff || buff.ms < MLUCK_REFRESH_MS;
+  if (!buff) return true;
+
+  // Already ours, so it is a top-up rather than a fresh cast
+  if (isOwnedCharacter(entity.name) || buff.f === character.name)
+    return buff.ms < MLUCK_REFRESH_MS;
 
   // Strong luck can't be overwritten, so it isn't worth an attempt
-  if (buff?.strong) return false;
+  if (buff.strong) return false;
 
   return Date.now() - (mluckAimedAt[entity.name] ?? 0) > MLUCK_RETRY_MS;
 }
