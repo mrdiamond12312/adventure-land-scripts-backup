@@ -1739,6 +1739,48 @@ async function warriorStomp() {
   });
 }
 
+/** Pull only while the mob lands less than this on the tanker, per second */
+const PULL_MAX_TANKER_DPS = 500;
+
+/**
+ * Raw attack says nothing on its own — what lands on the tanker we actually
+ * have is what counts, armour, resistance and piercing included.
+ *
+ * @param {object} [mob] what the party is on, or the toughest thing we farm
+ * @param {object} [tanker] the party tanker entity; we hold it ourselves without one
+ * @returns {boolean} whether it is soft enough to farm on the pull strategies
+ */
+function isWeakEnoughToUsePullStrategy(mob, tanker) {
+  if (!mob) return false;
+
+  // With nobody assigned to hold it, the damage would be coming at us
+  const holder = tanker ?? character;
+
+  // calculateDamage is already per second: attack * multiplier * frequency
+  return calculateDamage(mob, holder) < PULL_MAX_TANKER_DPS;
+}
+
+/**
+ * What the pull decision should be about.
+ *
+ * get_target() is not usable here: a priest retargets to whoever it is healing,
+ * so the stat read would belong to an ally rather than the mob. getTarget() is
+ * monster-only, and the configured farm list covers the gaps between kills so
+ * the mode does not flip every time a target dies.
+ *
+ * @returns {object | undefined} an entity-shaped mob, ready for calculateDamage
+ */
+function getStrategyMob() {
+  const engaged = getTarget();
+  if (engaged) return engaged;
+
+  // Shaped like an entity so calculateDamage can read its piercing off G
+  return (mobsToFarm ?? [])
+    .filter((mtype) => G.monsters[mtype])
+    .map((mtype) => ({ ...G.monsters[mtype], type: "monster", mtype }))
+    .sort((lhs, rhs) => rhs.attack - lhs.attack)[0];
+}
+
 /**
  * Pulls only while a healthy tanker and a healer are up to hold what we pull.
  */
@@ -1759,7 +1801,7 @@ function adaptStrategyToParty() {
     partyHealer &&
     !partyHealer.rip &&
     character.ping < 600 &&
-    (get_targeted_monster()?.level < 5 || get_target()?.attack < 500)
+    isWeakEnoughToUsePullStrategy(getStrategyMob(), partyTanker)
   )
     changeToPullStrategies();
   else changeToNormalStrategies();
