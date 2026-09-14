@@ -99,6 +99,10 @@ function forgetSpecialMobSighting(mtype) {
  * @returns {Promise<object|undefined>} the outcome, if it owns this tick
  */
 async function useSpecialMobStrategy() {
+  // Every tick, like the farming strategy: the exits below own the tick, so
+  // nothing downstream would re-evaluate it and the mode would go stale
+  adaptStrategyToParty();
+
   // Anything already in sight beats walking, including one found mid-trip
   const inVision = getSpecialMobInVision();
   if (inVision) return engage(inVision);
@@ -115,7 +119,6 @@ async function useSpecialMobStrategy() {
   }
 
   log(`Hunting ${sighting.mtype}`);
-  adaptStrategyToParty();
   advanceSmartMove(sighting);
 
   return travelling();

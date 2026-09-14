@@ -127,6 +127,7 @@ async function usePullStrategies(target) {
 
       // Basic Requirements
       const canUseAgitate =
+        isAssignedAsTanker() &&
         !havePulledEnoughMobs &&
         !formidableMonsterAppeared &&
         character.mp >= G.skills["agitate"].mp &&
