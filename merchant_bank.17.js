@@ -394,7 +394,7 @@ async function bankStoreRoutine(forced = false) {
 }
 
 async function bankLoop() {
-  let delay = 120_000;
+  let delay = 185_000;
 
   // isFightingBoss is checked separately from onDuty: an event fight holds the
   // duty, but this makes it explicit that banking waits for the fight to end
