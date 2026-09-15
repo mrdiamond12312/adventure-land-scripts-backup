@@ -54,6 +54,7 @@ const MINI_BOSSES_TO_SCOUT = {
     spotsToCheck: [
       ...getMonsterSpawns("crab"),
       ...getMonsterSpawns("crabx"),
+      ...getMonsterSpawns("bee"),
       ...getMonsterSpawns("bigbird"),
     ],
     useTeleportation: false,
