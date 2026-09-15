@@ -38,10 +38,10 @@ const MINI_BOSSES_TO_SCOUT = {
     spotsToCheck: undefined,
     useTeleportation: true,
   },
-  // phoenix: {
-  //   spotsToCheck: undefined,
-  //   useTeleportation: true,
-  // },
+  phoenix: {
+    spotsToCheck: undefined,
+    useTeleportation: true,
+  },
   fvampire: {
     spotsToCheck: getMonsterSpawns("fvampire"),
     useTeleportation: true,
@@ -54,12 +54,12 @@ const MINI_BOSSES_TO_SCOUT = {
     spotsToCheck: [
       ...getMonsterSpawns("crab"),
       ...getMonsterSpawns("crabx"),
-      ...getMonsterSpawns("hawk"),
+      ...getMonsterSpawns("bigbird"),
     ],
     useTeleportation: false,
   },
   goldenbot: {
-    spotsToCheck: getMonsterSpawns("sparkbot"),
+    spotsToCheck: [{ map: "uhills", x: 328, y: -271 }],
     useTeleportation: true,
   },
 };
