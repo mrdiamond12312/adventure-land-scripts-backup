@@ -182,7 +182,7 @@ setInterval(async function () {
       craft("scribeorb", 1, { map: "main", x: -2, y: 295 }),
       craft("glacierseal", 1, { map: "main", x: -2, y: 295 }),
       // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
-      craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
+      // craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("basketofeggs", 1, homeLocation),
       !isSortingInventory &&
         Promise.all(
