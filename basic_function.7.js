@@ -391,7 +391,7 @@ var IGNORE = [
   "supermittens",
 
   // "horsecapeg",
-  "throwingstars",
+  // "throwingstars",
   "computer",
   "ancientcomputer",
 
