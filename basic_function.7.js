@@ -1798,7 +1798,7 @@ async function getServerPlayers() {
   return playersData;
 }
 
-function deployCharacters() {
+async function deployCharacters() {
   //// Deploy characters which arent active
   const loadedCharacters = get_active_characters();
   const loadedCharactersNames = Object.keys(loadedCharacters);
@@ -1814,11 +1814,14 @@ function deployCharacters() {
           parent.caracAL.shutdown(id);
         });
 
-    allCharacters
-      .filter((id) => parent.caracAL && !parent.caracAL.siblings.includes(id))
-      .forEach((id) => {
-        parent.caracAL.deploy(id, null, caracALconfig.characters[id].script);
-      });
+    //the server only confirms one login at a time per account - deploying
+    //these in the same tick gets all but one rejected as characters_unconfirmed
+    for (const id of allCharacters.filter(
+      (id) => parent.caracAL && !parent.caracAL.siblings.includes(id),
+    )) {
+      parent.caracAL.deploy(id, null, caracALconfig.characters[id].script);
+      await sleep(1000);
+    }
   } else if (!parent.caracAL && !character.controller) {
     loadedCharactersNames
       .filter(
