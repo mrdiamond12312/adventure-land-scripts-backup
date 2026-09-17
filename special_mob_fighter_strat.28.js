@@ -12,6 +12,11 @@ const SPECIAL_MOB_RESPAWN_PADDING_MS = 30 * 1000;
 /** Standing this close to a reported spot counts as having checked it */
 const SPECIAL_MOB_ARRIVAL_SLACK = 200;
 
+/** The fighter ticks far faster than the store needs rewriting */
+const SPECIAL_MOB_REPORT_INTERVAL_MS = 1000;
+
+var lastSpecialMobReportAt = 0;
+
 /**
  * The scout's reports, written by merchant_scout.29.js.
  * @returns {Object<string, {seenAt?: number, seenSpot?: {map: string, x: number, y: number}}>}
@@ -62,9 +67,6 @@ function getSpecialMobSighting() {
     if (Date.now() - report.seenAt > SPECIAL_MOB_SIGHTING_TTL_MS) continue;
     if (isTakenBySomeoneElse(report.target)) continue;
 
-    // A respawnEta only means anything while it is the newer of the two: seeing
-    // it alive since the scout surged its corpse settles the question
-    // Roamers have no timed respawn, so a stale eta must not hold them back
     const isDownUntil =
       G.monsters[mtype]?.respawn > 0 &&
       report.respawnEta &&
@@ -83,8 +85,23 @@ function getSpecialMobSighting() {
 }
 
 /**
- * Drops a sighting we walked to and found nothing at, so the next tick moves on
- * to the next report instead of pacing the same spot.
+ * Update miniboss info while fighting
+ * @param {object} mob
+ */
+function reportSpecialMobInSight(mob) {
+  if (Date.now() - lastSpecialMobReportAt < SPECIAL_MOB_REPORT_INTERVAL_MS)
+    return;
+  lastSpecialMobReportAt = Date.now();
+
+  updateStoreEntry(SCOUT_LS_KEY, mob.mtype, {
+    seenAt: Date.now(),
+    seenSpot: { map: character.map, x: mob.real_x, y: mob.real_y },
+    target: mob.target,
+  });
+}
+
+/**
+ * Drops a miniboss info from merchant upon arrival and not found
  * @param {string} mtype
  */
 function forgetSpecialMobSighting(mtype) {
@@ -99,13 +116,15 @@ function forgetSpecialMobSighting(mtype) {
  * @returns {Promise<object|undefined>} the outcome, if it owns this tick
  */
 async function useSpecialMobStrategy() {
-  // Every tick, like the farming strategy: the exits below own the tick, so
-  // nothing downstream would re-evaluate it and the mode would go stale
+  // Every tick, like the farming strategy
   adaptStrategyToParty();
 
   // Anything already in sight beats walking, including one found mid-trip
   const inVision = getSpecialMobInVision();
-  if (inVision) return engage(inVision);
+  if (inVision) {
+    reportSpecialMobInSight(inVision);
+    return engage(inVision);
+  }
 
   if (smart.moving || isAdvanceSmartMoving) return travelling();
 

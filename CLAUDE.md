@@ -79,9 +79,11 @@ basic_function.7.js          [SHARED — the core library]
                                  distributor, and realm-fatigue hop policy; loaded just before
                                  14, which consults it
     server_hop.14.js             server-hopping automation (only if caracALconfig enables the character)
-    daily_event_fighter_strat.26.js  \_ the fighter targeting chain, walked in this
-    crypt_fighter_strat.16.js         | order by selectFightTarget(); each one carries
-    farming_fighter_strat.27.js      /  its own smart move and owns the tick or defers
+    cave_fighter_strat.15.js         \_ the fighter targeting chain, walked in this
+    daily_event_fighter_strat.26.js   | order by selectFightTarget(); each one carries
+    crypt_fighter_strat.16.js         | its own smart move and owns the tick or defers
+    special_mob_fighter_strat.28.js   |
+    farming_fighter_strat.27.js      /
     strategic_smart_move.21.js   \_ pathing layered on top of
     advance_smart_move.20.js     /  the native smart_move
 
