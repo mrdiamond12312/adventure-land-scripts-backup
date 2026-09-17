@@ -395,7 +395,13 @@ function calculateMageItems() {
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
     cape: "horsecapeg",
-    orb: feelingLucky ? "rabbitsfoot" : feelingWise ? "talkingskull" : "jacko",
+    orb: feelingLucky
+      ? "rabbitsfoot"
+      : feelingWise
+      ? "talkingskull"
+      : currentTarget && (currentTarget.resistance ?? 0) < 400
+      ? "cave_loaded_die"
+      : "jacko",
     amulet: feelingWise ? "spookyamulet" : "intamulet",
   };
 }
