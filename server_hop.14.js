@@ -148,7 +148,7 @@ setInterval(async () => {
   if (get("cryptInstance")) return;
 
   // A hop ends the cave run for good, and the daily visit is spent
-  if (character.cave) return;
+  // if (character.cave) return;
 
   // Should we return home?
   // When there's gonna be a boss with home server drop table in 30 mins~!

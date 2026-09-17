@@ -38,9 +38,7 @@ const SMART_MOVE_CONFIG = Object.freeze({
 class StrategicSmartMove {
   constructor() {
     this.pathfinder = parent.caracAL.ALPathfinder;
-    this.pathfinder.prepare(parent.G, ["bank_u"]);
-    this.pathfinder.clear();
-    this.pathfinder.addCheatPath("winterland", 721, 277, 737, 352);
+    this.preparePathfinder();
     this.scareInterval = undefined;
     this.isDoingSomethingMagical = false;
     this.blinkLoop = undefined;
@@ -48,6 +46,13 @@ class StrategicSmartMove {
     this.watcherInterval = undefined;
     this.isSmartMoving = true;
     this.townEpoch = 0;
+  }
+
+  /** Rebuilds the graph from whatever G currently holds */
+  preparePathfinder() {
+    this.pathfinder.prepare(parent.G, ["bank_u"]);
+    this.pathfinder.clear();
+    this.pathfinder.addCheatPath("winterland", 721, 277, 737, 352);
   }
 
   /**
@@ -831,3 +836,5 @@ const strategicSmartMove = new StrategicSmartMove();
 const smartMove = strategicSmartMove.smartMove.bind(strategicSmartMove);
 const getMonsterSpawns =
   strategicSmartMove.getMonsterSpawns.bind(strategicSmartMove);
+const preparePathfinder =
+  strategicSmartMove.preparePathfinder.bind(strategicSmartMove);

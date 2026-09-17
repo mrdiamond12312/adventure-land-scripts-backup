@@ -12,8 +12,24 @@ const CAVE_MOBS_TO_LEAVE = ["cave_darkmage", "cave_rogue"];
 /** Levels land at spawn, so a ceiling is the only way to duck the wolf packs */
 var caveMaxMobLevel = Infinity;
 
-/** The two effects that mark one of the five shakedowns */
-const CAVE_SHAKEDOWN_EFFECTS = ["bad_fight", "bad_double"];
+/** Options that put cave_wolf on the field — e10_0 and e12_2 call in six */
+const CAVE_OPTIONS_TO_REFUSE = [
+  "e10_0",
+  "e12_2",
+  "e03_1",
+  "e08_2",
+  "e08_4",
+  "e10_1",
+  "e10_3",
+  "e18_4",
+  "e21_2",
+];
+
+/** The rogue encounter's wait-and-see option, by its own id */
+const CAVE_ROGUE_WAIT = "watch";
+
+/** Standing this close to an objective counts as being on it */
+const CAVE_ARRIVAL_SLACK = 120;
 
 /** Town junk at cave prices — the broom alone is 80% of the purse */
 var CAVE_ITEMS_TO_SKIP = ["broom", "tshirt0", "tshirt1", "tshirt2"];
@@ -50,6 +66,7 @@ const caveState = {
   checkedAt: 0,
   enteredAt: 0,
   inside: false,
+  preparedFor: undefined,
 };
 
 /**
@@ -133,6 +150,57 @@ function isCaveMobWorthHitting(entity) {
 }
 
 /**
+ * Raises Reflective Shield while the Dark Mage is in range to cast.
+ * @returns {Promise<void>}
+ */
+async function raiseReflectionForDarkMage() {
+  if (character.ctype !== "mage") return;
+  if (is_on_cooldown("reflection")) return;
+  if (character.mp < G.skills.reflection.mp) return;
+
+  // Only his own reflected spell can kill him, so the lock is the cue
+  const darkmage = get_nearest_monster({ type: "cave_darkmage" });
+  if (!darkmage?.target || !getAlliedNames().has(darkmage.target)) return;
+
+  // He picks mages first, but the shield belongs on whoever he took
+  const victim =
+    darkmage.target === character.name
+      ? character
+      : get_entity(darkmage.target);
+
+  if (!victim || victim.s?.reflection) return;
+  if (distance(character, victim) > G.skills.reflection.range) return;
+
+  await use_skill("reflection", victim).catch(() => undefined);
+}
+
+/**
+ * Whether a position sits inside a room.
+ * @param {object} position
+ * @param {number[]} bounds
+ * @returns {boolean}
+ */
+function isInCaveBounds(position, bounds) {
+  return (
+    position.x >= bounds[0] &&
+    position.x <= bounds[2] &&
+    position.y >= bounds[1] &&
+    position.y <= bounds[3]
+  );
+}
+
+/**
+ * The room holding a position, if the generated map has one there.
+ * @param {object} position
+ * @returns {object|undefined}
+ */
+function getCaveRoom(position) {
+  return (parent.G.maps[character.map]?.rooms ?? []).find((room) =>
+    isInCaveBounds(position, room.bounds),
+  );
+}
+
+/**
  * Nearest cave mob worth hitting, whatever the party is already on first.
  * @returns {object|undefined}
  */
@@ -140,20 +208,16 @@ function getCaveTarget() {
   const partyTarget = getTarget();
   if (partyTarget && isCaveMobWorthHitting(partyTarget)) return partyTarget;
 
-  return Object.values(parent.entities)
-    .filter(isCaveMobWorthHitting)
-    .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
-}
+  // Camps sit a room apart, so vision alone would wake the neighbours
+  const room = getCaveRoom(character);
 
-/**
- * Cheapest way out that spends no Amber, which outlives the run.
- * @param {object[]} options
- * @returns {object|undefined}
- */
-function cheapestCaveOption(options) {
-  return options
-    .filter((option) => !option.amber)
-    .sort((lhs, rhs) => (lhs.cost ?? 0) - (rhs.cost ?? 0))[0];
+  return Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        isCaveMobWorthHitting(entity) &&
+        (!room || isInCaveBounds(entity, room.bounds)),
+    )
+    .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
 }
 
 /**
@@ -162,30 +226,27 @@ function cheapestCaveOption(options) {
  * @returns {object|undefined}
  */
 function pickCaveOption(choice) {
-  const options = (choice.options ?? []).filter((option) => !option.unavailable);
-  if (!options.length) return undefined;
+  const offered = (choice.options ?? []).filter((option) => !option.unavailable);
+
+  // Walking away beats a wolf pack, so this one bends for nothing
+  const allowed = offered.filter(
+    (option) => !CAVE_OPTIONS_TO_REFUSE.includes(option.id),
+  );
+  if (!allowed.length) return undefined;
 
   // Amber outlives the run, so nothing in here is worth paying it with
-  const affordable = options.filter((option) => !option.amber);
-  const leave = affordable.find((option) => option.effect === "leave");
-  const offer = affordable.find((option) => option.offer);
-  const fallback = leave ?? affordable[0] ?? options[0];
-
-  // A shakedown sells its own way out
-  if (options.some((option) => CAVE_SHAKEDOWN_EFFECTS.includes(option.effect)))
-    return (
-      cheapestCaveOption(affordable.filter((it) => it.effect === "pay")) ??
-      fallback
-    );
+  const affordable = allowed.filter((option) => !option.amber);
 
   // Last Word only drops if monsters finish him, and a saved rogue may turn
-  if (choice.kind === "rogue")
-    return affordable.find((option) => option.effect === "watch") ?? fallback;
+  if (choice.kind === "rogue") {
+    const wait = affordable.find((option) => option.id === CAVE_ROGUE_WAIT);
+    if (wait) return wait;
+  }
 
-  if (choice.group === "positive") return offer ?? fallback;
-  if (choice.group === "bad") return cheapestCaveOption(affordable) ?? fallback;
-
-  return leave ?? offer ?? fallback;
+  return (
+    [...affordable].sort((lhs, rhs) => (lhs.cost ?? 0) - (rhs.cost ?? 0))[0] ??
+    allowed[0]
+  );
 }
 
 /**
@@ -246,6 +307,70 @@ async function talkToCaveTraveler() {
 }
 
 /**
+ * The next thing on this floor worth standing on, else the way down.
+ * @returns {object|undefined}
+ */
+function getCaveDestination() {
+  const cave = character.cave;
+  const pending = (cave.objectives ?? []).filter(
+    (objective) => !objective.done && objective.floor === cave.floor,
+  );
+
+  // Required ones gate the stairs, so the optional rooms wait
+  const required = pending.filter((objective) => objective.required);
+  const shortlist = required.length ? required : pending;
+
+  if (shortlist.length)
+    return shortlist.sort(
+      (lhs, rhs) => distance(character, lhs) - distance(character, rhs),
+    )[0];
+
+  return (cave.doors ?? []).find((door) => door.down && !door.locked);
+}
+
+/** A floor reaches G after the run starts, and leaves when the run ends */
+function refreshCavePathfinder() {
+  if (typeof preparePathfinder !== "function") return;
+  if (caveState.preparedFor === character.map) return;
+  if (!parent.G.maps[character.map]) return;
+
+  preparePathfinder();
+  caveState.preparedFor = character.map;
+}
+
+/**
+ * Takes the stairs, whose spawn only the generated map knows.
+ * @param {object} door
+ * @returns {Promise<void>}
+ */
+async function descendCaveFloor(door) {
+  const spawn = parent.G.maps[character.map]?.doors?.[door.id]?.[5] ?? 0;
+  await transport(door.to, spawn).catch(() => undefined);
+}
+
+/**
+ * Walks to that destination, and through it when it is the way down.
+ * @returns {Promise<void>}
+ */
+async function walkToCaveDestination() {
+  if (smart.moving || isAdvanceSmartMoving) return;
+
+  const destination = getCaveDestination();
+  if (!destination) return;
+
+  if (distance(character, destination) > CAVE_ARRIVAL_SLACK) {
+    // Same-map only: the next floor is not in G until we are standing in it
+    await advanceSmartMove(
+      { map: character.map, x: destination.x, y: destination.y },
+      { useScare: true, useTown: false },
+    ).catch(() => undefined);
+    return;
+  }
+
+  if (destination.to) await descendCaveFloor(destination);
+}
+
+/**
  * Fights a run out, otherwise gathers the party at Dorr and goes in.
  * @returns {Promise<object|undefined>} the outcome, if it owns this tick
  */
@@ -253,10 +378,23 @@ async function useCaveStrategy() {
   if (!hasCaveApi()) return undefined;
 
   const inCave = isInCave();
-  if (inCave && !caveState.inside) caveRun = freshCaveRun();
-  caveState.inside = inCave;
+
+  if (inCave !== caveState.inside) {
+    if (inCave) caveRun = freshCaveRun();
+    else {
+      // The run is over for everyone, not just whoever spent the visit
+      caveState.checkedAt = 0;
+      caveState.preparedFor = undefined;
+      refreshCavePathfinder();
+    }
+
+    caveState.inside = inCave;
+  }
 
   if (inCave) {
+    // Each floor is its own map, and it lands in G after the run begins
+    refreshCavePathfinder();
+
     if (character.cave.choice) {
       await voteOnCaveChoice(character.cave.choice);
       await buyFromCaveShop(character.cave.choice);
@@ -265,10 +403,18 @@ async function useCaveStrategy() {
     // A forced vote stops the cave's own clock
     if (character.cave.paused) return travelling();
 
+    raiseReflectionForDarkMage();
     talkToCaveTraveler();
 
-    changeToNormalStrategies();
-    return engage(getCaveTarget());
+    const target = getCaveTarget();
+    if (target) {
+      changeToNormalStrategies();
+      return engage(target);
+    }
+
+    walkToCaveDestination();
+
+    return travelling();
   }
 
   // The daily resets on our own realm, and a hop would end the run
