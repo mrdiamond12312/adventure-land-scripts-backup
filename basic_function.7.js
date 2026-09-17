@@ -456,6 +456,8 @@ const STORE_ABLE = [
   "elixirint0",
   "elixirdex0",
   "cscroll2",
+  "cscroll3",
+  "scroll3",
   "cryptkey",
   "cake",
   "elixirstr0",
@@ -600,9 +602,11 @@ const SALE_ABLE = [
   // "intring",
   // "dexamulet",
   // "stramulet",
+
   // Halloween temp for gold
   // "bowofthedead",
   // "daggerofthedead",
+  "throwingstars",
 ];
 
 const DISMANTLE_LIST = [
