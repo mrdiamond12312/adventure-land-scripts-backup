@@ -148,7 +148,10 @@ setInterval(async () => {
   if (get("cryptInstance")) return;
 
   // A hop ends the cave run for good, and the daily visit is spent
-  // if (character.cave) return;
+  if (character.cave) return;
+
+  // The merchant is never inside, but its hop takes the party out with it
+  if (get("caveRun") > Date.now()) return;
 
   // Should we return home?
   // When there's gonna be a boss with home server drop table in 30 mins~!

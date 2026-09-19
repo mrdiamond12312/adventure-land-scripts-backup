@@ -52,6 +52,12 @@ const CAVE_VISIT_TTL_MS = 60 * 1000;
 /** Long enough for an entry to land before it is asked for again */
 const CAVE_ENTER_COOLDOWN_MS = 10 * 1000;
 
+/** A merchant hop drags the whole party out, so a near window outranks a run */
+const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
+
+/** The run's own ceiling, so a client that dies inside cannot pin the flag */
+const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
+
 /** @returns {object} a run's blank slate */
 function freshCaveRun() {
   return { bought: [], attempts: {}, choiceId: undefined, buyAt: 0, talkAt: 0 };
@@ -91,6 +97,17 @@ function isInCave() {
  */
 function isHomeRealm() {
   return typeof isAtHomeServer !== "function" || isAtHomeServer();
+}
+
+/**
+ * Whether the home realm's next daily/nightly window lands too soon to spend
+ * the time on a run.
+ * @returns {boolean}
+ */
+function isEventDueSoon() {
+  if (typeof msUntilHomeScheduledEvent !== "function") return false;
+
+  return msUntilHomeScheduledEvent() <= CAVE_EVENT_LEAD_MS;
 }
 
 /**
@@ -388,6 +405,9 @@ async function useCaveStrategy() {
       refreshCavePathfinder();
     }
 
+    // The merchant cannot see character.cave, so leave it a deadline it can read
+    set("caveRun", inCave ? Date.now() + CAVE_RUN_MAX_MS : undefined);
+
     caveState.inside = inCave;
   }
 
@@ -419,6 +439,7 @@ async function useCaveStrategy() {
 
   // The daily resets on our own realm, and a hop would end the run
   if (!isHomeRealm()) return undefined;
+  if (isEventDueSoon()) return undefined;
 
   const visit = await getCaveVisit();
   if (!visit?.available) return undefined;
