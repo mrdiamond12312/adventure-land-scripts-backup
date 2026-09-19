@@ -145,6 +145,9 @@ async function enterCave() {
   if (character.name !== partyMems[0]) return;
   if (Date.now() - caveState.enteredAt < CAVE_ENTER_COOLDOWN_MS) return;
 
+  // An outsider in the party would be taken in on their own account's visit
+  if (parent.party_list.some((name) => !partyMems.includes(name))) return;
+
   caveState.enteredAt = Date.now();
   await cave_enter().catch((error) => console.warn("Cave refused us", error));
 
@@ -392,6 +395,8 @@ async function walkToCaveDestination() {
  * @returns {Promise<object|undefined>} the outcome, if it owns this tick
  */
 async function useCaveStrategy() {
+  isPreparingCave = false;
+
   if (!hasCaveApi()) return undefined;
 
   const inCave = isInCave();
@@ -412,6 +417,8 @@ async function useCaveStrategy() {
   }
 
   if (inCave) {
+    isPreparingCave = true;
+
     // Each floor is its own map, and it lands in G after the run begins
     refreshCavePathfinder();
 
@@ -443,6 +450,8 @@ async function useCaveStrategy() {
 
   const visit = await getCaveVisit();
   if (!visit?.available) return undefined;
+
+  isPreparingCave = true;
 
   if (smart.moving || isAdvanceSmartMoving) return travelling();
 

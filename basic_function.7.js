@@ -1839,6 +1839,9 @@ async function deployCharacters() {
   }
 }
 
+/** Raised by cave_fighter_strat.15.js while a run is being set up or fought */
+var isPreparingCave = false;
+
 // Party Setups
 setTimeout(deployCharacters, 5000);
 setInterval(deployCharacters, 30000);
@@ -1871,7 +1874,10 @@ setInterval(async () => {
     partyWhitelistRegex.some((regex) => regex.test(member.name)),
   );
 
-  if (
+  if (isPreparingCave) {
+    // The cave takes the current party in, and an outsider needs their own visit
+    if (hasWhitelistedMember) leave_party();
+  } else if (
     inviteTarget &&
     whitelistPartyMembers.length + characterNotInOutsiderParty.length <= 10 &&
     (!currentPartySize || !hasWhitelistedMember)
@@ -1889,9 +1895,22 @@ setInterval(async () => {
     else disconnect();
   }
 
-  if (myMemberList.some((id) => !parent.party_list.includes(id))) {
+  // The cave takes only partyMems, so the merchant sits the run out
+  const wantedMembers = isPreparingCave ? partyMems : myMemberList;
+
+  if (
+    isPreparingCave &&
+    character.name === partyMems[0] &&
+    typeof kick_party_member === "function"
+  ) {
+    parent.party_list
+      .filter((name) => !partyMems.includes(name))
+      .forEach((name) => kick_party_member(name).catch(() => undefined));
+  }
+
+  if (wantedMembers.some((id) => !parent.party_list.includes(id))) {
     if (character.name === partyMems[0]) {
-      myMemberList.forEach((member) => {
+      wantedMembers.forEach((member) => {
         send_party_invite(member);
       });
     }
