@@ -2371,7 +2371,7 @@ if (character.ctype !== "merchant") {
   }
 
   var fighterStrategies = [
-    // useCaveStrategy,
+    useCaveStrategy,
     useEventStrategy,
     useCryptStrategy,
     useSpecialMobStrategy,
