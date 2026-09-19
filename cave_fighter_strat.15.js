@@ -62,7 +62,7 @@ const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
 const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
 
 /** Narrates each decision; leave off outside a debugging run */
-var CAVE_DEBUG = false;
+var CAVE_DEBUG = true;
 
 /** The last line printed, so a per-tick decision speaks only when it changes */
 let lastCaveLog = "";
