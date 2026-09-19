@@ -111,7 +111,8 @@ async function merchantScoutingLoop() {
     isAdvanceSmartMoving ||
     smart.moving ||
     shouldGoChilling() ||
-    serverCurrentlyHasLiveEvent()
+    serverCurrentlyHasLiveEvent() ||
+    isCaveRunOpen()
   ) {
     setTimeout(merchantScoutingLoop, SCOUT_CONFIG.REJECT_TIMEOUT);
     return;

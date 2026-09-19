@@ -13,6 +13,7 @@ async function lureMechaGnome() {
     smart.moving ||
     shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
+    isCaveRunOpen() ||
     !isMyMageOnline() ||
     (!(
       parent.party_list &&
@@ -463,6 +464,7 @@ async function dragEnt() {
     smart.moving ||
     shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
+    isCaveRunOpen() ||
     !isMyPriestOnline() ||
     hasMaxEntsEngagedAtSpawn()
   ) {

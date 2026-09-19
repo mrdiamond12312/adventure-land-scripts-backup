@@ -1935,6 +1935,15 @@ function serverCurrentlyHasLiveEvent() {
   );
 }
 
+/**
+ * Whether a cave run is still open somewhere in the party. The deadline is
+ * published by cave_fighter_strat.15.js, which the merchant never loads.
+ * @returns {boolean}
+ */
+function isCaveRunOpen() {
+  return get("caveRun") > Date.now();
+}
+
 const RSPEED_DURATION = G.conditions["rspeed"].duration;
 const RSPEED_MARGIN = 0.75 * 60 * 1000; // 45 seconds
 
