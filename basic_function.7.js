@@ -1849,6 +1849,9 @@ setInterval(deployCharacters, 30000);
 setInterval(async () => {
   // if (isMerchant()) return;
 
+  // A run's roster is fixed and the server refuses party calls from inside it
+  if (character.cave) return;
+
   const currentPartySize = parent.party_list.length;
   const serverCharacters = await getServerPlayers();
   const partyWhitelistRegex = [/^earth/];

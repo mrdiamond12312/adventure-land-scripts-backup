@@ -184,11 +184,13 @@ async function enterCave(resuming) {
   if (!resuming && character.name !== partyMems[0]) return;
   if (Date.now() - caveState.enteredAt < CAVE_ENTER_COOLDOWN_MS) return;
 
-  // An outsider in the party would be taken in on their own account's visit
+  // An outsider would be taken in on their own account's visit, but nobody can
+  // join a run already under way, so only a fresh entry has to care
   const outsiders = parent.party_list.filter(
     (name) => !partyMems.includes(name),
   );
-  if (outsiders.length) return caveLog("entry held — outsiders", outsiders);
+  if (!resuming && outsiders.length)
+    return caveLog("entry held — outsiders", outsiders);
 
   // A fresh visit is spent on whoever is in the party, so it waits for all three
   if (!resuming && parent.party_list.length !== partyMems.length)
