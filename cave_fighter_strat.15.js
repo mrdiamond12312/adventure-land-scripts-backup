@@ -114,6 +114,16 @@ function isEventDueSoon() {
 }
 
 /**
+ * Whether a run of ours is still open here. `remaining_ms` only comes back on
+ * the realm holding the run, so its presence is the realm check.
+ * @param {object} [visit]
+ * @returns {boolean}
+ */
+function canResumeCaveRun(visit) {
+  return (visit?.resume?.remaining_ms ?? 0) > 0;
+}
+
+/**
  * The account's daily visit, re-asked at most once a minute.
  * @returns {Promise<object|undefined>}
  */
@@ -142,14 +152,18 @@ function isPartyAtDorr() {
 
 /**
  * Takes the party in, once, from whoever leads it.
+ * @param {boolean} [resuming] a return to an open run, which needs no party
  * @returns {Promise<void>}
  */
-async function enterCave() {
+async function enterCave(resuming) {
   if (character.name !== partyMems[0]) return;
   if (Date.now() - caveState.enteredAt < CAVE_ENTER_COOLDOWN_MS) return;
 
   // An outsider in the party would be taken in on their own account's visit
   if (parent.party_list.some((name) => !partyMems.includes(name))) return;
+
+  // A fresh visit is spent on whoever is in the party, so it waits for all three
+  if (!resuming && parent.party_list.length !== partyMems.length) return;
 
   caveState.enteredAt = Date.now();
   await cave_enter().catch((error) => console.warn("Cave refused us", error));
@@ -456,10 +470,15 @@ async function useCaveStrategy() {
 
   // The daily resets on our own realm, and a hop would end the run
   if (!isHomeRealm()) return undefined;
-  if (isEventDueSoon()) return undefined;
 
   const visit = await getCaveVisit();
-  if (!visit?.available) return undefined;
+  const resuming = canResumeCaveRun(visit);
+
+  // A run already paid for outranks the window a fresh one would have to dodge
+  if (!resuming) {
+    if (isEventDueSoon()) return undefined;
+    if (!visit?.available) return undefined;
+  }
 
   isPreparingCave = true;
 
@@ -474,7 +493,7 @@ async function useCaveStrategy() {
   // Standing at the door, waiting on the stragglers
   if (!isPartyAtDorr()) return travelling();
 
-  await enterCave();
+  await enterCave(resuming);
 
   return travelling();
 }
