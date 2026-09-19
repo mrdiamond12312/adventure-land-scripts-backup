@@ -173,12 +173,15 @@ function isPartyAtDorr() {
 }
 
 /**
- * Takes the party in, once, from whoever leads it.
+ * Takes the party in, once, from whoever leads it, or walks a single character
+ * back into a run that is still open.
  * @param {boolean} [resuming] a return to an open run, which needs no party
  * @returns {Promise<void>}
  */
 async function enterCave(resuming) {
-  if (character.name !== partyMems[0]) return;
+  // A fresh visit is spent once, by the leader, on the whole party at the door;
+  // a return is each character's own, so whoever is outside makes their own call
+  if (!resuming && character.name !== partyMems[0]) return;
   if (Date.now() - caveState.enteredAt < CAVE_ENTER_COOLDOWN_MS) return;
 
   // An outsider in the party would be taken in on their own account's visit
@@ -399,14 +402,33 @@ function getCaveDestination() {
   return (cave.doors ?? []).find((door) => door.down && !door.locked);
 }
 
+/**
+ * Enough of the chunk to tell one floor's map from the next under the same id.
+ * @returns {string|undefined} undefined until G carries the map at all
+ */
+function caveMapVersion() {
+  const map = parent.G.maps[character.map];
+  if (!map) return undefined;
+
+  return [
+    character.map,
+    character.cave?.floor,
+    (map.rooms ?? []).length,
+    (map.doors ?? []).length,
+    (map.spawns ?? []).length,
+  ].join(":");
+}
+
 /** A floor reaches G after the run starts, and leaves when the run ends */
 function refreshCavePathfinder() {
   if (typeof preparePathfinder !== "function") return;
-  if (caveState.preparedFor === character.map) return;
-  if (!parent.G.maps[character.map]) return;
 
+  const version = caveMapVersion();
+  if (version === undefined || caveState.preparedFor === version) return;
+
+  caveLog("rebuilding pathfinder", { version });
   preparePathfinder();
-  caveState.preparedFor = character.map;
+  caveState.preparedFor = version;
 }
 
 /**
@@ -529,8 +551,9 @@ async function useCaveStrategy() {
     return travelling();
   }
 
-  // Standing at the door, waiting on the stragglers
-  if (!isPartyAtDorr()) {
+  // Standing at the door, waiting on the stragglers. Whoever is still inside a
+  // run we are returning to cannot be at Dorr, so a return waits for nobody
+  if (!resuming && !isPartyAtDorr()) {
     caveLog("at Dorr, waiting on the party");
     return travelling();
   }

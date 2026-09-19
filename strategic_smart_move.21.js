@@ -50,7 +50,7 @@ class StrategicSmartMove {
 
   /** Rebuilds the graph from whatever G currently holds */
   preparePathfinder() {
-    this.pathfinder.prepare(parent.G, ["bank_u"]);
+    this.pathfinder.prepare(G, ["bank_u"]);
     this.pathfinder.clear();
     this.pathfinder.addCheatPath("winterland", 721, 277, 737, 352);
   }
