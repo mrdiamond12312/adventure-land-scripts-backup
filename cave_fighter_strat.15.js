@@ -336,6 +336,21 @@ async function voteOnCaveChoice(choice) {
 }
 
 /**
+ * Whether the shop's offer is on the skip list, which names plain items while
+ * the shop prefixes its own.
+ * @param {string} [name]
+ * @returns {boolean}
+ */
+function isCaveItemSkipped(name) {
+  if (!name) return false;
+
+  return (
+    CAVE_ITEMS_TO_SKIP.includes(name) ||
+    CAVE_ITEMS_TO_SKIP.includes(name.replace(/^cave_/, ""))
+  );
+}
+
+/**
  * Buys the shop's one item, since cave gold is worthless once the run ends.
  * @param {object} choice
  * @returns {Promise<void>}
@@ -343,14 +358,19 @@ async function voteOnCaveChoice(choice) {
 async function buyFromCaveShop(choice) {
   if (character.name !== partyMems[0]) return;
 
-  const room = choice?.shop?.room;
+  const shop = choice?.shop;
+  const room = shop?.room;
   if (room === undefined || caveRun.bought.includes(room)) return;
-  if (CAVE_ITEMS_TO_SKIP.includes(choice.shop.item)) return;
+  if (shop.sold) return caveLog("shop sold out", shop.name);
+  if (shop.nearby === false) return;
+  if (isCaveItemSkipped(shop.name)) return caveLog("shop skipped", shop.name);
   if ((caveRun.attempts[room] ?? 0) >= CAVE_BUY_ATTEMPTS) return;
   if (Date.now() - caveRun.buyAt < CAVE_BUY_RETRY_MS) return;
 
   caveRun.buyAt = Date.now();
   caveRun.attempts[room] = (caveRun.attempts[room] ?? 0) + 1;
+
+  caveLog("buying", { name: shop.name, price: shop.price });
 
   await cave_buy(room)
     .then(() => caveRun.bought.push(room))
