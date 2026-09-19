@@ -61,6 +61,28 @@ const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
 /** The run's own ceiling, so a client that dies inside cannot pin the flag */
 const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
 
+/** Narrates each decision; leave off outside a debugging run */
+var CAVE_DEBUG = false;
+
+/** The last line printed, so a per-tick decision speaks only when it changes */
+let lastCaveLog = "";
+
+/**
+ * Prints a decision once, until a different one comes along.
+ * @param {string} stage
+ * @param {object} [detail]
+ */
+function caveLog(stage, detail) {
+  if (!CAVE_DEBUG) return;
+
+  const line =
+    detail === undefined ? stage : `${stage} ${JSON.stringify(detail)}`;
+  if (line === lastCaveLog) return;
+
+  lastCaveLog = line;
+  console.warn(`[cave] ${line}`);
+}
+
 /** @returns {object} a run's blank slate */
 function freshCaveRun() {
   return { bought: [], attempts: {}, choiceId: undefined, buyAt: 0, talkAt: 0 };
@@ -160,11 +182,16 @@ async function enterCave(resuming) {
   if (Date.now() - caveState.enteredAt < CAVE_ENTER_COOLDOWN_MS) return;
 
   // An outsider in the party would be taken in on their own account's visit
-  if (parent.party_list.some((name) => !partyMems.includes(name))) return;
+  const outsiders = parent.party_list.filter(
+    (name) => !partyMems.includes(name),
+  );
+  if (outsiders.length) return caveLog("entry held — outsiders", outsiders);
 
   // A fresh visit is spent on whoever is in the party, so it waits for all three
-  if (!resuming && parent.party_list.length !== partyMems.length) return;
+  if (!resuming && parent.party_list.length !== partyMems.length)
+    return caveLog("entry held — party", parent.party_list);
 
+  caveLog(resuming ? "resuming" : "entering", parent.party_list);
   caveState.enteredAt = Date.now();
   await cave_enter().catch((error) => console.warn("Cave refused us", error));
 
@@ -446,6 +473,13 @@ async function useCaveStrategy() {
     // Each floor is its own map, and it lands in G after the run begins
     refreshCavePathfinder();
 
+    caveLog("inside", {
+      floor: character.cave.floor,
+      map: character.map,
+      paused: Boolean(character.cave.paused),
+      choice: character.cave.choice?.id,
+    });
+
     if (character.cave.choice) {
       await voteOnCaveChoice(character.cave.choice);
       await buyFromCaveShop(character.cave.choice);
@@ -469,15 +503,19 @@ async function useCaveStrategy() {
   }
 
   // The daily resets on our own realm, and a hop would end the run
-  if (!isHomeRealm()) return undefined;
+  if (!isHomeRealm()) return caveLog("away from home realm");
 
   const visit = await getCaveVisit();
   const resuming = canResumeCaveRun(visit);
 
   // A run already paid for outranks the window a fresh one would have to dodge
   if (!resuming) {
-    if (isEventDueSoon()) return undefined;
-    if (!visit?.available) return undefined;
+    if (isEventDueSoon())
+      return caveLog("skipped — window in", {
+        minutes: Math.round(msUntilHomeScheduledEvent() / 60000),
+      });
+
+    if (!visit?.available) return caveLog("no visit left", visit);
   }
 
   isPreparingCave = true;
@@ -485,13 +523,17 @@ async function useCaveStrategy() {
   if (smart.moving || isAdvanceSmartMoving) return travelling();
 
   if (distance(character, DORR_SPOT) > DORR_SLACK) {
+    caveLog(resuming ? "walking back to Dorr" : "walking to Dorr");
     changeToNormalStrategies();
     advanceSmartMove(DORR_SPOT);
     return travelling();
   }
 
   // Standing at the door, waiting on the stragglers
-  if (!isPartyAtDorr()) return travelling();
+  if (!isPartyAtDorr()) {
+    caveLog("at Dorr, waiting on the party");
+    return travelling();
+  }
 
   await enterCave(resuming);
 
