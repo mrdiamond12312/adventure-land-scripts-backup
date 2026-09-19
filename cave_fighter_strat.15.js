@@ -40,6 +40,9 @@ const CAVE_BUY_RETRY_MS = 20 * 1000;
 /** A shop that keeps saying no is out of stock, not out of our gold */
 const CAVE_BUY_ATTEMPTS = 6;
 
+/** Refusals that cost no attempt, because the next chest settles them */
+const CAVE_BUY_RETRY_REASONS = ["gold_not_enough"];
+
 /** Chatter is free, but not every tick */
 const CAVE_TALK_INTERVAL_MS = 10 * 1000;
 
@@ -303,10 +306,17 @@ async function buyFromCaveShop(choice) {
   caveRun.buyAt = Date.now();
   caveRun.attempts[room] = (caveRun.attempts[room] ?? 0) + 1;
 
-  // Only the sale is final — a short purse fills again from the next chest
   await cave_buy(room)
     .then(() => caveRun.bought.push(room))
-    .catch((error) => console.warn("Cave shop refused us", error));
+    .catch((error) => {
+      // A short purse fills again from the next chest, so it costs no attempt
+      if (CAVE_BUY_RETRY_REASONS.includes(error?.reason)) {
+        caveRun.attempts[room] -= 1;
+        return;
+      }
+
+      console.warn("Cave shop refused us", error);
+    });
 }
 
 /**
