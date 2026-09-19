@@ -2358,13 +2358,13 @@ async function visitAnniversaryPlayer() {
 if (character.ctype !== "merchant") {
   if (parent.caracAL) {
     parent.caracAL.load_scripts([
-      // "adventure-land-scripts-backup/cave_fighter_strat.15.js",
+      "adventure-land-scripts-backup/cave_fighter_strat.15.js",
       "adventure-land-scripts-backup/daily_event_fighter_strat.26.js",
       "adventure-land-scripts-backup/special_mob_fighter_strat.28.js",
       "adventure-land-scripts-backup/farming_fighter_strat.27.js",
     ]);
   } else {
-    // load_code(15);
+    load_code(15);
     load_code(26);
     load_code(28);
     load_code(27);
