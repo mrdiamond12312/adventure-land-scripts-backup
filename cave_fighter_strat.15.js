@@ -425,32 +425,30 @@ function getCaveDestination() {
 }
 
 /**
- * Enough of the chunk to tell one floor's map from the next under the same id.
- * @returns {string|undefined} undefined until G carries the map at all
+ * The instance the graph would be built from, once G can describe it. A floor's
+ * geometry lands under its instance id, a moment after the map itself.
+ * @returns {string|undefined} undefined until this floor is describable
  */
-function caveMapVersion() {
-  const map = parent.G.maps[character.map];
-  if (!map) return undefined;
+function caveGraphInstance() {
+  const instance = character.in;
+  if (!instance) return undefined;
+  if (!parent.G.maps[character.map]) return undefined;
+  if (!parent.G.geometry[instance]) return undefined;
 
-  return [
-    character.map,
-    character.cave?.floor,
-    (map.rooms ?? []).length,
-    (map.doors ?? []).length,
-    (map.spawns ?? []).length,
-  ].join(":");
+  return instance;
 }
 
 /** A floor reaches G after the run starts, and leaves when the run ends */
 function refreshCavePathfinder() {
   if (typeof preparePathfinder !== "function") return;
 
-  const version = caveMapVersion();
-  if (version === undefined || caveState.preparedFor === version) return;
+  const instance = caveGraphInstance();
+  if (instance === undefined) return caveLog("waiting on floor geometry");
+  if (caveState.preparedFor === instance) return;
 
-  caveLog("rebuilding pathfinder", { version });
+  caveLog("rebuilding pathfinder", { instance });
   preparePathfinder();
-  caveState.preparedFor = version;
+  caveState.preparedFor = instance;
 }
 
 /**
@@ -474,6 +472,10 @@ async function walkToCaveDestination() {
   if (!destination) return;
 
   if (distance(character, destination) > CAVE_ARRIVAL_SLACK) {
+    // Until this floor's geometry lands, the graph still describes the last one
+    if (caveState.preparedFor !== character.in)
+      return caveLog("holding — floor not pathable yet");
+
     // Same-map only: the next floor is not in G until we are standing in it
     await advanceSmartMove(
       { map: character.map, x: destination.x, y: destination.y },

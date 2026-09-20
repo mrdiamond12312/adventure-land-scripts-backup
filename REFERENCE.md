@@ -1664,3 +1664,18 @@ three for one, so the pile has to clear the threshold *by a set* or the compound
 `craft()` builds `isEnoughIngredients` with `.map(...).every(Boolean)` rather than `.every(...)`.
 A short-circuit at the first unsatisfied ingredient would skip the level check on every later one,
 so their targets would never be registered and their climb would never start.
+
+## A cave floor is pathable only once its geometry lands (`refreshCavePathfinder`, 2026-09-21)
+
+`ALPathfinder.prepare(G)` is all-or-nothing: there is no per-map add, so every new floor costs a
+full graph rebuild. The floor arrives in `G` in two pieces — `G.maps[character.map]` first, and the
+walls under `G.geometry[character.in]`, keyed by the *instance*, not the map. Fingerprinting the map
+(room/door/spawn counts) therefore declared the floor ready while the graph still held the previous
+one's walls, and a rebuild triggered on that fingerprint baked in whatever geometry happened to be
+there. The readiness key is the instance id itself: present in `G.geometry` means describable, and
+`caveState.preparedFor === character.in` means already described. Outside a run `character.in` is
+the map name, so the same key covers the rebuild that drops the cave floors on the way out.
+
+The tick calls this every pass, but the comparison is an id, so it rebuilds once per floor. The same
+key gates the walk: pathing before the rebuild would not merely fail, it would return a plausible
+path through the last floor's walls.
