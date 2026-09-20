@@ -67,7 +67,7 @@ const CAVE_ENTER_COOLDOWN_MS = 10 * 1000;
 /** A merchant hop drags the whole party out, so a near window outranks a run */
 const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
 
-/** The run's own ceiling, so a client that dies inside cannot pin the flag */
+/** Stands in for the run's own deadline when the cave has not named one */
 const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
 
 /** Narrates each decision; leave off outside a debugging run */
@@ -227,6 +227,19 @@ async function enterCave(resuming) {
 }
 
 /**
+ * Whether this is one of the room's cast, who stand around as monsters do.
+ * @param {object} entity
+ * @returns {boolean}
+ */
+function isCaveSceneMember(entity) {
+  return (character.cave?.choice?.scene ?? []).some(
+    (person) =>
+      `${person.id}` === `${entity.id}` ||
+      (person.name && person.name === entity.name),
+  );
+}
+
+/**
  * Whether this one is worth swinging at.
  * @param {object} entity
  * @returns {boolean}
@@ -237,6 +250,7 @@ function isCaveMobWorthHitting(entity) {
     !entity.dead &&
     // The cave's people are monsters to the client — its merchant included
     !entity.cave?.citizen &&
+    !isCaveSceneMember(entity) &&
     !CAVE_MOBS_TO_LEAVE.includes(entity.mtype) &&
     (entity.level ?? 0) <= caveMaxMobLevel
   );
@@ -288,8 +302,8 @@ function isInCaveBounds(position, bounds) {
  * @returns {object|undefined}
  */
 function getCaveRoom(position) {
-  return (parent.G.maps[character.map]?.rooms ?? []).find((room) =>
-    isInCaveBounds(position, room.bounds),
+  return (parent.G.maps[character.map]?.rooms ?? []).find(
+    (room) => room.bounds && isInCaveBounds(position, room.bounds),
   );
 }
 
@@ -639,7 +653,12 @@ async function useCaveStrategy() {
     }
 
     // The merchant cannot see character.cave, so leave it a deadline it can read
-    set("caveRun", inCave ? Date.now() + CAVE_RUN_MAX_MS : undefined);
+    set(
+      "caveRun",
+      inCave
+        ? (character.cave.expires ?? Date.now() + CAVE_RUN_MAX_MS)
+        : undefined,
+    );
 
     caveState.inside = inCave;
   }
