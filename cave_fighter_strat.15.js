@@ -478,7 +478,7 @@ async function walkToCaveDestination() {
     await advanceSmartMove(
       { map: character.map, x: destination.x, y: destination.y },
       { useScare: true, useTown: false },
-    ).catch(() => undefined);
+    ).catch((e) => console.warn(e));
     return;
   }
 

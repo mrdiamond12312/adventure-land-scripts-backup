@@ -28,6 +28,9 @@ const MIDAS_CHARACTER = [MAGE, "CrownPriest"];
 // Outsiders we team up with — their tank changes what the party can hold
 const trustedPartners = ["earthPri", "earthWar"];
 
+/** Cave of Many Dreams — the one switch for the daily run, loader and all */
+var USE_CAVE_STRATEGY = false;
+
 const CODE_SLOTS = {
   MoohThatCow: {
     homeServer: "EUII",
@@ -2380,20 +2383,23 @@ async function visitAnniversaryPlayer() {
 if (character.ctype !== "merchant") {
   if (parent.caracAL) {
     parent.caracAL.load_scripts([
-      "adventure-land-scripts-backup/cave_fighter_strat.15.js",
+      ...(USE_CAVE_STRATEGY
+        ? ["adventure-land-scripts-backup/cave_fighter_strat.15.js"]
+        : []),
       "adventure-land-scripts-backup/daily_event_fighter_strat.26.js",
       "adventure-land-scripts-backup/special_mob_fighter_strat.28.js",
       "adventure-land-scripts-backup/farming_fighter_strat.27.js",
     ]);
   } else {
-    load_code(15);
+    if (USE_CAVE_STRATEGY) load_code(15);
     load_code(26);
     load_code(28);
     load_code(27);
   }
 
   var fighterStrategies = [
-    useCaveStrategy,
+    // The identifier only resolves when slot 15 was loaded above
+    ...(USE_CAVE_STRATEGY ? [useCaveStrategy] : []),
     useEventStrategy,
     useCryptStrategy,
     useSpecialMobStrategy,
