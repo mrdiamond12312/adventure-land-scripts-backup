@@ -309,13 +309,6 @@ function startSkillLoops() {
       return use_skill("mluck", pendingMluckTarget);
     },
   });
-
-  runSkillLoop({
-    skill: "drop_egg",
-    whileMoving: true,
-    canUse: () => character.moving && !is_on_cooldown("drop_egg"),
-    cast: () => use_skill("drop_egg"),
-  });
 }
 
 function on_party_invite(name) {

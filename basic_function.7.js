@@ -1033,6 +1033,87 @@ function runSkillLoop({
   return loop;
 }
 
+/**
+ * Whether this character unlocked the cosmetic a novelty skill rides on.
+ * @param {string} skill
+ * @returns {boolean}
+ */
+function hasCosmeticSkill(skill) {
+  const emote = G.skills[skill]?.emote;
+  return Boolean(emote && character.acx?.[emote]);
+}
+
+/** character name -> when we last kissed them */
+const kissedAt = {};
+
+/** @returns {Object|undefined} whoever in range has gone longest without one */
+function getKissTarget() {
+  const inRange = Object.values(parent.entities).filter(
+    (entity) =>
+      entity?.type === "character" &&
+      !entity.npc &&
+      !entity.rip &&
+      is_in_range(entity, "ikissyou"),
+  );
+
+  // One shared cooldown, and the visit ticket expires — the emote can wait
+  if (hasAnniversaryVisitToMake()) {
+    const featured = getAnniversaryEvent()?.id;
+    return inRange.find((entity) => entity.name === featured);
+  }
+
+  return inRange
+    .filter((entity) => !isOwnedCharacter(entity.name))
+    .sort((lhs, rhs) => {
+      const waited = (kissedAt[lhs.name] ?? 0) - (kissedAt[rhs.name] ?? 0);
+      if (waited) return waited;
+
+      return distance(character, lhs) - distance(character, rhs);
+    })[0];
+}
+
+/** Novelty emotes — every class that unlocked the cosmetic gets them */
+function startCosmeticSkillLoops() {
+  let pendingKissTarget = null;
+
+  runSkillLoop({
+    skill: "makeawish",
+    floorMs: 1000,
+    whileMoving: true,
+    canUse: () =>
+      hasCosmeticSkill("makeawish") && character.mp >= G.skills.makeawish.mp,
+    cast: () => use_skill("makeawish"),
+  });
+
+  runSkillLoop({
+    skill: "ikissyou",
+    floorMs: 1000,
+    whileMoving: true,
+    canUse: () => {
+      if (!hasCosmeticSkill("ikissyou")) return false;
+
+      pendingKissTarget = getKissTarget();
+      return pendingKissTarget != null;
+    },
+    cast: () => {
+      kissedAt[pendingKissTarget.name] = Date.now();
+      return use_skill("ikissyou", pendingKissTarget);
+    },
+  });
+
+  runSkillLoop({
+    skill: "drop_egg",
+    whileMoving: true,
+    canUse: () =>
+      hasCosmeticSkill("drop_egg") &&
+      character.moving &&
+      !is_on_cooldown("drop_egg"),
+    cast: () => use_skill("drop_egg"),
+  });
+}
+
+startCosmeticSkillLoops();
+
 async function leaveJail() {
   if (character.map === "jail" && !smart.moving && !isAdvanceSmartMoving) {
     log("Jail escape plan!");

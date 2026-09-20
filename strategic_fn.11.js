@@ -402,6 +402,8 @@ function calculateMageItems() {
       : currentTarget && (currentTarget.resistance ?? 0) < 400
       ? "cave_loaded_die"
       : "jacko",
+    ring1: "intring",
+    ring2: "cring",
     amulet: feelingWise ? "spookyamulet" : "intamulet",
   };
 }
@@ -825,7 +827,7 @@ function calculatePriestItems(target) {
     orb: getPriestOrb(target, isTanking, feelingLucky, feelingWise),
     gloves: "supermittens",
     amulet: getPriestAmulet(isTanking, feelingLucky, feelingWise),
-    ring1: feelingLucky ? "ringhs" : "cring",
+    ring1: feelingLucky ? "ringhs" : "zapper",
     ring2: feelingLucky ? "ringhs" : "zapper",
     cape: "angelwings",
   };
@@ -1774,12 +1776,6 @@ function isWeakEnoughToUsePullStrategy(mob, tanker) {
 
 /**
  * What the pull decision should be about.
- *
- * get_target() is not usable here: a priest retargets to whoever it is healing,
- * so the stat read would belong to an ally rather than the mob. getTarget() is
- * monster-only, and the configured farm list covers the gaps between kills so
- * the mode does not flip every time a target dies.
- *
  * @returns {object | undefined} an entity-shaped mob, ready for calculateDamage
  */
 function getStrategyMob() {
