@@ -1665,44 +1665,39 @@ three for one, so the pile has to clear the threshold *by a set* or the compound
 A short-circuit at the first unsatisfied ingredient would skip the level check on every later one,
 so their targets would never be registered and their climb would never start.
 
-## A cave floor is pathable only once its geometry lands (`refreshCavePathfinder`, 2026-09-21)
+## A generated map reaches G after the graph was built (`refreshPathfinderFor`, 2026-09-21)
 
-`ALPathfinder.prepare(G)` is all-or-nothing: there is no per-map add, so every new floor costs a
-full graph rebuild. The floor arrives in `G` in two pieces — `G.maps[character.map]` first, and the
-walls under `G.geometry[character.in]`, keyed by the *instance*, not the map. Fingerprinting the map
-(room/door/spawn counts) therefore declared the floor ready while the graph still held the previous
-one's walls, and a rebuild triggered on that fingerprint baked in whatever geometry happened to be
-there. The readiness key is the instance id itself: present in `G.geometry` means describable, and
-`caveState.preparedFor === character.in` means already described. Outside a run `character.in` is
-the map name, so the same key covers the rebuild that drops the cave floors on the way out.
+`ALPathfinder.prepare` is all-or-nothing — there is no per-map add — and it is called once at load,
+long before a cave run conjures `zone_<run>_<floor>`. Nothing in the graph describes that map, so
+every `getPath` into it returns null, `smartMove` throws instantly, and the caller retries.
 
-The tick calls this every pass, but the comparison is an id, so it rebuilds once per floor. The same
-key gates the walk: pathing before the rebuild would not merely fail, it would return a plausible
-path through the last floor's walls.
+`preparePathfinder` therefore records `Object.keys(parent.G.geometry)` as `preparedMaps`, and
+`pathfinderGetPath` calls `refreshPathfinderFor(character.map, toPosition.map)` before every query.
+An unknown map rebuilds the graph once and is then recorded, whether or not the rebuild helped. The
+rebuild is skipped unless `parent.G.geometry[map]` exists: a floor's map key lands in `G` before its
+walls do, and preparing in that window would record a floor the graph cannot see, breaking it for the
+rest of the run. Hooking the query rather than `smartMove` covers the spawn loop and the cave's path
+cost sort too.
 
-`ALPathfinder.prepare` keys geometry by *map name*, while a floor's arrives under its instance, so
-the rebuild copies it onto `G.geometry[character.map]` when nothing is there. Without that the graph
-builds the floor with no walls at all, which reads as "prepared" and then paths through everything.
-Both holds — no geometry yet, and prepared-for-another-floor — log the ids they compared, because
-from the outside the two look identical: a party standing still.
+Note `prepare` takes `parent.G`, not the script's own `G` — under caracAL those are separate vm
+realms, and only `parent.G` receives the map the server adds mid-run. `advance_smart_move.20.js` and
+alpathfinder's README always did it this way; `strategic_smart_move.21.js` did not.
 
-### Picking a destination: depth over farms, path over line (2026-09-21)
+The cave strategy used to carry its own version of this, keyed on `character.in` and gating the walk
+until the floor was prepared. It is gone: one mechanism in the move layer serves every caller.
+
+### Picking a destination: depth over farms (2026-09-21)
 
 `getCaveDestination` used to fall back from the required objectives to *all* pending ones, and only
 offered the down-door when nothing was pending at all. A floor's optional `farm` rooms therefore
 outranked the stairs, and since the run is on a server clock (`visit.resume.remaining_ms`), a party
-that cleared the required objectives would spend the rest of the run on roosts. The door now wins as
-soon as the required list empties; farms are what is left when there is no unlocked door.
+that cleared the required objectives would spend the rest of the run on roosts — the dumps confirm a
+`0:shop` encounter objective stays `done: false` all run, so the pending list never empties. The door
+now wins as soon as the required list empties; farms are what is left when there is no unlocked door.
 
-The shortlist is ordered by `pathfinderGetPath` legs summed, not by `distance`. On a walled floor the
-straight line is a bad proxy — a room one wall over reads as near, one across the floor as far. The
-sort falls back to `distance` when the graph cannot answer: `pathfinderGetPath` is undefined in the
-native branch (only caracAL loads `strategic_smart_move.21.js`), and returns null for a destination
-the graph has no route to.
-
-That is a path query per candidate, on a loop that idles at ~1ms per tick, so the pick is cached for
-`CAVE_DESTINATION_TTL_MS`. Its key carries `caveState.preparedFor` alongside the pending objective
-ids: a pick made before the floor's rebuild measured straight lines, and must not outlive it.
+Ordering within the shortlist is plain `distance`. A pathfinder-measured sort was tried and dropped:
+it cost a `getPath` per candidate on a loop that idles at ~2ms, and the shortlist is three objectives
+in one room-and-corridor floor, where the straight line ranks them the same way often enough.
 
 ### The realm guard was inert, and now names its realm outright (2026-09-21)
 

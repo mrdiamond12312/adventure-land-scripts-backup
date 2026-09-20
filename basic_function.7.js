@@ -1021,7 +1021,7 @@ function runSkillLoop({
       const isMovingControlled =
         (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
 
-      // A paused cave refuses every action, and the loops would just keep asking
+      // A paused cave refuses every action
       if (
         !character.rip &&
         !character.cave?.paused &&

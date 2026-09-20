@@ -50,10 +50,26 @@ class StrategicSmartMove {
 
   /** Rebuilds the graph from whatever G currently holds */
   preparePathfinder() {
-    // parent.G is the live game data; the script's own G can be a stale realm
     this.pathfinder.prepare(parent.G, ["bank_u"]);
     this.pathfinder.clear();
     this.pathfinder.addCheatPath("winterland", 721, 277, 737, 352);
+
+    // What the graph was built from
+    this.preparedMaps = new Set(Object.keys(parent.G.geometry));
+  }
+
+  /**
+   * Rebuilds once for a map the graph has never seen, e.g. a generated floor.
+   * @param {...string} maps
+   */
+  refreshPathfinderFor(...maps) {
+    const unknown = maps.filter(
+      (map) => map && !this.preparedMaps.has(map) && parent.G.geometry[map],
+    );
+    if (!unknown.length) return;
+
+    this.preparePathfinder();
+    for (const map of unknown) this.preparedMaps.add(map);
   }
 
   /**
@@ -130,6 +146,8 @@ class StrategicSmartMove {
    * @param {number} speed set the speed to a very big number to disable use_town, default: character's speed
    */
   pathfinderGetPath(toPosition, speed = character.speed) {
+    this.refreshPathfinderFor(character.map, toPosition.map);
+
     return parent.caracAL.ALPathfinder.getPath(
       character.map,
       character.x,

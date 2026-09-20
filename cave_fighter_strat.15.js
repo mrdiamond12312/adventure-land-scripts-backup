@@ -1,6 +1,6 @@
 // Cave of Many Dreams — the fighter's highest priority strategy.
 
-/** The realm holding the daily — a run started anywhere else is not ours */
+/** The realm holding the daily */
 const CAVE_HOME_REALM = "USII";
 
 /** Dorr, at the vine-covered doorway */
@@ -31,16 +31,7 @@ const CAVE_OPTIONS_TO_REFUSE = [
 /** The rogue encounter's wait-and-see option, by its own id */
 const CAVE_ROGUE_WAIT = "watch";
 
-/** How long a destination pick holds, so the path queries stay off the tick */
-const CAVE_DESTINATION_TTL_MS = 1000;
-
-/** A step is half a second of travel, so re-aiming faster only floods moves */
-const CAVE_STEP_MS = 250;
-
-/** Stop just inside reach rather than at its edge, where a step would lose it */
-const CAVE_REACH_MARGIN = 0.9;
-
-/** How long a refused walk waits before the same destination is tried again */
+/** How long a refused walk waits */
 const CAVE_WALK_RETRY_MS = 3 * 1000;
 
 /** Standing this close to an objective counts as being on it */
@@ -58,7 +49,7 @@ const CAVE_BUY_ATTEMPTS = 6;
 /** Refusals that cost no attempt, because the next chest settles them */
 const CAVE_BUY_RETRY_REASONS = ["gold_not_enough"];
 
-/** Long enough for a vote to land before the same one is cast again */
+/** Long enough for a vote to land */
 const CAVE_VOTE_RETRY_MS = 2 * 1000;
 
 /** Chatter is free, but not every tick */
@@ -76,17 +67,17 @@ const CAVE_ENTER_COOLDOWN_MS = 10 * 1000;
 /** A merchant hop drags the whole party out, so a near window outranks a run */
 const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
 
-/** Stands in for the run's own deadline when the cave has not named one */
+/** Stands in for the run's own deadline */
 const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
 
 /** Narrates each decision; leave off outside a debugging run */
 var CAVE_DEBUG = true;
 
-/** The last line printed per stage — two stages alternating are still one each */
+/** The last line printed per stage */
 const lastCaveLogs = new Map();
 
 /**
- * Prints a decision once, until that stage has something else to say.
+ * Prints a decision once per stage, until it changes.
  * @param {string} stage
  * @param {object} [detail]
  */
@@ -109,12 +100,8 @@ function freshCaveRun() {
     choiceId: undefined,
     buyAt: 0,
     talkAt: 0,
-    picked: undefined,
-    pickedFor: "",
-    pickedAt: 0,
     votedAt: 0,
     walkedAt: 0,
-    steppedAt: 0,
   };
 }
 
@@ -127,7 +114,6 @@ const caveState = {
   checkedAt: 0,
   enteredAt: 0,
   inside: false,
-  preparedFor: undefined,
 };
 
 /**
@@ -147,8 +133,7 @@ function isInCave() {
 }
 
 /**
- * Whether this realm is ours. A run belongs to the realm holding it and a hop
- * would end it, so a realm we cannot read counts as away.
+ * Whether this realm is ours.
  * @returns {boolean}
  */
 function isHomeRealm() {
@@ -238,8 +223,7 @@ async function enterCave(resuming) {
 }
 
 /**
- * Whether the room's cast lists this one as a bystander. They stand around as
- * monsters do, and the encounter says which of them took a side.
+ * Whether the room's cast lists this one as a bystander.
  * @param {object} entity
  * @returns {boolean}
  */
@@ -261,7 +245,7 @@ function isCaveMobWorthHitting(entity) {
   return (
     entity.type === "monster" &&
     !entity.dead &&
-    // The cave's people are monsters to the client — its merchant included
+    // The cave's people are monsters to the client
     !entity.cave?.citizen &&
     !isCaveBystander(entity) &&
     !CAVE_MOBS_TO_LEAVE.includes(entity.mtype) &&
@@ -385,7 +369,6 @@ async function voteOnCaveChoice(choice) {
 
   caveRun.votedAt = Date.now();
 
-  // Only a vote the cave took counts as cast, or a refusal is never retried
   await cave_reply(choice.id, option.id)
     .then(() => {
       caveRun.choiceId = choice.id;
@@ -470,51 +453,14 @@ async function talkToCaveTraveler() {
 }
 
 /**
- * What the walk to a point costs, summed over the path's own legs. Legs that
- * change map skip ground rather than covering it, so they cost nothing.
- * @param {object} destination
- * @returns {number} the straight line when no graph can answer
- */
-function getCaveWalkCost(destination) {
-  if (typeof pathfinderGetPath !== "function")
-    return distance(character, destination);
-
-  let path;
-  try {
-    path = pathfinderGetPath({
-      map: character.map,
-      x: destination.x,
-      y: destination.y,
-    });
-  } catch (error) {
-    path = undefined;
-  }
-
-  if (!path?.length) return distance(character, destination);
-
-  let cost = 0;
-  let from = character;
-
-  for (const leg of path) {
-    if (leg.map === from.map) cost += distance(from, leg);
-    from = leg;
-  }
-
-  return cost;
-}
-
-/**
- * The closest of these by the walk it takes, not by the line to it — a room one
- * wall over is nearer than the line says, and one across the floor is farther.
+ * The closest of these.
  * @param {object[]} destinations
  * @returns {object|undefined}
  */
 function getClosestCaveDestination(destinations) {
-  if (destinations.length < 2) return destinations[0];
-
-  return destinations
-    .map((destination) => ({ destination, cost: getCaveWalkCost(destination) }))
-    .sort((lhs, rhs) => lhs.cost - rhs.cost)[0].destination;
+  return [...destinations].sort(
+    (lhs, rhs) => distance(character, lhs) - distance(character, rhs),
+  )[0];
 }
 
 /**
@@ -527,78 +473,15 @@ function getCaveDestination() {
     (objective) => !objective.done && objective.floor === cave.floor,
   );
 
-  // A pick costs a path query per candidate, and it holds until one is done.
-  // The graph is in the key: a pick made before the rebuild measured lines
-  const key = [
-    cave.floor,
-    caveState.preparedFor,
-    ...pending.map((objective) => objective.id),
-  ].join();
-  if (
-    caveRun.pickedFor === key &&
-    Date.now() - caveRun.pickedAt < CAVE_DESTINATION_TTL_MS
-  )
-    return caveRun.picked;
-
   // Required ones gate the stairs, so the optional rooms wait
   const required = pending.filter((objective) => objective.required);
 
-  // The run is on a clock, so depth outranks the farm rooms it would spend
+  // Depth outranks the optional farm rooms
   const down = (cave.doors ?? []).find((door) => door.down && !door.locked);
 
-  const picked = required.length
+  return required.length
     ? getClosestCaveDestination(required)
-    : down ?? getClosestCaveDestination(pending);
-
-  caveRun.pickedFor = key;
-  caveRun.pickedAt = Date.now();
-  caveRun.picked = picked;
-
-  return picked;
-}
-
-/**
- * This floor's walls, which land under the instance holding the run.
- * @returns {object|undefined}
- */
-function getCaveGeometry() {
-  return parent.G.geometry[character.in] ?? parent.G.geometry[character.map];
-}
-
-/**
- * The instance the graph would be built from, once G can describe it. A floor's
- * geometry lands a moment after the map itself.
- * @returns {string|undefined} undefined until this floor is describable
- */
-function caveGraphInstance() {
-  const instance = character.in;
-  if (!instance) return undefined;
-  if (!parent.G.maps[character.map]) return undefined;
-  if (!getCaveGeometry()) return undefined;
-
-  return instance;
-}
-
-/** A floor reaches G after the run starts, and leaves when the run ends */
-function refreshCavePathfinder() {
-  if (typeof preparePathfinder !== "function") return;
-
-  const instance = caveGraphInstance();
-  if (instance === undefined)
-    return caveLog("waiting on floor geometry", {
-      in: character.in,
-      map: character.map,
-    });
-
-  if (caveState.preparedFor === instance) return;
-
-  // prepare() reads geometry by map name, and a floor's arrives under its own
-  if (!parent.G.geometry[character.map])
-    parent.G.geometry[character.map] = getCaveGeometry();
-
-  caveLog("rebuilding pathfinder", { instance, map: character.map });
-  preparePathfinder();
-  caveState.preparedFor = instance;
+    : (down ?? getClosestCaveDestination(pending));
 }
 
 /**
@@ -612,20 +495,6 @@ async function descendCaveFloor(door) {
 }
 
 /**
- * Steps toward a target out of reach. A farm spot puts the party on top of its
- * spawn; an objective marker does not, so nothing else here closes the gap.
- * @param {object} target
- */
-function approachCaveTarget(target) {
-  if (smart.moving || isAdvanceSmartMoving) return;
-  if (Date.now() - caveRun.steppedAt < CAVE_STEP_MS) return;
-  if (distance(character, target) <= character.range * CAVE_REACH_MARGIN) return;
-
-  caveRun.steppedAt = Date.now();
-  moveTowardDestination(target);
-}
-
-/**
  * Walks to that destination, and through it when it is the way down.
  * @returns {Promise<void>}
  */
@@ -636,16 +505,8 @@ async function walkToCaveDestination() {
   if (!destination) return;
 
   if (distance(character, destination) > CAVE_ARRIVAL_SLACK) {
-    // A floor the graph cannot read refuses instantly, and each refusal stops
-    // the character — at a tick this fast that alone reads as a flood
+    // A refusal stops the character, so it must not repeat per tick
     if (Date.now() - caveRun.walkedAt < CAVE_WALK_RETRY_MS) return;
-
-    // Until this floor's geometry lands, the graph still describes the last one
-    if (caveState.preparedFor !== character.in)
-      return caveLog("holding — floor not pathable yet", {
-        in: character.in,
-        preparedFor: caveState.preparedFor,
-      });
 
     // Same-map only: the next floor is not in G until we are standing in it
     const to = { map: character.map, x: destination.x, y: destination.y };
@@ -659,7 +520,7 @@ async function walkToCaveDestination() {
           why: error?.message ?? String(error),
         });
 
-        // The client walks this floor even where our own graph cannot
+        // Native pathing reads floors our graph cannot
         await smart_move(to).catch(() => undefined);
       },
     );
@@ -685,15 +546,13 @@ async function useCaveStrategy() {
     else {
       // The run is over for everyone, not just whoever spent the visit
       caveState.checkedAt = 0;
-      caveState.preparedFor = undefined;
-      refreshCavePathfinder();
     }
 
     // The merchant cannot see character.cave, so leave it a deadline it can read
     set(
       "caveRun",
       inCave
-        ? (character.cave.expires ?? Date.now() + CAVE_RUN_MAX_MS)
+        ? character.cave.expires ?? Date.now() + CAVE_RUN_MAX_MS
         : undefined,
     );
 
@@ -702,9 +561,6 @@ async function useCaveStrategy() {
 
   if (inCave) {
     isPreparingCave = true;
-
-    // Each floor is its own map, and it lands in G after the run begins
-    refreshCavePathfinder();
 
     caveLog("inside", {
       floor: character.cave.floor,
@@ -718,7 +574,7 @@ async function useCaveStrategy() {
       await buyFromCaveShop(character.cave.choice);
     }
 
-    // A forced vote stops the cave's own clock, and every action it refuses
+    // A forced vote stops the cave's own clock
     if (character.cave.paused) {
       caveLog("paused", {
         choice: character.cave.choice?.id,
@@ -727,7 +583,7 @@ async function useCaveStrategy() {
         in: Math.round((character.cave.choice?.deadline - Date.now()) / 1000),
       });
 
-      // Still ours: the chain below would walk us out of a run we are mid-way
+      // The tick stays ours, or the chain below walks us out
       return travelling();
     }
 
@@ -737,7 +593,6 @@ async function useCaveStrategy() {
     const target = getCaveTarget();
     if (target) {
       changeToNormalStrategies();
-      approachCaveTarget(target);
       return engage(target);
     }
 
@@ -774,7 +629,7 @@ async function useCaveStrategy() {
 
   if (distance(character, DORR_SPOT) > DORR_SLACK) {
     caveLog(resuming ? "walking back to Dorr" : "walking to Dorr");
-    changeToNormalStrategies();
+    changeToPullStrategies();
     advanceSmartMove(DORR_SPOT);
     return travelling();
   }
