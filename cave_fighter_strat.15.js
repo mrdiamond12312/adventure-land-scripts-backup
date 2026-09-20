@@ -31,6 +31,9 @@ const CAVE_OPTIONS_TO_REFUSE = [
 /** The rogue encounter's wait-and-see option, by its own id */
 const CAVE_ROGUE_WAIT = "watch";
 
+/** Long enough for the shop to answer once we are standing in it */
+const CAVE_SHOP_WAIT_MS = 15 * 1000;
+
 /** How long a refused walk waits */
 const CAVE_WALK_RETRY_MS = 3 * 1000;
 
@@ -48,6 +51,9 @@ const CAVE_BUY_ATTEMPTS = 6;
 
 /** Refusals that cost no attempt, because the next chest settles them */
 const CAVE_BUY_RETRY_REASONS = ["gold_not_enough"];
+
+/** How often the choice loop looks, off the tick */
+const CAVE_CHOICE_INTERVAL_MS = 1000;
 
 /** Long enough for a vote to land */
 const CAVE_VOTE_RETRY_MS = 2 * 1000;
@@ -102,6 +108,7 @@ function freshCaveRun() {
     talkAt: 0,
     votedAt: 0,
     walkedAt: 0,
+    shopAt: {},
   };
 }
 
@@ -408,7 +415,10 @@ async function buyFromCaveShop(choice) {
   const shop = choice?.shop;
   const room = shop?.room;
   if (room === undefined || caveRun.settled.includes(room)) return;
-  if (shop.sold) return caveLog("shop sold out", shop.name);
+  if (shop.sold) {
+    caveRun.settled.push(room);
+    return caveLog("shop sold out", shop.name);
+  }
   if (shop.nearby === false) return;
   if (isCaveItemSkipped(shop.name)) {
     caveRun.settled.push(room);
@@ -475,13 +485,19 @@ function getCaveDestination() {
 
   // Required ones gate the stairs, so the optional rooms wait
   const required = pending.filter((objective) => objective.required);
+  if (required.length) return getClosestCaveDestination(required);
+
+  // Cave gold dies with the run, and the purse only fills once the floor is run
+  const shop = pending.find(
+    (objective) =>
+      objective.id.endsWith(":shop") && !caveRun.settled.includes(objective.id),
+  );
+  if (shop) return shop;
 
   // Depth outranks the optional farm rooms
   const down = (cave.doors ?? []).find((door) => door.down && !door.locked);
 
-  return required.length
-    ? getClosestCaveDestination(required)
-    : (down ?? getClosestCaveDestination(pending));
+  return down ?? getClosestCaveDestination(pending);
 }
 
 /**
@@ -492,6 +508,18 @@ function getCaveDestination() {
 async function descendCaveFloor(door) {
   const spawn = parent.G.maps[character.map]?.doors?.[door.id]?.[5] ?? 0;
   await transport(door.to, spawn).catch(() => undefined);
+}
+
+/**
+ * Settles a shop that never answers while we stand in it.
+ * @param {object} objective
+ */
+function waitOutCaveShop(objective) {
+  caveRun.shopAt[objective.id] ??= Date.now();
+  if (Date.now() - caveRun.shopAt[objective.id] < CAVE_SHOP_WAIT_MS) return;
+
+  caveRun.settled.push(objective.id);
+  caveLog("shop gave up", objective.id);
 }
 
 /**
@@ -527,7 +555,9 @@ async function walkToCaveDestination() {
     return;
   }
 
-  if (destination.to) await descendCaveFloor(destination);
+  if (destination.to) return descendCaveFloor(destination);
+
+  if (destination.id?.endsWith(":shop")) waitOutCaveShop(destination);
 }
 
 /**
@@ -568,11 +598,6 @@ async function useCaveStrategy() {
       paused: Boolean(character.cave.paused),
       choice: character.cave.choice?.id,
     });
-
-    if (character.cave.choice) {
-      await voteOnCaveChoice(character.cave.choice);
-      await buyFromCaveShop(character.cave.choice);
-    }
 
     // A forced vote stops the cave's own clock
     if (character.cave.paused) {
@@ -645,3 +670,24 @@ async function useCaveStrategy() {
 
   return travelling();
 }
+
+/**
+ * Answers the room on its own clock. The tick cannot: it bails while smart
+ * moving, and a pause refuses the move it is waiting on.
+ * @returns {Promise<void>}
+ */
+async function caveChoiceLoop() {
+  try {
+    const choice = character.cave?.choice;
+    if (choice) {
+      await voteOnCaveChoice(choice);
+      await buyFromCaveShop(choice);
+    }
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setTimeout(caveChoiceLoop, CAVE_CHOICE_INTERVAL_MS);
+  }
+}
+
+caveChoiceLoop();
