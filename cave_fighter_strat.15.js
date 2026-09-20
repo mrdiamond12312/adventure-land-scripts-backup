@@ -34,6 +34,12 @@ const CAVE_ROGUE_WAIT = "watch";
 /** How long a destination pick holds, so the path queries stay off the tick */
 const CAVE_DESTINATION_TTL_MS = 1000;
 
+/** A step is half a second of travel, so re-aiming faster only floods moves */
+const CAVE_STEP_MS = 250;
+
+/** Stop just inside reach rather than at its edge, where a step would lose it */
+const CAVE_REACH_MARGIN = 0.9;
+
 /** How long a refused walk waits before the same destination is tried again */
 const CAVE_WALK_RETRY_MS = 3 * 1000;
 
@@ -108,6 +114,7 @@ function freshCaveRun() {
     pickedAt: 0,
     votedAt: 0,
     walkedAt: 0,
+    steppedAt: 0,
   };
 }
 
@@ -231,15 +238,17 @@ async function enterCave(resuming) {
 }
 
 /**
- * Whether this is one of the room's cast, who stand around as monsters do.
+ * Whether the room's cast lists this one as a bystander. They stand around as
+ * monsters do, and the encounter says which of them took a side.
  * @param {object} entity
  * @returns {boolean}
  */
-function isCaveSceneMember(entity) {
+function isCaveBystander(entity) {
   return (character.cave?.choice?.scene ?? []).some(
     (person) =>
-      `${person.id}` === `${entity.id}` ||
-      (person.name && person.name === entity.name),
+      person.side === "neutral" &&
+      (`${person.id}` === `${entity.id}` ||
+        (person.name && person.name === entity.name)),
   );
 }
 
@@ -254,7 +263,7 @@ function isCaveMobWorthHitting(entity) {
     !entity.dead &&
     // The cave's people are monsters to the client — its merchant included
     !entity.cave?.citizen &&
-    !isCaveSceneMember(entity) &&
+    !isCaveBystander(entity) &&
     !CAVE_MOBS_TO_LEAVE.includes(entity.mtype) &&
     (entity.level ?? 0) <= caveMaxMobLevel
   );
@@ -603,6 +612,20 @@ async function descendCaveFloor(door) {
 }
 
 /**
+ * Steps toward a target out of reach. A farm spot puts the party on top of its
+ * spawn; an objective marker does not, so nothing else here closes the gap.
+ * @param {object} target
+ */
+function approachCaveTarget(target) {
+  if (smart.moving || isAdvanceSmartMoving) return;
+  if (Date.now() - caveRun.steppedAt < CAVE_STEP_MS) return;
+  if (distance(character, target) <= character.range * CAVE_REACH_MARGIN) return;
+
+  caveRun.steppedAt = Date.now();
+  moveTowardDestination(target);
+}
+
+/**
  * Walks to that destination, and through it when it is the way down.
  * @returns {Promise<void>}
  */
@@ -695,8 +718,18 @@ async function useCaveStrategy() {
       await buyFromCaveShop(character.cave.choice);
     }
 
-    // A forced vote stops the cave's own clock
-    if (character.cave.paused) return travelling();
+    // A forced vote stops the cave's own clock, and every action it refuses
+    if (character.cave.paused) {
+      caveLog("paused", {
+        choice: character.cave.choice?.id,
+        resolved: Boolean(character.cave.choice?.resolved),
+        votes: character.cave.choice?.votes,
+        in: Math.round((character.cave.choice?.deadline - Date.now()) / 1000),
+      });
+
+      // Still ours: the chain below would walk us out of a run we are mid-way
+      return travelling();
+    }
 
     raiseReflectionForDarkMage();
     talkToCaveTraveler();
@@ -704,6 +737,7 @@ async function useCaveStrategy() {
     const target = getCaveTarget();
     if (target) {
       changeToNormalStrategies();
+      approachCaveTarget(target);
       return engage(target);
     }
 

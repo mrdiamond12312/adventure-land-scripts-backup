@@ -1021,7 +1021,13 @@ function runSkillLoop({
       const isMovingControlled =
         (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
 
-      if (!character.rip && (whileMoving || !isMovingControlled) && canUse())
+      // A paused cave refuses every action, and the loops would just keep asking
+      if (
+        !character.rip &&
+        !character.cave?.paused &&
+        (whileMoving || !isMovingControlled) &&
+        canUse()
+      )
         await withTimeout(cast(), timeoutMs);
     } catch (e) {
       console.log(`[skillLoop:${skill}]`, e);
