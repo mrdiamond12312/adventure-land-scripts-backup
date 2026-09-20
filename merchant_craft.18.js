@@ -354,6 +354,12 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     )
     .every(Boolean);
 
+  // A recipe that cannot fire must stop holding its flat ingredients: the
+  // levelled path releases its own, this one used to hold them for good
+  if (!isEnoughIngredients)
+    for (const [, name, level] of G.craft[item].items)
+      if (!level) releaseCraftLevel(name, 0);
+
   // Runs even when the craft can't fire yet — the climb needs the base items now
   if (targetBuy.length) {
     await Promise.all(targetBuy.map((id) => buy(id).catch(() => {})));
