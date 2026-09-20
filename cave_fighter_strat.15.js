@@ -1,5 +1,8 @@
 // Cave of Many Dreams — the fighter's highest priority strategy.
 
+/** The realm holding the daily — a run started anywhere else is not ours */
+const CAVE_HOME_REALM = "USII";
+
 /** Dorr, at the vine-covered doorway */
 const DORR_SPOT = { map: "main", x: 816, y: 1200 };
 
@@ -129,11 +132,14 @@ function isInCave() {
 }
 
 /**
- * Whether this realm is ours — a character that never hops is always home.
+ * Whether this realm is ours. A run belongs to the realm holding it and a hop
+ * would end it, so a realm we cannot read counts as away.
  * @returns {boolean}
  */
 function isHomeRealm() {
-  return typeof isAtHomeServer !== "function" || isAtHomeServer();
+  if (typeof server === "undefined") return false;
+
+  return `${server.region}${server.id}` === CAVE_HOME_REALM;
 }
 
 /**
@@ -225,6 +231,8 @@ function isCaveMobWorthHitting(entity) {
   return (
     entity.type === "monster" &&
     !entity.dead &&
+    // The cave's people are monsters to the client — its merchant included
+    !entity.cave?.citizen &&
     !CAVE_MOBS_TO_LEAVE.includes(entity.mtype) &&
     (entity.level ?? 0) <= caveMaxMobLevel
   );
@@ -307,7 +315,9 @@ function getCaveTarget() {
  * @returns {object|undefined}
  */
 function pickCaveOption(choice) {
-  const offered = (choice.options ?? []).filter((option) => !option.unavailable);
+  const offered = (choice.options ?? []).filter(
+    (option) => !option.unavailable,
+  );
 
   // Walking away beats a wolf pack, so this one bends for nothing
   const allowed = offered.filter(
@@ -496,7 +506,7 @@ function getCaveDestination() {
 
   const picked = required.length
     ? getClosestCaveDestination(required)
-    : (down ?? getClosestCaveDestination(pending));
+    : down ?? getClosestCaveDestination(pending);
 
   caveRun.pickedFor = key;
   caveRun.pickedAt = Date.now();
@@ -630,7 +640,13 @@ async function useCaveStrategy() {
   }
 
   // The daily resets on our own realm, and a hop would end the run
-  if (!isHomeRealm()) return caveLog("away from home realm");
+  if (!isHomeRealm())
+    return caveLog("away from home realm", {
+      here:
+        typeof server === "undefined"
+          ? undefined
+          : `${server.region}${server.id}`,
+    });
 
   const visit = await getCaveVisit();
   const resuming = canResumeCaveRun(visit);

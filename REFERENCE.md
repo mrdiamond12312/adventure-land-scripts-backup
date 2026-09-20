@@ -1697,3 +1697,24 @@ the graph has no route to.
 That is a path query per candidate, on a loop that idles at ~1ms per tick, so the pick is cached for
 `CAVE_DESTINATION_TTL_MS`. Its key carries `caveState.preparedFor` alongside the pending objective
 ids: a pick made before the floor's rebuild measured straight lines, and must not outlive it.
+
+### The realm guard was inert, and now names its realm outright (2026-09-21)
+
+`isHomeRealm` used to read `typeof isAtHomeServer !== "function" || isAtHomeServer()`, so a client
+that never loaded `server_hop_utilities.25.js` was "always home". That module only loads for a
+character `enabled` in caracALconfig — which no fighter is — so the guard passed unconditionally for
+exactly the characters it was written for, and a party sitting on a foreign realm would still walk to
+Dorr and spend a visit there.
+
+The check is now `CAVE_HOME_REALM`, a literal at the top of the file, against `server.region` +
+`server.id`. Deriving it was the wrong shape: `HOME_SERVER` in slot 25 is a single global that is
+unloaded for every fighter, and `CODE_SLOTS[].homeServer` is a per-character roster value that drifts
+from wherever the runner actually launches them — so both could disagree with the realm the daily is
+on. One editable constant says which realm the cave belongs to. An unreadable `server` counts as away:
+a run belongs to the realm holding it, so guessing wrong spends the daily on the wrong server.
+
+### The cave's people are monsters to the client
+
+Its citizens — the one-item merchant among them — arrive in `parent.entities` as `type: "monster"`,
+so `isCaveMobWorthHitting` excludes `entity.cave?.citizen` outright. `CAVE_MOBS_TO_LEAVE` cannot do
+this job: it keys on `mtype`, and an encounter's cast is not a monster type.
