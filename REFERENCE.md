@@ -1680,6 +1680,12 @@ The tick calls this every pass, but the comparison is an id, so it rebuilds once
 key gates the walk: pathing before the rebuild would not merely fail, it would return a plausible
 path through the last floor's walls.
 
+`ALPathfinder.prepare` keys geometry by *map name*, while a floor's arrives under its instance, so
+the rebuild copies it onto `G.geometry[character.map]` when nothing is there. Without that the graph
+builds the floor with no walls at all, which reads as "prepared" and then paths through everything.
+Both holds — no geometry yet, and prepared-for-another-floor — log the ids they compared, because
+from the outside the two look identical: a party standing still.
+
 ### Picking a destination: depth over farms, path over line (2026-09-21)
 
 `getCaveDestination` used to fall back from the required objectives to *all* pending ones, and only

@@ -49,6 +49,9 @@ const CAVE_BUY_ATTEMPTS = 6;
 /** Refusals that cost no attempt, because the next chest settles them */
 const CAVE_BUY_RETRY_REASONS = ["gold_not_enough"];
 
+/** Long enough for a vote to land before the same one is cast again */
+const CAVE_VOTE_RETRY_MS = 2 * 1000;
+
 /** Chatter is free, but not every tick */
 const CAVE_TALK_INTERVAL_MS = 10 * 1000;
 
@@ -100,6 +103,7 @@ function freshCaveRun() {
     picked: undefined,
     pickedFor: "",
     pickedAt: 0,
+    votedAt: 0,
   };
 }
 
@@ -347,14 +351,25 @@ function pickCaveOption(choice) {
  */
 async function voteOnCaveChoice(choice) {
   if (!choice || choice.resolved || choice.id === caveRun.choiceId) return;
+  if (Date.now() - caveRun.votedAt < CAVE_VOTE_RETRY_MS) return;
 
   const option = pickCaveOption(choice);
   if (!option) return;
 
-  caveRun.choiceId = choice.id;
-  await cave_reply(choice.id, option.id).catch((error) =>
-    console.warn("Cave vote refused", error),
-  );
+  caveRun.votedAt = Date.now();
+
+  // Only a vote the cave took counts as cast, or a refusal is never retried
+  await cave_reply(choice.id, option.id)
+    .then(() => {
+      caveRun.choiceId = choice.id;
+    })
+    .catch((error) =>
+      caveLog("vote refused", {
+        id: choice.id,
+        option: option.id,
+        why: error?.reason ?? error?.message ?? String(error),
+      }),
+    );
 }
 
 /**
@@ -516,15 +531,23 @@ function getCaveDestination() {
 }
 
 /**
+ * This floor's walls, which land under the instance holding the run.
+ * @returns {object|undefined}
+ */
+function getCaveGeometry() {
+  return parent.G.geometry[character.in] ?? parent.G.geometry[character.map];
+}
+
+/**
  * The instance the graph would be built from, once G can describe it. A floor's
- * geometry lands under its instance id, a moment after the map itself.
+ * geometry lands a moment after the map itself.
  * @returns {string|undefined} undefined until this floor is describable
  */
 function caveGraphInstance() {
   const instance = character.in;
   if (!instance) return undefined;
   if (!parent.G.maps[character.map]) return undefined;
-  if (!parent.G.geometry[instance]) return undefined;
+  if (!getCaveGeometry()) return undefined;
 
   return instance;
 }
@@ -534,10 +557,19 @@ function refreshCavePathfinder() {
   if (typeof preparePathfinder !== "function") return;
 
   const instance = caveGraphInstance();
-  if (instance === undefined) return caveLog("waiting on floor geometry");
+  if (instance === undefined)
+    return caveLog("waiting on floor geometry", {
+      in: character.in,
+      map: character.map,
+    });
+
   if (caveState.preparedFor === instance) return;
 
-  caveLog("rebuilding pathfinder", { instance });
+  // prepare() reads geometry by map name, and a floor's arrives under its own
+  if (!parent.G.geometry[character.map])
+    parent.G.geometry[character.map] = getCaveGeometry();
+
+  caveLog("rebuilding pathfinder", { instance, map: character.map });
   preparePathfinder();
   caveState.preparedFor = instance;
 }
@@ -565,13 +597,21 @@ async function walkToCaveDestination() {
   if (distance(character, destination) > CAVE_ARRIVAL_SLACK) {
     // Until this floor's geometry lands, the graph still describes the last one
     if (caveState.preparedFor !== character.in)
-      return caveLog("holding — floor not pathable yet");
+      return caveLog("holding — floor not pathable yet", {
+        in: character.in,
+        preparedFor: caveState.preparedFor,
+      });
 
     // Same-map only: the next floor is not in G until we are standing in it
     await advanceSmartMove(
       { map: character.map, x: destination.x, y: destination.y },
       { useScare: true, useTown: false },
-    ).catch((e) => console.warn(e));
+    ).catch((error) =>
+      caveLog("walk refused", {
+        to: destination.name ?? destination.id,
+        why: error?.message ?? String(error),
+      }),
+    );
     return;
   }
 
