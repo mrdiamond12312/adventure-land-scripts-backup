@@ -34,6 +34,9 @@ const CAVE_ROGUE_WAIT = "watch";
 /** How long a destination pick holds, so the path queries stay off the tick */
 const CAVE_DESTINATION_TTL_MS = 1000;
 
+/** How long a refused walk waits before the same destination is tried again */
+const CAVE_WALK_RETRY_MS = 3 * 1000;
+
 /** Standing this close to an objective counts as being on it */
 const CAVE_ARRIVAL_SLACK = 120;
 
@@ -104,6 +107,7 @@ function freshCaveRun() {
     pickedFor: "",
     pickedAt: 0,
     votedAt: 0,
+    walkedAt: 0,
   };
 }
 
@@ -609,6 +613,10 @@ async function walkToCaveDestination() {
   if (!destination) return;
 
   if (distance(character, destination) > CAVE_ARRIVAL_SLACK) {
+    // A floor the graph cannot read refuses instantly, and each refusal stops
+    // the character — at a tick this fast that alone reads as a flood
+    if (Date.now() - caveRun.walkedAt < CAVE_WALK_RETRY_MS) return;
+
     // Until this floor's geometry lands, the graph still describes the last one
     if (caveState.preparedFor !== character.in)
       return caveLog("holding — floor not pathable yet", {
@@ -617,14 +625,20 @@ async function walkToCaveDestination() {
       });
 
     // Same-map only: the next floor is not in G until we are standing in it
-    await advanceSmartMove(
-      { map: character.map, x: destination.x, y: destination.y },
-      { useScare: true, useTown: false },
-    ).catch((error) =>
-      caveLog("walk refused", {
-        to: destination.name ?? destination.id,
-        why: error?.message ?? String(error),
-      }),
+    const to = { map: character.map, x: destination.x, y: destination.y };
+
+    caveRun.walkedAt = Date.now();
+
+    await advanceSmartMove(to, { useScare: true, useTown: false }).catch(
+      async (error) => {
+        caveLog("walk refused", {
+          to: destination.name ?? destination.id,
+          why: error?.message ?? String(error),
+        });
+
+        // The client walks this floor even where our own graph cannot
+        await smart_move(to).catch(() => undefined);
+      },
     );
     return;
   }

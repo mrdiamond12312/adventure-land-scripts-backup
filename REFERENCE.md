@@ -1724,3 +1724,19 @@ a run belongs to the realm holding it, so guessing wrong spends the daily on the
 Its citizens — the one-item merchant among them — arrive in `parent.entities` as `type: "monster"`,
 so `isCaveMobWorthHitting` excludes `entity.cave?.citizen` outright. `CAVE_MOBS_TO_LEAVE` cannot do
 this job: it keys on `mtype`, and an encounter's cast is not a monster type.
+
+### A refused walk is a socket flood, not a no-op (debugged 2026-09-21)
+
+`smartMove` with `useTown: false` and no path does its cleanup and throws, synchronously — and
+`cleanUp` ends with `stop()`. The cave strategy caught the throw and re-issued on the next tick, and
+that tick is ~2ms whenever there is nothing to attack (`getLoopInterval` floors at 1ms once attack is
+off cooldown), so one unroutable objective became hundreds of `stop()` emits a second and the client
+was dropped. Sessions 127 through 142 inside 60ms is what it looks like in the log.
+
+So a refused walk now waits `CAVE_WALK_RETRY_MS` before the same destination is tried again, and the
+refusal falls back to the native `smart_move`, whose pathing reads the generated floor even when
+`ALPathfinder`'s graph of it comes back empty. The two per-call `console.warn`s in `smartMove` moved
+behind `SMART_MOVE_CONFIG.LOOP_DEBUG`, since at that tick rate they were most of the log.
+
+The graph coming back empty for a `zone_*` map is the open question underneath this — the fallback
+makes the run survive it, it does not explain it.

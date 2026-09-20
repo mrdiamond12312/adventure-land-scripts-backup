@@ -50,7 +50,8 @@ class StrategicSmartMove {
 
   /** Rebuilds the graph from whatever G currently holds */
   preparePathfinder() {
-    this.pathfinder.prepare(G, ["bank_u"]);
+    // parent.G is the live game data; the script's own G can be a stale realm
+    this.pathfinder.prepare(parent.G, ["bank_u"]);
     this.pathfinder.clear();
     this.pathfinder.addCheatPath("winterland", 721, 277, 737, 352);
   }
@@ -491,7 +492,7 @@ class StrategicSmartMove {
       this.cancelTown();
     }
 
-    console.warn(toPosition);
+    if (SMART_MOVE_CONFIG.LOOP_DEBUG) console.warn(toPosition);
 
     if (!can_walk(character)) return;
 
@@ -828,7 +829,8 @@ class StrategicSmartMove {
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
     stop();
-    console.warn("Clean up called for session", this.smartMoveSession);
+    if (SMART_MOVE_CONFIG.LOOP_DEBUG)
+      console.warn("Clean up called for session", this.smartMoveSession);
   }
 }
 
