@@ -838,3 +838,5 @@ const getMonsterSpawns =
   strategicSmartMove.getMonsterSpawns.bind(strategicSmartMove);
 const preparePathfinder =
   strategicSmartMove.preparePathfinder.bind(strategicSmartMove);
+const pathfinderGetPath =
+  strategicSmartMove.pathfinderGetPath.bind(strategicSmartMove);

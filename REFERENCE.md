@@ -1679,3 +1679,21 @@ the map name, so the same key covers the rebuild that drops the cave floors on t
 The tick calls this every pass, but the comparison is an id, so it rebuilds once per floor. The same
 key gates the walk: pathing before the rebuild would not merely fail, it would return a plausible
 path through the last floor's walls.
+
+### Picking a destination: depth over farms, path over line (2026-09-21)
+
+`getCaveDestination` used to fall back from the required objectives to *all* pending ones, and only
+offered the down-door when nothing was pending at all. A floor's optional `farm` rooms therefore
+outranked the stairs, and since the run is on a server clock (`visit.resume.remaining_ms`), a party
+that cleared the required objectives would spend the rest of the run on roosts. The door now wins as
+soon as the required list empties; farms are what is left when there is no unlocked door.
+
+The shortlist is ordered by `pathfinderGetPath` legs summed, not by `distance`. On a walled floor the
+straight line is a bad proxy — a room one wall over reads as near, one across the floor as far. The
+sort falls back to `distance` when the graph cannot answer: `pathfinderGetPath` is undefined in the
+native branch (only caracAL loads `strategic_smart_move.21.js`), and returns null for a destination
+the graph has no route to.
+
+That is a path query per candidate, on a loop that idles at ~1ms per tick, so the pick is cached for
+`CAVE_DESTINATION_TTL_MS`. Its key carries `caveState.preparedFor` alongside the pending objective
+ids: a pick made before the floor's rebuild measured straight lines, and must not outlive it.

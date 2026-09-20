@@ -28,6 +28,9 @@ const CAVE_OPTIONS_TO_REFUSE = [
 /** The rogue encounter's wait-and-see option, by its own id */
 const CAVE_ROGUE_WAIT = "watch";
 
+/** How long a destination pick holds, so the path queries stay off the tick */
+const CAVE_DESTINATION_TTL_MS = 1000;
+
 /** Standing this close to an objective counts as being on it */
 const CAVE_ARRIVAL_SLACK = 120;
 
@@ -64,11 +67,11 @@ const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
 /** Narrates each decision; leave off outside a debugging run */
 var CAVE_DEBUG = true;
 
-/** The last line printed, so a per-tick decision speaks only when it changes */
-let lastCaveLog = "";
+/** The last line printed per stage — two stages alternating are still one each */
+const lastCaveLogs = new Map();
 
 /**
- * Prints a decision once, until a different one comes along.
+ * Prints a decision once, until that stage has something else to say.
  * @param {string} stage
  * @param {object} [detail]
  */
@@ -77,15 +80,24 @@ function caveLog(stage, detail) {
 
   const line =
     detail === undefined ? stage : `${stage} ${JSON.stringify(detail)}`;
-  if (line === lastCaveLog) return;
+  if (lastCaveLogs.get(stage) === line) return;
 
-  lastCaveLog = line;
+  lastCaveLogs.set(stage, line);
   console.warn(`[cave] ${line}`);
 }
 
 /** @returns {object} a run's blank slate */
 function freshCaveRun() {
-  return { bought: [], attempts: {}, choiceId: undefined, buyAt: 0, talkAt: 0 };
+  return {
+    settled: [],
+    attempts: {},
+    choiceId: undefined,
+    buyAt: 0,
+    talkAt: 0,
+    picked: undefined,
+    pickedFor: "",
+    pickedAt: 0,
+  };
 }
 
 /** Room and choice ids are only unique within the run that issued them */
@@ -360,10 +372,13 @@ async function buyFromCaveShop(choice) {
 
   const shop = choice?.shop;
   const room = shop?.room;
-  if (room === undefined || caveRun.bought.includes(room)) return;
+  if (room === undefined || caveRun.settled.includes(room)) return;
   if (shop.sold) return caveLog("shop sold out", shop.name);
   if (shop.nearby === false) return;
-  if (isCaveItemSkipped(shop.name)) return caveLog("shop skipped", shop.name);
+  if (isCaveItemSkipped(shop.name)) {
+    caveRun.settled.push(room);
+    return caveLog("shop skipped", shop.name);
+  }
   if ((caveRun.attempts[room] ?? 0) >= CAVE_BUY_ATTEMPTS) return;
   if (Date.now() - caveRun.buyAt < CAVE_BUY_RETRY_MS) return;
 
@@ -373,7 +388,7 @@ async function buyFromCaveShop(choice) {
   caveLog("buying", { name: shop.name, price: shop.price });
 
   await cave_buy(room)
-    .then(() => caveRun.bought.push(room))
+    .then(() => caveRun.settled.push(room))
     .catch((error) => {
       // A short purse fills again from the next chest, so it costs no attempt
       if (CAVE_BUY_RETRY_REASONS.includes(error?.reason)) {
@@ -403,6 +418,54 @@ async function talkToCaveTraveler() {
 }
 
 /**
+ * What the walk to a point costs, summed over the path's own legs. Legs that
+ * change map skip ground rather than covering it, so they cost nothing.
+ * @param {object} destination
+ * @returns {number} the straight line when no graph can answer
+ */
+function getCaveWalkCost(destination) {
+  if (typeof pathfinderGetPath !== "function")
+    return distance(character, destination);
+
+  let path;
+  try {
+    path = pathfinderGetPath({
+      map: character.map,
+      x: destination.x,
+      y: destination.y,
+    });
+  } catch (error) {
+    path = undefined;
+  }
+
+  if (!path?.length) return distance(character, destination);
+
+  let cost = 0;
+  let from = character;
+
+  for (const leg of path) {
+    if (leg.map === from.map) cost += distance(from, leg);
+    from = leg;
+  }
+
+  return cost;
+}
+
+/**
+ * The closest of these by the walk it takes, not by the line to it — a room one
+ * wall over is nearer than the line says, and one across the floor is farther.
+ * @param {object[]} destinations
+ * @returns {object|undefined}
+ */
+function getClosestCaveDestination(destinations) {
+  if (destinations.length < 2) return destinations[0];
+
+  return destinations
+    .map((destination) => ({ destination, cost: getCaveWalkCost(destination) }))
+    .sort((lhs, rhs) => lhs.cost - rhs.cost)[0].destination;
+}
+
+/**
  * The next thing on this floor worth standing on, else the way down.
  * @returns {object|undefined}
  */
@@ -412,16 +475,34 @@ function getCaveDestination() {
     (objective) => !objective.done && objective.floor === cave.floor,
   );
 
+  // A pick costs a path query per candidate, and it holds until one is done.
+  // The graph is in the key: a pick made before the rebuild measured lines
+  const key = [
+    cave.floor,
+    caveState.preparedFor,
+    ...pending.map((objective) => objective.id),
+  ].join();
+  if (
+    caveRun.pickedFor === key &&
+    Date.now() - caveRun.pickedAt < CAVE_DESTINATION_TTL_MS
+  )
+    return caveRun.picked;
+
   // Required ones gate the stairs, so the optional rooms wait
   const required = pending.filter((objective) => objective.required);
-  const shortlist = required.length ? required : pending;
 
-  if (shortlist.length)
-    return shortlist.sort(
-      (lhs, rhs) => distance(character, lhs) - distance(character, rhs),
-    )[0];
+  // The run is on a clock, so depth outranks the farm rooms it would spend
+  const down = (cave.doors ?? []).find((door) => door.down && !door.locked);
 
-  return (cave.doors ?? []).find((door) => door.down && !door.locked);
+  const picked = required.length
+    ? getClosestCaveDestination(required)
+    : (down ?? getClosestCaveDestination(pending));
+
+  caveRun.pickedFor = key;
+  caveRun.pickedAt = Date.now();
+  caveRun.picked = picked;
+
+  return picked;
 }
 
 /**
