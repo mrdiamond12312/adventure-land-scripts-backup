@@ -49,6 +49,7 @@ async function fight(target, isMovingControlled = false) {
     const mobsInSearchRange = Object.values(parent.entities).filter(
       (entity) =>
         entity.type === "monster" &&
+        !isCaveFriendly(entity) &&
         !entity.dead &&
         inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
     );
@@ -173,6 +174,7 @@ function getCurseTarget() {
       .filter(
         (mob) =>
           mob.type === "monster" &&
+          !isCaveFriendly(mob) &&
           !mob.dead &&
           !mob.s.curse &&
           is_in_range(mob, "curse") &&
@@ -256,6 +258,7 @@ function getZapTarget() {
   const targetsInRange = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
+      !isCaveFriendly(entity) &&
       is_in_range(entity, "zapperzap") &&
       !entity["1hp"],
   );

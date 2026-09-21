@@ -46,6 +46,7 @@ async function fight(target) {
     .filter(
       (entity) =>
         entity.type === "monster" &&
+        !isCaveFriendly(entity) &&
         (party.has(entity.target) ||
           (entity.cooperative && entity.target)) &&
         !MELEE_IGNORE_LIST.includes(entity.mtype) &&

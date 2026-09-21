@@ -147,6 +147,7 @@ async function fight(target) {
     .filter((entity) => {
       return (
         entity.type === "monster" &&
+        !isCaveFriendly(entity) &&
         !entity.s?.fullguardx &&
         !MELEE_IGNORE_LIST.includes(entity.mtype) &&
         entity.target &&
@@ -278,6 +279,7 @@ function getTauntTarget() {
     .filter(
       (entity) =>
         entity.type === "monster" &&
+        !isCaveFriendly(entity) &&
         myCharacters.some(
           (ally) => ally !== character.name && entity.target === ally,
         ) &&

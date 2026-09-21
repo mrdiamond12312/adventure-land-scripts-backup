@@ -42,6 +42,7 @@ async function fight(target) {
   const aggroedMobs = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
+      !isCaveFriendly(entity) &&
       entity.target && // Must be aggroed
       !entity.dead &&
       !entity.s?.fullguardx &&

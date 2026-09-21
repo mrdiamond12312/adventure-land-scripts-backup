@@ -78,6 +78,7 @@ function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
   return Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
+      !isCaveFriendly(entity) &&
       distance(target, entity) < blastRadius &&
       entity.target,
   );
@@ -191,6 +192,7 @@ function hasUntargetedMonsterAround(
   return Object.values(parent.entities).some(
     (entity) =>
       entity.type === "monster" &&
+      !isCaveFriendly(entity) &&
       !entity.target &&
       distance(target, entity) < blastRadius &&
       counts(entity),
@@ -1557,6 +1559,7 @@ async function warriorCleave(strategyName) {
   const mobsList = Object.values(parent.entities).filter(
     (mob) =>
       mob.type === "monster" &&
+      !isCaveFriendly(mob) &&
       distance(mob, character) < G.skills["cleave"].range + character.xrange,
   );
 

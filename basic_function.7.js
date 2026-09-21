@@ -118,6 +118,15 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 // leave standing. Every skill aimed at one comes back `friendly_target`
 const CAVE_SIDES_TO_LEAVE = ["neutral", "ally", "victim"];
 
+/**
+ * Whether a cave run forbids swinging at this one. False outside a run.
+ * @param {object} entity
+ * @returns {boolean}
+ */
+function isCaveFriendly(entity) {
+  return CAVE_SIDES_TO_LEAVE.includes(entity?.cave?.side);
+}
+
 // localStorage's Scout info key
 const SCOUT_LS_KEY = "scoutInfo";
 
@@ -351,11 +360,6 @@ function changeToPullStrategies() {
 function changeToNormalStrategies() {
   currentStrategy =
     typeof useNormalStrategy === "function" ? useNormalStrategy : asyncNoop;
-}
-
-/** For stretches where the strategy loop must not act at all, e.g. a cave walk */
-function changeToNoStrategy() {
-  currentStrategy = asyncNoop;
 }
 
 // Debug stucking
@@ -919,6 +923,7 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
+            !isCaveFriendly(entity) &&
             entity.target &&
             party.has(entity.target) &&
             entity.target !== character.name &&
@@ -939,6 +944,7 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
+            !isCaveFriendly(entity) &&
             entity.target &&
             party.has(entity.target) &&
             distance(entity, character) < character.range + character.xrange,
