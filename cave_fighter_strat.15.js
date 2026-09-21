@@ -31,6 +31,12 @@ const CAVE_OPTIONS_TO_REFUSE = [
 /** The rogue encounter's wait-and-see option, by its own id */
 const CAVE_ROGUE_WAIT = "watch";
 
+/**
+ * Options that pay nothing without a supply in hand, and declare no `needs`, so
+ * the server offers them either way. Every other supply option says so itself.
+ */
+const CAVE_OPTIONS_NEEDING_SUPPLY = { e47_0: "lamp" };
+
 /** Long enough for the shop to answer once we are standing in it */
 const CAVE_SHOP_WAIT_MS = 15 * 1000;
 
@@ -355,10 +361,15 @@ function pickCaveOption(choice) {
     (option) => !option.unavailable,
   );
 
+  const supplies = character.cave?.supplies ?? [];
+
   // Walking away beats a wolf pack, so this one bends for nothing
-  const allowed = offered.filter(
-    (option) => !CAVE_OPTIONS_TO_REFUSE.includes(option.id),
-  );
+  const allowed = offered.filter((option) => {
+    if (CAVE_OPTIONS_TO_REFUSE.includes(option.id)) return false;
+
+    const needed = CAVE_OPTIONS_NEEDING_SUPPLY[option.id];
+    return !needed || supplies.includes(needed);
+  });
   if (!allowed.length) return undefined;
 
   // Amber outlives the run, so nothing in here is worth paying it with
