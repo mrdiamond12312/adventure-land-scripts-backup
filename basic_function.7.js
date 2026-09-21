@@ -1591,8 +1591,42 @@ const POTION_REQUEST_AT = 200;
 
 const LOOTING_LIMIT = 15;
 var isLooting = false;
+
+/** How far cave_open_chest reaches */
+const CAVE_LOOT_RANGE = 400;
+
+/**
+ * Takes every cave chest in reach.
+ * @param {object[]} chests
+ * @returns {Promise<void>}
+ */
+async function lootCaveChests(chests) {
+  if (isLooting || character.rip || character.cave.paused) return;
+
+  const reachable = chests.filter(
+    (chest) =>
+      chest.map === character.map &&
+      distance(chest, character) <= CAVE_LOOT_RANGE,
+  );
+  if (!reachable.length) return;
+
+  isLooting = true;
+
+  try {
+    await withTimeout(
+      Promise.allSettled(reachable.map((chest) => parent.open_chest(chest.id))),
+      2500,
+    );
+  } finally {
+    isLooting = false;
+  }
+}
+
 async function midasLooting(forced = false) {
   const chests = Object.values(parent.chests);
+
+  // A cave chest pays the shared purse at face value, so no gear changes it
+  if (character.cave) return lootCaveChests(chests);
 
   // Early exit: do NOT touch isLooting here
   if (

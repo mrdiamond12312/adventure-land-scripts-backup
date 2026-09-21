@@ -1,5 +1,7 @@
 // Cave of Many Dreams — the fighter's highest priority strategy.
 
+// The daily, and the door it is behind
+
 /** The realm holding the daily */
 const CAVE_HOME_REALM = "USII";
 
@@ -9,11 +11,27 @@ const DORR_SPOT = { map: "main", x: 816, y: 1200 };
 /** Everyone has to be this close to Dorr to go in */
 const DORR_SLACK = 160;
 
+/** How long a daily-visit answer is trusted */
+const CAVE_VISIT_TTL_MS = 60 * 1000;
+
+/** Long enough for an entry to land before it is asked for again */
+const CAVE_ENTER_COOLDOWN_MS = 10 * 1000;
+
+/** A merchant hop drags the whole party out, so a near window outranks a run */
+const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
+
+/** Stands in for the run's own deadline */
+const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
+
+// What we swing at
+
 /** The Dark Mage is immune, and the rogue only pays out if monsters finish him */
 const CAVE_MOBS_TO_LEAVE = ["cave_darkmage", "cave_rogue"];
 
 /** Levels land at spawn, so a ceiling is the only way to duck the wolf packs */
 var caveMaxMobLevel = Infinity;
+
+// Answering a room
 
 /** Options that put cave_wolf on the field — e10_0 and e12_2 call in six */
 const CAVE_OPTIONS_TO_REFUSE = [
@@ -31,26 +49,25 @@ const CAVE_OPTIONS_TO_REFUSE = [
 /** The rogue encounter's wait-and-see option, by its own id */
 const CAVE_ROGUE_WAIT = "watch";
 
-/**
- * Options that pay nothing without a supply in hand, and declare no `needs`, so
- * the server offers them either way. Every other supply option says so itself.
- */
+/** Options that pay nothing without a supply they never declare */
 const CAVE_OPTIONS_NEEDING_SUPPLY = { e47_0: "lamp" };
 
-/** Long enough for the shop to answer once we are standing in it */
-const CAVE_SHOP_WAIT_MS = 15 * 1000;
+/** How often the choice loop looks, off the tick */
+const CAVE_CHOICE_INTERVAL_MS = 1000;
 
-/** How long a refused walk waits */
-const CAVE_WALK_RETRY_MS = 3 * 1000;
+/** Long enough for a vote to land */
+const CAVE_VOTE_RETRY_MS = 2 * 1000;
 
-/** High enough that no leg of a path is worth a town warp */
-const CAVE_PATHING_SPEED = 1_000_000;
+// The shop with one item
 
-/** Standing this close to an objective counts as being on it */
-const CAVE_ARRIVAL_SLACK = 120;
+/** Where the party's answered shops live */
+const CAVE_SHOPS_KEY = "caveShops";
 
 /** Town junk at cave prices — the broom alone is 80% of the purse */
 var CAVE_ITEMS_TO_SKIP = ["broom", "tshirt0", "tshirt1", "tshirt2"];
+
+/** Long enough for the shop to answer once we are standing in it */
+const CAVE_SHOP_WAIT_MS = 15 * 1000;
 
 /** Long enough for chest gold to land before the shop is asked again */
 const CAVE_BUY_RETRY_MS = 20 * 1000;
@@ -61,11 +78,7 @@ const CAVE_BUY_ATTEMPTS = 6;
 /** Refusals that cost no attempt, because the next chest settles them */
 const CAVE_BUY_RETRY_REASONS = ["gold_not_enough"];
 
-/** How often the choice loop looks, off the tick */
-const CAVE_CHOICE_INTERVAL_MS = 1000;
-
-/** Long enough for a vote to land */
-const CAVE_VOTE_RETRY_MS = 2 * 1000;
+// The cave's own people
 
 /** Chatter is free, but not every tick */
 const CAVE_TALK_INTERVAL_MS = 10 * 1000;
@@ -73,17 +86,16 @@ const CAVE_TALK_INTERVAL_MS = 10 * 1000;
 /** What cave_talk reaches */
 const CAVE_TALK_RANGE = 160;
 
-/** How long a daily-visit answer is trusted */
-const CAVE_VISIT_TTL_MS = 60 * 1000;
+// Getting around a floor
 
-/** Long enough for an entry to land before it is asked for again */
-const CAVE_ENTER_COOLDOWN_MS = 10 * 1000;
+/** Standing this close to an objective counts as being on it */
+const CAVE_ARRIVAL_SLACK = 120;
 
-/** A merchant hop drags the whole party out, so a near window outranks a run */
-const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
+/** How long a refused walk waits */
+const CAVE_WALK_RETRY_MS = 3 * 1000;
 
-/** Stands in for the run's own deadline */
-const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
+/** High enough that no leg of a path is worth a town warp */
+const CAVE_PATHING_SPEED = 1_000_000;
 
 /** Narrates each decision; leave off outside a debugging run */
 var CAVE_DEBUG = true;
@@ -107,6 +119,15 @@ function caveLog(stage, detail) {
   console.warn(`[cave] ${line}`);
 }
 
+/**
+ * What a refusal actually said, whichever shape it came back in.
+ * @param {object|Error} error
+ * @returns {string}
+ */
+function caveWhy(error) {
+  return error?.reason ?? error?.message ?? String(error);
+}
+
 /** @returns {object} a run's blank slate */
 function freshCaveRun() {
   return {
@@ -124,12 +145,8 @@ function freshCaveRun() {
 /** Room and choice ids are only unique within the run that issued them */
 let caveRun = freshCaveRun();
 
-/** Shop rooms the party has already dealt with, keyed by the run that issued them */
-const CAVE_SHOPS_KEY = "caveShops";
-
 /**
- * Shop rooms already answered, by anyone in the run. A shop sells its one item
- * to the party, not to each of us, so the answer belongs to all three.
+ * Shop rooms already answered, by anyone in the run.
  * @returns {string[]}
  */
 function getSettledCaveShops() {
@@ -147,6 +164,15 @@ function settleCaveShop(room) {
   if (rooms.includes(room)) return;
 
   set(CAVE_SHOPS_KEY, { run: character.cave?.run, rooms: [...rooms, room] });
+}
+
+/**
+ * Whether this objective is a shop room rather than a camp or an encounter.
+ * @param {object} objective
+ * @returns {boolean}
+ */
+function isCaveShopObjective(objective) {
+  return Boolean(objective?.id?.endsWith(":shop"));
 }
 
 /** Outlives any one run: the daily answer, the entry handshake, the run edge */
@@ -388,8 +414,7 @@ function pickCaveOption(choice) {
 }
 
 /**
- * Votes once per choice. A majority of the voters settles it, and the roll is
- * of accounts rather than characters.
+ * Votes once per choice, since a majority settles it.
  * @param {object} choice
  * @returns {Promise<void>}
  */
@@ -410,7 +435,7 @@ async function voteOnCaveChoice(choice) {
       caveLog("vote refused", {
         id: choice.id,
         option: option.id,
-        why: error?.reason ?? error?.message ?? String(error),
+        why: caveWhy(error),
       }),
     );
 }
@@ -448,8 +473,7 @@ async function buyFromCaveShop(choice) {
     settleCaveShop(room);
     return caveLog("shop skipped", shop.name);
   }
-  // The purse is shared and the server picks the recipient, so the one standing
-  // in the shop buys it, leader or not
+  // The purse is shared, so whoever stands in the shop buys
   if (shop.nearby === false) return;
   if ((caveRun.attempts[room] ?? 0) >= CAVE_BUY_ATTEMPTS) return;
   if (Date.now() - caveRun.buyAt < CAVE_BUY_RETRY_MS) return;
@@ -517,7 +541,7 @@ function getCaveDestination() {
   // Cave gold dies with the run, and the purse only fills once the floor is run
   const shop = pending.find(
     (objective) =>
-      objective.id.endsWith(":shop") &&
+      isCaveShopObjective(objective) &&
       !getSettledCaveShops().includes(objective.id),
   );
   if (shop) return shop;
@@ -542,7 +566,7 @@ async function descendCaveFloor(door) {
       door: door.id,
       spawn,
       away: Math.round(distance(character, door)),
-      why: error?.reason ?? error?.message ?? String(error),
+      why: caveWhy(error),
     }),
   );
 }
@@ -568,7 +592,7 @@ async function openCaveShop(objective) {
   await cave_talk(objective.id).catch((error) =>
     caveLog("shop would not open", {
       id: objective.id,
-      why: error?.reason ?? error?.message ?? String(error),
+      why: caveWhy(error),
     }),
   );
 }
@@ -592,8 +616,7 @@ async function walkToCaveDestination() {
 
     caveRun.walkedAt = Date.now();
 
-    // A port would land us in the mage's room, or on the mage's floor, and a
-    // town warp would drop us on the floor's spawn
+    // A run refuses both outright
     await advanceSmartMove(to, {
       useScare: true,
       useTown: false,
@@ -602,7 +625,7 @@ async function walkToCaveDestination() {
     }).catch(async (error) => {
       caveLog("walk refused", {
         to: destination.name ?? destination.id,
-        why: error?.message ?? String(error),
+        why: caveWhy(error),
       });
 
       // Native pathing reads floors our graph cannot
@@ -613,7 +636,7 @@ async function walkToCaveDestination() {
 
   if (destination.to) return descendCaveFloor(destination);
 
-  if (destination.id?.endsWith(":shop")) await openCaveShop(destination);
+  if (isCaveShopObjective(destination)) await openCaveShop(destination);
 }
 
 /**
@@ -713,8 +736,8 @@ async function useCaveStrategy() {
   if (distance(character, DORR_SPOT) > DORR_SLACK) {
     caveLog(resuming ? "walking back to Dorr" : "walking to Dorr");
     // A pulled train at the door is a party that cannot go in
-    changeToNoStrategy();
-    advanceSmartMove(DORR_SPOT);
+    changeToNormalStrategies();
+    await advanceSmartMove(DORR_SPOT);
     return travelling();
   }
 
