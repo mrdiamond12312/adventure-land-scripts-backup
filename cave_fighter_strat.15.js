@@ -531,17 +531,20 @@ async function walkToCaveDestination() {
 
     caveRun.walkedAt = Date.now();
 
-    await advanceSmartMove(to, { useScare: true, useTown: false }).catch(
-      async (error) => {
-        caveLog("walk refused", {
-          to: destination.name ?? destination.id,
-          why: error?.message ?? String(error),
-        });
+    // A port would land us in the mage's room, or on the mage's floor
+    await advanceSmartMove(to, {
+      useScare: true,
+      useTown: false,
+      useMagiport: false,
+    }).catch(async (error) => {
+      caveLog("walk refused", {
+        to: destination.name ?? destination.id,
+        why: error?.message ?? String(error),
+      });
 
-        // Native pathing reads floors our graph cannot
-        await smart_move(to).catch(() => undefined);
-      },
-    );
+      // Native pathing reads floors our graph cannot
+      await smart_move(to).catch(() => undefined);
+    });
     return;
   }
 
