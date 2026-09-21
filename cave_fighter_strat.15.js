@@ -12,9 +12,6 @@ const DORR_SLACK = 160;
 /** The Dark Mage is immune, and the rogue only pays out if monsters finish him */
 const CAVE_MOBS_TO_LEAVE = ["cave_darkmage", "cave_rogue"];
 
-/** Two the run refuses to let us damage, and one we are paid to leave standing */
-const CAVE_SIDES_TO_LEAVE = ["neutral", "ally", "victim"];
-
 /** Levels land at spawn, so a ceiling is the only way to duck the wolf packs */
 var caveMaxMobLevel = Infinity;
 
@@ -115,6 +112,7 @@ function freshCaveRun() {
     votedAt: 0,
     walkedAt: 0,
     shopAt: {},
+    shopTalkAt: 0,
   };
 }
 
@@ -504,15 +502,29 @@ async function descendCaveFloor(door) {
 }
 
 /**
- * Settles a shop that never answers while we stand in it.
+ * Opens the shop we are standing in, and settles one that never answers.
  * @param {object} objective
  */
-function waitOutCaveShop(objective) {
+async function openCaveShop(objective) {
   caveRun.shopAt[objective.id] ??= Date.now();
-  if (Date.now() - caveRun.shopAt[objective.id] < CAVE_SHOP_WAIT_MS) return;
 
-  caveRun.settled.push(objective.id);
-  caveLog("shop gave up", objective.id);
+  if (Date.now() - caveRun.shopAt[objective.id] >= CAVE_SHOP_WAIT_MS) {
+    caveRun.settled.push(objective.id);
+    return caveLog("shop gave up", objective.id);
+  }
+
+  // The offer only exists once the room's own vote has begun
+  if (character.cave?.choice?.shop?.room === objective.id) return;
+  if (Date.now() - caveRun.shopTalkAt < CAVE_VOTE_RETRY_MS) return;
+
+  caveRun.shopTalkAt = Date.now();
+
+  await cave_talk(objective.id).catch((error) =>
+    caveLog("shop would not open", {
+      id: objective.id,
+      why: error?.reason ?? error?.message ?? String(error),
+    }),
+  );
 }
 
 /**
@@ -555,7 +567,7 @@ async function walkToCaveDestination() {
 
   if (destination.to) return descendCaveFloor(destination);
 
-  if (destination.id?.endsWith(":shop")) waitOutCaveShop(destination);
+  if (destination.id?.endsWith(":shop")) await openCaveShop(destination);
 }
 
 /**

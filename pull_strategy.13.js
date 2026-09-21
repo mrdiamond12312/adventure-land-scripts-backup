@@ -9,7 +9,8 @@ async function usePullStrategies(target) {
       ? 1200
       : 0);
   const mobsList = Object.values(parent.entities).filter(
-    (mob) => mob.type === "monster",
+    (mob) =>
+      mob.type === "monster" && !CAVE_SIDES_TO_LEAVE.includes(mob.cave?.side),
   );
   const promises = [];
 

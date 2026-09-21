@@ -114,6 +114,10 @@ var max_att = 2000;
 // Ignore mob with high d-return
 const MELEE_IGNORE_LIST = ["porcupine"];
 
+// Cave sides the run refuses to let us damage, plus the one we are paid to
+// leave standing. Every skill aimed at one comes back `friendly_target`
+const CAVE_SIDES_TO_LEAVE = ["neutral", "ally", "victim"];
+
 // localStorage's Scout info key
 const SCOUT_LS_KEY = "scoutInfo";
 
