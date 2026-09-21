@@ -566,6 +566,9 @@ async function useCaveStrategy() {
     else {
       // The run is over for everyone, not just whoever spent the visit
       caveState.checkedAt = 0;
+
+      // Nothing further down the chain assigns one, so it cannot be left idle
+      changeToNormalStrategies();
     }
 
     // The merchant cannot see character.cave, so leave it a deadline it can read
@@ -581,6 +584,8 @@ async function useCaveStrategy() {
 
   if (inCave) {
     isPreparingCave = true;
+
+    changeToPullStrategies();
 
     caveLog("inside", {
       floor: character.cave.floor,
@@ -606,10 +611,7 @@ async function useCaveStrategy() {
     talkToCaveTraveler();
 
     const target = getCaveTarget();
-    if (target) {
-      changeToNormalStrategies();
-      return engage(target);
-    }
+    if (target) return engage(target);
 
     walkToCaveDestination();
 
@@ -644,7 +646,8 @@ async function useCaveStrategy() {
 
   if (distance(character, DORR_SPOT) > DORR_SLACK) {
     caveLog(resuming ? "walking back to Dorr" : "walking to Dorr");
-    changeToPullStrategies();
+    // A pulled train at the door is a party that cannot go in
+    changeToNoStrategy();
     advanceSmartMove(DORR_SPOT);
     return travelling();
   }

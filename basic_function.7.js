@@ -345,6 +345,11 @@ function changeToNormalStrategies() {
     typeof useNormalStrategy === "function" ? useNormalStrategy : asyncNoop;
 }
 
+/** For stretches where the strategy loop must not act at all, e.g. a cave walk */
+function changeToNoStrategy() {
+  currentStrategy = asyncNoop;
+}
+
 // Debug stucking
 var smartmoveDebug = false;
 
