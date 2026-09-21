@@ -1686,6 +1686,39 @@ alpathfinder's README always did it this way; `strategic_smart_move.21.js` did n
 The cave strategy used to carry its own version of this, keyed on `character.in` and gating the walk
 until the floor was prepared. It is gone: one mechanism in the move layer serves every caller.
 
+### `clear()` belongs before `prepare()`, not after (2026-09-21)
+
+`preparePathfinder` used to prepare, then clear, then add the cheat path. `clear()` drops the whole
+graph, so that order threw away the graph it had just built, every time, for every map — not only
+the generated floors where the symptom was first noticed. Measured against alpathfinder 0.6.0 and
+real `G` (version 17139), six rebuilds in a row: `prepare` then `clear` gives `main -> cave = null`
+each time, `clear` then `prepare` gives an eleven-node path each time.
+
+Clearing first is also what drops a floor of a finished run. `prepare` adds and replaces, it never
+removes, so a map that has left `G` stays in the graph until something clears it.
+
+### One malformed map traps the whole rebuild (2026-09-21)
+
+`prepare` wants `name`, `doors` and `spawns` on every entry in `G.maps`. A map missing any of the
+three aborts the call with a wasm `unreachable` trap that takes all 54 maps with it, not just the
+offender. `npcs` is optional despite every stock map carrying it.
+
+This is not hypothetical for a cave run. The client creates a `G.maps` entry for every floor of the
+run out of `bundle.manifest`, carrying `definition` alone, and the server's own `cave_snapshot`
+hedges with `(run.manifest?.[floor]?.definition.doors || [])` — so a manifest definition can arrive
+without `doors`. `_pathfinderView` therefore hands `prepare` a shallow copy with the three fields
+filled in, and leaves `parent.G` untouched. The stand-in for `spawns` is `[]` rather than a
+fabricated point: alpathfinder floods its walkable region out from the spawns, so an invented
+spawn would either sit in a wall or claim walkable ground that is not there. An empty one leaves the
+stub unwalkable, which is correct — a manifest stub has no geometry, so `refreshPathfinderFor`
+never prepares against it anyway, and arriving on that floor delivers a real definition.
+
+What `prepare` reads is narrower than it looks: `version`, `maps`, `geometry`; per map `name`,
+`doors`, `npcs`, `spawns`, `ignore` and `places`; per geometry `min_x`, `max_x`, `min_y`, `max_y`,
+`x_lines`, `y_lines`. It never reads `tiles`, `placements`, `groups` or `animations` — which is why
+the headless delivery emptying all four (`send_generated_maps`, for `no_graphics=1` sockets) costs
+the graph nothing. That was the first suspect and it was the wrong one.
+
 ### Picking a destination: depth over farms (2026-09-21)
 
 `getCaveDestination` used to fall back from the required objectives to *all* pending ones, and only
@@ -1719,6 +1752,26 @@ a run belongs to the realm holding it, so guessing wrong spends the daily on the
 Its citizens — the one-item merchant among them — arrive in `parent.entities` as `type: "monster"`,
 so `isCaveMobWorthHitting` excludes `entity.cave?.citizen` outright. `CAVE_MOBS_TO_LEAVE` cannot do
 this job: it keys on `mtype`, and an encounter's cast is not a monster type.
+
+### An ally we cannot damage stalls the run outright (2026-09-21)
+
+Every cave monster carries `entity.cave.side`. The server treats `neutral` and `ally` as non-hostile
+to players: `commence_attack` refuses the swing with `friendly_target`, and `cave_damage` returns 0
+for anything that gets past it. An ally has `700 * scale * depth` hp and no way to lose it.
+
+That is a deadlock, not waste. `getCaveTarget` returns the nearest hittable thing in the room, and
+`walkToCaveDestination` only runs on the tick where there is no target — so an undamageable target
+holds the strategy on that one tick forever. Helpers follow us between rooms (`cave_add_follower`),
+so the room-bounds filter does not shake one off, and seven options across the encounter table hand
+us one.
+
+The old guard read the room's cast out of `character.cave.choice.scene` and matched `side ===
+"neutral"` by id or name. It missed allies on both counts: the wrong side, and a scene that only
+describes the room whose vote is open. `CAVE_SIDES_TO_LEAVE` reads the side off the entity instead,
+which is live for every actor on the floor and needs no open choice.
+
+`victim` is on that list for a different reason. The server does let us hurt one — it is the rescue
+target, and killing it forfeits `cave_rescue`.
 
 ### A refused walk is a socket flood, not a no-op (debugged 2026-09-21)
 

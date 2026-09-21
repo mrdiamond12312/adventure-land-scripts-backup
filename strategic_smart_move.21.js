@@ -1,5 +1,12 @@
 const MAGIPORT_IGNORE_LIST = ["bank", "bank_u", "bank_b", "jail"];
 
+/** What ALPathfinder's deserializer wants on every map in G, and its stand-ins */
+const PATHFINDER_MAP_DEFAULTS = Object.freeze({
+  name: "",
+  doors: [],
+  spawns: [],
+});
+
 /** Tunables used across the smartMove implementation */
 const SMART_MOVE_CONFIG = Object.freeze({
   // Pathing / walk loop
@@ -38,6 +45,7 @@ const SMART_MOVE_CONFIG = Object.freeze({
 class StrategicSmartMove {
   constructor() {
     this.pathfinder = parent.caracAL.ALPathfinder;
+    this.patchedMaps = new Set();
     this.preparePathfinder();
     this.scareInterval = undefined;
     this.isDoingSomethingMagical = false;
@@ -48,14 +56,59 @@ class StrategicSmartMove {
     this.townEpoch = 0;
   }
 
-  /** Rebuilds the graph from whatever G currently holds */
+  /**
+   * G with every map carrying the fields the pathfinder insists on. One map
+   * without them traps the whole rebuild, not just itself.
+   * @returns {object}
+   */
+  _pathfinderView() {
+    const maps = {};
+
+    for (const name in parent.G.maps) {
+      const map = parent.G.maps[name];
+      const missing = Object.keys(PATHFINDER_MAP_DEFAULTS).filter(
+        (field) => !map[field],
+      );
+
+      if (!missing.length) {
+        maps[name] = map;
+        continue;
+      }
+
+      maps[name] = { ...map };
+      for (const field of missing)
+        maps[name][field] = PATHFINDER_MAP_DEFAULTS[field];
+
+      if (!this.patchedMaps.has(name)) {
+        this.patchedMaps.add(name);
+        console.warn(`[pathfinder] ${name} arrived without ${missing.join(", ")}`);
+      }
+    }
+
+    return { ...parent.G, maps };
+  }
+
+  /**
+   * Rebuilds the graph from whatever G currently holds.
+   * @returns {boolean} whether the graph is now standing
+   */
   preparePathfinder() {
-    this.pathfinder.prepare(parent.G, ["bank_u"]);
     this.pathfinder.clear();
+    this.preparedMaps = new Set();
+
+    try {
+      this.pathfinder.prepare(this._pathfinderView(), ["bank_u"]);
+    } catch (error) {
+      console.warn("Pathfinder rebuild refused", error);
+      return false;
+    }
+
     this.pathfinder.addCheatPath("winterland", 721, 277, 737, 352);
 
     // What the graph was built from
     this.preparedMaps = new Set(Object.keys(parent.G.geometry));
+
+    return true;
   }
 
   /**
@@ -68,6 +121,7 @@ class StrategicSmartMove {
     );
     if (!unknown.length) return;
 
+    // A refused rebuild refuses the same way next tick, so it counts as seen
     this.preparePathfinder();
     for (const map of unknown) this.preparedMaps.add(map);
   }

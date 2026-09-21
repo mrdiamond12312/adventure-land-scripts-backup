@@ -12,6 +12,9 @@ const DORR_SLACK = 160;
 /** The Dark Mage is immune, and the rogue only pays out if monsters finish him */
 const CAVE_MOBS_TO_LEAVE = ["cave_darkmage", "cave_rogue"];
 
+/** Two the run refuses to let us damage, and one we are paid to leave standing */
+const CAVE_SIDES_TO_LEAVE = ["neutral", "ally", "victim"];
+
 /** Levels land at spawn, so a ceiling is the only way to duck the wolf packs */
 var caveMaxMobLevel = Infinity;
 
@@ -230,20 +233,6 @@ async function enterCave(resuming) {
 }
 
 /**
- * Whether the room's cast lists this one as a bystander.
- * @param {object} entity
- * @returns {boolean}
- */
-function isCaveBystander(entity) {
-  return (character.cave?.choice?.scene ?? []).some(
-    (person) =>
-      person.side === "neutral" &&
-      (`${person.id}` === `${entity.id}` ||
-        (person.name && person.name === entity.name)),
-  );
-}
-
-/**
  * Whether this one is worth swinging at.
  * @param {object} entity
  * @returns {boolean}
@@ -254,7 +243,7 @@ function isCaveMobWorthHitting(entity) {
     !entity.dead &&
     // The cave's people are monsters to the client
     !entity.cave?.citizen &&
-    !isCaveBystander(entity) &&
+    !CAVE_SIDES_TO_LEAVE.includes(entity.cave?.side) &&
     !CAVE_MOBS_TO_LEAVE.includes(entity.mtype) &&
     (entity.level ?? 0) <= caveMaxMobLevel
   );
@@ -363,7 +352,8 @@ function pickCaveOption(choice) {
 }
 
 /**
- * Votes once per choice, since three identical votes settle it outright.
+ * Votes once per choice. A majority of the voters settles it, and the roll is
+ * of accounts rather than characters.
  * @param {object} choice
  * @returns {Promise<void>}
  */
