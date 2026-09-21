@@ -330,6 +330,10 @@ if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
 var disablePullingStrategy = false;
 const asyncNoop = async () => {};
 
+/** Only the native branch declares one, and never for a merchant */
+var currentStrategy =
+  typeof currentStrategy === "function" ? currentStrategy : asyncNoop;
+
 function changeToPullStrategies() {
   const normal =
     typeof useNormalStrategy === "function" ? useNormalStrategy : asyncNoop;
