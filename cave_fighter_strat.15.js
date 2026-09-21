@@ -104,7 +104,6 @@ function caveLog(stage, detail) {
 /** @returns {object} a run's blank slate */
 function freshCaveRun() {
   return {
-    settled: [],
     attempts: {},
     choiceId: undefined,
     buyAt: 0,
@@ -118,6 +117,31 @@ function freshCaveRun() {
 
 /** Room and choice ids are only unique within the run that issued them */
 let caveRun = freshCaveRun();
+
+/** Shop rooms the party has already dealt with, keyed by the run that issued them */
+const CAVE_SHOPS_KEY = "caveShops";
+
+/**
+ * Shop rooms already answered, by anyone in the run. A shop sells its one item
+ * to the party, not to each of us, so the answer belongs to all three.
+ * @returns {string[]}
+ */
+function getSettledCaveShops() {
+  const stored = get(CAVE_SHOPS_KEY);
+
+  return stored?.run === character.cave?.run ? (stored.rooms ?? []) : [];
+}
+
+/**
+ * Records a shop room as answered, for the whole party.
+ * @param {string} room
+ */
+function settleCaveShop(room) {
+  const rooms = getSettledCaveShops();
+  if (rooms.includes(room)) return;
+
+  set(CAVE_SHOPS_KEY, { run: character.cave?.run, rooms: [...rooms, room] });
+}
 
 /** Outlives any one run: the daily answer, the entry handshake, the run edge */
 const caveState = {
@@ -401,20 +425,21 @@ function isCaveItemSkipped(name) {
  * @returns {Promise<void>}
  */
 async function buyFromCaveShop(choice) {
-  if (character.name !== partyMems[0]) return;
-
   const shop = choice?.shop;
   const room = shop?.room;
-  if (room === undefined || caveRun.settled.includes(room)) return;
+  if (room === undefined || getSettledCaveShops().includes(room)) return;
   if (shop.sold) {
-    caveRun.settled.push(room);
+    settleCaveShop(room);
     return caveLog("shop sold out", shop.name);
   }
-  if (shop.nearby === false) return;
+  // Turning one down takes no standing in it
   if (isCaveItemSkipped(shop.name)) {
-    caveRun.settled.push(room);
+    settleCaveShop(room);
     return caveLog("shop skipped", shop.name);
   }
+  // The purse is shared and the server picks the recipient, so the one standing
+  // in the shop buys it, leader or not
+  if (shop.nearby === false) return;
   if ((caveRun.attempts[room] ?? 0) >= CAVE_BUY_ATTEMPTS) return;
   if (Date.now() - caveRun.buyAt < CAVE_BUY_RETRY_MS) return;
 
@@ -424,7 +449,7 @@ async function buyFromCaveShop(choice) {
   caveLog("buying", { name: shop.name, price: shop.price });
 
   await cave_buy(room)
-    .then(() => caveRun.settled.push(room))
+    .then(() => settleCaveShop(room))
     .catch((error) => {
       // A short purse fills again from the next chest, so it costs no attempt
       if (CAVE_BUY_RETRY_REASONS.includes(error?.reason)) {
@@ -481,7 +506,8 @@ function getCaveDestination() {
   // Cave gold dies with the run, and the purse only fills once the floor is run
   const shop = pending.find(
     (objective) =>
-      objective.id.endsWith(":shop") && !caveRun.settled.includes(objective.id),
+      objective.id.endsWith(":shop") &&
+      !getSettledCaveShops().includes(objective.id),
   );
   if (shop) return shop;
 
@@ -498,7 +524,16 @@ function getCaveDestination() {
  */
 async function descendCaveFloor(door) {
   const spawn = parent.G.maps[character.map]?.doors?.[door.id]?.[5] ?? 0;
-  await transport(door.to, spawn).catch(() => undefined);
+
+  await transport(door.to, spawn).catch((error) =>
+    caveLog("stairs refused", {
+      to: door.to,
+      door: door.id,
+      spawn,
+      away: Math.round(distance(character, door)),
+      why: error?.reason ?? error?.message ?? String(error),
+    }),
+  );
 }
 
 /**
@@ -509,7 +544,7 @@ async function openCaveShop(objective) {
   caveRun.shopAt[objective.id] ??= Date.now();
 
   if (Date.now() - caveRun.shopAt[objective.id] >= CAVE_SHOP_WAIT_MS) {
-    caveRun.settled.push(objective.id);
+    settleCaveShop(objective.id);
     return caveLog("shop gave up", objective.id);
   }
 
