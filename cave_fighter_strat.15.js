@@ -40,6 +40,9 @@ const CAVE_SHOP_WAIT_MS = 15 * 1000;
 /** How long a refused walk waits */
 const CAVE_WALK_RETRY_MS = 3 * 1000;
 
+/** High enough that no leg of a path is worth a town warp */
+const CAVE_PATHING_SPEED = 1_000_000;
+
 /** Standing this close to an objective counts as being on it */
 const CAVE_ARRIVAL_SLACK = 120;
 
@@ -531,11 +534,13 @@ async function walkToCaveDestination() {
 
     caveRun.walkedAt = Date.now();
 
-    // A port would land us in the mage's room, or on the mage's floor
+    // A port would land us in the mage's room, or on the mage's floor, and a
+    // town warp would drop us on the floor's spawn
     await advanceSmartMove(to, {
       useScare: true,
       useTown: false,
       useMagiport: false,
+      speed: CAVE_PATHING_SPEED,
     }).catch(async (error) => {
       caveLog("walk refused", {
         to: destination.name ?? destination.id,
