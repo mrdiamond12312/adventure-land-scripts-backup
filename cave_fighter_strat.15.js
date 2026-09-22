@@ -543,8 +543,16 @@ function getClosestCaveDestination(destinations) {
 function isEscortingToCaveStairs() {
   const choice = character.cave?.choice;
 
-  return Boolean(
-    choice?.resolved && CAVE_ESCORT_OPTIONS.includes(choice.result),
+  if (!choice?.resolved) return false;
+  if (!CAVE_ESCORT_OPTIONS.includes(choice.result)) return false;
+
+  // A settled vote outlives its own room, so the objective it opened is what
+  // says the walk is still owed — both name the same phrase
+  const phrase = choice.title_message?.phrase;
+  if (!phrase) return false;
+
+  return getPendingCaveObjectives().some(
+    (objective) => objective.name_message?.phrase === phrase,
   );
 }
 
@@ -578,7 +586,7 @@ function getCaveDestination() {
 
   // An escort pays out at the stairs, not at the room that started it. They
   // are still locked at that point, so walk to them without taking them
-  if (required.length && isEscortingToCaveStairs()) {
+  if (isEscortingToCaveStairs()) {
     const stairs = (cave.doors ?? []).find((door) => door.down);
     if (stairs) return { id: "escort", x: stairs.x, y: stairs.y };
   }
