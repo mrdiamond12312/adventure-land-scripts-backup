@@ -52,6 +52,12 @@ const CAVE_ESCORT_OPTIONS = ["e23_0", "e35_0", "e45_0"];
 /** The rogue encounter's wait-and-see option, by its own id */
 const CAVE_ROGUE_WAIT = "watch";
 
+/** Last Word: the only thing letting him die pays, and he rarely carries it */
+const CAVE_ROGUE_PRIZE = "cave_backstabber";
+
+/** Taken instead when his blades are ordinary — "cover" trades it for safety */
+const CAVE_ROGUE_RESCUE = "lure";
+
 /** Options that pay nothing without a supply they never declare */
 const CAVE_OPTIONS_NEEDING_SUPPLY = { e47_0: "lamp" };
 
@@ -390,6 +396,30 @@ function getCaveTarget() {
 }
 
 /**
+ * Whether the cornered rogue is holding Last Word. The scene names him; the
+ * blades are on the live entity.
+ * @param {object} choice
+ * @returns {boolean}
+ */
+function isCaveRogueCarryingPrize(choice) {
+  const blades = (choice.scene ?? []).map((actor) => ({
+    name: actor.name,
+    seen: Boolean(parent.entities[actor.id]),
+    holding: Object.values(parent.entities[actor.id]?.slots ?? {})
+      .filter(Boolean)
+      .map((slot) => slot.name),
+  }));
+
+  const carrying = blades.some((actor) =>
+    actor.holding.includes(CAVE_ROGUE_PRIZE),
+  );
+
+  caveLog("rogue blades", { blades, carrying });
+
+  return carrying;
+}
+
+/**
  * The option this character votes for.
  * @param {object} choice
  * @returns {object|undefined}
@@ -413,10 +443,16 @@ function pickCaveOption(choice) {
   // Amber outlives the run, so nothing in here is worth paying it with
   const affordable = allowed.filter((option) => !option.amber);
 
-  // Last Word only drops if monsters finish him, and a saved rogue may turn
+  // Letting him die pays only while he holds Last Word; a rescue pays always
   if (choice.kind === "rogue") {
-    const wait = affordable.find((option) => option.id === CAVE_ROGUE_WAIT);
-    if (wait) return wait;
+    const wanted = isCaveRogueCarryingPrize(choice)
+      ? CAVE_ROGUE_WAIT
+      : CAVE_ROGUE_RESCUE;
+
+    const rogue =
+      affordable.find((option) => option.id === wanted) ??
+      affordable.find((option) => option.id === CAVE_ROGUE_WAIT);
+    if (rogue) return rogue;
   }
 
   return (
@@ -788,8 +824,11 @@ async function useCaveStrategy() {
         in: Math.round((character.cave.choice?.deadline - Date.now()) / 1000),
       });
 
+      // The clock stops, the fight does not — but a move would be refused
+      const held = getCaveTarget();
+
       // The tick stays ours, or the chain below walks us out
-      return travelling();
+      return held ? engage(held) : travelling();
     }
 
     raiseReflectionForDarkMage();
