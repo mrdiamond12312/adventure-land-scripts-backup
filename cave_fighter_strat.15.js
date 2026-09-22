@@ -691,6 +691,20 @@ async function walkToCaveDestination() {
 }
 
 /**
+ * Whether the floor owes us nothing and the way down stands open. Optional
+ * camps keep respawning, so only this says when to stop fighting one.
+ * @returns {boolean}
+ */
+function isCaveFloorDone() {
+  const cave = character.cave;
+
+  if (getPendingCaveObjectives().some((objective) => objective.required))
+    return false;
+
+  return (cave.doors ?? []).some((door) => door.down && !door.locked);
+}
+
+/**
  * Whether the run has nothing left to give: the deepest floor, cleared. An
  * open way down outranks leaving, however deep the floor claims to be.
  * @returns {boolean}
@@ -781,7 +795,8 @@ async function useCaveStrategy() {
     raiseReflectionForDarkMage();
     talkToCaveTraveler();
 
-    const target = getCaveTarget();
+    // Open stairs outrank a stray pack, or a camp holds whoever lags behind
+    const target = isCaveFloorDone() ? undefined : getCaveTarget();
     if (target) return engage(target);
 
     // Amber only reaches the party outside, and the clock buys nothing now
