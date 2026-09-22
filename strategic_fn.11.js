@@ -404,7 +404,7 @@ function calculateMageItems() {
       : currentTarget && (currentTarget.resistance ?? 0) < 400
       ? "cave_loaded_die"
       : "jacko",
-    ring1: "intring",
+    ring1: "glacierseal",
     ring2: "cring",
     amulet: feelingWise ? "spookyamulet" : "intamulet",
   };
