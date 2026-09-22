@@ -97,6 +97,14 @@ const CAVE_WALK_RETRY_MS = 3 * 1000;
 /** High enough that no leg of a path is worth a town warp */
 const CAVE_PATHING_SPEED = 1_000_000;
 
+// Leaving
+
+/** The deepest floor: it has no stairs, so clearing it ends the run */
+const CAVE_LAST_FLOOR = 2;
+
+/** How long a refused exit waits */
+const CAVE_EXIT_RETRY_MS = 5 * 1000;
+
 /** Narrates each decision; leave off outside a debugging run */
 var CAVE_DEBUG = true;
 
@@ -139,6 +147,7 @@ function freshCaveRun() {
     walkedAt: 0,
     shopAt: {},
     shopTalkAt: 0,
+    exitedAt: 0,
   };
 }
 
@@ -525,25 +534,36 @@ function getClosestCaveDestination(destinations) {
 }
 
 /**
+ * This floor's unfinished objectives. A settled shop never flips `done`, so it
+ * counts as finished here or nothing on the floor ever empties the list.
+ * @returns {object[]}
+ */
+function getPendingCaveObjectives() {
+  const cave = character.cave;
+  const settled = getSettledCaveShops();
+
+  return (cave.objectives ?? []).filter(
+    (objective) =>
+      !objective.done &&
+      objective.floor === cave.floor &&
+      !(isCaveShopObjective(objective) && settled.includes(objective.id)),
+  );
+}
+
+/**
  * The next thing on this floor worth standing on, else the way down.
  * @returns {object|undefined}
  */
 function getCaveDestination() {
   const cave = character.cave;
-  const pending = (cave.objectives ?? []).filter(
-    (objective) => !objective.done && objective.floor === cave.floor,
-  );
+  const pending = getPendingCaveObjectives();
 
   // Required ones gate the stairs, so the optional rooms wait
   const required = pending.filter((objective) => objective.required);
   if (required.length) return getClosestCaveDestination(required);
 
   // Cave gold dies with the run, and the purse only fills once the floor is run
-  const shop = pending.find(
-    (objective) =>
-      isCaveShopObjective(objective) &&
-      !getSettledCaveShops().includes(objective.id),
-  );
+  const shop = pending.find((objective) => isCaveShopObjective(objective));
   if (shop) return shop;
 
   // Depth outranks the optional farm rooms
@@ -640,6 +660,36 @@ async function walkToCaveDestination() {
 }
 
 /**
+ * Whether the run has nothing left to give: the deepest floor, cleared. A
+ * locked door is still listed, so no down door at all is what marks the floor.
+ * @returns {boolean}
+ */
+function isCaveRunFinished() {
+  const cave = character.cave;
+
+  if ((cave.floor ?? 0) < CAVE_LAST_FLOOR) return false;
+  if ((cave.doors ?? []).some((door) => door.down)) return false;
+
+  return getPendingCaveObjectives().length === 0;
+}
+
+/**
+ * Leaves for good, which is what pays the party its unspent Amber.
+ * @returns {Promise<void>}
+ */
+async function leaveCave() {
+  if (Date.now() - caveRun.exitedAt < CAVE_EXIT_RETRY_MS) return;
+
+  caveRun.exitedAt = Date.now();
+
+  if (typeof cave_exit !== "function") return caveLog("no exit to take");
+
+  caveLog("run finished — leaving", { floor: character.cave.floor });
+
+  await cave_exit().catch((error) => caveLog("exit refused", caveWhy(error)));
+}
+
+/**
  * Fights a run out, otherwise gathers the party at Dorr and goes in.
  * @returns {Promise<object|undefined>} the outcome, if it owns this tick
  */
@@ -701,6 +751,12 @@ async function useCaveStrategy() {
 
     const target = getCaveTarget();
     if (target) return engage(target);
+
+    // Amber only reaches the party outside, and the clock buys nothing now
+    if (isCaveRunFinished()) {
+      await leaveCave();
+      return travelling();
+    }
 
     walkToCaveDestination();
 
