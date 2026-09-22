@@ -46,6 +46,9 @@ const CAVE_OPTIONS_TO_REFUSE = [
   "e21_2",
 ];
 
+/** Options that only pay out once the party reaches the stairs */
+const CAVE_ESCORT_OPTIONS = ["e23_0", "e35_0", "e45_0"];
+
 /** The rogue encounter's wait-and-see option, by its own id */
 const CAVE_ROGUE_WAIT = "watch";
 
@@ -534,6 +537,18 @@ function getClosestCaveDestination(destinations) {
 }
 
 /**
+ * Whether a settled vote has us walking someone to the stairs.
+ * @returns {boolean}
+ */
+function isEscortingToCaveStairs() {
+  const choice = character.cave?.choice;
+
+  return Boolean(
+    choice?.resolved && CAVE_ESCORT_OPTIONS.includes(choice.result),
+  );
+}
+
+/**
  * This floor's unfinished objectives. A settled shop never flips `done`, so it
  * counts as finished here or nothing on the floor ever empties the list.
  * @returns {object[]}
@@ -560,6 +575,14 @@ function getCaveDestination() {
 
   // Required ones gate the stairs, so the optional rooms wait
   const required = pending.filter((objective) => objective.required);
+
+  // An escort pays out at the stairs, not at the room that started it. They
+  // are still locked at that point, so walk to them without taking them
+  if (required.length && isEscortingToCaveStairs()) {
+    const stairs = (cave.doors ?? []).find((door) => door.down);
+    if (stairs) return { id: "escort", x: stairs.x, y: stairs.y };
+  }
+
   if (required.length) return getClosestCaveDestination(required);
 
   // Cave gold dies with the run, and the purse only fills once the floor is run
@@ -660,15 +683,16 @@ async function walkToCaveDestination() {
 }
 
 /**
- * Whether the run has nothing left to give: the deepest floor, cleared. A
- * locked door is still listed, so no down door at all is what marks the floor.
+ * Whether the run has nothing left to give: the deepest floor, cleared. An
+ * open way down outranks leaving, however deep the floor claims to be.
  * @returns {boolean}
  */
 function isCaveRunFinished() {
   const cave = character.cave;
 
   if ((cave.floor ?? 0) < CAVE_LAST_FLOOR) return false;
-  if ((cave.doors ?? []).some((door) => door.down)) return false;
+  if ((cave.doors ?? []).some((door) => door.down && !door.locked))
+    return false;
 
   return getPendingCaveObjectives().length === 0;
 }
