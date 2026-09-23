@@ -1,5 +1,8 @@
 const MAGIPORT_IGNORE_LIST = ["bank", "bank_u", "bank_b", "jail"];
 
+/** Maps a path may not enter, pass through, or end on, unless smartMove is given its own */
+const DEFAULT_AVOID_MAPS = Object.freeze(["bank_u"]);
+
 /** What ALPathfinder's deserializer wants on every map in G, and its stand-ins */
 const PATHFINDER_MAP_DEFAULTS = Object.freeze({
   name: "",
@@ -96,14 +99,15 @@ class StrategicSmartMove {
     this.pathfinder.clear();
     this.preparedMaps = new Set();
 
+    // prepare only bakes cheat paths that already exist into the graph
+    this.pathfinder.addCheatPath("winterland", 721, 277, 737, 352);
+
     try {
-      this.pathfinder.prepare(this._pathfinderView(), ["bank_u"]);
+      this.pathfinder.prepare(this._pathfinderView());
     } catch (error) {
       console.warn("Pathfinder rebuild refused", error);
       return false;
     }
-
-    this.pathfinder.addCheatPath("winterland", 721, 277, 737, 352);
 
     // What the graph was built from
     this.preparedMaps = new Set(Object.keys(parent.G.geometry));
@@ -198,8 +202,13 @@ class StrategicSmartMove {
    * Pathfinding using earth's ALPathfinder
    * @param {Object} toPosition includes `x`, `y` and `map`
    * @param {number} speed set the speed to a very big number to disable use_town, default: character's speed
+   * @param {string[]} avoidMaps maps the path may not enter, pass through, or end on
    */
-  pathfinderGetPath(toPosition, speed = character.speed) {
+  pathfinderGetPath(
+    toPosition,
+    speed = character.speed,
+    avoidMaps = DEFAULT_AVOID_MAPS,
+  ) {
     this.refreshPathfinderFor(character.map, toPosition.map);
 
     return parent.caracAL.ALPathfinder.getPath(
@@ -209,7 +218,7 @@ class StrategicSmartMove {
       toPosition.map,
       toPosition.x,
       toPosition.y,
-      speed,
+      { speed, avoidMaps: [...avoidMaps] },
     );
   }
 
@@ -555,6 +564,7 @@ class StrategicSmartMove {
    * @param {boolean} extraOptions.useScare - whether to scare away mobs during smart moving, default: true
    * @param {Function} extraOptions.stopWatcher - a function that returns a boolean to determine whether to stop smart moving, default: undefined
    * @param {number} extraOptions.speed - the speed to use for pathfinding, set to a very big number to disable use_town, default: character's speed
+   * @param {string[]} extraOptions.avoidMaps - maps the path may not enter, pass through, or end on, default: DEFAULT_AVOID_MAPS
    * @param {boolean} extraOptions.useTown - whether to town back to the map's first spawn when no path is found, default: true. Set false when towning is worse than not moving (e.g. a tanker holding mobs)
    */
   async smartMove(toPosition, extraOptions = {}) {
@@ -576,6 +586,7 @@ class StrategicSmartMove {
       wait: 0,
       speed: Math.max(character.speed, SMART_MOVE_CONFIG.MIN_PATHING_SPEED),
       useTown: true,
+      avoidMaps: DEFAULT_AVOID_MAPS,
       exact: false,
       smartmoveDebug: false, // to set the global var smartmoveDebug
       ...extraOptions,
@@ -599,7 +610,11 @@ class StrategicSmartMove {
       let shortest = Infinity;
 
       for (const spawn of monsterSpawns) {
-        const result = this.pathfinderGetPath(spawn, options.speed);
+        const result = this.pathfinderGetPath(
+          spawn,
+          options.speed,
+          options.avoidMaps,
+        );
 
         if (Array.isArray(result) && result.length < shortest) {
           shortest = result.length;
@@ -651,7 +666,11 @@ class StrategicSmartMove {
       if (distance(toPosition, character) < SMART_MOVE_CONFIG.ARRIVED_DISTANCE)
         return;
 
-      pathFindingResult = this.pathfinderGetPath(toPosition, options.speed);
+      pathFindingResult = this.pathfinderGetPath(
+        toPosition,
+        options.speed,
+        options.avoidMaps,
+      );
 
       // Standable fallback
       if (
@@ -668,6 +687,7 @@ class StrategicSmartMove {
             y: mapData.spawns[0][1],
           },
           options.speed,
+          options.avoidMaps,
         );
 
         if (Array.isArray(pathFindingResult)) {
@@ -803,6 +823,19 @@ class StrategicSmartMove {
 
         if (segment.method === "town") {
           await this.useTownWithRetry();
+          advance();
+          continue;
+        }
+
+        if (segment.method === "enter") {
+          if (segment.key && locate_item(segment.key) === -1) {
+            throw new Error(`Entering ${segment.map} needs a ${segment.key}`);
+          }
+          const waitPromise = this.waitForNewMap();
+          await enter(segment.map);
+          await waitPromise.catch(() =>
+            console.warn("Enter timeout! Current map:", character.map),
+          );
           advance();
           continue;
         }

@@ -1697,6 +1697,26 @@ each time, `clear` then `prepare` gives an eleven-node path each time.
 Clearing first is also what drops a floor of a finished run. `prepare` adds and replaces, it never
 removes, so a map that has left `G` stays in the graph until something clears it.
 
+### Cheat paths go in before `prepare()`, and only one `prepare` per build (2026-09-24)
+
+`prepare` bakes into the graph only the cheat paths that already exist when it runs. A cheat added
+afterwards shows up in `canWalkPath` and in a `getPath` whose two ends sit on the cheat itself,
+but the graph never learns the edge, so any real route that needs it returns null. Measured against
+alpathfinder 0.4.7, 0.5.1 and 0.6.0 with real `G` (version 16846): with `clear -> prepare ->
+addCheatPath`, `main -> winterland (737, 352)` is null and so is the route from winterland's own
+spawn. With `clear -> addCheatPath -> prepare`, those paths have 13 and 5 nodes. `clear()` also
+drops cheat paths, so `preparePathfinder` re-adds the winterland cheat on every rebuild, between
+`clear` and `prepare`.
+
+`advance_smart_move.20.js` used to call `prepare(parent.G)` a second time at load, straight after
+the constructor in `strategic_smart_move.21.js` built the graph. Each character is its own forked
+process with its own wasm instance, so this was never characters overwriting each other; it was one
+process preparing twice. On 0.5.1 and 0.6.0, that second call (raw `parent.G`, no `clear`) turns
+`cave (-190.5, -1176.5) -> cave (1244, -22.5)` from 13 nodes into null. That is the scout's failed
+mvampire leg. The graph stayed broken until an unknown map triggered `refreshPathfinderFor`. 0.4.7
+kept that path, which is why it only surfaced after the upgrade. The second `prepare` is gone:
+`preparePathfinder` is the only builder.
+
 ### One malformed map traps the whole rebuild (2026-09-21)
 
 `prepare` wants `name`, `doors` and `spawns` on every entry in `G.maps`. A map missing any of the

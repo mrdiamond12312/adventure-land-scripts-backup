@@ -49,10 +49,6 @@ function getCharacter(name) {
   }
 }
 
-if (parent.caracAL && parent.caracAL.ALPathfinder) {
-  parent.caracAL.ALPathfinder.prepare(parent.G, ["bank_u"]); // Ignore bank_u for pathfinding
-}
-
 async function mageBlink(
   map,
   coordinates,
