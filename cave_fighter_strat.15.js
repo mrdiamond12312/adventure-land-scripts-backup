@@ -100,8 +100,14 @@ const CAVE_TALK_RANGE = 160;
 /** Standing this close to an objective counts as being on it */
 const CAVE_ARRIVAL_SLACK = 120;
 
+/** The stairs trigger on the door's own box, which is far tighter */
+const CAVE_DOOR_SLACK = 40;
+
 /** How long a refused walk waits */
 const CAVE_WALK_RETRY_MS = 3 * 1000;
+
+/** How long a refused descent waits */
+const CAVE_DESCEND_RETRY_MS = 3 * 1000;
 
 /** High enough that no leg of a path is worth a town warp */
 const CAVE_PATHING_SPEED = 1_000_000;
@@ -158,6 +164,7 @@ function freshCaveRun() {
     talkAt: 0,
     votedAt: 0,
     walkedAt: 0,
+    descendedAt: 0,
     shopAt: {},
     shopTalkAt: 0,
     exitedAt: 0,
@@ -682,11 +689,47 @@ function getCaveDestination() {
 // Walking a floor
 
 /**
+ * The floor a generated map belongs to, by its `zone_<run>_<floor>` name.
+ * @param {string} [map]
+ * @returns {number|undefined}
+ */
+function getCaveFloorOf(map) {
+  const match = /_(\d+)$/.exec(map ?? "");
+
+  return match ? Number(match[1]) : undefined;
+}
+
+/**
+ * Who is still on a shallower floor than us. Waiting on one already deeper
+ * would strand both halves of a party that has split.
+ * @returns {string[]}
+ */
+function getCaveStragglers() {
+  const party = get_party() ?? {};
+  const here = character.cave.floor;
+
+  return (character.cave.roster ?? [])
+    .filter(
+      (member) =>
+        !member.left &&
+        !member.disconnected &&
+        member.name !== character.name &&
+        (getCaveFloorOf(party[member.name]?.map) ?? here) < here,
+    )
+    .map((member) => member.name);
+}
+
+/**
  * Takes the stairs, whose spawn only the generated map knows.
  * @param {object} door
  * @returns {Promise<void>}
  */
 async function descendCaveFloor(door) {
+  // A refusal must not repeat per tick
+  if (Date.now() - caveRun.descendedAt < CAVE_DESCEND_RETRY_MS) return;
+
+  caveRun.descendedAt = Date.now();
+
   const spawn = parent.G.maps[character.map]?.doors?.[door.id]?.[5] ?? 0;
 
   await transport(door.to, spawn).catch((error) =>
@@ -710,7 +753,9 @@ async function walkToCaveDestination() {
   const destination = getCaveDestination();
   if (!destination) return;
 
-  if (distance(character, destination) > CAVE_ARRIVAL_SLACK) {
+  const slack = destination.to ? CAVE_DOOR_SLACK : CAVE_ARRIVAL_SLACK;
+
+  if (distance(character, destination) > slack) {
     // A refusal stops the character, so it must not repeat per tick
     if (Date.now() - caveRun.walkedAt < CAVE_WALK_RETRY_MS) return;
 
@@ -737,7 +782,12 @@ async function walkToCaveDestination() {
     return;
   }
 
-  if (destination.to) return descendCaveFloor(destination);
+  if (destination.to) {
+    const stragglers = getCaveStragglers();
+    if (stragglers.length) return caveLog("stairs held — party", stragglers);
+
+    return descendCaveFloor(destination);
+  }
 
   if (isCaveShopObjective(destination)) await openCaveShop(destination);
 }
