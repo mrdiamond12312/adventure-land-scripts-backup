@@ -657,6 +657,33 @@ function getClosestCaveDestination(destinations) {
 }
 
 /**
+ * The nearest required objective still open on this floor.
+ * @returns {object|undefined}
+ */
+function getNextRequiredCaveObjective() {
+  const required = getPendingCaveObjectives().filter(
+    (objective) => objective.required,
+  );
+
+  return required.length ? getClosestCaveDestination(required) : undefined;
+}
+
+/**
+ * Whether that objective is waiting outside this room. Optional camps respawn
+ * on a timer, so fighting one here would hold the floor forever.
+ * @param {object} [objective]
+ * @returns {boolean}
+ */
+function isCaveObjectiveElsewhere(objective) {
+  if (!objective) return false;
+
+  const room = getCaveRoom(character);
+  if (!room) return distance(character, objective) > CAVE_ARRIVAL_SLACK;
+
+  return !isInCaveBounds(objective, room.bounds);
+}
+
+/**
  * The next thing on this floor worth standing on, else the way down.
  * @returns {object|undefined}
  */
@@ -900,7 +927,11 @@ async function fightCaveRun() {
   talkToCaveTraveler();
 
   // Open stairs outrank a stray pack, or a camp holds whoever lags behind
-  const target = isCaveFloorDone() ? undefined : getCaveTarget();
+  const holding =
+    isCaveFloorDone() ||
+    isCaveObjectiveElsewhere(getNextRequiredCaveObjective());
+
+  const target = holding ? undefined : getCaveTarget();
   if (target) return engage(target);
 
   // Amber only reaches the party outside, and the clock buys nothing now
