@@ -461,6 +461,7 @@ const STORE_ABLE = [
   "essenceofether",
   "spidersilk",
   "feather0",
+  "feather1",
   "vitscroll",
   "bunnyelixir",
   "pvptoken",
@@ -561,6 +562,8 @@ const STORE_ABLE = [
   "anniversarygift",
   "confetti",
   "gift0",
+  "cxjar",
+  "cave_amber",
 ];
 
 const SALE_ABLE = [
