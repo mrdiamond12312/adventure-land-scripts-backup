@@ -1359,6 +1359,8 @@ async function resolveDestination(desired, orbit, radiusTotal) {
           useScare: false,
           speed: 200,
           useTown: false,
+          // A run refuses magiport both ways
+          useMagiport: !character.cave,
           smartmoveDebug: true,
         },
       );
