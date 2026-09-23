@@ -100,9 +100,6 @@ const CAVE_TALK_RANGE = 160;
 /** Standing this close to an objective counts as being on it */
 const CAVE_ARRIVAL_SLACK = 120;
 
-/** The stairs trigger on the door's own box, which is far tighter */
-const CAVE_DOOR_SLACK = 40;
-
 /** How long a refused walk waits */
 const CAVE_WALK_RETRY_MS = 3 * 1000;
 
@@ -340,18 +337,19 @@ function getCaveRoom(position) {
  * @returns {object|undefined}
  */
 function getCaveTarget() {
-  const partyTarget = getTarget();
-  if (partyTarget && isCaveMobWorthHitting(partyTarget)) return partyTarget;
-
   // Camps sit a room apart, so vision alone would wake the neighbours
   const room = getCaveRoom(character);
 
+  const isHere = (entity) =>
+    isCaveMobWorthHitting(entity) &&
+    (!room || isInCaveBounds(entity, room.bounds));
+
+  // A blinked-ahead mage must not pin whoever is still walking
+  const partyTarget = getTarget();
+  if (partyTarget && isHere(partyTarget)) return partyTarget;
+
   return Object.values(parent.entities)
-    .filter(
-      (entity) =>
-        isCaveMobWorthHitting(entity) &&
-        (!room || isInCaveBounds(entity, room.bounds)),
-    )
+    .filter(isHere)
     .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
 }
 
@@ -627,9 +625,10 @@ function getPendingCaveObjectives() {
 
 /**
  * Whether a settled vote has us walking someone to the stairs.
+ * @param {object[]} pending
  * @returns {boolean}
  */
-function isEscortingToCaveStairs() {
+function isEscortingToCaveStairs(pending) {
   const choice = character.cave?.choice;
 
   if (!choice?.resolved) return false;
@@ -640,9 +639,7 @@ function isEscortingToCaveStairs() {
   const phrase = choice.title_message?.phrase;
   if (!phrase) return false;
 
-  return getPendingCaveObjectives().some(
-    (objective) => objective.name_message?.phrase === phrase,
-  );
+  return pending.some((objective) => objective.name_message?.phrase === phrase);
 }
 
 /**
@@ -658,45 +655,42 @@ function getClosestCaveDestination(destinations) {
 
 /**
  * The nearest required objective still open on this floor.
+ * @param {object[]} pending
  * @returns {object|undefined}
  */
-function getNextRequiredCaveObjective() {
-  const required = getPendingCaveObjectives().filter(
-    (objective) => objective.required,
-  );
+function getNextRequiredCaveObjective(pending) {
+  const required = pending.filter((objective) => objective.required);
 
   return required.length ? getClosestCaveDestination(required) : undefined;
 }
 
 /**
- * Whether that objective is waiting outside this room. Optional camps respawn
- * on a timer, so fighting one here would hold the floor forever.
+ * Whether we are not standing on that objective yet. Optional camps respawn
+ * and a tanker holds its ground, so anything swingable on the way would keep
+ * the floor from ever being finished.
  * @param {object} [objective]
  * @returns {boolean}
  */
-function isCaveObjectiveElsewhere(objective) {
+function isAwayFromCaveObjective(objective) {
   if (!objective) return false;
 
-  const room = getCaveRoom(character);
-  if (!room) return distance(character, objective) > CAVE_ARRIVAL_SLACK;
-
-  return !isInCaveBounds(objective, room.bounds);
+  return distance(character, objective) > CAVE_ARRIVAL_SLACK;
 }
 
 /**
  * The next thing on this floor worth standing on, else the way down.
+ * @param {object[]} pending
  * @returns {object|undefined}
  */
-function getCaveDestination() {
+function getCaveDestination(pending) {
   const cave = character.cave;
-  const pending = getPendingCaveObjectives();
 
   // Required ones gate the stairs, so the optional rooms wait
   const required = pending.filter((objective) => objective.required);
 
   // An escort pays out at the stairs, not at the room that started it. They
   // are still locked at that point, so walk to them without taking them
-  if (isEscortingToCaveStairs()) {
+  if (isEscortingToCaveStairs(pending)) {
     const stairs = (cave.doors ?? []).find((door) => door.down);
     if (stairs) return { id: "escort", x: stairs.x, y: stairs.y };
   }
@@ -716,14 +710,18 @@ function getCaveDestination() {
 // Walking a floor
 
 /**
- * The floor a generated map belongs to, by its `zone_<run>_<floor>` name.
+ * The floor a generated map belongs to, by its `zone_<run>_<floor>` name. Only
+ * this run's floors answer, so anywhere else reads as no floor at all.
  * @param {string} [map]
  * @returns {number|undefined}
  */
 function getCaveFloorOf(map) {
-  const match = /_(\d+)$/.exec(map ?? "");
+  const prefix = `zone_${character.cave.run}_`;
+  if (!map?.startsWith(prefix)) return undefined;
 
-  return match ? Number(match[1]) : undefined;
+  const floor = Number(map.slice(prefix.length));
+
+  return Number.isInteger(floor) ? floor : undefined;
 }
 
 /**
@@ -772,17 +770,16 @@ async function descendCaveFloor(door) {
 
 /**
  * Walks to that destination, and through it when it is the way down.
+ * @param {object[]} pending
  * @returns {Promise<void>}
  */
-async function walkToCaveDestination() {
+async function walkToCaveDestination(pending) {
   if (smart.moving || isAdvanceSmartMoving) return;
 
-  const destination = getCaveDestination();
+  const destination = getCaveDestination(pending);
   if (!destination) return;
 
-  const slack = destination.to ? CAVE_DOOR_SLACK : CAVE_ARRIVAL_SLACK;
-
-  if (distance(character, destination) > slack) {
+  if (distance(character, destination) > CAVE_ARRIVAL_SLACK) {
     // A refusal stops the character, so it must not repeat per tick
     if (Date.now() - caveRun.walkedAt < CAVE_WALK_RETRY_MS) return;
 
@@ -824,13 +821,13 @@ async function walkToCaveDestination() {
 /**
  * Whether the floor owes us nothing and the way down stands open. Optional
  * camps keep respawning, so only this says when to stop fighting one.
+ * @param {object[]} pending
  * @returns {boolean}
  */
-function isCaveFloorDone() {
+function isCaveFloorDone(pending) {
   const cave = character.cave;
 
-  if (getPendingCaveObjectives().some((objective) => objective.required))
-    return false;
+  if (pending.some((objective) => objective.required)) return false;
 
   return (cave.doors ?? []).some((door) => door.down && !door.locked);
 }
@@ -838,16 +835,17 @@ function isCaveFloorDone() {
 /**
  * Whether the run has nothing left to give: the deepest floor, cleared. An
  * open way down outranks leaving, however deep the floor claims to be.
+ * @param {object[]} pending
  * @returns {boolean}
  */
-function isCaveRunFinished() {
+function isCaveRunFinished(pending) {
   const cave = character.cave;
 
   if ((cave.floor ?? 0) < CAVE_LAST_FLOOR) return false;
   if ((cave.doors ?? []).some((door) => door.down && !door.locked))
     return false;
 
-  return getPendingCaveObjectives().length === 0;
+  return pending.length === 0;
 }
 
 /**
@@ -926,23 +924,27 @@ async function fightCaveRun() {
   raiseReflectionForDarkMage();
   talkToCaveTraveler();
 
+  // One read of the objectives, which every answer below is drawn from
+  const pending = getPendingCaveObjectives();
+
   // Open stairs outrank a stray pack, or a camp holds whoever lags behind
   const holding =
-    isCaveFloorDone() ||
-    isCaveObjectiveElsewhere(getNextRequiredCaveObjective());
+    isCaveFloorDone(pending) ||
+    isAwayFromCaveObjective(getNextRequiredCaveObjective(pending));
 
-  const target = holding ? undefined : getCaveTarget();
-  if (target) return engage(target);
+  // Committing to a fight ends the tick; passing through only swings at reach
+  const target = holding ? getCaveTargetInReach() : getCaveTarget();
+  if (target && !holding) return engage(target);
 
   // Amber only reaches the party outside, and the clock buys nothing now
-  if (isCaveRunFinished()) {
+  if (isCaveRunFinished(pending)) {
     await leaveCave();
     return travelling();
   }
 
-  walkToCaveDestination();
+  walkToCaveDestination(pending);
 
-  return travelling();
+  return target ? engage(target) : travelling();
 }
 
 /**
