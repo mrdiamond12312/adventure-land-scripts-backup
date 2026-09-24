@@ -354,6 +354,22 @@ function getCaveTarget() {
 }
 
 /**
+ * Nearest mob already on one of us and inside our range, so passing through
+ * never stops to pull.
+ * @returns {object|undefined}
+ */
+function getCaveTargetInReach() {
+  return Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        isCaveMobWorthHitting(entity) &&
+        partyMems.includes(entity.target) &&
+        distance(character, entity) <= character.range,
+    )
+    .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
+}
+
+/**
  * Raises Reflective Shield while the Dark Mage is in range to cast.
  * @returns {Promise<void>}
  */
