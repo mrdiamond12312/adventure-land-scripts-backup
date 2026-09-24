@@ -67,6 +67,9 @@ const CAVE_CHOICE_INTERVAL_MS = 1000;
 /** Long enough for a vote to land */
 const CAVE_VOTE_RETRY_MS = 2 * 1000;
 
+/** Refusals meaning the vote is already over, not that ours was wrong */
+const CAVE_VOTE_SETTLED_REASONS = ["vote_closed"];
+
 // The shop with one item
 
 /** Where the party's answered shops live */
@@ -480,13 +483,19 @@ async function voteOnCaveChoice(choice) {
     .then(() => {
       caveRun.choiceId = choice.id;
     })
-    .catch((error) =>
+    .catch((error) => {
+      // A majority got there first, so there is nothing left to vote on
+      if (CAVE_VOTE_SETTLED_REASONS.includes(error?.reason)) {
+        caveRun.choiceId = choice.id;
+        return;
+      }
+
       caveLog("vote refused", {
         id: choice.id,
         option: option.id,
         why: caveWhy(error),
-      }),
-    );
+      });
+    });
 }
 
 /**
