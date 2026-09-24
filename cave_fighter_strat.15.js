@@ -103,6 +103,9 @@ const CAVE_TALK_RANGE = 160;
 /** Standing this close to an objective counts as being on it */
 const CAVE_ARRIVAL_SLACK = 120;
 
+/** The stairs trigger on the door's own box, which is far tighter */
+const CAVE_DOOR_SLACK = 40;
+
 /** How long a refused walk waits */
 const CAVE_WALK_RETRY_MS = 3 * 1000;
 
@@ -804,7 +807,9 @@ async function walkToCaveDestination(pending) {
   const destination = getCaveDestination(pending);
   if (!destination) return;
 
-  if (distance(character, destination) > CAVE_ARRIVAL_SLACK) {
+  const slack = destination.to ? CAVE_DOOR_SLACK : CAVE_ARRIVAL_SLACK;
+
+  if (distance(character, destination) > slack) {
     // A refusal stops the character, so it must not repeat per tick
     if (Date.now() - caveRun.walkedAt < CAVE_WALK_RETRY_MS) return;
 
