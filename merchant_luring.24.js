@@ -9,6 +9,7 @@ async function lureMechaGnome() {
   if (
     isLuringMobs ||
     onDuty ||
+    isAwaitingParcel() ||
     isAdvanceSmartMoving ||
     smart.moving ||
     shouldGoChilling() ||
@@ -460,6 +461,7 @@ async function dragEnt() {
     map !== ENT_LURE_MAP ||
     isLuringMobs ||
     onDuty ||
+    isAwaitingParcel() ||
     isAdvanceSmartMoving ||
     smart.moving ||
     shouldGoChilling() ||

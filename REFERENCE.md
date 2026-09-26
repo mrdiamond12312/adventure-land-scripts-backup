@@ -1411,25 +1411,33 @@ another stand and out of the `front_clearance` box in front of one, parked for `
 within `anchor_tolerance` (4px), with a real listing and a free inventory slot. One parcel per
 account per `hour_ms`.
 
-**Park by a `stop`, not by a line between two.** The 32px handoff is against wherever he actually
-walks, and his pathing between stops is not in `G` — only the seven stops themselves are, each held
-for `delay` (5s). A spot measured against interpolated stop-to-stop segments assumes a straight-line
-walk the data never promises; a spot within ~20px of a real stop is safe under any pathing. Every
-entry in `MERRIT_SPOTS` is picked that way, which is why none of them are the square's centre —
-stop `[0,0]` is the one with a fixed NPC inside the 40px clearance.
+**Any walkable point in `areas` works — Merrit comes to you (2026-09-26).** Read from the server
+(`node/logic/market_patron_runtime.js`): once a stand qualifies, his loop paths *to that stand's
+position* (within `radius` 600 of the origin), not just past his `stops`. So the old "park within
+~20px of a stop" constraint was unnecessary; `findStandSpot()` scans both `areas` on an 8px grid and
+takes the nearest spot that is walkable, more than `npc_clearance` from a *fixed* NPC and clear of
+other stands. Fixed means what the server's `blockers()` counts: not `role: "citizen"`, not
+`moving`, not `loop` — so the five citizens parked at `[0,0]` in map data (Merrit included) don't
+count, while `basics`/`fancypots`/`favors`/`secondhands` do.
 
-**The spot list is a rotation, not a constant.** `stand_clearance`/`front_clearance` are contested —
-another player's stand parked on our spot silently costs us every parcel — so `getStandSpot()` walks
-`MERRIT_SPOTS` in order and takes the first that `isSpotTaken()` clears, with `homeLocation`
-(the first entry) as both the preferred spot and the fallback. It is deliberately re-evaluated on
-every `moveHome`, so a neighbour arriving moves us on and a neighbour leaving brings us back; the
-order being fixed is what keeps that from oscillating. Off `main` there is nothing to see, so it
-returns `homeLocation` and re-decides on arrival.
+**The front strip is symmetric.** The server rejects `|dx| <= front_width && |dy| <= front_clearance`
+— above *and* below the other stand. The first version only checked south of it.
 
-`moveHome`'s arrival slack had to come down from 150px to `STAND_ANCHOR_SLACK` (24) for any of this
-to mean anything — 150px of drift is five times the handoff, so the careful spot was decoration.
-That is safe because `advanceSmartMove`'s `exact: true` appends a literal `move` to the coordinates
-(strategic_smart_move.21.js), so the merchant lands on the spot rather than near it.
+**First come, first served is the server's own rule.** Every open stand gets a placement `order`
+that survives as long as it stays within `anchor_tolerance` (4px), and `blockers()` only counts
+neighbours with an *earlier* order. So once we stand open on `homeLocation`, a newcomer parking on
+top of us is their problem, and `claimStandSpot()` keeps the spot without looking at neighbours.
+What it trusts instead is the server: `merrit_status` is pushed on stand-open and every 15s while
+open, and `claimStandSpot()` also asks for one (`merrit_info`, 3s server rate limit) on parking. A
+push received since we parked, at the spot, carrying `stand_close`/`stand_front`/`npc`/`area` means
+someone really was there first (or our geometry is off), so the spot goes into
+`rejectedStandSpots` and the nearest other free spot becomes the new `homeLocation`. Being the
+incumbent is lost the moment the stand closes or we drift, so any trip away re-checks on return.
+
+`homeLocation` is a `let` and *is* the claimed spot — crafting calls that pass it follow along.
+`moveHome`'s arrival check is `anchor_tolerance` centre-to-centre, not the old 24px box `distance`:
+a re-picked spot can be closer than 24px, and holding needs us within 4px anyway. That relies on
+`advanceSmartMove`'s `exact: true` appending a literal `move` (strategic_smart_move.21.js).
 
 `parent.character.merrit` is the authority when it still goes wrong — `.reasons[]` carries the
 server's own codes (`area`, `closed`, `listing`, `inventory`, `warming`, `cooldown`, `npc`,

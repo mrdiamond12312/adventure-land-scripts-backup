@@ -35,46 +35,103 @@ var invJammed = false;
 const fishingLocation = { map: "main", x: -1367, y: -82 };
 const miningLocation = { map: "tunnel", x: -279, y: -148 };
 
-// Merrit parcel spots, each parked by one of his stops and clear of every
-// fixed NPC. Tried in order, so the first is home unless somebody took it.
-const MERRIT_SPOTS = [
-  { map: "main", x: -116, y: 0 },
-  { map: "main", x: 0, y: 140 },
-  { map: "main", x: 104, y: 122 },
-  { map: "main", x: -174, y: 96 },
-  { map: "main", x: 32, y: 220 },
-  { map: "main", x: -16, y: 308 },
-];
-const homeLocation = MERRIT_SPOTS[0];
+// Merrit parcel config
+/** Extra px kept beyond Merrit's clearances */
+const STAND_SPACING_MARGIN = 4;
+/** Grid step when scanning for a free spot */
+const STAND_SCAN_STEP = 8;
+/** Server reasons that rule a spot out */
+const MERRIT_SPOT_BLOCKERS = ["stand_close", "stand_front", "npc", "area"];
+/** Time to walk home before the settle window */
+const PARCEL_HOLD_LEAD = 60_000;
+/** How long past due to keep waiting on Merrit */
+const PARCEL_HOLD_GRACE = 300_000;
 
-// Close enough to count as parked, under Merrit's 32px handoff
-const STAND_ANCHOR_SLACK = 24;
+// Merrit parcel state
+/** Our claimed parcel spot */
+let homeLocation = { map: "main", x: -116, y: 0 };
+/** Spots the server refused, as "x,y" */
+const rejectedStandSpots = new Set();
+/** When we parked on homeLocation, 0 while not */
+let standParkedAt = 0;
+/** Last merrit_status, with when and where it arrived */
+let merritStatus = null;
+/** When the parcel cooldown ends, 0 while unknown */
+let parcelCooldownEndsAt = 0;
+
+/** @returns {Object} Merrit's market rules */
+const merritMarket = () => G.npcs.citizen22.market;
+
+parent.socket?.on("merrit_status", (data) => {
+  const reasons = data?.reasons ?? [];
+  const now = Date.now();
+
+  merritStatus = {
+    reasons,
+    at: now,
+    x: character.real_x,
+    y: character.real_y,
+  };
+
+  if (reasons.some((r) => r.code === "unavailable")) return;
+  const cooldown = reasons.find((r) => r.code === "cooldown");
+  parcelCooldownEndsAt = now + (cooldown?.remaining_ms ?? 0);
+});
+
+parent.socket?.emit("interaction", { type: "merrit_info" });
+
+/** @returns {boolean} whether the stand must stay parked for the next parcel */
+function isAwaitingParcel() {
+  if (!parcelCooldownEndsAt) return false;
+
+  const { settle_ms } = merritMarket();
+  const now = Date.now();
+
+  return (
+    now >= parcelCooldownEndsAt - settle_ms - PARCEL_HOLD_LEAD &&
+    now <= parcelCooldownEndsAt + settle_ms + PARCEL_HOLD_GRACE
+  );
+}
+
+/** @returns {number} centre-to-centre px from us to spot */
+const distanceToSpot = (spot) =>
+  Math.hypot(character.real_x - spot.x, character.real_y - spot.y);
 
 const haveAComputer = () =>
   locate_item("computer") !== -1 || locate_item("ancientcomputer") !== -1;
+
+/** @returns {number[][]} [x, y] of every NPC on main that never moves */
+function getFixedMainNpcs() {
+  return (G.maps.main.npcs ?? [])
+    .filter((npc) => {
+      const def = G.npcs[npc.id];
+      return def && def.role !== "citizen" && !def.moving && !npc.loop;
+    })
+    .map((npc) => npc.position ?? npc.positions?.[0])
+    .filter(Boolean);
+}
 
 /**
  * @param {{x: number, y: number}} spot
  * @returns {boolean} whether another open stand rules this spot out
  */
 function isSpotTaken(spot) {
-  const market = G.npcs.citizen22.market;
+  const market = merritMarket();
 
   for (const id in parent.entities) {
     const entity = parent.entities[id];
     if (entity?.type !== "character" || !entity.stand) continue;
     if (entity.name === character.name) continue;
 
-    const sideways = Math.abs(spot.x - entity.real_x);
-    const southwards = spot.y - entity.real_y;
+    const dx = Math.abs(spot.x - entity.real_x);
+    const dy = Math.abs(spot.y - entity.real_y);
 
-    if (Math.hypot(sideways, southwards) <= market.stand_clearance) return true;
+    if (Math.hypot(dx, dy) <= market.stand_clearance + STAND_SPACING_MARGIN)
+      return true;
 
-    // The strip in front of a stand is refused too
     if (
-      sideways <= market.front_width &&
-      southwards > 0 &&
-      southwards <= market.front_clearance
+      dx <= market.front_width + STAND_SPACING_MARGIN &&
+      dy <= market.front_clearance + STAND_SPACING_MARGIN
     )
       return true;
   }
@@ -82,18 +139,122 @@ function isSpotTaken(spot) {
   return false;
 }
 
-/** @returns {Object} the first parcel spot nobody else has taken */
-function getStandSpot() {
+/**
+ * @param {{x: number, y: number}} spot
+ * @returns {boolean} whether Merrit would visit a stand opened here
+ */
+function isSpotViable(spot) {
+  const market = merritMarket();
+
+  if (rejectedStandSpots.has(`${spot.x},${spot.y}`)) return false;
+
+  const inArea = market.areas.some(
+    ([x0, y0, x1, y1]) =>
+      spot.x >= x0 && spot.x <= x1 && spot.y >= y0 && spot.y <= y1,
+  );
+  if (!inArea) return false;
+
+  const nearNpc = getFixedMainNpcs().some(
+    ([x, y]) =>
+      Math.hypot(spot.x - x, spot.y - y) <=
+      market.npc_clearance + STAND_SPACING_MARGIN,
+  );
+  if (nearNpc) return false;
+
+  try {
+    if (!strategicSmartMove.isStandablePoint({ map: "main", ...spot }))
+      return false;
+  } catch (e) {}
+
+  return !isSpotTaken(spot);
+}
+
+/** @returns {boolean} whether we already stand open on homeLocation */
+function isHoldingHome() {
+  const holding =
+    character.map === homeLocation.map &&
+    character.stand &&
+    !character.moving &&
+    distanceToSpot(homeLocation) <= merritMarket().anchor_tolerance;
+
+  if (!holding) standParkedAt = 0;
+  else if (!standParkedAt) {
+    standParkedAt = Date.now();
+    parent.socket?.emit("interaction", { type: "merrit_info" });
+  }
+
+  return holding;
+}
+
+/** @returns {boolean} whether the server refused our spot since we parked */
+function isHomeRefused() {
+  if (!standParkedAt || !merritStatus || merritStatus.at < standParkedAt)
+    return false;
+
+  const anchor = merritMarket().anchor_tolerance;
+  const statusOffset = Math.hypot(
+    merritStatus.x - homeLocation.x,
+    merritStatus.y - homeLocation.y,
+  );
+  if (statusOffset > anchor) return false;
+
+  return merritStatus.reasons.some((r) =>
+    MERRIT_SPOT_BLOCKERS.includes(r.code),
+  );
+}
+
+/** @returns {Object|undefined} the viable spot in Merrit's areas nearest to us */
+function findStandSpot() {
+  const { areas } = merritMarket();
+  let best;
+  let bestDistance = Infinity;
+
+  for (const [x0, y0, x1, y1] of areas) {
+    for (let x = x0; x <= x1; x += STAND_SCAN_STEP) {
+      for (let y = y0; y <= y1; y += STAND_SCAN_STEP) {
+        const spot = { map: "main", x, y };
+        const d = distanceToSpot(spot);
+        if (d >= bestDistance || !isSpotViable(spot)) continue;
+
+        best = spot;
+        bestDistance = d;
+      }
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Keeps homeLocation on a spot Merrit will visit; one we already hold is ours.
+ * @returns {Object} homeLocation
+ */
+function claimStandSpot() {
   if (character.map !== homeLocation.map) return homeLocation;
 
-  return MERRIT_SPOTS.find((spot) => !isSpotTaken(spot)) ?? homeLocation;
+  if (isHoldingHome()) {
+    if (!isHomeRefused()) return homeLocation;
+
+    rejectedStandSpots.add(`${homeLocation.x},${homeLocation.y}`);
+    standParkedAt = 0;
+  } else if (isSpotViable(homeLocation)) {
+    return homeLocation;
+  }
+
+  const spot = findStandSpot();
+  if (spot) {
+    log(`Merrit spot moved to ${spot.x},${spot.y}`);
+    homeLocation = spot;
+  }
+
+  return homeLocation;
 }
 
 async function moveHome() {
-  const spot = getStandSpot();
+  const spot = claimStandSpot();
 
   if (
-    distance(character, spot) < STAND_ANCHOR_SLACK ||
+    distanceToSpot(spot) <= merritMarket().anchor_tolerance ||
     smart.moving ||
     isAdvanceSmartMoving ||
     isDraggingMobs

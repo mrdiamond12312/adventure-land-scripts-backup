@@ -106,6 +106,7 @@ async function merchantScoutingLoop() {
   if (
     !hasVisitedBank ||
     onDuty ||
+    isAwaitingParcel() ||
     isAdvanceSmartMoving ||
     smart.moving ||
     shouldGoChilling() ||
