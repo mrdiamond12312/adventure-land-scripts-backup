@@ -1,36 +1,51 @@
 // Cave of Many Dreams — the fighter's highest priority strategy.
 
-// The daily, and the door it is behind
+// Getting in
 
 /** Dorr, at the vine-covered doorway */
 const DORR_SPOT = { map: "main", x: 816, y: 1200 };
 
-/** Everyone has to be this close to Dorr to go in */
+/** How close to Dorr everyone must stand to enter */
 const DORR_SLACK = 160;
 
 /** How long a daily-visit answer is trusted */
 const CAVE_VISIT_TTL_MS = 60 * 1000;
 
-/** Long enough for an entry to land before it is asked for again */
+/** How long an entry request waits before it is sent again */
 const CAVE_ENTER_COOLDOWN_MS = 10 * 1000;
 
-/** A merchant hop drags the whole party out, so a near window outranks a run */
+/** How close a scheduled event may be before a run is skipped */
 const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
 
-/** Stands in for the run's own deadline */
+/** Run length to assume when the state carries no deadline */
 const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
 
-// What we swing at
+// Fighting
 
-/** The Dark Mage is immune, and the rogue only pays out if monsters finish him */
-const CAVE_MOBS_TO_LEAVE = ["cave_darkmage", "cave_rogue"];
+/** Immune to everything but his own reflected spell */
+const CAVE_DARKMAGE = "cave_darkmage";
 
-/** Levels land at spawn, so a ceiling is the only way to duck the wolf packs */
-var caveMaxMobLevel = Infinity;
+/** How far the Dark Mage looks for a target */
+const CAVE_DARKMAGE_REACH = 650;
 
-// Answering a room
+/** Where the mage waits for its shield, just outside his reach */
+const CAVE_DARKMAGE_STANDOFF = 680;
 
-/** Options that put cave_wolf on the field — e10_0 and e12_2 call in six */
+/** How close the shielded mage walks in */
+const CAVE_DARKMAGE_STRIKE = 200;
+
+/** How far everyone else keeps from him */
+const CAVE_DARKMAGE_CLEARANCE = 750;
+
+/** Storage key for where he was last seen */
+const CAVE_DARKMAGE_KEY = "caveDarkMage";
+
+/** How often a hunt step is re-issued */
+const CAVE_HUNT_STEP_MS = 500;
+
+// Voting
+
+/** Options that put cave_wolf on the field */
 const CAVE_OPTIONS_TO_REFUSE = [
   "e10_0",
   "e12_2",
@@ -43,90 +58,67 @@ const CAVE_OPTIONS_TO_REFUSE = [
   "e21_2",
 ];
 
-/** Options that only pay out once the party reaches the stairs */
+/** Options that pay out at the stairs */
 const CAVE_ESCORT_OPTIONS = ["e23_0", "e35_0", "e45_0"];
 
-/** The rogue encounter's wait-and-see option, by its own id */
+/** The rogue option that leaves him to his wolves */
 const CAVE_ROGUE_WAIT = "watch";
 
-/** Last Word: the only thing letting him die pays, and he rarely carries it */
+/** Last Word, dropped only when a predator kills him */
 const CAVE_ROGUE_PRIZE = "cave_backstabber";
 
-/** Taken instead when his blades are ordinary — "cover" trades it for safety */
-const CAVE_ROGUE_RESCUE = "lure";
+/** Rogue options when he is not holding Last Word, best first */
+const CAVE_ROGUE_RESCUES = ["lure", "save", "cover"];
 
-/** Options that pay nothing without a supply they never declare */
-const CAVE_OPTIONS_NEEDING_SUPPLY = { e47_0: "lamp" };
-
-/** How often the choice loop looks, off the tick */
+/** How often the choice loop runs */
 const CAVE_CHOICE_INTERVAL_MS = 1000;
 
-/** Long enough for a vote to land */
-const CAVE_VOTE_RETRY_MS = 2 * 1000;
+/** How long a vote or shop talk waits before it is sent again */
+const CAVE_REQUEST_RETRY_MS = 2 * 1000;
 
-/** Refusals meaning the vote is already over, not that ours was wrong */
-const CAVE_VOTE_SETTLED_REASONS = ["vote_closed"];
+// The shop
 
-// The shop with one item
+/** Shop items not worth cave gold */
+const CAVE_ITEMS_TO_SKIP = ["broom", "tshirt0", "tshirt1", "tshirt2"];
 
-/** Where the party's answered shops live */
-const CAVE_SHOPS_KEY = "caveShops";
-
-/** Town junk at cave prices — the broom alone is 80% of the purse */
-var CAVE_ITEMS_TO_SKIP = ["broom", "tshirt0", "tshirt1", "tshirt2"];
-
-/** Long enough for the shop to answer once we are standing in it */
+/** How long a shop gets to open once we are in it */
 const CAVE_SHOP_WAIT_MS = 15 * 1000;
 
-/** Long enough for chest gold to land before the shop is asked again */
+/** How long a refused purchase waits */
 const CAVE_BUY_RETRY_MS = 20 * 1000;
 
-/** A shop that keeps saying no is out of stock, not out of our gold */
+/** Refusals before a shop is given up */
 const CAVE_BUY_ATTEMPTS = 6;
 
-/** Refusals that cost no attempt, because the next chest settles them */
-const CAVE_BUY_RETRY_REASONS = ["gold_not_enough"];
+// Moving
 
-// The cave's own people
-
-/** Chatter is free, but not every tick */
-const CAVE_TALK_INTERVAL_MS = 10 * 1000;
-
-/** What cave_talk reaches */
-const CAVE_TALK_RANGE = 160;
-
-// Getting around a floor
-
-/** Standing this close to an objective counts as being on it */
+/** How close counts as standing on an objective */
 const CAVE_ARRIVAL_SLACK = 120;
 
-/** The stairs trigger on the door's own box, which is far tighter */
+/** How close the stairs must be to take them */
 const CAVE_DOOR_SLACK = 40;
 
-/** How long a refused walk waits */
-const CAVE_WALK_RETRY_MS = 3 * 1000;
+/** How long a refused walk or descent waits */
+const CAVE_MOVE_RETRY_MS = 3 * 1000;
 
-/** How long a refused descent waits */
-const CAVE_DESCEND_RETRY_MS = 3 * 1000;
-
-/** High enough that no leg of a path is worth a town warp */
+/** Pathing speed that rules out town warps */
 const CAVE_PATHING_SPEED = 1_000_000;
 
 // Leaving
 
-/** The deepest floor: it has no stairs, so clearing it ends the run */
+/** The deepest floor */
 const CAVE_LAST_FLOOR = 2;
 
 /** How long a refused exit waits */
 const CAVE_EXIT_RETRY_MS = 5 * 1000;
 
-/** Narrates each decision; leave off outside a debugging run */
-var CAVE_DEBUG = true;
+/** Narrates each decision */
+const CAVE_DEBUG = true;
+
+// Narrating a run
 
 /** The last line printed per stage */
 const lastCaveLogs = new Map();
-
-// Narrating a run
 
 /**
  * Prints a decision once per stage, until it changes.
@@ -161,15 +153,19 @@ function freshCaveRun() {
     attempts: {},
     choiceId: undefined,
     buyAt: 0,
-    talkAt: 0,
     votedAt: 0,
     walkedAt: 0,
     descendedAt: 0,
     shopAt: {},
     shopTalkAt: 0,
     exitedAt: 0,
+    huntedAt: 0,
+    shieldAt: 0,
   };
 }
+
+/** Storage key for the party's settled shops */
+const CAVE_SHOPS_KEY = "caveShops";
 
 /** Room and choice ids are only unique within the run that issued them */
 let caveRun = freshCaveRun();
@@ -292,20 +288,41 @@ async function enterCave(resuming) {
 
 // Picking a target
 
+/** @returns {string|undefined} the room of a live rogue we voted to watch */
+function getWatchedCaveRoom() {
+  const choice = character.cave?.choice;
+  if (!choice?.resolved || choice.kind !== "rogue") return undefined;
+  if (choice.result !== CAVE_ROGUE_WAIT) return undefined;
+
+  const rogue = Object.values(parent.entities).find(
+    (entity) =>
+      entity.mtype === "cave_rogue" &&
+      !entity.dead &&
+      entity.cave?.side === "victim",
+  );
+
+  return rogue?.cave?.room;
+}
+
 /**
  * Whether this one is worth swinging at.
  * @param {object} entity
+ * @param {string} [watched]
  * @returns {boolean}
  */
-function isCaveMobWorthHitting(entity) {
+function isCaveMobWorthHitting(entity, watched) {
   return (
     entity.type === "monster" &&
     !entity.dead &&
     // The cave's people are monsters to the client
     !entity.cave?.citizen &&
     !CAVE_SIDES_TO_LEAVE.includes(entity.cave?.side) &&
-    !CAVE_MOBS_TO_LEAVE.includes(entity.mtype) &&
-    (entity.level ?? 0) <= caveMaxMobLevel
+    entity.mtype !== CAVE_DARKMAGE &&
+    !(
+      watched !== undefined &&
+      entity.cave?.room === watched &&
+      entity.cave?.side === "predator"
+    )
   );
 }
 
@@ -342,9 +359,10 @@ function getCaveRoom(position) {
 function getCaveTarget() {
   // Camps sit a room apart, so vision alone would wake the neighbours
   const room = getCaveRoom(character);
+  const watched = getWatchedCaveRoom();
 
   const isHere = (entity) =>
-    isCaveMobWorthHitting(entity) &&
+    isCaveMobWorthHitting(entity, watched) &&
     (!room || isInCaveBounds(entity, room.bounds));
 
   // A blinked-ahead mage must not pin whoever is still walking
@@ -356,60 +374,137 @@ function getCaveTarget() {
     .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
 }
 
-/**
- * Nearest mob already on one of us and inside our range, so passing through
- * never stops to pull.
- * @returns {object|undefined}
- */
+/** @returns {object|undefined} the nearest awake mob in range */
 function getCaveTargetInReach() {
+  const watched = getWatchedCaveRoom();
+
   return Object.values(parent.entities)
     .filter(
       (entity) =>
-        isCaveMobWorthHitting(entity) &&
-        partyMems.includes(entity.target) &&
-        distance(character, entity) <= character.range,
+        isCaveMobWorthHitting(entity, watched) &&
+        distance(character, entity) <= character.range &&
+        isCaveMobAwake(entity),
     )
     .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
 }
 
+// Hunting the Dark Mage
+
+/** @returns {boolean} whether our mage is still in the run */
+function isCaveMageInRun() {
+  return (character.cave.roster ?? []).some(
+    (member) => member.name === MAGE && !member.left && !member.disconnected,
+  );
+}
+
 /**
- * Raises Reflective Shield while the Dark Mage is in range to cast.
- * @returns {Promise<void>}
+ * The Dark Mage in view, else where the party last saw him on this floor.
+ * @returns {object|undefined}
  */
-async function raiseReflectionForDarkMage() {
-  if (character.ctype !== "mage") return;
-  if (is_on_cooldown("reflection")) return;
-  if (character.mp < G.skills.reflection.mp) return;
+function getCaveDarkMage() {
+  const seen = get_nearest_monster({ type: CAVE_DARKMAGE });
+  if (seen && !isCaveFriendly(seen)) {
+    set(CAVE_DARKMAGE_KEY, {
+      run: character.cave.run,
+      map: character.map,
+      x: seen.x,
+      y: seen.y,
+    });
+    return seen;
+  }
 
-  // Only his own reflected spell can kill him, so the lock is the cue
-  const darkmage = get_nearest_monster({ type: "cave_darkmage" });
-  if (!darkmage?.target || !getAlliedNames().has(darkmage.target)) return;
+  const reported = get(CAVE_DARKMAGE_KEY);
+  if (reported?.run !== character.cave.run) return undefined;
+  if (reported.map !== character.map) return undefined;
 
-  // He picks mages first, but the shield belongs on whoever he took
-  const victim =
-    darkmage.target === character.name
-      ? character
-      : get_entity(darkmage.target);
+  // Standing on his spot without seeing him means he is dead
+  if (distance(character, reported) < CAVE_DARKMAGE_STRIKE) {
+    set(CAVE_DARKMAGE_KEY, undefined);
+    return caveLog("dark mage gone");
+  }
 
-  if (!victim || victim.s?.reflection) return;
-  if (distance(character, victim) > G.skills.reflection.range) return;
+  return reported;
+}
 
-  await use_skill("reflection", victim).catch(() => undefined);
+/**
+ * Steps to this distance from the Dark Mage, on our side of him.
+ * @param {object} darkmage
+ * @param {number} range
+ */
+function stepToDarkMageRange(darkmage, range) {
+  if (Date.now() - caveRun.huntedAt < CAVE_HUNT_STEP_MS) return;
+  if (smart.moving || isAdvanceSmartMoving) return;
+
+  const away = distance(character, darkmage) || 1;
+  const x = darkmage.x + ((character.x - darkmage.x) / away) * range;
+  const y = darkmage.y + ((character.y - darkmage.y) / away) * range;
+
+  caveRun.huntedAt = Date.now();
+  Promise.resolve(xmove(x, y)).catch(() => undefined);
+}
+
+/**
+ * The mage takes his spell under Reflective Shield; everyone else keeps clear.
+ * @param {object} darkmage
+ * @returns {Promise<object>} the outcome, which always owns the tick
+ */
+async function huntCaveDarkMage(darkmage) {
+  const away = distance(character, darkmage);
+
+  if (character.name !== MAGE) {
+    if (away < CAVE_DARKMAGE_CLEARANCE)
+      stepToDarkMageRange(darkmage, CAVE_DARKMAGE_CLEARANCE);
+    return travelling();
+  }
+
+  const shielded =
+    Date.now() - caveRun.shieldAt < G.conditions.reflection.duration;
+  const ready =
+    !is_on_cooldown("reflection") && character.mp >= G.skills.reflection.mp;
+
+  if (shielded) {
+    caveLog("dark mage", { step: "charging", away: Math.round(away) });
+    if (away > CAVE_DARKMAGE_STRIKE)
+      stepToDarkMageRange(darkmage, CAVE_DARKMAGE_STRIKE);
+    return travelling();
+  }
+
+  if (!ready) {
+    caveLog("dark mage", { step: "cooling", away: Math.round(away) });
+    if (away < CAVE_DARKMAGE_CLEARANCE)
+      stepToDarkMageRange(darkmage, CAVE_DARKMAGE_CLEARANCE);
+    return travelling();
+  }
+
+  if (away > CAVE_DARKMAGE_STANDOFF + CAVE_ARRIVAL_SLACK) {
+    caveLog("dark mage", { step: "closing", away: Math.round(away) });
+    stepToDarkMageRange(darkmage, CAVE_DARKMAGE_STANDOFF);
+    return travelling();
+  }
+
+  caveLog("dark mage", { step: "shielding", away: Math.round(away) });
+  await use_skill("reflection", character)
+    .then(() => {
+      caveRun.shieldAt = Date.now();
+    })
+    .catch((error) => caveLog("shield refused", caveWhy(error)));
+
+  return travelling();
 }
 
 // Voting on a room
 
 /**
- * Whether the cornered rogue is holding Last Word. The scene names him; the
- * blades are on the live entity.
+ * Whether the cornered rogue is holding Last Word.
  * @param {object} choice
  * @returns {boolean}
  */
 function isCaveRogueCarryingPrize(choice) {
   const blades = (choice.scene ?? []).map((actor) => ({
     name: actor.name,
-    seen: Boolean(parent.entities[actor.id]),
-    holding: Object.values(parent.entities[actor.id]?.slots ?? {})
+    holding: Object.values(
+      actor.slots ?? parent.entities[actor.id]?.slots ?? {},
+    )
       .filter(Boolean)
       .map((slot) => slot.name),
   }));
@@ -433,15 +528,10 @@ function pickCaveOption(choice) {
     (option) => !option.unavailable,
   );
 
-  const supplies = character.cave?.supplies ?? [];
-
   // Walking away beats a wolf pack, so this one bends for nothing
-  const allowed = offered.filter((option) => {
-    if (CAVE_OPTIONS_TO_REFUSE.includes(option.id)) return false;
-
-    const needed = CAVE_OPTIONS_NEEDING_SUPPLY[option.id];
-    return !needed || supplies.includes(needed);
-  });
+  const allowed = offered.filter(
+    (option) => !CAVE_OPTIONS_TO_REFUSE.includes(option.id),
+  );
   if (!allowed.length) return undefined;
 
   // Amber outlives the run, so nothing in here is worth paying it with
@@ -450,12 +540,12 @@ function pickCaveOption(choice) {
   // Letting him die pays only while he holds Last Word; a rescue pays always
   if (choice.kind === "rogue") {
     const wanted = isCaveRogueCarryingPrize(choice)
-      ? CAVE_ROGUE_WAIT
-      : CAVE_ROGUE_RESCUE;
+      ? [CAVE_ROGUE_WAIT]
+      : CAVE_ROGUE_RESCUES;
 
-    const rogue =
-      affordable.find((option) => option.id === wanted) ??
-      affordable.find((option) => option.id === CAVE_ROGUE_WAIT);
+    const rogue = wanted
+      .map((id) => affordable.find((option) => option.id === id))
+      .find(Boolean);
     if (rogue) return rogue;
   }
 
@@ -472,7 +562,7 @@ function pickCaveOption(choice) {
  */
 async function voteOnCaveChoice(choice) {
   if (!choice || choice.resolved || choice.id === caveRun.choiceId) return;
-  if (Date.now() - caveRun.votedAt < CAVE_VOTE_RETRY_MS) return;
+  if (Date.now() - caveRun.votedAt < CAVE_REQUEST_RETRY_MS) return;
 
   const option = pickCaveOption(choice);
   if (!option) return;
@@ -485,7 +575,7 @@ async function voteOnCaveChoice(choice) {
     })
     .catch((error) => {
       // A majority got there first, so there is nothing left to vote on
-      if (CAVE_VOTE_SETTLED_REASONS.includes(error?.reason)) {
+      if (error?.reason === "vote_closed") {
         caveRun.choiceId = choice.id;
         return;
       }
@@ -496,23 +586,6 @@ async function voteOnCaveChoice(choice) {
         why: caveWhy(error),
       });
     });
-}
-
-/**
- * Chats up a traveler standing next to us, which costs the run nothing.
- * @returns {Promise<void>}
- */
-async function talkToCaveTraveler() {
-  if (Date.now() - caveRun.talkAt < CAVE_TALK_INTERVAL_MS) return;
-
-  const traveler = Object.values(parent.entities).find(
-    (entity) =>
-      entity.cave?.citizen && distance(character, entity) < CAVE_TALK_RANGE,
-  );
-  if (!traveler) return;
-
-  caveRun.talkAt = Date.now();
-  await cave_talk(traveler.cave.room, traveler.id).catch(() => undefined);
 }
 
 // Buying the one item
@@ -594,7 +667,7 @@ async function buyFromCaveShop(choice) {
     .then(() => settleCaveShop(room))
     .catch((error) => {
       // A short purse fills again from the next chest, so it costs no attempt
-      if (CAVE_BUY_RETRY_REASONS.includes(error?.reason)) {
+      if (error?.reason === "gold_not_enough") {
         caveRun.attempts[room] -= 1;
         return;
       }
@@ -617,7 +690,7 @@ async function openCaveShop(objective) {
 
   // The offer only exists once the room's own vote has begun
   if (character.cave?.choice?.shop?.room === objective.id) return;
-  if (Date.now() - caveRun.shopTalkAt < CAVE_VOTE_RETRY_MS) return;
+  if (Date.now() - caveRun.shopTalkAt < CAVE_REQUEST_RETRY_MS) return;
 
   caveRun.shopTalkAt = Date.now();
 
@@ -776,7 +849,7 @@ function getCaveStragglers() {
  */
 async function descendCaveFloor(door) {
   // A refusal must not repeat per tick
-  if (Date.now() - caveRun.descendedAt < CAVE_DESCEND_RETRY_MS) return;
+  if (Date.now() - caveRun.descendedAt < CAVE_MOVE_RETRY_MS) return;
 
   caveRun.descendedAt = Date.now();
 
@@ -808,7 +881,7 @@ async function walkToCaveDestination(pending) {
 
   if (distance(character, destination) > slack) {
     // A refusal stops the character, so it must not repeat per tick
-    if (Date.now() - caveRun.walkedAt < CAVE_WALK_RETRY_MS) return;
+    if (Date.now() - caveRun.walkedAt < CAVE_MOVE_RETRY_MS) return;
 
     // Same-map only: the next floor is not in G until we are standing in it
     const to = { map: character.map, x: destination.x, y: destination.y };
@@ -948,8 +1021,9 @@ async function fightCaveRun() {
     return held ? engage(held) : travelling();
   }
 
-  raiseReflectionForDarkMage();
-  talkToCaveTraveler();
+  // Respawn is free, so he is always worth another try
+  const darkmage = isCaveMageInRun() ? getCaveDarkMage() : undefined;
+  if (darkmage) return huntCaveDarkMage(darkmage);
 
   // One read of the objectives, which every answer below is drawn from
   const pending = getPendingCaveObjectives();

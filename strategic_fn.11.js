@@ -80,7 +80,7 @@ function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
       entity.type === "monster" &&
       !isCaveFriendly(entity) &&
       distance(target, entity) < blastRadius &&
-      entity.target,
+      isMonsterEngaged(entity),
   );
 }
 
@@ -193,7 +193,7 @@ function hasUntargetedMonsterAround(
     (entity) =>
       entity.type === "monster" &&
       !isCaveFriendly(entity) &&
-      !entity.target &&
+      !isMonsterEngaged(entity) &&
       distance(target, entity) < blastRadius &&
       counts(entity),
   );
@@ -802,8 +802,7 @@ function getPriestOrb(target, isTanking, feelingLucky, feelingWise) {
 function getPriestAmulet(isTanking, feelingLucky, feelingWise) {
   if (feelingLucky || (feelingWise && !isTanking)) return "spookyamulet";
 
-  // Re-equip sanguine to (re)apply its aura whenever we own or already wear one
-  // and the buff is missing or about to expire; otherwise let it fall through.
+  // Re-equip sanguine to (re)apply its aura
   const haveSanguine =
     locate_item("sanguine") !== -1 ||
     character.slots.amulet?.name === "sanguine";
@@ -884,8 +883,7 @@ function calculateRogueItems(target) {
   };
 }
 
-// What the merchant shoots with, whenever it shoots at all — a lure, a drag, an
-// event boss, or a snipe (merchant_service.19.js, merchant_frenzinesss.100.js)
+// What the merchant shoots with, whenever it shoots at all
 const ATTACK_WEAPON = "dartgun";
 // Only a fallback for the bank trip: everything else takes getBestQuiver
 const ATTACK_OFFHAND = "t2quiver";
@@ -904,9 +902,7 @@ function getCarriedItems() {
 }
 
 /**
- * Longest-ranged quiver we are carrying. Not the by-wtype sweep getMaxBlastRadius
- * does — the merchant hauls the fighters' loot, so its bag is full of gear it
- * can't hold.
+ * Longest-ranged quiver we are carrying.
  * @returns {{name: string, range: number}|undefined}
  */
 function getBestQuiver() {
@@ -925,8 +921,6 @@ function getBestQuiver() {
 
 /**
  * Reach the dartgun would give us: the gun itself plus the best quiver's delta.
- * Name-locked on the gun — a looted crossbow would otherwise set the number.
- * @returns {number} 0 when there is no dartgun to hold
  */
 function getMaxAttackWeaponRange() {
   const dartgunRange = getCarriedItems()
@@ -939,9 +933,7 @@ function getMaxAttackWeaponRange() {
 }
 
 /**
- * How far the merchant can shoot *once geared*: with the broom in hand
- * character.range reads melee, so callers that have to decide whether gearing up
- * is worth it can't measure it live. 0 until a dartgun has been seen at all.
+ * How far the merchant can shoot *once geared*
  * @returns {number}
  */
 function getAttackWeaponReach() {
@@ -1016,9 +1008,7 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
 const MERCHANT_CARRIED_EXTRAS = ["orboftemporal"];
 
 /**
- * Every item calculateMerchantEquipments can ask for, whichever way its branches
- * fall — the whole state space evaluated, so nothing here can drift out of sync
- * with the table above — plus the on-demand extras.
+ * Every item calculateMerchantEquipments can ask for
  * @returns {Set<string>}
  */
 function getMerchantGearNames() {
@@ -2103,14 +2093,7 @@ async function drainPendingSurges() {
       return;
     }
 
-    // times cannot be attributed back to an entity, but the hasten itself is
-    // deterministic, so apply it to our own estimate and keep hastening until
-    // the spawn would beat the next cooldown home
     const nextCooldown = ms_to_next_skill("temporalsurge");
-
-    // times is the server's own remainder after hastening, so it replaces the
-    // seeded guess outright. The largest is the mini-boss: nothing else sharing
-    // a spawn area comes close to a two minute respawn
     const remaining = times.length ? Math.max(...times) : 0;
 
     for (const [id, entity] of inRange) {
@@ -2128,18 +2111,14 @@ async function drainPendingSurges() {
 }
 
 /**
- * Publishes a surge-derived respawn estimate for a watched mini-boss. Only
- * called with a time straight off the server, never with the seeded guess, so
- * the scout store never carries an estimate the fighters cannot trust.
- * checkedAt moves with it: we just watched this one die.
+ * Publishes a surge-derived respawn estimate for a watched mini-boss.
  *
  * @param {string} id entity id
  * @param {object} entity
  */
 function publishRespawnEta(id, entity) {
   if (!SPECIAL_MOB_IDS.includes(entity.mtype)) return;
-  // Roamers like goldenbat carry respawn -1: they never come back on a timer,
-  // so any eta for them is meaningless
+  // Cases where mobs have no respawn time
   if (!(G.monsters[entity.mtype]?.respawn > 0)) return;
 
   updateStoreEntry(SCOUT_LS_KEY, entity.mtype, {
@@ -2168,9 +2147,7 @@ function scheduleSurgeRetry(delayMs) {
   pendingSurgeTimer = setTimeout(drainPendingSurges, delayMs);
 }
 
-// Any kill in vision counts, not just ours. The corpse lingers in
-// parent.entities while it fades, and the object keeps its position after,
-// so the loop can read everything it needs off the entity itself
+// Any kill in vision counts, not just ours.
 parent.socket.on("hit", (data) => {
   if (!data?.kill) return;
 

@@ -1880,3 +1880,77 @@ behind `SMART_MOVE_CONFIG.LOOP_DEBUG`, since at that tick rate they were most of
 
 The graph coming back empty for a `zone_*` map is the open question underneath this — the fallback
 makes the run survive it, it does not explain it.
+
+### Cave mobs never report a target (checked against the server, 2026-09-27)
+
+A cave actor's aggro lives in `zone_actor.prey`, which is never sent. `target_player` returns before
+it assigns `monster.target` to any `zone_actor`, and `cave_spawn` sets `target = null`, so
+`entity.target` is null for everything in a run. Anything keyed on it is blind in the cave:
+
+- The Dark Mage shield. His pick is predictable: `cave_actor_tick` puts mages first, then the
+  nearest, within 650. `raiseReflectionForDarkMage` shields whoever that is.
+- The pass-through swing. `getCaveTargetInReach` now takes any mob in range whose camp is already
+  awake. A camp wakes when a player is within 210 of it, or when it has taken damage, so a mob that
+  meets either test costs nothing extra to hit.
+- Still blind: `getTarget`'s mobs-hitting-party check, and the `mob.target` counts in
+  `pull_strategy.13.js`.
+
+### Watching the rogue means leaving his wolves alone
+
+`cave_rogue_weapon` (Last Word) drops only if a `predator` lands the kill on a rare rogue who hasn't
+betrayed the party. Voting `watch` and then clearing the pack forfeits it, so `getWatchedCaveRoom`
+takes that room's predators off the list until he is down. When he dies, every remaining actor in
+the room turns `enemy`, which puts them back on it.
+
+`choice.scene[].slots` carries his blades, so the prize check no longer needs him in view.
+
+### Moths pay without a lamp
+
+`e47_0` gives 2 Amber without a lamp, and `cave_mothsteps` with one. It was being refused as if it
+paid nothing, so the supply gate is gone. Options that really do need a supply declare it (`needs`)
+and come back `unavailable`.
+
+### The rogue is left by his side, never by name
+
+`cave_rogue` used to be in `CAVE_MOBS_TO_LEAVE`. After a rescue he betrays the party half the time
+(`rogue_betrayal`), turning `enemy` with attack frequency 8. `e07_2` also spawns one as a straight
+fight. Leaving him alone by name meant taking those hits and never finishing the room. While he is a
+`victim`, `CAVE_SIDES_TO_LEAVE` already keeps us off him, and that is the only case that needs it.
+
+What each choice pays when he is not holding Last Word:
+
+- `lure` / `save`: `cave_rescue` plus 3000 gold, or a betrayal fight that ends in `cave_parcel`.
+- `watch` / `finish`: his cargo (a `cave_parcel` roll) and no gold.
+
+So `CAVE_ROGUE_RESCUES` ranks `lure` first and `watch` last.
+
+### The splash count was always zero in the cave (2026-09-27)
+
+`mobsListAroundTarget` counted only mobs with a `target`, and `hasUntargetedMonsterAround` flagged
+every mob without one. Cave mobs never have a `target`, so the mage always saw an "untargeted" mob
+and returned 0, and the warrior counted nothing. Neither ever reached
+`TARGET_TO_SWITCH_TO_BLASTER_WEAPON`, so both stayed on fire weapons under the pull strategy.
+
+Both helpers now ask `isMonsterEngaged`. Outside the cave it still means `entity.target`. Inside, it
+means the mob's camp is awake. The server wakes a whole room at once (`room.engaged`), so one mob
+in the same `cave.room` that is wounded or within 210 of us counts for all of them.
+
+Still target-blind in the cave: the warrior's agitate/taunt counts and fear check in
+`pull_strategy.13.js`, and `getWarriorAmulet`'s "am I being targeted" test.
+
+### Hunting the Dark Mage
+
+He replaces one optional floor-2 encounter in 0.2% of runs. He hits for 100,000 every 4s, picks a
+mage first (within 650), and dies only to his own spell reflected back. Reflection is the mage's
+gear stat plus 20 while Reflective Shield is up (capped at 50). The shield lasts 5s on a 30s
+cooldown.
+
+A death costs nothing: Nera's `landing` option revives at the floor's doorway for free, and
+`pickCaveOption` already picks it. So `huntCaveDarkMage` always tries:
+
+1. Everyone but the mage stays 750 from him.
+2. The mage waits at 680 for the shield, casts it on itself, and walks in to 200 to take a cast.
+3. Once the shield is spent, it backs out to 750 until the next cooldown.
+
+Whoever sees him writes his spot to `caveDarkMage` storage for the run. Reaching that spot without
+seeing him clears it. Without our mage on the roster the hunt is skipped.

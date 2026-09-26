@@ -124,6 +124,44 @@ function isCaveFriendly(entity) {
   return CAVE_SIDES_TO_LEAVE.includes(entity?.cave?.side);
 }
 
+/** How close a player wakes a cave camp */
+const CAVE_WAKE_RANGE = 210;
+
+/** @returns {object[]} the party's characters in view */
+function getCavePartyInView() {
+  return [...getAlliedNames()]
+    .map((name) => (name === character.name ? character : get_entity(name)))
+    .filter((member) => member && !member.rip);
+}
+
+/**
+ * Whether a cave mob's camp is awake.
+ * @param {object} entity
+ * @returns {boolean}
+ */
+function isCaveMobAwake(entity) {
+  const party = getCavePartyInView();
+
+  return Object.values(parent.entities).some(
+    (other) =>
+      other.cave?.room === entity.cave?.room &&
+      !other.dead &&
+      (other.hp < other.max_hp ||
+        party.some((member) => distance(member, other) <= CAVE_WAKE_RANGE)),
+  );
+}
+
+/**
+ * Whether a mob is fighting us; cave mobs never report a target.
+ * @param {object} entity
+ * @returns {boolean}
+ */
+function isMonsterEngaged(entity) {
+  if (entity.cave) return isCaveMobAwake(entity);
+
+  return Boolean(entity.target);
+}
+
 // localStorage's Scout info key
 const SCOUT_LS_KEY = "scoutInfo";
 
