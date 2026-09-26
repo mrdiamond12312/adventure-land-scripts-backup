@@ -547,7 +547,7 @@ const ITEM_NEEDED = [
   { name: "gphelmet" },
   { name: "vitring", maxLevel: 3 },
   { name: "vitearring", maxLevel: 3 },
-  { name: "wbook0", maxLevel: 4 },
+  // { name: "wbook0", maxLevel: 4 },
   { name: "embercore" },
 ];
 
