@@ -29,7 +29,7 @@ const MIDAS_CHARACTER = [MAGE, "CrownPriest"];
 const trustedPartners = ["earthPri", "earthWar"];
 
 /** Cave of Many Dreams — the one switch for the daily run, loader and all */
-var USE_CAVE_STRATEGY = false;
+var USE_CAVE_STRATEGY = true;
 
 const CODE_SLOTS = {
   MoohThatCow: {
