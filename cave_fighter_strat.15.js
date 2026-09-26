@@ -95,6 +95,12 @@ const CAVE_ARRIVAL_SLACK = 120;
 /** How close the stairs must be to take them */
 const CAVE_DOOR_SLACK = 40;
 
+/** How far an escort may trail before the walk stops for her */
+const CAVE_ESCORT_LEASH = 200;
+
+/** How close a following escort must come before the walk resumes */
+const CAVE_ESCORT_CLOSE = 80;
+
 /** How long a refused walk or descent waits */
 const CAVE_MOVE_RETRY_MS = 3 * 1000;
 
@@ -432,12 +438,47 @@ function stepToDarkMageRange(darkmage, range) {
   if (Date.now() - caveRun.huntedAt < CAVE_HUNT_STEP_MS) return;
   if (smart.moving || isAdvanceSmartMoving) return;
 
-  const away = distance(character, darkmage) || 1;
-  const x = darkmage.x + ((character.x - darkmage.x) / away) * range;
-  const y = darkmage.y + ((character.y - darkmage.y) / away) * range;
+  const { x, y } = getDarkMageRangePoint(darkmage, range);
 
   caveRun.huntedAt = Date.now();
   Promise.resolve(xmove(x, y)).catch(() => undefined);
+}
+
+/**
+ * The point at this distance from the Dark Mage, on our side of him.
+ * @param {object} darkmage
+ * @param {number} range
+ * @returns {{x: number, y: number}}
+ */
+function getDarkMageRangePoint(darkmage, range) {
+  const away = distance(character, darkmage) || 1;
+
+  return {
+    x: darkmage.x + ((character.x - darkmage.x) / away) * range,
+    y: darkmage.y + ((character.y - darkmage.y) / away) * range,
+  };
+}
+
+/**
+ * Blinks to this distance from the Dark Mage, keeping mp for the shield.
+ * @param {object} darkmage
+ * @param {number} range
+ * @returns {Promise<boolean>} whether a blink was sent
+ */
+async function blinkToDarkMageRange(darkmage, range) {
+  if (Date.now() - caveRun.huntedAt < CAVE_HUNT_STEP_MS) return false;
+  if (smart.moving || isAdvanceSmartMoving) return false;
+  if (is_on_cooldown("blink")) return false;
+  if (character.mp < G.skills.blink.mp + G.skills.reflection.mp) return false;
+
+  const { x, y } = getDarkMageRangePoint(darkmage, range);
+
+  caveRun.huntedAt = Date.now();
+  await use_skill("blink", [x, y]).catch((error) =>
+    caveLog("blink refused", caveWhy(error)),
+  );
+
+  return true;
 }
 
 /**
@@ -475,7 +516,9 @@ async function huntCaveDarkMage(darkmage) {
 
   if (away > CAVE_DARKMAGE_STANDOFF + CAVE_ARRIVAL_SLACK) {
     caveLog("dark mage", { step: "closing", away: Math.round(away) });
-    stepToDarkMageRange(darkmage, CAVE_DARKMAGE_STANDOFF);
+    // Blink only before the shield
+    if (!(await blinkToDarkMageRange(darkmage, CAVE_DARKMAGE_STANDOFF)))
+      stepToDarkMageRange(darkmage, CAVE_DARKMAGE_STANDOFF);
     return travelling();
   }
 
@@ -719,15 +762,15 @@ function getPendingCaveObjectives() {
 }
 
 /**
- * Whether an unfinished room's ally is waiting on us with nothing left to fight.
+ * An unfinished room's ally with nothing left to fight, who we walk to the stairs.
  * @param {object[]} pending
- * @returns {boolean}
+ * @returns {object|undefined}
  */
-function isEscortingToCaveStairs(pending) {
+function getCaveEscort(pending) {
   const rooms = new Set(pending.map((objective) => objective.id));
   const entities = Object.values(parent.entities);
 
-  return entities.some(
+  return entities.find(
     (ally) =>
       ally.cave?.side === "ally" &&
       !ally.dead &&
@@ -790,9 +833,19 @@ function getCaveDestination(pending) {
 
   // An escort pays out at the stairs, not at the room that started it. They
   // are still locked at that point, so walk to them without taking them
-  if (isEscortingToCaveStairs(pending)) {
-    const stairs = (cave.doors ?? []).find((door) => door.down);
-    if (stairs) return { id: "escort", x: stairs.x, y: stairs.y };
+  const escort = getCaveEscort(pending);
+  const stairs = (cave.doors ?? []).find((door) => door.down);
+  if (escort && stairs) {
+    const gap = distance(character, escort);
+
+    // A stalled escort is fetched
+    if (gap > CAVE_ESCORT_LEASH && !escort.moving)
+      return { id: "escort", x: escort.x, y: escort.y };
+
+    if (gap > CAVE_ESCORT_CLOSE && escort.moving)
+      return caveLog("escort — waiting", { gap: Math.round(gap) });
+
+    return { id: "escort", x: stairs.x, y: stairs.y, escort: escort.id };
   }
 
   if (required.length) return getClosestCaveDestination(required);
@@ -890,12 +943,22 @@ async function walkToCaveDestination(pending) {
 
     caveRun.walkedAt = Date.now();
 
-    // A run refuses both outright
+    // An escort must not be outrun
+    const stopWatcher = destination.escort
+      ? () => {
+          const escort = parent.entities[destination.escort];
+          return !escort || distance(character, escort) > CAVE_ESCORT_LEASH;
+        }
+      : undefined;
+
+    // No town, magiport or blink in a run
     await advanceSmartMove(to, {
       useScare: true,
       useTown: false,
       useMagiport: false,
+      useBlink: false,
       speed: CAVE_PATHING_SPEED,
+      stopWatcher,
     }).catch(async (error) => {
       caveLog("walk refused", {
         to: destination.name ?? destination.id,
@@ -903,7 +966,15 @@ async function walkToCaveDestination(pending) {
       });
 
       // Native pathing reads floors our graph cannot
-      await smart_move(to).catch(() => undefined);
+      const watcher =
+        stopWatcher &&
+        setInterval(() => {
+          if (stopWatcher()) stop("move");
+        }, 250);
+
+      await smart_move(to)
+        .catch(() => undefined)
+        .finally(() => clearInterval(watcher));
     });
     return;
   }

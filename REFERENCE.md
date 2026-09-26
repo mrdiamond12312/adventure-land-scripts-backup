@@ -1965,3 +1965,17 @@ stairs locked. That was the Edda stall.
 `isEscortingToCaveStairs` now reads the entities instead: a live `ally` in an unfinished objective's
 room, with nothing hostile left in that room, means walk to the stairs. The "nothing hostile" part
 keeps it off a duel ally (rival still alive) and off a rescue ally (wolves still alive).
+
+An escort also has to be paced. A following actor walks straight at the nearest player while the
+line to them is clear. Otherwise the server asks a worker for a path and won't move her again until
+it answers (`actor.working`). Once we outran Edda (88 vs her 70) around a corner, she stood still
+500 from the stairs. So the stairs leg carries a `stopWatcher` that cancels the walk once she trails
+by more than `CAVE_ESCORT_LEASH` (200). We wait while she is still walking, until she is within
+`CAVE_ESCORT_CLOSE` (80). If she has stopped, we walk back to her.
+
+The mage blinks when it is far out (typically back from the doorway after a death). Blink has no
+range limit and snaps to the nearest safe spot, but landing runs `decay_s(player, 30000)`, which
+cuts every active buff by 30s and would wipe the 5s shield. So `blinkToDarkMageRange` is only used
+in the closing step, before any shield, and only while there is mp left for the shield after it
+(1600 + 540). Ordinary cave walks don't blink at all (`useBlink: false`): magiport is refused in a
+run, so a mage that blinks ahead just ends up fighting on its own.
