@@ -1,25 +1,4 @@
-// Realm identity, cross-realm data and hop policy, consulted by server_hop.14.js
-
-/** The realm this character told Bean to call home — Bean's choice is not readable from CODE */
-const HOME_SERVER = {
-  serverRegion: "US",
-  serverIdentifier: "II",
-};
-
-/** @returns {string} the realm we are on right now, e.g. "USII" */
-function getCurrentServer() {
-  return `${server.region}${server.id}`;
-}
-
-/** @returns {string} the configured home realm, e.g. "USII" */
-function getHomeServer() {
-  return `${HOME_SERVER.serverRegion}${HOME_SERVER.serverIdentifier}`;
-}
-
-/** @returns {boolean} whether we are standing on the configured home realm */
-function isAtHomeServer() {
-  return getCurrentServer() === getHomeServer();
-}
+// Cross-realm data and hop policy, consulted by server_hop.14.js
 
 /** Master switch — false restores the plain HP-race hopping */
 var FATIGUE_AWARE_HOPPING = true;

@@ -75,8 +75,8 @@ basic_function.7.js          [SHARED — the core library]
     strategic_fn.11.js           combat math: damage/heal calc, gear selection, cleave/blast targeting
     normal_strategy.12.js        \_ farming strategy variants, swapped via
     pull_strategy.13.js          /  changeToPullStrategies()/changeToNormalStrategies()
-    server_hop_utilities.25.js   realm identity (HOME_SERVER), the cross-realm ServerRealmData
-                                 distributor, and realm-fatigue hop policy; loaded just before
+    server_hop_utilities.25.js   the cross-realm ServerRealmData distributor and realm-fatigue
+                                 hop policy (HOME_SERVER itself is config in 7); loaded just before
                                  14, which consults it
     server_hop.14.js             server-hopping automation (only if caracALconfig enables the character)
     cave_fighter_strat.15.js         \_ the fighter targeting chain, walked in this
@@ -129,7 +129,7 @@ Standalone / auxiliary (not wired into the load graph above, used directly or ad
 
 - **Config lives at the top of `basic_function.7.js`.** Party roster (`partyMems`), per-character role
   constants (`MAGE`, `WARRIOR`, `PRIEST`, `RANGER`, `TANKER`, `HEALER`), the `CODE_SLOTS` map (character name
-  → home server + slot), farming location (`map`/`mapX`/`mapY`), `mobsToFarm`, and `desiredElixir` are all
+  → CODE slot), farming location (`map`/`mapX`/`mapY`), `mobsToFarm`, and `desiredElixir` are all
   hand-edited here before (re)deploying scripts to a party. Several alternate map/location blocks are kept
   commented out immediately below the active one — follow that pattern (comment out the old location, don't
   delete it) when switching farming spots.

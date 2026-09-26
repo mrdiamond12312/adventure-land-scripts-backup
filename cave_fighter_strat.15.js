@@ -2,9 +2,6 @@
 
 // The daily, and the door it is behind
 
-/** The realm holding the daily */
-const CAVE_HOME_REALM = "USII";
-
 /** Dorr, at the vine-covered doorway */
 const DORR_SPOT = { map: "main", x: 816, y: 1200 };
 
@@ -210,7 +207,7 @@ function isInCave() {
 function isHomeRealm() {
   if (typeof server === "undefined") return false;
 
-  return `${server.region}${server.id}` === CAVE_HOME_REALM;
+  return isAtHomeServer();
 }
 
 /**

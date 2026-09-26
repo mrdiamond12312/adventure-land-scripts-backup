@@ -285,9 +285,10 @@ content we would forfeit. The at-home path is unaffected either way, since
   the HP race entirely; a home-table boss abroad drops to last **after** HP, replacing the old
   plain home tie-break which only ever broke exact HP ties.
 
-**Where home actually is.** `HOME_SERVER` lives in slot 25 with `getCurrentServer`/`getHomeServer`/
-`isAtHomeServer`, moved out of slot 14 so the dependency runs one way (14 consults 25, 25 loads
-first). It is a hand-maintained mirror of what Bean was told — **CODE cannot read the real home
+**Where home actually is.** `HOME_SERVER` lives in the config at the top of slot 7 with
+`getCurrentServer`/`getHomeServer`/`isAtHomeServer` — first moved out of slot 14 into 25 so the
+dependency runs one way, then into 7 (2026-09-26) because 25 only loads for hop-enabled characters
+and the cave's realm guard on the fighters needs it too. It is a hand-maintained mirror of what Bean was told — **CODE cannot read the real home
 realm**; there is no `character.home`, nothing in `runner_functions.js`, and `set_home()` returns
 nothing useful. Every policy here is only as correct as that constant, so it is the first thing to
 check if the guards misfire.
@@ -1829,10 +1830,14 @@ Dorr and spend a visit there.
 
 The check is now `CAVE_HOME_REALM`, a literal at the top of the file, against `server.region` +
 `server.id`. Deriving it was the wrong shape: `HOME_SERVER` in slot 25 is a single global that is
-unloaded for every fighter, and `CODE_SLOTS[].homeServer` is a per-character roster value that drifts
-from wherever the runner actually launches them — so both could disagree with the realm the daily is
+unloaded for every fighter, and `CODE_SLOTS[].homeServer` (since removed) was a per-character roster
+value that drifted from wherever the runner actually launches them — so both could disagree with the realm the daily is
 on. One editable constant says which realm the cave belongs to. An unreadable `server` counts as away:
 a run belongs to the realm holding it, so guessing wrong spends the daily on the wrong server.
+
+**Superseded (2026-09-26):** `HOME_SERVER` and its helpers moved into slot 7's config, which every
+fighter loads, so `isHomeRealm` now reads `isAtHomeServer()` and `CAVE_HOME_REALM` is gone — the
+cave and the merchant's hopping share one home, which is what the user wants.
 
 ### The cave's people are monsters to the client
 

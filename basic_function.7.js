@@ -32,39 +32,36 @@ const trustedPartners = ["earthPri", "earthWar"];
 var USE_CAVE_STRATEGY = false;
 
 const CODE_SLOTS = {
-  MoohThatCow: {
-    homeServer: "EUII",
-    script: 32,
-  },
-  CowTheMooh: {
-    homeServer: "ASIAI",
-    script: 2,
-  },
-  MooohMoooh: {
-    homeServer: "ASIAI",
-    script: 9,
-  },
-  MowTheCooh: {
-    homeServer: "ASIAI",
-    script: 4,
-  },
-  MerchantMooh: {
-    homeServer: "ASIAI",
-    script: 5,
-  },
-  MoohChan: {
-    homeServer: "USIII",
-    script: 5,
-  },
-  CupidCow: {
-    homeServer: "USII",
-    script: 32,
-  },
-  MooohSteak: {
-    homeServer: "USI",
-    script: 31,
-  },
+  MoohThatCow: { script: 32 },
+  CowTheMooh: { script: 2 },
+  MooohMoooh: { script: 9 },
+  MowTheCooh: { script: 4 },
+  MerchantMooh: { script: 5 },
+  MoohChan: { script: 5 },
+  CupidCow: { script: 32 },
+  MooohSteak: { script: 31 },
 };
+
+/** The realm this character told Bean to call home — Bean's choice is not readable from CODE */
+const HOME_SERVER = {
+  serverRegion: "US",
+  serverIdentifier: "I",
+};
+
+/** @returns {string} the realm we are on right now, e.g. "USII" */
+function getCurrentServer() {
+  return `${server.region}${server.id}`;
+}
+
+/** @returns {string} the configured home realm, e.g. "USII" */
+function getHomeServer() {
+  return `${HOME_SERVER.serverRegion}${HOME_SERVER.serverIdentifier}`;
+}
+
+/** @returns {boolean} whether we are standing on the configured home realm */
+function isAtHomeServer() {
+  return getCurrentServer() === getHomeServer();
+}
 
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
@@ -822,8 +819,6 @@ function getMonstersOnDeclares() {
     }
   }
 
-  // The merchant is actively dragging this mob type in from elsewhere (see dragEnt
-  // in merchant_service.19.js) — don't declare it until it's actually arrived.
   const luringMobType = get("luringMobType");
 
   for (const monster of mobsToFarm) {
@@ -2206,7 +2201,7 @@ const shouldDeployRogue = () => {
 
 const DYNAMIC_PARTY_PRESETS = {
   mrgreen: {
-    USI: [WARRIOR, PRIEST, ROGUE],
+    USI: [WARRIOR, PRIEST, MAGE],
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
@@ -2229,11 +2224,8 @@ const DYNAMIC_PARTY_PRESETS = {
       RANGER = RANGER1;
       return [RANGER1, PRIEST, ROGUE];
     },
-    default: () => {
-      // const isAggroed = !!server.status.franky?.target;
-      // HEALER = PRIEST;
-      return [WARRIOR, PRIEST, ROGUE];
-    },
+    USI: [WARRIOR, PRIEST, MAGE],
+    default: [WARRIOR, PRIEST, ROGUE],
   },
   icegolem: {
     EUII: () => {
@@ -2246,13 +2238,14 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER1;
       return [RANGER, ROGUE, MAGE];
     },
+    USI: [WARRIOR, PRIEST, MAGE],
     default: () => {
       HEALER = PRIEST;
       return [PRIEST, ROGUE, MAGE];
     },
   },
   dragold: {
-    USI: [WARRIOR, PRIEST, ROGUE],
+    USII: [WARRIOR, PRIEST, ROGUE],
     ASIAI: () => {
       RANGER = RANGER1;
       HEALER = PRIEST;
@@ -2263,7 +2256,7 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = PRIEST;
       return [WARRIOR, RANGER, PRIEST];
     },
-    USII: () => {
+    USI: () => {
       HEALER = PRIEST;
       return [WARRIOR, MAGE, PRIEST];
     },
@@ -2278,7 +2271,7 @@ const DYNAMIC_PARTY_PRESETS = {
       RANGER = RANGER1;
       return [WARRIOR, RANGER, PRIEST];
     },
-    USI: () => {
+    USII: () => {
       return [WARRIOR, ROGUE, PRIEST];
     },
     default: () => {
@@ -2286,8 +2279,8 @@ const DYNAMIC_PARTY_PRESETS = {
     },
   },
   pinkgoo: {
-    USI: [MAGE, PRIEST, ROGUE],
-    USII: [WARRIOR, MAGE, PRIEST],
+    USII: [MAGE, PRIEST, ROGUE],
+    USI: [WARRIOR, MAGE, PRIEST],
     ASIAI: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
@@ -2305,7 +2298,7 @@ const DYNAMIC_PARTY_PRESETS = {
     },
   },
   wabbit: {
-    USI: () => {
+    USII: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
       return [ROGUE, RANGER, MAGE];
@@ -2328,7 +2321,7 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER;
       return [WARRIOR, RANGER, MAGE];
     },
-    USI: () => {
+    USII: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
       return [WARRIOR, RANGER, ROGUE];
