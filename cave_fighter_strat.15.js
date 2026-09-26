@@ -58,9 +58,6 @@ const CAVE_OPTIONS_TO_REFUSE = [
   "e21_2",
 ];
 
-/** Options that pay out at the stairs */
-const CAVE_ESCORT_OPTIONS = ["e23_0", "e35_0", "e45_0"];
-
 /** The rogue option that leaves him to his wolves */
 const CAVE_ROGUE_WAIT = "watch";
 
@@ -722,22 +719,27 @@ function getPendingCaveObjectives() {
 }
 
 /**
- * Whether a settled vote has us walking someone to the stairs.
+ * Whether an unfinished room's ally is waiting on us with nothing left to fight.
  * @param {object[]} pending
  * @returns {boolean}
  */
 function isEscortingToCaveStairs(pending) {
-  const choice = character.cave?.choice;
+  const rooms = new Set(pending.map((objective) => objective.id));
+  const entities = Object.values(parent.entities);
 
-  if (!choice?.resolved) return false;
-  if (!CAVE_ESCORT_OPTIONS.includes(choice.result)) return false;
-
-  // A settled vote outlives its own room, so the objective it opened is what
-  // says the walk is still owed — both name the same phrase
-  const phrase = choice.title_message?.phrase;
-  if (!phrase) return false;
-
-  return pending.some((objective) => objective.name_message?.phrase === phrase);
+  return entities.some(
+    (ally) =>
+      ally.cave?.side === "ally" &&
+      !ally.dead &&
+      rooms.has(ally.cave.room) &&
+      !entities.some(
+        (other) =>
+          other !== ally &&
+          other.cave?.room === ally.cave.room &&
+          !other.dead &&
+          !isCaveFriendly(other),
+      ),
+  );
 }
 
 /**

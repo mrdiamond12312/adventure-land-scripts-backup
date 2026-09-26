@@ -1954,3 +1954,14 @@ A death costs nothing: Nera's `landing` option revives at the floor's doorway fo
 
 Whoever sees him writes his spot to `caveDarkMage` storage for the run. Reaching that spot without
 seeing him clears it. Without our mage on the roster the hunt is skipped.
+
+### An escort outlives its vote (debugged 2026-09-27)
+
+The server keeps only the latest vote in `run.cave.vote`. The escort check used to read
+`character.cave.choice.result`. So any vote after the escort vote (the shop, a revive, another
+encounter) wiped it out, and the party stood in the escort's room with the ally beside them and the
+stairs locked. That was the Edda stall.
+
+`isEscortingToCaveStairs` now reads the entities instead: a live `ally` in an unfinished objective's
+room, with nothing hostile left in that room, means walk to the stairs. The "nothing hostile" part
+keeps it off a duel ally (rival still alive) and off a rescue ally (wolves still alive).
