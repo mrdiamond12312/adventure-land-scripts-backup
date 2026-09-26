@@ -85,6 +85,41 @@ of `smartMove()` after the flag is set must go through `cleanUp()` (guaranteed v
 `try/finally`), because nothing watchdogs that flag — leaking it true silently freezes every
 routine that guards on it.
 
+`finally` only runs once the awaited move settles, and the game client can stop the character
+without ever settling it. A move promise only settles in `stop_logic` on arrival, and that only
+runs while `character.moving` is true. It can also settle on an `abs` update, on `new_map`, or
+when a later `move()` interrupts it. Two client paths clear `moving` without touching
+`deferreds["move"]`:
+- Death (`functions.js`). Respawning in town settles the move through `new_map`, as if it had
+  succeeded. A revive where you fell (a priest, or Nera in the cave) settles nothing.
+- A Cave of Many Dreams forced-vote pause (`receive_cave_state` in `generated_zones.js`). During
+  the pause, `move()` rejects `cave_paused` before it gets as far as interrupting, so even
+  `cleanUp()`'s `stop()` can't free the old one.
+
+Either way, the in-flight `unsafeMove` hangs forever with the flag set.
+`StrategicSmartMove.watchStrandedMoves()` rejects the orphaned deferreds on `character.on("death")`
+and on a paused `character.on("cave")`. That throws `smartMove()` into its `finally`, and the next
+tick walks again. It only acts while `isAdvanceSmartMoving` is set, so a bare `move()` elsewhere
+never gets a rejection it wasn't written to catch.
+
+`enter` and `leave` segments are followed by `_assertArrivedOn(segment)`, so a refusal throws into
+`cleanUp()` instead of walking the rest of the path on the wrong map. That's safe at any ping:
+the server calls `transport_player_to`, which sends `new_map`, *before* its success response on
+the same socket, so `character.map` is already right when the promise resolves, and a refusal
+rejects it.
+
+`door`/`transport` segments deliberately get no such check. `this.transport()` emits raw and waits
+out `waitForNewMap`'s 5s, because the runner's built-in `transport()` breaks for the bank. A bank
+mount or unmount answers `in_progress` and sends `new_map` only after a DB load, which can outlast
+those 5s. Walking on and letting the late `new_map` settle the next move is what gets those trips
+through, and an arrival check there would throw instead. High ping doesn't matter for the door
+itself: the server's door check (`B.door_dist`, 112) uses the server-side position, which trails
+the client by roughly speed × one-way latency. At 500ms that's tens of pixels.
+
+In ALPathfinder's `PathNode`, `map` on map-changing nodes is the map the step *leads to*. That was
+confirmed against the npm package (0.6.0) with real G: jail→main gives
+`{method: "leave", map: "main"}`.
+
 And to `isDoingSomethingMagical` in the same file: the walk loop busy-waits on it
 (`sleep/continue`), so the blink and magiport branches must reset it in a `finally` — an
 unhandled rejection there (e.g. `move()` interrupted by the magiport itself landing) otherwise

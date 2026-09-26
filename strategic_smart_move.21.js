@@ -55,8 +55,25 @@ class StrategicSmartMove {
     this.blinkLoop = undefined;
     this.magiportLoop = undefined;
     this.watcherInterval = undefined;
-    this.isSmartMoving = true;
+    this.isSmartMoving = false;
     this.townEpoch = 0;
+    this.watchStrandedMoves();
+  }
+
+  /**
+   * Rejects the walk in flight when the client stops us without settling it —
+   * death and a cave pause both do — so the walk loop still reaches cleanUp.
+   */
+  watchStrandedMoves() {
+    const reject = (reason) => {
+      if (!isAdvanceSmartMoving) return;
+      parent.reject_deferreds("move", { failed: true, reason });
+    };
+
+    character.on("death", () => reject("death"));
+    character.on("cave", (state) => {
+      if (state?.paused) reject("cave_paused");
+    });
   }
 
   /**
@@ -508,6 +525,18 @@ class StrategicSmartMove {
     reschedule();
   }
 
+  /**
+   * Throws when a map-changing segment left us anywhere but the map it leads
+   * to, so the rest of the path is never walked on the wrong map.
+   * @param {Object} segment - an enter or leave path node
+   */
+  _assertArrivedOn(segment) {
+    if (character.map === segment.map) return;
+    throw new Error(
+      `${segment.method} to ${segment.map} left us on ${character.map}`,
+    );
+  }
+
   waitForNewMap(effect, timeout = SMART_MOVE_CONFIG.NEW_MAP_TIMEOUT_MS) {
     return new Promise((resolve, reject) => {
       let timer;
@@ -724,10 +753,6 @@ class StrategicSmartMove {
       );
     }
 
-    if (options.wait) {
-      await sleep(options.wait);
-    }
-
     if (options.exact) {
       pathFindingResult.push({
         method: "move",
@@ -738,62 +763,66 @@ class StrategicSmartMove {
     }
 
     try {
-      if (options.useScare) {
-        await scareAwayMobs();
-        this.scareInterval = setInterval(async () => {
-          if (!this.isSmartMoving || session !== this.smartMoveSession) {
-            clearInterval(this.scareInterval);
+      if (options.wait) {
+        await sleep(options.wait);
+      }
+
+      try {
+        if (options.useScare) {
+          await scareAwayMobs();
+          this.scareInterval = setInterval(async () => {
+            if (!this.isSmartMoving || session !== this.smartMoveSession) {
+              clearInterval(this.scareInterval);
+              return;
+            }
+
+            await scareAwayMobs();
+          }, SMART_MOVE_CONFIG.SCARE_INTERVAL_MS);
+        }
+      } catch (e) {
+        console.warn("Code's not ready");
+      }
+
+      if (options.useMagiport && MAGE && character.ctype !== "mage") {
+        this.magiportLoop = setTimeout(
+          () => this._magiportCheck(session, toPosition),
+          0,
+        );
+      }
+
+      // Start moving
+      // Segment progress, shared with the blink loop which skips segments ahead after a successful blink
+      const progress = { segmentIndex: 0 };
+
+      if (
+        options.useBlink &&
+        character.ctype === "mage" &&
+        pathFindingResult.length
+      ) {
+        this.blinkLoop = setTimeout(
+          () => this._blinkCheck(session, pathFindingResult, progress),
+          0,
+        );
+      }
+
+      if (options.stopWatcher) {
+        this.watcherInterval = setInterval(() => {
+          if (SMART_MOVE_CONFIG.LOOP_DEBUG) console.warn("watcher tick", session);
+          if (options.stopWatcher()) {
+            stop();
+            this.isSmartMoving = false;
+            clearInterval(this.watcherInterval);
             return;
           }
 
-          await scareAwayMobs();
-        }, SMART_MOVE_CONFIG.SCARE_INTERVAL_MS);
+          if (!this.isSmartMoving || session !== this.smartMoveSession)
+            clearInterval(this.watcherInterval);
+        }, SMART_MOVE_CONFIG.STOP_WATCHER_INTERVAL_MS);
       }
-    } catch (e) {
-      console.warn("Code's not ready");
-    }
 
-    if (options.useMagiport && MAGE && character.ctype !== "mage") {
-      this.magiportLoop = setTimeout(
-        () => this._magiportCheck(session, toPosition),
-        0,
-      );
-    }
+      let moveError;
+      let blinkAttempts = 0;
 
-    // Start moving
-    // Segment progress, shared with the blink loop which skips segments ahead after a successful blink
-    const progress = { segmentIndex: 0 };
-
-    if (
-      options.useBlink &&
-      character.ctype === "mage" &&
-      pathFindingResult.length
-    ) {
-      this.blinkLoop = setTimeout(
-        () => this._blinkCheck(session, pathFindingResult, progress),
-        0,
-      );
-    }
-
-    if (options.stopWatcher) {
-      this.watcherInterval = setInterval(() => {
-        if (SMART_MOVE_CONFIG.LOOP_DEBUG) console.warn("watcher tick", session);
-        if (options.stopWatcher()) {
-          stop();
-          this.isSmartMoving = false;
-          clearInterval(this.watcherInterval);
-          return;
-        }
-
-        if (!this.isSmartMoving || session !== this.smartMoveSession)
-          clearInterval(this.watcherInterval);
-      }, SMART_MOVE_CONFIG.STOP_WATCHER_INTERVAL_MS);
-    }
-
-    let moveError;
-    let blinkAttempts = 0;
-
-    try {
       while (progress.segmentIndex < pathFindingResult.length) {
         if (!this.isSmartMoving || session !== this.smartMoveSession) break;
 
@@ -836,12 +865,14 @@ class StrategicSmartMove {
           await waitPromise.catch(() =>
             console.warn("Enter timeout! Current map:", character.map),
           );
+          this._assertArrivedOn(segment);
           advance();
           continue;
         }
 
         if (segment.method === "leave") {
           await leave();
+          this._assertArrivedOn(segment);
           advance();
           continue;
         }
@@ -933,6 +964,7 @@ class StrategicSmartMove {
     this.isDoingSomethingMagical = false;
     this.isSmartMoving = false;
     isAdvanceSmartMoving = false;
+    smartmoveDebug = false;
     stop();
     if (SMART_MOVE_CONFIG.LOOP_DEBUG)
       console.warn("Clean up called for session", this.smartMoveSession);
