@@ -1,8 +1,8 @@
-// Cave of Many Dreams — the fighter's highest priority strategy.
+// Cave of Many Dreams fighter strategy
 
-// Getting in
+// Entry
 
-/** Dorr, at the vine-covered doorway */
+/** Where Dorr stands */
 const DORR_SPOT = { map: "main", x: 816, y: 1200 };
 
 /** How close to Dorr everyone must stand to enter */
@@ -20,9 +20,9 @@ const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
 /** Run length to assume when the state carries no deadline */
 const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
 
-// Fighting
+// Dark Mage
 
-/** Immune to everything but his own reflected spell */
+/** Dies only to his own reflected spell */
 const CAVE_DARKMAGE = "cave_darkmage";
 
 /** How far the Dark Mage looks for a target */
@@ -58,10 +58,10 @@ const CAVE_OPTIONS_TO_REFUSE = [
   "e21_2",
 ];
 
-/** The rogue option that leaves him to his wolves */
+/** Rogue option that leaves him to the wolves */
 const CAVE_ROGUE_WAIT = "watch";
 
-/** Last Word, dropped only when a predator kills him */
+/** Last Word */
 const CAVE_ROGUE_PRIZE = "cave_backstabber";
 
 /** Rogue options when he is not holding Last Word, best first */
@@ -73,7 +73,7 @@ const CAVE_CHOICE_INTERVAL_MS = 1000;
 /** How long a vote or shop talk waits before it is sent again */
 const CAVE_REQUEST_RETRY_MS = 2 * 1000;
 
-// The shop
+// Shop
 
 /** Shop items not worth cave gold */
 const CAVE_ITEMS_TO_SKIP = ["broom", "tshirt0", "tshirt1", "tshirt2"];
@@ -87,7 +87,7 @@ const CAVE_BUY_RETRY_MS = 20 * 1000;
 /** Refusals before a shop is given up */
 const CAVE_BUY_ATTEMPTS = 6;
 
-// Moving
+// Movement
 
 /** How close counts as standing on an objective */
 const CAVE_ARRIVAL_SLACK = 120;
@@ -115,16 +115,16 @@ const CAVE_LAST_FLOOR = 2;
 /** How long a refused exit waits */
 const CAVE_EXIT_RETRY_MS = 5 * 1000;
 
-/** Narrates each decision */
+/** Logs each decision */
 const CAVE_DEBUG = true;
 
-// Narrating a run
+// Logging
 
 /** The last line printed per stage */
 const lastCaveLogs = new Map();
 
 /**
- * Prints a decision once per stage, until it changes.
+ * Logs a line once per stage until it changes.
  * @param {string} stage
  * @param {object} [detail]
  */
@@ -140,7 +140,7 @@ function caveLog(stage, detail) {
 }
 
 /**
- * What a refusal actually said, whichever shape it came back in.
+ * The reason from a refusal or an error.
  * @param {object|Error} error
  * @returns {string}
  */
@@ -150,7 +150,7 @@ function caveWhy(error) {
 
 // Run state
 
-/** @returns {object} a run's blank slate */
+/** @returns {object} empty per-run state */
 function freshCaveRun() {
   return {
     attempts: {},
@@ -170,10 +170,10 @@ function freshCaveRun() {
 /** Storage key for the party's settled shops */
 const CAVE_SHOPS_KEY = "caveShops";
 
-/** Room and choice ids are only unique within the run that issued them */
+/** Per-run state */
 let caveRun = freshCaveRun();
 
-/** Outlives any one run: the daily answer, the entry handshake, the run edge */
+/** State kept across runs */
 const caveState = {
   visit: undefined,
   checkedAt: 0,
@@ -181,39 +181,26 @@ const caveState = {
   inside: false,
 };
 
-// The daily, and getting in
+// Entry
 
-/**
- * Whether this client knows the cave at all.
- * @returns {boolean}
- */
+/** @returns {boolean} whether the cave API exists */
 function hasCaveApi() {
   return typeof cave_info === "function" && typeof cave_enter === "function";
 }
 
-/**
- * Whether a cave run currently holds this character.
- * @returns {boolean}
- */
+/** @returns {boolean} whether we are in a run */
 function isInCave() {
   return Boolean(character.cave);
 }
 
-/**
- * Whether this realm is ours.
- * @returns {boolean}
- */
+/** @returns {boolean} whether we are on the home realm */
 function isHomeRealm() {
   if (typeof server === "undefined") return false;
 
   return isAtHomeServer();
 }
 
-/**
- * Whether the home realm's next daily/nightly window lands too soon to spend
- * the time on a run.
- * @returns {boolean}
- */
+/** @returns {boolean} whether a scheduled event starts too soon for a run */
 function isEventDueSoon() {
   if (typeof msUntilHomeScheduledEvent !== "function") return false;
 
@@ -221,8 +208,7 @@ function isEventDueSoon() {
 }
 
 /**
- * Whether a run of ours is still open here. `remaining_ms` only comes back on
- * the realm holding the run, so its presence is the realm check.
+ * Whether we have an open run on this realm.
  * @param {object} [visit]
  * @returns {boolean}
  */
@@ -231,7 +217,7 @@ function canResumeCaveRun(visit) {
 }
 
 /**
- * The account's daily visit, re-asked at most once a minute.
+ * The daily visit, cached for a minute.
  * @returns {Promise<object|undefined>}
  */
 async function getCaveVisit() {
@@ -244,10 +230,7 @@ async function getCaveVisit() {
   return caveState.visit;
 }
 
-/**
- * Whether every party member is standing with us at Dorr.
- * @returns {boolean}
- */
+/** @returns {boolean} whether the whole party is at Dorr */
 function isPartyAtDorr() {
   return partyMems.every((name) => {
     if (name === character.name) return true;
@@ -258,38 +241,33 @@ function isPartyAtDorr() {
 }
 
 /**
- * Takes the party in, once, from whoever leads it, or walks a single character
- * back into a run that is still open.
- * @param {boolean} [resuming] a return to an open run, which needs no party
+ * Enters with the party, or rejoins an open run alone.
+ * @param {boolean} [resuming]
  * @returns {Promise<void>}
  */
 async function enterCave(resuming) {
-  // A fresh visit is spent once, by the leader, on the whole party at the door;
-  // a return is each character's own, so whoever is outside makes their own call
+  // Only the leader starts a fresh run
   if (!resuming && character.name !== partyMems[0]) return;
   if (Date.now() - caveState.enteredAt < CAVE_ENTER_COOLDOWN_MS) return;
 
-  // An outsider would be taken in on their own account's visit, but nobody can
-  // join a run already under way, so only a fresh entry has to care
   const outsiders = parent.party_list.filter(
     (name) => !partyMems.includes(name),
   );
   if (!resuming && outsiders.length)
-    return caveLog("entry held — outsiders", outsiders);
+    return caveLog("entry held: outsiders", outsiders);
 
-  // A fresh visit is spent on whoever is in the party, so it waits for all three
   if (!resuming && parent.party_list.length !== partyMems.length)
-    return caveLog("entry held — party", parent.party_list);
+    return caveLog("entry held: party", parent.party_list);
 
   caveLog(resuming ? "resuming" : "entering", parent.party_list);
   caveState.enteredAt = Date.now();
   await cave_enter().catch((error) => console.warn("Cave refused us", error));
 
-  // The visit is spent either way, so stop trusting the cached answer
+  // Re-check the visit
   caveState.checkedAt = 0;
 }
 
-// Picking a target
+// Targeting
 
 /** @returns {string|undefined} the room of a live rogue we voted to watch */
 function getWatchedCaveRoom() {
@@ -308,7 +286,7 @@ function getWatchedCaveRoom() {
 }
 
 /**
- * Whether this one is worth swinging at.
+ * Whether we should attack it.
  * @param {object} entity
  * @param {string} [watched]
  * @returns {boolean}
@@ -317,7 +295,6 @@ function isCaveMobWorthHitting(entity, watched) {
   return (
     entity.type === "monster" &&
     !entity.dead &&
-    // The cave's people are monsters to the client
     !entity.cave?.citizen &&
     !CAVE_SIDES_TO_LEAVE.includes(entity.cave?.side) &&
     entity.mtype !== CAVE_DARKMAGE &&
@@ -330,7 +307,7 @@ function isCaveMobWorthHitting(entity, watched) {
 }
 
 /**
- * Whether a position sits inside a room.
+ * Whether a position is inside the bounds.
  * @param {object} position
  * @param {number[]} bounds
  * @returns {boolean}
@@ -345,7 +322,7 @@ function isInCaveBounds(position, bounds) {
 }
 
 /**
- * The room holding a position, if the generated map has one there.
+ * The room containing a position.
  * @param {object} position
  * @returns {object|undefined}
  */
@@ -355,12 +332,9 @@ function getCaveRoom(position) {
   );
 }
 
-/**
- * Nearest cave mob worth hitting, whatever the party is already on first.
- * @returns {object|undefined}
- */
+/** @returns {object|undefined} the party target, else the nearest mob in our room */
 function getCaveTarget() {
-  // Camps sit a room apart, so vision alone would wake the neighbours
+  // Stay inside our room
   const room = getCaveRoom(character);
   const watched = getWatchedCaveRoom();
 
@@ -368,7 +342,6 @@ function getCaveTarget() {
     isCaveMobWorthHitting(entity, watched) &&
     (!room || isInCaveBounds(entity, room.bounds));
 
-  // A blinked-ahead mage must not pin whoever is still walking
   const partyTarget = getTarget();
   if (partyTarget && isHere(partyTarget)) return partyTarget;
 
@@ -391,7 +364,7 @@ function getCaveTargetInReach() {
     .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
 }
 
-// Hunting the Dark Mage
+// Dark Mage
 
 /** @returns {boolean} whether our mage is still in the run */
 function isCaveMageInRun() {
@@ -401,7 +374,7 @@ function isCaveMageInRun() {
 }
 
 /**
- * The Dark Mage in view, else where the party last saw him on this floor.
+ * The Dark Mage in view, else his last seen spot.
  * @returns {object|undefined}
  */
 function getCaveDarkMage() {
@@ -420,7 +393,7 @@ function getCaveDarkMage() {
   if (reported?.run !== character.cave.run) return undefined;
   if (reported.map !== character.map) return undefined;
 
-  // Standing on his spot without seeing him means he is dead
+  // At his spot and not seen: dead
   if (distance(character, reported) < CAVE_DARKMAGE_STRIKE) {
     set(CAVE_DARKMAGE_KEY, undefined);
     return caveLog("dark mage gone");
@@ -430,7 +403,7 @@ function getCaveDarkMage() {
 }
 
 /**
- * Steps to this distance from the Dark Mage, on our side of him.
+ * Walks to this distance from the Dark Mage.
  * @param {object} darkmage
  * @param {number} range
  */
@@ -445,7 +418,7 @@ function stepToDarkMageRange(darkmage, range) {
 }
 
 /**
- * The point at this distance from the Dark Mage, on our side of him.
+ * The point at this distance from the Dark Mage, on our side.
  * @param {object} darkmage
  * @param {number} range
  * @returns {{x: number, y: number}}
@@ -460,7 +433,7 @@ function getDarkMageRangePoint(darkmage, range) {
 }
 
 /**
- * Blinks to this distance from the Dark Mage, keeping mp for the shield.
+ * Blinks to this distance from the Dark Mage.
  * @param {object} darkmage
  * @param {number} range
  * @returns {Promise<boolean>} whether a blink was sent
@@ -482,9 +455,9 @@ async function blinkToDarkMageRange(darkmage, range) {
 }
 
 /**
- * The mage takes his spell under Reflective Shield; everyone else keeps clear.
+ * Mage tanks his cast under Reflective Shield; the rest keep away.
  * @param {object} darkmage
- * @returns {Promise<object>} the outcome, which always owns the tick
+ * @returns {Promise<object>}
  */
 async function huntCaveDarkMage(darkmage) {
   const away = distance(character, darkmage);
@@ -532,7 +505,7 @@ async function huntCaveDarkMage(darkmage) {
   return travelling();
 }
 
-// Voting on a room
+// Voting
 
 /**
  * Whether the cornered rogue is holding Last Word.
@@ -559,7 +532,7 @@ function isCaveRogueCarryingPrize(choice) {
 }
 
 /**
- * The option this character votes for.
+ * The option to vote for.
  * @param {object} choice
  * @returns {object|undefined}
  */
@@ -568,16 +541,14 @@ function pickCaveOption(choice) {
     (option) => !option.unavailable,
   );
 
-  // Walking away beats a wolf pack, so this one bends for nothing
   const allowed = offered.filter(
     (option) => !CAVE_OPTIONS_TO_REFUSE.includes(option.id),
   );
   if (!allowed.length) return undefined;
 
-  // Amber outlives the run, so nothing in here is worth paying it with
+  // Never spend Amber
   const affordable = allowed.filter((option) => !option.amber);
 
-  // Letting him die pays only while he holds Last Word; a rescue pays always
   if (choice.kind === "rogue") {
     const wanted = isCaveRogueCarryingPrize(choice)
       ? [CAVE_ROGUE_WAIT]
@@ -596,7 +567,7 @@ function pickCaveOption(choice) {
 }
 
 /**
- * Votes once per choice, since a majority settles it.
+ * Votes once per choice.
  * @param {object} choice
  * @returns {Promise<void>}
  */
@@ -614,7 +585,6 @@ async function voteOnCaveChoice(choice) {
       caveRun.choiceId = choice.id;
     })
     .catch((error) => {
-      // A majority got there first, so there is nothing left to vote on
       if (error?.reason === "vote_closed") {
         caveRun.choiceId = choice.id;
         return;
@@ -628,10 +598,10 @@ async function voteOnCaveChoice(choice) {
     });
 }
 
-// Buying the one item
+// Shop
 
 /**
- * Whether this objective is a shop room rather than a camp or an encounter.
+ * Whether this objective is a shop.
  * @param {object} objective
  * @returns {boolean}
  */
@@ -640,7 +610,7 @@ function isCaveShopObjective(objective) {
 }
 
 /**
- * Shop rooms already answered, by anyone in the run.
+ * Shop rooms already handled this run.
  * @returns {string[]}
  */
 function getSettledCaveShops() {
@@ -650,7 +620,7 @@ function getSettledCaveShops() {
 }
 
 /**
- * Records a shop room as answered, for the whole party.
+ * Marks a shop room as handled.
  * @param {string} room
  */
 function settleCaveShop(room) {
@@ -661,8 +631,7 @@ function settleCaveShop(room) {
 }
 
 /**
- * Whether the shop's offer is on the skip list, which names plain items while
- * the shop prefixes its own.
+ * Whether the shop item is on the skip list.
  * @param {string} [name]
  * @returns {boolean}
  */
@@ -676,7 +645,7 @@ function isCaveItemSkipped(name) {
 }
 
 /**
- * Buys the shop's one item, since cave gold is worthless once the run ends.
+ * Buys the shop item.
  * @param {object} choice
  * @returns {Promise<void>}
  */
@@ -688,12 +657,10 @@ async function buyFromCaveShop(choice) {
     settleCaveShop(room);
     return caveLog("shop sold out", shop.name);
   }
-  // Turning one down takes no standing in it
   if (isCaveItemSkipped(shop.name)) {
     settleCaveShop(room);
     return caveLog("shop skipped", shop.name);
   }
-  // The purse is shared, so whoever stands in the shop buys
   if (shop.nearby === false) return;
   if ((caveRun.attempts[room] ?? 0) >= CAVE_BUY_ATTEMPTS) return;
   if (Date.now() - caveRun.buyAt < CAVE_BUY_RETRY_MS) return;
@@ -706,7 +673,7 @@ async function buyFromCaveShop(choice) {
   await cave_buy(room)
     .then(() => settleCaveShop(room))
     .catch((error) => {
-      // A short purse fills again from the next chest, so it costs no attempt
+      // Not an attempt
       if (error?.reason === "gold_not_enough") {
         caveRun.attempts[room] -= 1;
         return;
@@ -717,7 +684,7 @@ async function buyFromCaveShop(choice) {
 }
 
 /**
- * Opens the shop we are standing in, and settles one that never answers.
+ * Opens the shop we are standing in.
  * @param {object} objective
  */
 async function openCaveShop(objective) {
@@ -728,7 +695,6 @@ async function openCaveShop(objective) {
     return caveLog("shop gave up", objective.id);
   }
 
-  // The offer only exists once the room's own vote has begun
   if (character.cave?.choice?.shop?.room === objective.id) return;
   if (Date.now() - caveRun.shopTalkAt < CAVE_REQUEST_RETRY_MS) return;
 
@@ -742,11 +708,10 @@ async function openCaveShop(objective) {
   );
 }
 
-// What the floor still owes us
+// Objectives
 
 /**
- * This floor's unfinished objectives. A settled shop never flips `done`, so it
- * counts as finished here or nothing on the floor ever empties the list.
+ * This floor's unfinished objectives.
  * @returns {object[]}
  */
 function getPendingCaveObjectives() {
@@ -762,7 +727,7 @@ function getPendingCaveObjectives() {
 }
 
 /**
- * An unfinished room's ally with nothing left to fight, who we walk to the stairs.
+ * The ally we are escorting to the stairs.
  * @param {object[]} pending
  * @returns {object|undefined}
  */
@@ -786,7 +751,7 @@ function getCaveEscort(pending) {
 }
 
 /**
- * The closest of these.
+ * The closest one.
  * @param {object[]} destinations
  * @returns {object|undefined}
  */
@@ -797,7 +762,7 @@ function getClosestCaveDestination(destinations) {
 }
 
 /**
- * The nearest required objective still open on this floor.
+ * The nearest unfinished required objective.
  * @param {object[]} pending
  * @returns {object|undefined}
  */
@@ -808,9 +773,7 @@ function getNextRequiredCaveObjective(pending) {
 }
 
 /**
- * Whether we are not standing on that objective yet. Optional camps respawn
- * and a tanker holds its ground, so anything swingable on the way would keep
- * the floor from ever being finished.
+ * Whether we are away from that objective.
  * @param {object} [objective]
  * @returns {boolean}
  */
@@ -821,50 +784,45 @@ function isAwayFromCaveObjective(objective) {
 }
 
 /**
- * The next thing on this floor worth standing on, else the way down.
+ * Where to walk next.
  * @param {object[]} pending
  * @returns {object|undefined}
  */
 function getCaveDestination(pending) {
   const cave = character.cave;
 
-  // Required ones gate the stairs, so the optional rooms wait
   const required = pending.filter((objective) => objective.required);
 
-  // An escort pays out at the stairs, not at the room that started it. They
-  // are still locked at that point, so walk to them without taking them
+  // Escort to the stairs
   const escort = getCaveEscort(pending);
   const stairs = (cave.doors ?? []).find((door) => door.down);
   if (escort && stairs) {
     const gap = distance(character, escort);
 
-    // A stalled escort is fetched
+    // Fetch a stuck escort
     if (gap > CAVE_ESCORT_LEASH && !escort.moving)
       return { id: "escort", x: escort.x, y: escort.y };
 
     if (gap > CAVE_ESCORT_CLOSE && escort.moving)
-      return caveLog("escort — waiting", { gap: Math.round(gap) });
+      return caveLog("escort waiting", { gap: Math.round(gap) });
 
     return { id: "escort", x: stairs.x, y: stairs.y, escort: escort.id };
   }
 
   if (required.length) return getClosestCaveDestination(required);
 
-  // Cave gold dies with the run, and the purse only fills once the floor is run
   const shop = pending.find((objective) => isCaveShopObjective(objective));
   if (shop) return shop;
 
-  // Depth outranks the optional farm rooms
   const down = (cave.doors ?? []).find((door) => door.down && !door.locked);
 
   return down ?? getClosestCaveDestination(pending);
 }
 
-// Walking a floor
+// Movement
 
 /**
- * The floor a generated map belongs to, by its `zone_<run>_<floor>` name. Only
- * this run's floors answer, so anywhere else reads as no floor at all.
+ * The floor number of this run's map.
  * @param {string} [map]
  * @returns {number|undefined}
  */
@@ -878,8 +836,7 @@ function getCaveFloorOf(map) {
 }
 
 /**
- * Who is still on a shallower floor than us. Waiting on one already deeper
- * would strand both halves of a party that has split.
+ * Party members on a shallower floor.
  * @returns {string[]}
  */
 function getCaveStragglers() {
@@ -898,12 +855,11 @@ function getCaveStragglers() {
 }
 
 /**
- * Takes the stairs, whose spawn only the generated map knows.
+ * Takes the stairs.
  * @param {object} door
  * @returns {Promise<void>}
  */
 async function descendCaveFloor(door) {
-  // A refusal must not repeat per tick
   if (Date.now() - caveRun.descendedAt < CAVE_MOVE_RETRY_MS) return;
 
   caveRun.descendedAt = Date.now();
@@ -922,28 +878,28 @@ async function descendCaveFloor(door) {
 }
 
 /**
- * Walks to that destination, and through it when it is the way down.
+ * Walks to the destination, and takes it if it is the stairs.
  * @param {object[]} pending
+ * @param {object} [destination]
  * @returns {Promise<void>}
  */
-async function walkToCaveDestination(pending) {
+async function walkToCaveDestination(
+  pending,
+  destination = getCaveDestination(pending),
+) {
   if (smart.moving || isAdvanceSmartMoving) return;
-
-  const destination = getCaveDestination(pending);
   if (!destination) return;
 
   const slack = destination.to ? CAVE_DOOR_SLACK : CAVE_ARRIVAL_SLACK;
 
   if (distance(character, destination) > slack) {
-    // A refusal stops the character, so it must not repeat per tick
     if (Date.now() - caveRun.walkedAt < CAVE_MOVE_RETRY_MS) return;
 
-    // Same-map only: the next floor is not in G until we are standing in it
     const to = { map: character.map, x: destination.x, y: destination.y };
 
     caveRun.walkedAt = Date.now();
 
-    // An escort must not be outrun
+    // Stop if the escort falls behind
     const stopWatcher = destination.escort
       ? () => {
           const escort = parent.entities[destination.escort];
@@ -965,7 +921,7 @@ async function walkToCaveDestination(pending) {
         why: caveWhy(error),
       });
 
-      // Native pathing reads floors our graph cannot
+      // Native fallback
       const watcher =
         stopWatcher &&
         setInterval(() => {
@@ -981,7 +937,7 @@ async function walkToCaveDestination(pending) {
 
   if (destination.to) {
     const stragglers = getCaveStragglers();
-    if (stragglers.length) return caveLog("stairs held — party", stragglers);
+    if (stragglers.length) return caveLog("stairs held: party", stragglers);
 
     return descendCaveFloor(destination);
   }
@@ -989,11 +945,10 @@ async function walkToCaveDestination(pending) {
   if (isCaveShopObjective(destination)) await openCaveShop(destination);
 }
 
-// Ending the run
+// Leaving
 
 /**
- * Whether the floor owes us nothing and the way down stands open. Optional
- * camps keep respawning, so only this says when to stop fighting one.
+ * Whether the required rooms are done and the stairs are open.
  * @param {object[]} pending
  * @returns {boolean}
  */
@@ -1006,8 +961,7 @@ function isCaveFloorDone(pending) {
 }
 
 /**
- * Whether the run has nothing left to give: the deepest floor, cleared. An
- * open way down outranks leaving, however deep the floor claims to be.
+ * Whether it is time to leave.
  * @param {object[]} pending
  * @returns {boolean}
  */
@@ -1017,12 +971,33 @@ function isCaveRunFinished(pending) {
   if ((cave.floor ?? 0) < CAVE_LAST_FLOOR) return false;
   if ((cave.doors ?? []).some((door) => door.down && !door.locked))
     return false;
+  if (pending.some((objective) => objective.required)) return false;
+
+  // Farms may be stuck
+  if (isCaveAmberCapped())
+    return !pending.some((objective) => objective.kind !== "farm");
 
   return pending.length === 0;
 }
 
+/** @returns {boolean} whether the run has spawned all the Amber it can */
+function isCaveAmberCapped() {
+  const limits = character.cave.limits;
+
+  return Boolean(limits) && limits.amber_spawned >= limits.amber;
+}
+
+/** @returns {object|undefined} the nearest unopened cave chest on this floor */
+function getNearestCaveChest() {
+  const chests = Object.values(parent.chests).filter(
+    (chest) => chest.map === character.map,
+  );
+
+  return getClosestCaveDestination(chests);
+}
+
 /**
- * Leaves for good, which is what pays the party its unspent Amber.
+ * Exits the run.
  * @returns {Promise<void>}
  */
 async function leaveCave() {
@@ -1032,15 +1007,15 @@ async function leaveCave() {
 
   if (typeof cave_exit !== "function") return caveLog("no exit to take");
 
-  caveLog("run finished — leaving", { floor: character.cave.floor });
+  caveLog("leaving", { floor: character.cave.floor });
 
   await cave_exit().catch((error) => caveLog("exit refused", caveWhy(error)));
 }
 
-// The tick
+// Tick
 
 /**
- * Records the run starting or ending, once per crossing.
+ * Handles entering or leaving a run.
  * @param {boolean} inCave
  */
 function noteCaveRunEdge(inCave) {
@@ -1048,14 +1023,12 @@ function noteCaveRunEdge(inCave) {
 
   if (inCave) caveRun = freshCaveRun();
   else {
-    // The run is over for everyone, not just whoever spent the visit
     caveState.checkedAt = 0;
 
-    // Nothing further down the chain assigns one, so it cannot be left idle
     changeToNormalStrategies();
   }
 
-  // The merchant cannot see character.cave, so leave it a deadline it can read
+  // Deadline for the merchant
   set(
     "caveRun",
     inCave ? character.cave.expires ?? Date.now() + CAVE_RUN_MAX_MS : undefined,
@@ -1065,8 +1038,8 @@ function noteCaveRunEdge(inCave) {
 }
 
 /**
- * Fights the run out: the room, then the floor, then the way down or out.
- * @returns {Promise<object>} the outcome, which always owns the tick
+ * Runs one tick inside the cave.
+ * @returns {Promise<object>}
  */
 async function fightCaveRun() {
   changeToPullStrategies();
@@ -1078,7 +1051,6 @@ async function fightCaveRun() {
     choice: character.cave.choice?.id,
   });
 
-  // A forced vote stops the cave's own clock
   if (character.cave.paused) {
     caveLog("paused", {
       choice: character.cave.choice?.id,
@@ -1087,31 +1059,33 @@ async function fightCaveRun() {
       in: Math.round((character.cave.choice?.deadline - Date.now()) / 1000),
     });
 
-    // The clock stops, the fight does not — but a move would be refused
+    // Moves are refused while paused
     const held = getCaveTarget();
 
-    // The tick stays ours, or the chain below walks us out
     return held ? engage(held) : travelling();
   }
 
-  // Respawn is free, so he is always worth another try
   const darkmage = isCaveMageInRun() ? getCaveDarkMage() : undefined;
   if (darkmage) return huntCaveDarkMage(darkmage);
 
-  // One read of the objectives, which every answer below is drawn from
   const pending = getPendingCaveObjectives();
 
-  // Open stairs outrank a stray pack, or a camp holds whoever lags behind
+  // Only hit what is in reach while walking
   const holding =
     isCaveFloorDone(pending) ||
     isAwayFromCaveObjective(getNextRequiredCaveObjective(pending));
 
-  // Committing to a fight ends the tick; passing through only swings at reach
   const target = holding ? getCaveTargetInReach() : getCaveTarget();
   if (target && !holding) return engage(target);
 
-  // Amber only reaches the party outside, and the clock buys nothing now
   if (isCaveRunFinished(pending)) {
+    const chest = getNearestCaveChest();
+    if (chest) {
+      caveLog("collecting chests", { chest: chest.id });
+      walkToCaveDestination(pending, { id: "chest", x: chest.x, y: chest.y });
+      return travelling();
+    }
+
     await leaveCave();
     return travelling();
   }
@@ -1122,11 +1096,10 @@ async function fightCaveRun() {
 }
 
 /**
- * Gathers the party at Dorr and spends the daily, or says why it will not.
+ * Gathers the party at Dorr and enters.
  * @returns {Promise<object|undefined>} the outcome, if it owns this tick
  */
 async function approachCave() {
-  // The daily resets on our own realm, and a hop would end the run
   if (!isHomeRealm())
     return caveLog("away from home realm", {
       here:
@@ -1138,10 +1111,9 @@ async function approachCave() {
   const visit = await getCaveVisit();
   const resuming = canResumeCaveRun(visit);
 
-  // A run already paid for outranks the window a fresh one would have to dodge
   if (!resuming) {
     if (isEventDueSoon())
-      return caveLog("skipped — window in", {
+      return caveLog("skipped: event soon", {
         minutes: Math.round(msUntilHomeScheduledEvent() / 60000),
       });
 
@@ -1154,14 +1126,11 @@ async function approachCave() {
 
   if (distance(character, DORR_SPOT) > DORR_SLACK) {
     caveLog(resuming ? "walking back to Dorr" : "walking to Dorr");
-    // A pulled train at the door is a party that cannot go in
     changeToNormalStrategies();
     await advanceSmartMove(DORR_SPOT);
     return travelling();
   }
 
-  // Standing at the door, waiting on the stragglers. Whoever is still inside a
-  // run we are returning to cannot be at Dorr, so a return waits for nobody
   if (!resuming && !isPartyAtDorr()) {
     caveLog("at Dorr, waiting on the party");
     return travelling();
@@ -1173,7 +1142,7 @@ async function approachCave() {
 }
 
 /**
- * Fights a run out, otherwise gathers the party at Dorr and goes in.
+ * Cave strategy entry point.
  * @returns {Promise<object|undefined>} the outcome, if it owns this tick
  */
 async function useCaveStrategy() {
@@ -1192,11 +1161,10 @@ async function useCaveStrategy() {
   return fightCaveRun();
 }
 
-// The room's own clock
+// Choice loop
 
 /**
- * Answers the room on its own clock. The tick cannot: it bails while smart
- * moving, and a pause refuses the move it is waiting on.
+ * Votes and buys, independent of the tick.
  * @returns {Promise<void>}
  */
 async function caveChoiceLoop() {

@@ -1979,3 +1979,15 @@ cuts every active buff by 30s and would wipe the 5s shield. So `blinkToDarkMageR
 in the closing step, before any shield, and only while there is mp left for the shield after it
 (1600 + 540). Ordinary cave walks don't blink at all (`useBlink: false`): magiport is refused in a
 run, so a mage that blinks ahead just ends up fighting on its own.
+
+### Leaving floor 2 (2026-09-27)
+
+The old rule left only once every floor-2 objective was done, farms included. A farm's next wave
+is refused once the run has spawned 512 monsters (`issued >= 512`) or has more than 52 actors, so
+late in a run a farm can never finish. The party then circled it until the timer ran out.
+
+`isCaveRunFinished` now requires the required rooms to be done, which is what rolls `cave_finish`
+and its independent 0.1% `cave_finish_bonus` items. After that, once `limits.amber_spawned`
+reaches `limits.amber` (36), only farms may remain. Below the cap the old everything-done rule
+still applies. Amber reaches the purse only when its chest is opened, so the party walks to every
+unopened chest on the floor before `cave_exit`. The exit also turns the purse's Amber into an item.
