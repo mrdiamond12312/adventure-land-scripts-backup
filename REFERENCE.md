@@ -1439,6 +1439,30 @@ incumbent is lost the moment the stand closes or we drift, so any trip away re-c
 a re-picked spot can be closer than 24px, and holding needs us within 4px anyway. That relies on
 `advanceSmartMove`'s `exact: true` appending a literal `move` (strategic_smart_move.21.js).
 
+**Xyn's reach and a full square (2026-09-26).** Without a computer, `exchange` needs the merchant
+within `B.sell_dist` (400, server-only) of `G.maps.main.exchange` — Xyn at (-25, -478), which only the
+top strip of Merrit's north area (y ≈ -120..-80) reaches. `findStandSpot()` therefore ranks every
+spot in Xyn's reach (380 centre-to-centre, the server's box distance is never longer) ahead of any
+other; with a computer it is plain nearest. An out-of-reach exchange just fails and retries, so
+nothing else guards it. A held spot is kept even when a better-ranked one frees up — first come
+first served is worth more than the reach. When nothing is free the old `homeLocation` stays (the
+stand still sells, Merrit just won't come) and the scan backs off to every 5s; refusals expire
+after 10 minutes, since the stand that was first eventually leaves.
+
+**The parcel hold (2026-09-26).** `merrit_status` carries `{code: "cooldown", remaining_ms}` while
+the account's hourly cooldown runs, and the server pushes a fresh one the moment a parcel lands, so
+`parcelCooldownEndsAt` is kept from those pushes (plus one `merrit_info` request at load, since the
+server only learns the account's last parcel from the DB on request). `isAwaitingParcel()` opens
+`settle_ms` + 1 min before the cooldown ends and blocks gnome, ent and scout (not events, mining or
+fishing). It closes when the parcel resets the cooldown, or after `settle_ms` + 5 min spent actually
+parked inside the window — counted from the later of parking and the window opening, since the
+merchant may have been parked for most of the hour already.
+
+**The stand closes on the way to an event.** An open stand walks at speed 10, and the tick used to
+skip `close_stand()` whenever `isFightingBoss` was set — which it is from the moment the event duty is
+taken, so a stand open at home stayed open for the whole trip. It now stays open only while not
+`smart.moving`/`isAdvanceSmartMoving`, i.e. for the short `move()`s of orbiting the boss.
+
 `parent.character.merrit` is the authority when it still goes wrong — `.reasons[]` carries the
 server's own codes (`area`, `closed`, `listing`, `inventory`, `warming`, `cooldown`, `npc`,
 `stand_close`, `stand_front`, `unreachable`), refreshed by

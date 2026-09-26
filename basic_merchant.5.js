@@ -44,14 +44,22 @@ const STAND_SCAN_STEP = 8;
 const MERRIT_SPOT_BLOCKERS = ["stand_close", "stand_front", "npc", "area"];
 /** Time to walk home before the settle window */
 const PARCEL_HOLD_LEAD = 60_000;
-/** How long past due to keep waiting on Merrit */
+/** How long to stay parked past settle_ms before giving up on Merrit */
 const PARCEL_HOLD_GRACE = 300_000;
+/** How long a refused spot stays off the list */
+const STAND_REJECT_MS = 600_000;
+/** Wait between scans while no spot is free */
+const STAND_RESCAN_MS = 5_000;
+/** Xyn's exchange reach without a computer (server B.sell_dist), less a margin */
+const XYN_EXCHANGE_REACH = 380;
 
 // Merrit parcel state
 /** Our claimed parcel spot */
 let homeLocation = { map: "main", x: -116, y: 0 };
-/** Spots the server refused, as "x,y" */
-const rejectedStandSpots = new Set();
+/** Spots the server refused, "x,y" -> when */
+const rejectedStandSpots = new Map();
+/** No spot scan before this */
+let nextStandScanAt = 0;
 /** When we parked on homeLocation, 0 while not */
 let standParkedAt = 0;
 /** Last merrit_status, with when and where it arrived */
@@ -59,8 +67,20 @@ let merritStatus = null;
 /** When the parcel cooldown ends, 0 while unknown */
 let parcelCooldownEndsAt = 0;
 
-/** @returns {Object} Merrit's market rules */
-const merritMarket = () => G.npcs.citizen22.market;
+/** Merrit's market rules */
+const MERRIT_MARKET = G.npcs.citizen22.market;
+/** [x, y] of every NPC on main that never moves */
+const FIXED_MAIN_NPCS = (G.maps.main.npcs ?? [])
+  .filter((npc) => {
+    const def = G.npcs[npc.id];
+    return def && def.role !== "citizen" && !def.moving && !npc.loop;
+  })
+  .map((npc) => npc.position ?? npc.positions?.[0])
+  .filter(Boolean);
+/** Xyn's [x, y] on main */
+const XYN_POSITION = G.maps.main.npcs.find(
+  (npc) => npc.id === "exchange",
+)?.position;
 
 parent.socket?.on("merrit_status", (data) => {
   const reasons = data?.reasons ?? [];
@@ -84,13 +104,21 @@ parent.socket?.emit("interaction", { type: "merrit_info" });
 function isAwaitingParcel() {
   if (!parcelCooldownEndsAt) return false;
 
-  const { settle_ms } = merritMarket();
+  const { settle_ms } = MERRIT_MARKET;
   const now = Date.now();
 
-  return (
-    now >= parcelCooldownEndsAt - settle_ms - PARCEL_HOLD_LEAD &&
-    now <= parcelCooldownEndsAt + settle_ms + PARCEL_HOLD_GRACE
-  );
+  const holdStart = parcelCooldownEndsAt - settle_ms - PARCEL_HOLD_LEAD;
+  if (now < holdStart) return false;
+
+  const isParked =
+    standParkedAt &&
+    character.stand &&
+    distanceToSpot(homeLocation) <= MERRIT_MARKET.anchor_tolerance;
+  if (!isParked) return true;
+
+  // Parked long enough and still nothing, so let this trip go
+  const parkedFor = now - Math.max(standParkedAt, holdStart);
+  return parkedFor <= settle_ms + PARCEL_HOLD_GRACE;
 }
 
 /** @returns {number} centre-to-centre px from us to spot */
@@ -100,24 +128,11 @@ const distanceToSpot = (spot) =>
 const haveAComputer = () =>
   locate_item("computer") !== -1 || locate_item("ancientcomputer") !== -1;
 
-/** @returns {number[][]} [x, y] of every NPC on main that never moves */
-function getFixedMainNpcs() {
-  return (G.maps.main.npcs ?? [])
-    .filter((npc) => {
-      const def = G.npcs[npc.id];
-      return def && def.role !== "citizen" && !def.moving && !npc.loop;
-    })
-    .map((npc) => npc.position ?? npc.positions?.[0])
-    .filter(Boolean);
-}
-
 /**
  * @param {{x: number, y: number}} spot
  * @returns {boolean} whether another open stand rules this spot out
  */
 function isSpotTaken(spot) {
-  const market = merritMarket();
-
   for (const id in parent.entities) {
     const entity = parent.entities[id];
     if (entity?.type !== "character" || !entity.stand) continue;
@@ -126,12 +141,15 @@ function isSpotTaken(spot) {
     const dx = Math.abs(spot.x - entity.real_x);
     const dy = Math.abs(spot.y - entity.real_y);
 
-    if (Math.hypot(dx, dy) <= market.stand_clearance + STAND_SPACING_MARGIN)
+    if (
+      Math.hypot(dx, dy) <=
+      MERRIT_MARKET.stand_clearance + STAND_SPACING_MARGIN
+    )
       return true;
 
     if (
-      dx <= market.front_width + STAND_SPACING_MARGIN &&
-      dy <= market.front_clearance + STAND_SPACING_MARGIN
+      dx <= MERRIT_MARKET.front_width + STAND_SPACING_MARGIN &&
+      dy <= MERRIT_MARKET.front_clearance + STAND_SPACING_MARGIN
     )
       return true;
   }
@@ -144,20 +162,19 @@ function isSpotTaken(spot) {
  * @returns {boolean} whether Merrit would visit a stand opened here
  */
 function isSpotViable(spot) {
-  const market = merritMarket();
+  const rejectedAt = rejectedStandSpots.get(`${spot.x},${spot.y}`);
+  if (Date.now() - rejectedAt < STAND_REJECT_MS) return false;
 
-  if (rejectedStandSpots.has(`${spot.x},${spot.y}`)) return false;
-
-  const inArea = market.areas.some(
+  const inArea = MERRIT_MARKET.areas.some(
     ([x0, y0, x1, y1]) =>
       spot.x >= x0 && spot.x <= x1 && spot.y >= y0 && spot.y <= y1,
   );
   if (!inArea) return false;
 
-  const nearNpc = getFixedMainNpcs().some(
+  const nearNpc = FIXED_MAIN_NPCS.some(
     ([x, y]) =>
       Math.hypot(spot.x - x, spot.y - y) <=
-      market.npc_clearance + STAND_SPACING_MARGIN,
+      MERRIT_MARKET.npc_clearance + STAND_SPACING_MARGIN,
   );
   if (nearNpc) return false;
 
@@ -175,7 +192,7 @@ function isHoldingHome() {
     character.map === homeLocation.map &&
     character.stand &&
     !character.moving &&
-    distanceToSpot(homeLocation) <= merritMarket().anchor_tolerance;
+    distanceToSpot(homeLocation) <= MERRIT_MARKET.anchor_tolerance;
 
   if (!holding) standParkedAt = 0;
   else if (!standParkedAt) {
@@ -191,7 +208,7 @@ function isHomeRefused() {
   if (!standParkedAt || !merritStatus || merritStatus.at < standParkedAt)
     return false;
 
-  const anchor = merritMarket().anchor_tolerance;
+  const anchor = MERRIT_MARKET.anchor_tolerance;
   const statusOffset = Math.hypot(
     merritStatus.x - homeLocation.x,
     merritStatus.y - homeLocation.y,
@@ -203,21 +220,39 @@ function isHomeRefused() {
   );
 }
 
-/** @returns {Object|undefined} the viable spot in Merrit's areas nearest to us */
-function findStandSpot() {
-  const { areas } = merritMarket();
-  let best;
-  let bestDistance = Infinity;
+/**
+ * @param {{x: number, y: number}} spot
+ * @returns {boolean} whether Xyn exchanges from here without a computer
+ */
+function isInXynReach(spot) {
+  if (!XYN_POSITION) return false;
+  const [x, y] = XYN_POSITION;
+  return Math.hypot(spot.x - x, spot.y - y) <= XYN_EXCHANGE_REACH;
+}
 
-  for (const [x0, y0, x1, y1] of areas) {
+/**
+ * @param {{x: number, y: number}} spot
+ * @returns {boolean} whether a spot is as good as it gets for us
+ */
+function isPreferredSpot(spot) {
+  return haveAComputer() || isInXynReach(spot);
+}
+
+/** @returns {Object|undefined} the nearest viable spot, Xyn's reach first */
+function findStandSpot() {
+  let best;
+  let bestRank = Infinity;
+
+  for (const [x0, y0, x1, y1] of MERRIT_MARKET.areas) {
     for (let x = x0; x <= x1; x += STAND_SCAN_STEP) {
       for (let y = y0; y <= y1; y += STAND_SCAN_STEP) {
         const spot = { map: "main", x, y };
-        const d = distanceToSpot(spot);
-        if (d >= bestDistance || !isSpotViable(spot)) continue;
+        // Any preferred spot outranks every other one
+        const rank = distanceToSpot(spot) + (isPreferredSpot(spot) ? 0 : 1e6);
+        if (rank >= bestRank || !isSpotViable(spot)) continue;
 
         best = spot;
-        bestDistance = d;
+        bestRank = rank;
       }
     }
   }
@@ -234,15 +269,19 @@ function claimStandSpot() {
 
   if (isHoldingHome()) {
     if (!isHomeRefused()) return homeLocation;
-
-    rejectedStandSpots.add(`${homeLocation.x},${homeLocation.y}`);
-    standParkedAt = 0;
-  } else if (isSpotViable(homeLocation)) {
+    rejectedStandSpots.set(`${homeLocation.x},${homeLocation.y}`, Date.now());
+  } else if (isSpotViable(homeLocation) && isPreferredSpot(homeLocation)) {
     return homeLocation;
   }
 
+  if (Date.now() < nextStandScanAt) return homeLocation;
+
+  // Nothing free keeps the old spot: the stand still sells, just no parcel
   const spot = findStandSpot();
-  if (spot) {
+  nextStandScanAt = Date.now() + STAND_RESCAN_MS;
+  if (!spot) return homeLocation;
+
+  if (spot.x !== homeLocation.x || spot.y !== homeLocation.y) {
     log(`Merrit spot moved to ${spot.x},${spot.y}`);
     homeLocation = spot;
   }
@@ -254,7 +293,7 @@ async function moveHome() {
   const spot = claimStandSpot();
 
   if (
-    distanceToSpot(spot) <= merritMarket().anchor_tolerance ||
+    distanceToSpot(spot) <= MERRIT_MARKET.anchor_tolerance ||
     smart.moving ||
     isAdvanceSmartMoving ||
     isDraggingMobs
@@ -285,9 +324,13 @@ setInterval(async function () {
     return;
   }
 
-  // At an event the stand stays open even while moving — speed is 10 anyway,
-  // and idleAtEvent (merchant_frenzinesss.100.js) wants it up
-  if (character.moving && character.stand && !isFightingBoss) {
+  // At an event the stand stays open while orbiting, never on the way there
+  const isTravelling = smart.moving || isAdvanceSmartMoving;
+  if (
+    character.moving &&
+    character.stand &&
+    (!isFightingBoss || isTravelling)
+  ) {
     close_stand();
     await equipBatch(calculateMerchantEquipments());
   } else if (
