@@ -1,3 +1,6 @@
+/** Attack below which a cooperative mob is pulled anyway */
+const WEAK_COOP_MOB_ATTACK = 100;
+
 async function usePullStrategies(target) {
   const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
   const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
@@ -161,11 +164,17 @@ async function usePullStrategies(target) {
           (mob) =>
             mob.cooperative &&
             !mob["1hp"] &&
+            mob.attack >= WEAK_COOP_MOB_ATTACK &&
             (!myCharacters.includes(mob.target) ||
               externalPartyMembers.includes(mob.target)),
         ) &&
         (!mobsTargetingExternalParty ||
           distance(character, { map: map, x: mapX, y: mapY }) > 300);
+
+      // Nobody outside our account is tanking in range
+      const nobodyElseTanking = !mobsInAgitateRange.some(
+        (mob) => mob.target && !isOwnedCharacter(mob.target),
+      );
 
       // Fear Check
       const willNotBeFeared = !isFearedAfterAgitating;
@@ -183,6 +192,7 @@ async function usePullStrategies(target) {
         sufficientNoTargetMobs &&
         safeToAgitateMobs &&
         wontStealOrBreakCoop &&
+        nobodyElseTanking &&
         willNotBeFeared &&
         damageIsAcceptable
       ) {
