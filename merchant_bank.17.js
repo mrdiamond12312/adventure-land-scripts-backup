@@ -402,15 +402,13 @@ async function bankLoop() {
     return setTimeout(bankLoop, 5_000);
   }
 
+  if (isAwaitingParcel() && !hasVisitedBank) return setTimeout(bankLoop, 5_000);
+
   try {
     onDuty = true;
 
     // First run: build item level map then fetch items
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
-      // Walk every floor: character.bank only carries the packs of the floor
-      // we're standing on, so one visit per floor is what fills BANK_CACHE.
-      // goToBankFloor is forced — this runs at startup, before any other loop
-      // has taken the duty, and it updateBank()s on arrival.
       for (const floor of Object.keys(BANK_FLOORS)) {
         await goToBankFloor(floor, true);
       }

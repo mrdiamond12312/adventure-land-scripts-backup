@@ -406,9 +406,8 @@ setInterval(async function () {
     300000,
   );
 
-  // Events outrank chilling: a rod cast we skip comes back on cooldown long
-  // before the next boss does (merchant_frenzinesss.100.js owns the fight)
-  const hasEventToJoin = !!getEventToJoin();
+  // Events outrank chilling
+  const hasEventToJoin = !!getEventToJoin() && !isAwaitingParcel();
 
   if (!hasEventToJoin && !is_on_cooldown("mining")) goMining();
   else if (!hasEventToJoin && !is_on_cooldown("fishing")) goFishing();
