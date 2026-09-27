@@ -78,14 +78,33 @@ var LAST_RETRIEVED = { at: 0, signatures: {} };
 // ---------------------------------------------------------------------------
 
 /**
- * Returns the keep threshold for an item by name, falling back to its type.
- * @param {string} itemName
+ * An item's line in ITEMS_HIGHEST_LEVEL: titled copies (.p) are tracked apart.
+ * @param {{ name: string, p?: string }} item
+ * @returns {string} name, or name#p
+ */
+function getItemKey(item) {
+  return item.p ? `${item.name}#${item.p}` : item.name;
+}
+
+/** @returns {string} the item name behind a getItemKey key */
+function getKeyName(itemKey) {
+  return itemKey.split("#")[0];
+}
+
+/** @returns {boolean} whether an item belongs to a getItemKey key */
+function matchesItemKey(item, itemKey) {
+  return !!item && getItemKey(item) === itemKey;
+}
+
+/**
+ * Returns the keep threshold for an item line, falling back to its type.
+ * @param {string} itemKey - see getItemKey
  * @returns {number}
  */
-function getKeepThreshold(itemName) {
+function getKeepThreshold(itemKey) {
   return (
-    KEEP_THRESHOLD[itemName] ??
-    KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemName]?.type] ??
+    KEEP_THRESHOLD[getKeyName(itemKey)] ??
+    KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemKey]?.type] ??
     2
   );
 }
@@ -187,9 +206,10 @@ function retrieveMaxItemsLevel() {
     if (!item || item.q) return;
     if (IGNORE.includes(item.name) && !isCraftTargeted(item.name)) return;
 
-    const existing = ITEMS_HIGHEST_LEVEL[item.name];
+    const key = getItemKey(item);
+    const existing = ITEMS_HIGHEST_LEVEL[key];
     if (!existing) {
-      ITEMS_HIGHEST_LEVEL[item.name] = {
+      ITEMS_HIGHEST_LEVEL[key] = {
         level: item.level,
         quantity: 1,
         count: 1,
@@ -208,12 +228,7 @@ function retrieveMaxItemsLevel() {
   };
 
   character.items.forEach(processItem);
-  const bank = character.bank ?? BANK_CACHE ?? {};
-
-  for (const slot in bank) {
-    if (IGNORE_BANK_SLOTS.includes(slot)) continue;
-    bank[slot].forEach(processItem);
-  }
+  forEachBankSlot(processItem);
 }
 
 /**
@@ -250,19 +265,20 @@ function filterCompoundableSets(items, inventoryEmptySlots) {
 }
 
 /**
- * Bank slots worth pulling for one item id
- * @param {string} itemId
+ * Bank slots worth pulling for one item line
+ * @param {string} itemId - a craft target's name, or a getItemKey key
  * @param {boolean} isTargeted - a pending craft wants it at a level
  * @param {number} inventoryEmptySlots
  * @returns {Array<object>}
  */
 function selectRetrievableItems(itemId, isTargeted, inventoryEmptySlots) {
-  let items = getItemBankSlots(itemId, true, isTargeted).filter(
-    (item) => !item.l,
+  const name = getKeyName(itemId);
+  let items = getItemBankSlots(name, true, isTargeted).filter(
+    (item) => !item.l && (isTargeted || matchesItemKey(item, itemId)),
   );
 
   if (isTargeted) {
-    const targetLevel = getCraftTargetLevel(itemId);
+    const targetLevel = getCraftTargetLevel(name);
     items = items.filter((item) => (item.level ?? 0) < targetLevel);
   } else {
     // Clamped: a pile under its threshold keeps everything, and a bare
@@ -271,7 +287,7 @@ function selectRetrievableItems(itemId, isTargeted, inventoryEmptySlots) {
     items = items.slice(0, Math.max(0, items.length - keep));
   }
 
-  if (item_info({ name: itemId }).compound) {
+  if (item_info({ name }).compound) {
     items = filterCompoundableSets(items, inventoryEmptySlots);
   }
 
@@ -279,13 +295,13 @@ function selectRetrievableItems(itemId, isTargeted, inventoryEmptySlots) {
 }
 
 /**
- * Levels of an item's unlocked bag copies.
- * @param {string} itemName
+ * Levels of an item line's unlocked bag copies.
+ * @param {string} itemKey - see getItemKey
  * @returns {string}
  */
-function getBagLevelSignature(itemName) {
+function getBagLevelSignature(itemKey) {
   return character.items
-    .filter((item) => item && !item.l && item.name === itemName)
+    .filter((item) => item && !item.l && matchesItemKey(item, itemKey))
     .map((item) => item.level ?? 0)
     .sort((lhs, rhs) => lhs - rhs)
     .join(",");
@@ -293,7 +309,7 @@ function getBagLevelSignature(itemName) {
 
 /**
  * Backs off the last pull's items whose bag copies never changed.
- * @returns {Set<string>} names the last pull brought out
+ * @returns {Set<string>} item keys the last pull brought out
  */
 function settleLastRetrieve() {
   const names = new Set(Object.keys(LAST_RETRIEVED.signatures));
@@ -326,7 +342,7 @@ function getRetrieveFreshness(itemId) {
  * @returns {number}
  */
 function scoreRetrieveCandidate(itemId, itemCount) {
-  const base = item_info({ name: itemId })?.compound
+  const base = item_info({ name: getKeyName(itemId) })?.compound
     ? (itemCount / 3) * 2 * (isBankFull ? 10 : 1)
     : itemCount;
   return base * getRetrieveFreshness(itemId);
@@ -373,7 +389,7 @@ async function retrievedBankItemToUpgrade() {
     .filter(
       (id) =>
         !pickedIds.has(id) &&
-        item_info({ name: id }) &&
+        item_info({ name: getKeyName(id) }) &&
         !((RETRIEVE_BACKOFF[id] ?? 0) > now),
     )
     .map((id) => ({
@@ -397,19 +413,7 @@ async function retrievedBankItemToUpgrade() {
 
   if (!picked.length) return;
 
-  // Group items by floor so we only travel to each floor once
-  const byFloor = {};
-  for (const itemSlot of picked)
-    (byFloor[itemSlot.floor] = byFloor[itemSlot.floor] ?? []).push(itemSlot);
-
-  for (const [floor, slots] of Object.entries(byFloor)) {
-    if (!(await goToBankFloor(floor))) continue;
-    await withTimeout(
-      Promise.allSettled(slots.map((s) => bank_retrieve(s.pack, s.slot))),
-      2500,
-    );
-    updateBank();
-  }
+  await retrieveAll(picked);
 
   const signatures = {};
   for (const id of pickedIds) {
@@ -425,19 +429,19 @@ async function retrievedBankItemToUpgrade() {
 // ---------------------------------------------------------------------------
 
 /**
- * Three unlocked inventory slots holding the same item at the same level.
+ * Three unlocked inventory slots holding the same item line at the same level.
  * compound() takes arbitrary slots, so they need not sit side by side.
- * @param {string} itemName
+ * @param {string} itemKey - see getItemKey
  * @param {number} level
  * @returns {number[] | undefined}
  */
-function findCompoundSet(itemName, level) {
+function findCompoundSet(itemKey, level) {
   const slots = [];
 
   for (let i = 0; i < character.items.length && slots.length < 3; i++) {
     const item = character.items[i];
     if (!item || item.l) continue;
-    if (item.name !== itemName || (item.level ?? 0) !== level) continue;
+    if (!matchesItemKey(item, itemKey) || (item.level ?? 0) !== level) continue;
 
     slots.push(i);
   }
@@ -478,7 +482,8 @@ async function findAndCompound() {
     // Don't eat the copies another recipe wants at this exact level
     if (countSpareAtLevel(itemName, itemLevel) < 3) continue;
 
-    const compoundSlots = findCompoundSet(itemName, itemLevel);
+    const itemKey = getItemKey(item);
+    const compoundSlots = findCompoundSet(itemKey, itemLevel);
     if (!compoundSlots) continue;
 
     const itemGrade = item_grade(item);
@@ -494,11 +499,12 @@ async function findAndCompound() {
 
     // Skip if we don't have enough of this item yet: a compound burns three of
     // the pile for one, so the tail has to survive it
+    const highestLevel = ITEMS_HIGHEST_LEVEL[itemKey];
     if (
       !targeted &&
-      ITEMS_HIGHEST_LEVEL[itemName] &&
-      ITEMS_HIGHEST_LEVEL[itemName].quantity < getKeepThreshold(itemName) + 3 &&
-      itemLevel === ITEMS_HIGHEST_LEVEL[itemName].level
+      highestLevel &&
+      highestLevel.quantity < getKeepThreshold(itemKey) + 3 &&
+      itemLevel === highestLevel.level
     ) {
       continue;
     }
@@ -523,6 +529,17 @@ async function findAndCompound() {
 // ---------------------------------------------------------------------------
 // Upgrade
 // ---------------------------------------------------------------------------
+
+/** @returns {number} bag slot of an item line's highest copy, or -1 */
+function findMaxLevelBagSlot(itemKey) {
+  let best = -1;
+  character.items.forEach((item, index) => {
+    if (!matchesItemKey(item, itemKey)) return;
+    if (best === -1 || (item.level ?? 0) > (character.items[best].level ?? 0))
+      best = index;
+  });
+  return best;
+}
 
 /** Attempts to upgrade the lowest level upgradeable item in inventory. */
 async function upgradeInv() {
@@ -563,7 +580,8 @@ async function findAndUpgrade() {
     if (selectedTargeted && !targeted) continue;
 
     const itemGrade = item_grade(item);
-    const highestLevel = ITEMS_HIGHEST_LEVEL[item.name];
+    const itemKey = getItemKey(item);
+    const highestLevel = ITEMS_HIGHEST_LEVEL[itemKey];
 
     if (!targeted) {
       const overLeveled =
@@ -571,7 +589,7 @@ async function findAndUpgrade() {
         item.level >= (highestLevel?.level ?? 0);
       const haveEnoughToSpare =
         highestLevel &&
-        highestLevel.quantity > getKeepThreshold(item.name) &&
+        highestLevel.quantity > getKeepThreshold(itemKey) &&
         item.level === highestLevel.level;
 
       if (overLeveled && !haveEnoughToSpare) continue;
@@ -590,6 +608,7 @@ async function findAndUpgrade() {
 
   const item = character.items[itemIndex];
   const itemName = item.name;
+  const itemKey = getItemKey(item);
   // Neither a targeted climb nor vendor gear burns a primling: a break just
   // costs another base item, re-bought for a few hundred gold
   const isRareItem =
@@ -616,7 +635,7 @@ async function findAndUpgrade() {
         if (!e?.success) return;
 
         if (e.level > (selectedHighestLevel?.level ?? 0)) {
-          ITEMS_HIGHEST_LEVEL[itemName] = {
+          ITEMS_HIGHEST_LEVEL[itemKey] = {
             level: e.level,
             quantity: 1,
             ...item_info({ name: itemName }),
@@ -627,7 +646,7 @@ async function findAndUpgrade() {
           !selectedTargeted &&
           e.level >= (selectedHighestLevel?.level ?? 0) - 1
         ) {
-          storeToBankFloor(findMaxLevelItem(itemName));
+          storeToBankFloor(findMaxLevelBagSlot(itemKey));
         }
       })
       .catch(() => {});

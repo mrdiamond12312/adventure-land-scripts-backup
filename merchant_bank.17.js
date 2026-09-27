@@ -1,6 +1,8 @@
 // Bank storage: floors, retrieval, the store/retrieve cycle and the data sync.
 
-var BANK_CACHE = undefined;
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
 
 /** Spawn positions for each accessible bank floor */
 const BANK_FLOORS = {
@@ -8,18 +10,21 @@ const BANK_FLOORS = {
   bank_b: { map: "bank_b", x: -210, y: -130 },
 };
 
-// Set once bankLoop's first run has walked every floor.
-var hasVisitedBank = false;
-
-/** Whether no floor has an empty slot */
-var isBankFull = false;
-
 /**
  * Slots to skip globally (gold, personal storage).
  * items10 is reserved for personal items and is never touched.
  */
 const IGNORE_BANK_SLOTS = ["gold", "items10"];
 const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
+
+/** How long a batch of bank calls may take */
+const BANK_OP_TIMEOUT = 2_500;
+
+// Bag space the gear trip leaves alone for scrolls, offerings and loot
+const MERCHANT_GEAR_FREE_SLOTS = 4;
+
+/** Highest level the sell sweep takes, per kind */
+const SALE_MAX_LEVEL = { compound: 1, upgrade: 2 };
 
 /** Highest level sold per item once the bank is full */
 const PURGE_LEVELS = { frankypants: 2 };
@@ -30,56 +35,28 @@ const PURGE_SETS = ["rugged"];
 /** Vendor gear and PURGE_SETS are sold below this level */
 const PURGE_GEAR_LEVEL = 8;
 
+/** Rounds one stacking pass may run */
+const STACK_MAX_ROUNDS = 5;
+
 // ---------------------------------------------------------------------------
-// Bank Helpers
+// State
+// ---------------------------------------------------------------------------
+
+var BANK_CACHE = undefined;
+
+// Set once bankLoop's first run has walked every floor.
+var hasVisitedBank = false;
+
+/** Whether no floor has an empty slot */
+var isBankFull = false;
+
+// ---------------------------------------------------------------------------
+// Cache & Floors
 // ---------------------------------------------------------------------------
 
 /** Merges character.bank into BANK_CACHE */
 async function updateBank() {
   if (character.bank) BANK_CACHE = { ...BANK_CACHE, ...character.bank };
-}
-
-/**
- * Finds the NPC merchant that sells the given item.
- * @param {string} itemName
- * @returns {string | undefined} NPC id
- */
-function findVendorMerchantOf(itemName) {
-  for (const id in G.npcs) {
-    const npcData = G.npcs[id];
-    if (npcData.role === "merchant" && npcData.items?.includes(itemName))
-      return id;
-  }
-}
-
-/**
- * Returns all pack keys that belong to the given bank floor.
- * @param {string} floor - e.g. "bank", "bank_u"
- * @returns {string[]}
- */
-function getPacksOnFloor(floor) {
-  const packs = [];
-  for (const key in bank_packs) {
-    if (bank_packs[key][0] === floor) packs.push(key);
-  }
-  return packs;
-}
-
-function getItemNamesOnCurrentFloor() {
-  const names = new Set();
-  const packs = getPacksOnFloor(character.map);
-  const bank = BANK_CACHE ?? character.bank ?? {};
-
-  for (const pack of packs) {
-    const items = bank[pack];
-    if (!items) continue;
-
-    for (const item of items) {
-      if (item?.name) names.add(item.name);
-    }
-  }
-
-  return names;
 }
 
 /**
@@ -120,6 +97,52 @@ async function goToBankFloor(floor, forced = false) {
 }
 
 /**
+ * Visits every cached bank slot, empty ones included.
+ * @param {(item: object | null, pack: string, slot: number, floor: string) => void} visit
+ * @param {{ floor?: string, includePersonal?: boolean }} [options] - floor
+ *   limits the walk to one floor, includePersonal also walks IGNORE_BANK_SLOTS
+ */
+function forEachBankSlot(visit, { floor, includePersonal = false } = {}) {
+  for (const pack in BANK_CACHE ?? {}) {
+    if (pack === "gold") continue;
+    if (!includePersonal && IGNORE_BANK_SLOTS.includes(pack)) continue;
+
+    const packFloor = getFloorOfPack(pack);
+    if (floor && packFloor !== floor) continue;
+
+    BANK_CACHE[pack].forEach((item, slot) => visit(item, pack, slot, packFloor));
+  }
+}
+
+/**
+ * @param {Array<{ floor: string }>} entries
+ * @returns {Object<string, Array>} entries grouped by floor
+ */
+function groupByFloor(entries) {
+  const byFloor = {};
+  for (const entry of entries)
+    (byFloor[entry.floor] = byFloor[entry.floor] ?? []).push(entry);
+  return byFloor;
+}
+
+// ---------------------------------------------------------------------------
+// Bank Queries
+// ---------------------------------------------------------------------------
+
+/**
+ * Finds the NPC merchant that sells the given item.
+ * @param {string} itemName
+ * @returns {string | undefined} NPC id
+ */
+function findVendorMerchantOf(itemName) {
+  for (const id in G.npcs) {
+    const npcData = G.npcs[id];
+    if (npcData.role === "merchant" && npcData.items?.includes(itemName))
+      return id;
+  }
+}
+
+/**
  * Returns all bank slots containing the given item across all floors,
  * sorted by level ascending.
  * Filters out rare-grade items if gold is below threshold.
@@ -129,22 +152,13 @@ async function goToBankFloor(floor, forced = false) {
  * @returns {Array<{ name: string, level: number, slot: number, pack: string, floor: string }>}
  */
 function getItemBankSlots(itemId, forced = false, includeRare = false) {
-  if (!BANK_CACHE) return [];
-
   const result = [];
-  for (const id in BANK_CACHE) {
-    if (id === "gold") continue;
-    if (IGNORE_BANK_SLOTS.includes(id) && !forced) continue;
-    BANK_CACHE[id].forEach((item, index) => {
-      if (item?.name === itemId)
-        result.push({
-          ...item,
-          slot: index,
-          pack: id,
-          floor: getFloorOfPack(id),
-        });
-    });
-  }
+  forEachBankSlot(
+    (item, pack, slot, floor) => {
+      if (item?.name === itemId) result.push({ ...item, slot, pack, floor });
+    },
+    { includePersonal: forced },
+  );
 
   if (!includeRare && character.gold < IGNORE_RARE_GOLD_THRESHOLD)
     return result
@@ -152,6 +166,84 @@ function getItemBankSlots(itemId, forced = false, includeRare = false) {
       .sort((lhs, rhs) => lhs.level - rhs.level);
 
   return result.sort((lhs, rhs) => lhs.level - rhs.level);
+}
+
+/** @returns {Set<string>} names of the items on the current floor */
+function getItemNamesOnCurrentFloor() {
+  const names = new Set();
+  forEachBankSlot(
+    (item) => {
+      if (item?.name) names.add(item.name);
+    },
+    { floor: character.map, includePersonal: true },
+  );
+  return names;
+}
+
+// ---------------------------------------------------------------------------
+// Bag Helpers
+// ---------------------------------------------------------------------------
+
+/** @returns {number[]} empty bag slots */
+function getEmptyBagSlots() {
+  return character.items
+    .map((item, index) => (item ? -1 : index))
+    .filter((index) => index !== -1);
+}
+
+/** @returns {number[]} bag slots holding an item */
+function getBagSlotsOf(itemName) {
+  return character.items
+    .map((item, index) => (item?.name === itemName ? index : -1))
+    .filter((index) => index !== -1);
+}
+
+// ---------------------------------------------------------------------------
+// Retrieve & Store
+// ---------------------------------------------------------------------------
+
+/**
+ * Retrieves bank slots floor by floor, each floor's all at once.
+ * @param {Array<{ pack: string, slot: number, floor: string, index?: number }>} slots
+ *   index picks the bag slot it lands in
+ * @param {boolean} [forced=false] - walk even while smart moving
+ * @returns {Promise<void>}
+ */
+async function retrieveAll(slots, forced = false) {
+  for (const [floor, onFloor] of Object.entries(groupByFloor(slots))) {
+    if (!(await goToBankFloor(floor, forced))) continue;
+
+    await withTimeout(
+      Promise.allSettled(
+        onFloor.map(({ pack, slot, index }) =>
+          bank_retrieve(pack, slot, index).catch((e) =>
+            console.warn(`Failed retrieving ${pack}[${slot}]`, e),
+          ),
+        ),
+      ),
+      BANK_OP_TIMEOUT,
+    );
+    updateBank();
+  }
+}
+
+/**
+ * Stores bag slots on the current floor all at once.
+ * @param {Array<[number, string?, number?]>} entries - [index, pack, slot];
+ *   without pack the game picks the spot
+ * @returns {Promise<void>}
+ */
+function storeAll(entries) {
+  return withTimeout(
+    Promise.allSettled(
+      entries.map(([index, pack, slot]) =>
+        bank_store(index, pack, slot).catch((e) =>
+          console.warn(`Failed storing index ${index} on ${character.map}`, e),
+        ),
+      ),
+    ),
+    BANK_OP_TIMEOUT,
+  ).then(updateBank);
 }
 
 /**
@@ -162,114 +254,19 @@ function getItemBankSlots(itemId, forced = false, includeRare = false) {
  * @returns {Promise<void>}
  */
 async function retrieveBankItem(searchId, level = 0) {
-  // Find which pack (and floor) holds this item
-  let targetPack, targetSlot;
-  for (const [pack, items] of Object.entries(BANK_CACHE ?? {})) {
-    if (pack === "gold") continue;
-    const slot = items.findIndex(
-      (item) => item?.name === searchId && (!level || level === item.level),
-    );
-    if (slot !== -1) {
-      targetPack = pack;
-      targetSlot = slot;
-      break;
-    }
-  }
-
-  if (targetPack === undefined) return;
-
-  const floor = getFloorOfPack(targetPack);
-  if (!(await goToBankFloor(floor))) return;
-
-  return bank_retrieve(targetPack, targetSlot).then(updateBank);
-}
-
-// Bag space the gear trip leaves alone for scrolls, offerings and loot
-const MERCHANT_GEAR_FREE_SLOTS = 4;
-
-/**
- * Pulls one copy of every item calculateMerchantEquipments can ask for out of
- * the bank: locked first, then highest level. Only the swap that matches our
- * current state ever gets equipped, but the pieces for the others have to be in
- * the bag already — a swap mid-lure or mid-boss can't wait for a bank trip.
- * @returns {Promise<void>}
- */
-async function retrieveMerchantGear() {
-  if (character.ctype !== "merchant" || !BANK_CACHE) return;
-
-  const carried = new Set(
-    [
-      ...Object.entries(character.slots)
-        .filter(([slot]) => !slot.startsWith("trade"))
-        .map(([, item]) => item),
-      ...character.items,
-    ]
-      .filter(Boolean)
-      .map((item) => item.name),
+  let target;
+  forEachBankSlot(
+    (item, pack, slot, floor) => {
+      if (target || item?.name !== searchId) return;
+      if (!level || level === item.level) target = { pack, slot, floor };
+    },
+    { includePersonal: true },
   );
 
-  const targets = [];
-  for (const name of getMerchantGearNames()) {
-    if (carried.has(name)) continue;
+  if (!target) return;
+  if (!(await goToBankFloor(target.floor))) return;
 
-    // A locked copy is the one set aside for us on purpose; level only breaks ties
-    const best = getItemBankSlots(name, true, true)
-      .sort(
-        (lhs, rhs) =>
-          (lhs.l ? 1 : 0) - (rhs.l ? 1 : 0) ||
-          (lhs.level ?? 0) - (rhs.level ?? 0),
-      )
-      .pop();
-
-    if (best?.floor) targets.push(best);
-  }
-
-  const allowed = targets.slice(
-    0,
-    Math.max(0, character.esize - MERCHANT_GEAR_FREE_SLOTS),
-  );
-
-  // Retrieved by pack/slot, not by name+level: a same-level unlocked twin would
-  // otherwise be what the search hands back
-  for (const floor of new Set(allowed.map((target) => target.floor))) {
-    if (!(await goToBankFloor(floor))) continue;
-
-    await withTimeout(
-      Promise.allSettled(
-        allowed
-          .filter((target) => target.floor === floor)
-          .map((target) =>
-            bank_retrieve(target.pack, target.slot).catch((error) =>
-              console.warn(`Failed retrieving ${target.name}`, error),
-            ),
-          ),
-      ),
-      2_500,
-    );
-  }
-
-  return updateBank();
-}
-
-/**
- * Inventory indices holding the copy of each merchant-gear item we keep — the
- * highest level one. Spares stay bankable, so the upgrade rotation still gets
- * them and only what a swap would reach for is pinned to the bag.
- * @returns {Set<number>}
- */
-function getMerchantGearKeepIndices() {
-  if (character.ctype !== "merchant") return new Set();
-
-  const gear = getMerchantGearNames();
-  const keepers = {};
-
-  character.items.forEach((item, index) => {
-    if (!item || !gear.has(item.name)) return;
-    if ((item.level ?? 0) <= (keepers[item.name]?.level ?? -1)) return;
-    keepers[item.name] = { level: item.level ?? 0, index };
-  });
-
-  return new Set(Object.values(keepers).map((keeper) => keeper.index));
+  return bank_retrieve(target.pack, target.slot).then(updateBank);
 }
 
 /**
@@ -295,7 +292,7 @@ async function storeToBankFloor(inventoryIndex) {
   for (const floor of Object.keys(BANK_FLOORS)) {
     if (!(await goToBankFloor(floor))) continue;
     try {
-      bank_store(inventoryIndex);
+      await bank_store(inventoryIndex);
       return;
     } catch (e) {
       console.warn(`bank_store failed on ${floor}, trying next floor...`);
@@ -305,6 +302,10 @@ async function storeToBankFloor(inventoryIndex) {
   console.warn(`Could not store item at index ${inventoryIndex} on any floor.`);
 }
 
+// ---------------------------------------------------------------------------
+// Capacity
+// ---------------------------------------------------------------------------
+
 /** @returns {number} an item's stack size, 0 if it doesn't stack */
 function getMaxStack(itemName) {
   const maxStack = G.items[itemName]?.s;
@@ -313,7 +314,8 @@ function getMaxStack(itemName) {
 
 /** @returns {boolean} whether this stack can take more of its item */
 function isStackMergeable(item) {
-  return !item.l && !item.p && !item.b && !item.v && !item.data;
+  const hasTitle = item.p && !G.titles?.[item.p]?.stackable;
+  return !item.l && !hasTitle && !item.b && !item.v && !item.data;
 }
 
 /**
@@ -322,28 +324,25 @@ function isStackMergeable(item) {
  * @returns {{ empty: number, stackRoom: Object<string, number[]> }}
  */
 function getFloorCapacity(floor) {
-  const bank = BANK_CACHE ?? character.bank ?? {};
   const capacity = { empty: 0, stackRoom: {} };
 
-  for (const pack of getPacksOnFloor(floor)) {
-    const items = bank[pack];
-    if (!items) continue;
-
-    for (const item of items) {
+  forEachBankSlot(
+    (item) => {
       if (!item) {
         capacity.empty++;
-        continue;
+        return;
       }
 
       const maxStack = getMaxStack(item.name);
-      if (!maxStack || !isStackMergeable(item)) continue;
+      if (!maxStack || !isStackMergeable(item)) return;
 
       const room = maxStack - (item.q ?? 1);
       if (room > 0)
         (capacity.stackRoom[item.name] =
           capacity.stackRoom[item.name] ?? []).push(room);
-    }
-  }
+    },
+    { floor, includePersonal: true },
+  );
 
   return capacity;
 }
@@ -382,13 +381,85 @@ function pickStorableIndices(indices, capacity) {
   return { storable, skipped };
 }
 
+// ---------------------------------------------------------------------------
+// Merchant Gear
+// ---------------------------------------------------------------------------
+
+/**
+ * Pulls one copy of every item calculateMerchantEquipments can ask for out of
+ * the bank: locked first, then highest level. Only the swap that matches our
+ * current state ever gets equipped, but the pieces for the others have to be in
+ * the bag already — a swap mid-lure or mid-boss can't wait for a bank trip.
+ * @returns {Promise<void>}
+ */
+async function retrieveMerchantGear() {
+  if (character.ctype !== "merchant" || !BANK_CACHE) return;
+
+  const carried = new Set(
+    [
+      ...Object.entries(character.slots)
+        .filter(([slot]) => !slot.startsWith("trade"))
+        .map(([, item]) => item),
+      ...character.items,
+    ]
+      .filter(Boolean)
+      .map((item) => item.name),
+  );
+
+  const targets = [];
+  for (const name of getMerchantGearNames()) {
+    if (carried.has(name)) continue;
+
+    // A locked copy is the one set aside for us on purpose; level only breaks ties
+    const best = getItemBankSlots(name, true, true)
+      .sort(
+        (lhs, rhs) =>
+          (lhs.l ? 1 : 0) - (rhs.l ? 1 : 0) ||
+          (lhs.level ?? 0) - (rhs.level ?? 0),
+      )
+      .pop();
+
+    if (best?.floor) targets.push(best);
+  }
+
+  // Retrieved by pack/slot, not by name+level: a same-level unlocked twin would
+  // otherwise be what the search hands back
+  return retrieveAll(
+    targets.slice(0, Math.max(0, character.esize - MERCHANT_GEAR_FREE_SLOTS)),
+  );
+}
+
+/**
+ * Inventory indices holding the copy of each merchant-gear item we keep — the
+ * highest level one. Spares stay bankable, so the upgrade rotation still gets
+ * them and only what a swap would reach for is pinned to the bag.
+ * @returns {Set<number>}
+ */
+function getMerchantGearKeepIndices() {
+  if (character.ctype !== "merchant") return new Set();
+
+  const gear = getMerchantGearNames();
+  const keepers = {};
+
+  character.items.forEach((item, index) => {
+    if (!item || !gear.has(item.name)) return;
+    if ((item.level ?? 0) <= (keepers[item.name]?.level ?? -1)) return;
+    keepers[item.name] = { level: item.level ?? 0, index };
+  });
+
+  return new Set(Object.values(keepers).map((keeper) => keeper.index));
+}
+
+// ---------------------------------------------------------------------------
+// Store Routine
+// ---------------------------------------------------------------------------
+
 /**
  * Stores every index that fits on the current floor.
  * @param {number[]} indices
- * @param {number} timeout
  * @returns {Promise<void>}
  */
-async function storeIndicesOnCurrentFloor(indices, timeout) {
+function storeIndicesOnCurrentFloor(indices) {
   const { storable, skipped } = pickStorableIndices(
     indices,
     getFloorCapacity(character.map),
@@ -399,49 +470,122 @@ async function storeIndicesOnCurrentFloor(indices, timeout) {
       `bank full: ${skipped.length} items stay in bag on ${character.map}`,
     );
 
-  const promises = storable.map((index) =>
-    bank_store(index).catch((e) => {
-      console.warn(`Failed storing index ${index} on ${character.map}`, e);
-    }),
-  );
-
-  return withTimeout(Promise.allSettled(promises), timeout).then(updateBank);
+  return storeAll(storable.map((index) => [index]));
 }
 
-async function storeMatchingItemsOnFloor(
-  toStoreItemSet,
-  keepIndices = new Set(),
-) {
-  const floorItems = getItemNamesOnCurrentFloor();
+/**
+ * Bag indices of the named items, the kept merchant gear aside.
+ * @param {Set<string>} names
+ * @param {Set<number>} keepIndices
+ * @returns {number[]}
+ */
+function getStoreIndices(names, keepIndices) {
+  return character.items
+    .map((item, index) =>
+      item && !keepIndices.has(index) && names.has(item.name) ? index : -1,
+    )
+    .filter((index) => index !== -1);
+}
 
-  if (!floorItems.size) return;
+/**
+ * Stores qualifying bag items floor by floor, next to their kind first.
+ * @param {Boolean} forced to force storing weapons without checking its level
+ */
+async function bankStoreRoutine(forced = false) {
+  const lastRetrieved = settleLastRetrieve();
 
-  // collect matching inventory indices
-  const indices = [];
+  // Indices stay valid for the whole routine: storing leaves a hole behind
+  const keepIndices = getMerchantGearKeepIndices();
 
-  for (let i = 0; i < character.items.length; i++) {
-    const item = character.items[i];
-    if (!item) continue;
-    if (keepIndices.has(i)) continue;
-    if (!toStoreItemSet.has(item.name)) continue;
-    if (floorItems.has(item.name)) {
-      indices.push(i);
+  // Determine which items to store
+  const toStore = character.items
+    .map((item, index) => ({ item, index }))
+    .filter(({ item, index }) => {
+      if (!item) return false;
+      if (item.l) return false; // skip locked items
+      if (keepIndices.has(index)) return false;
+      if (shouldSellItem(item)) return false;
+
+      const info = item_info(item);
+
+      // A compound wants three at that level, an upgrade wants nothing but the
+      // item. Anything else is stranded here and belongs back in the pile.
+      const isFodder = info.compound
+        ? countInventoryAtLevel(item.name, item.level ?? 0) >= 3
+        : !!info.upgrade;
+
+      // A climb only holds its ingredient back while the climb can still happen
+      const targetLevel = getCraftTargetLevel(item.name);
+      if (targetLevel > 0 && (item.level ?? 0) < targetLevel && isFodder)
+        return false;
+
+      const itemKey = getItemKey(item);
+      const isRare = item_grade(item) >= 2;
+      const isHighLevel =
+        item.level >= (ITEMS_HIGHEST_LEVEL[itemKey]?.level ?? 1) - 1;
+      const isStoreable = STORE_ABLE.includes(item.name);
+      const isEquipable = info.compound || info.upgrade;
+      const shouldIgnore = IGNORE.includes(item.name);
+
+      return (
+        (!shouldIgnore &&
+          (isRare || (isEquipable && (forced || isHighLevel || !isFodder)))) ||
+        isStoreable ||
+        lastRetrieved.has(itemKey)
+      );
+    });
+
+  const toStoreItemSet = new Set(toStore.map(({ item }) => item.name));
+  const floors = Object.keys(BANK_FLOORS);
+
+  if (hasVisitedBank) {
+    const toStoreIndices = toStore.map(({ index }) => index);
+    const fitsSomewhere = floors.some(
+      (floor) =>
+        pickStorableIndices(toStoreIndices, getFloorCapacity(floor)).storable
+          .length,
+    );
+
+    if (!fitsSomewhere) {
+      const wasBankFull = isBankFull;
+      isBankFull = floors.every(
+        (floor) => getFloorCapacity(floor).empty === 0,
+      );
+      if (isBankFull && !wasBankFull)
+        console.log("bank full: nothing in the bag fits, skipping bank trips");
+      return;
     }
   }
 
-  return storeIndicesOnCurrentFloor(indices, 1000);
+  // Forward pass: each floor takes what it already holds a copy of
+  for (const floor of floors) {
+    await goToBankFloor(floor, true);
+    const floorItems = getItemNamesOnCurrentFloor();
+    await storeIndicesOnCurrentFloor(
+      getStoreIndices(toStoreItemSet, keepIndices).filter((index) =>
+        floorItems.has(character.items[index].name),
+      ),
+    );
+  }
+
+  // Backward pass (leftovers get another chance)
+  for (const floor of [...floors].reverse()) {
+    await goToBankFloor(floor, true);
+    await storeIndicesOnCurrentFloor(
+      getStoreIndices(toStoreItemSet, keepIndices),
+    );
+  }
+
+  isBankFull = floors.every((floor) => getFloorCapacity(floor).empty === 0);
 }
 
 // ---------------------------------------------------------------------------
 // Purge
 // ---------------------------------------------------------------------------
 
-/** Highest level the sell sweep takes, per kind */
-const SALE_MAX_LEVEL = { compound: 1, upgrade: 2 };
-
 /** @returns {boolean} whether the sell sweep takes this item */
 function isSaleableItem(item) {
-  if (!item || item.l || item.shiny) return false;
+  if (!item || item.l || item.p) return false;
   if (!SALE_ABLE.includes(item.name) || isCraftIngredient(item.name))
     return false;
 
@@ -474,41 +618,8 @@ function shouldSellItem(item) {
   return isSaleableItem(item) || (isBankFull && isPurgeable(item));
 }
 
-/**
- * Pulls stray saleables, and purgeable surplus once the bank is full, then sells them.
- * @returns {Promise<void>}
- */
-async function purgeBank() {
-  const byFloor = {};
-  for (const pack in BANK_CACHE ?? {}) {
-    if (IGNORE_BANK_SLOTS.includes(pack)) continue;
-
-    BANK_CACHE[pack].forEach((item, slot) => {
-      if (!shouldSellItem(item)) return;
-      const floor = getFloorOfPack(pack);
-      (byFloor[floor] = byFloor[floor] ?? []).push({ pack, slot });
-    });
-  }
-
-  for (const [floor, slots] of Object.entries(byFloor)) {
-    if (!(await goToBankFloor(floor))) continue;
-
-    while (slots.length) {
-      const batch = slots.splice(0, Math.max(0, character.esize - 1));
-      if (!batch.length) break;
-
-      await withTimeout(
-        Promise.allSettled(batch.map((s) => bank_retrieve(s.pack, s.slot))),
-        2500,
-      );
-      updateBank();
-      await sellMarkedItems();
-    }
-  }
-}
-
 /** Sells every bag item shouldSellItem picks */
-async function sellMarkedItems() {
+function sellMarkedItems() {
   const sales = [];
   character.items.forEach((item, index) => {
     if (shouldSellItem(item))
@@ -519,15 +630,32 @@ async function sellMarkedItems() {
       );
   });
 
-  return withTimeout(Promise.allSettled(sales), 2500);
+  return withTimeout(Promise.allSettled(sales), BANK_OP_TIMEOUT);
+}
+
+/**
+ * Pulls stray saleables, and purgeable surplus once the bank is full, then sells them.
+ * @returns {Promise<void>}
+ */
+async function purgeBank() {
+  const slots = [];
+  forEachBankSlot((item, pack, slot, floor) => {
+    if (shouldSellItem(item)) slots.push({ pack, slot, floor });
+  });
+  slots.sort((lhs, rhs) => lhs.floor.localeCompare(rhs.floor));
+
+  while (slots.length) {
+    const batch = slots.splice(0, Math.max(0, character.esize - 1));
+    if (!batch.length) break;
+
+    await retrieveAll(batch);
+    await sellMarkedItems();
+  }
 }
 
 // ---------------------------------------------------------------------------
 // Stacking
 // ---------------------------------------------------------------------------
-
-/** Rounds one stacking pass may run */
-const STACK_MAX_ROUNDS = 5;
 
 /**
  * Mergeable partial stacks of an item across every floor, fullest first.
@@ -538,25 +666,13 @@ function getPartialStacks(itemName) {
   const maxStack = getMaxStack(itemName);
   const stacks = [];
 
-  for (const pack in BANK_CACHE ?? {}) {
-    if (IGNORE_BANK_SLOTS.includes(pack)) continue;
-
-    BANK_CACHE[pack].forEach((item, slot) => {
-      if (item?.name !== itemName || !isStackMergeable(item)) return;
-      const q = item.q ?? 1;
-      if (q < maxStack)
-        stacks.push({ pack, slot, q, floor: getFloorOfPack(pack) });
-    });
-  }
+  forEachBankSlot((item, pack, slot, floor) => {
+    if (item?.name !== itemName || !isStackMergeable(item)) return;
+    const q = item.q ?? 1;
+    if (q < maxStack) stacks.push({ pack, slot, q, floor });
+  });
 
   return stacks.sort((lhs, rhs) => rhs.q - lhs.q);
-}
-
-/** @returns {number[]} bag slots holding an item */
-function getBagSlotsOf(itemName) {
-  return character.items
-    .map((item, index) => (item?.name === itemName ? index : -1))
-    .filter((index) => index !== -1);
 }
 
 /**
@@ -584,7 +700,13 @@ function buildStackDrain(name, bagSlots) {
   }
 
   if (!pieces.length) return;
-  return { name, source, pieces, left, slots: pieces.length + (left > 0 ? 1 : 0) };
+  return {
+    name,
+    source,
+    pieces,
+    left,
+    slots: pieces.length + (left > 0 ? 1 : 0),
+  };
 }
 
 /**
@@ -599,8 +721,7 @@ function planStackDrains(names, bagSlots) {
     .map((name) => buildStackDrain(name, Infinity))
     .filter(Boolean)
     .sort(
-      (lhs, rhs) =>
-        (lhs.left > 0) - (rhs.left > 0) || lhs.slots - rhs.slots,
+      (lhs, rhs) => (lhs.left > 0) - (rhs.left > 0) || lhs.slots - rhs.slots,
     );
 
   const drains = [];
@@ -628,7 +749,9 @@ function assignDrainSlots(drain) {
   if (free.length !== drain.slots) return false;
 
   for (const piece of drain.pieces) {
-    const at = free.findIndex((index) => character.items[index].q === piece.amount);
+    const at = free.findIndex(
+      (index) => character.items[index].q === piece.amount,
+    );
     if (at === -1) return false;
     piece.index = free.splice(at, 1)[0];
   }
@@ -637,14 +760,12 @@ function assignDrainSlots(drain) {
   return drain.left > 0 ? free.length === 1 : !free.length;
 }
 
-/** Stores [index, pack, slot] entries all at once */
-function storeAll(entries) {
-  return withTimeout(
-    Promise.allSettled(
-      entries.map(([index, pack, slot]) => bank_store(index, pack, slot)),
-    ),
-    2_500,
-  ).then(updateBank);
+/** Stores back any bag copy of an item a failed stack move left behind */
+async function returnStrays(itemName) {
+  if (!BANK_FLOORS[character.map]) return;
+
+  const strays = getBagSlotsOf(itemName);
+  if (strays.length) await storeAll(strays.map((index) => [index]));
 }
 
 /**
@@ -654,28 +775,21 @@ function storeAll(entries) {
  * @returns {Promise<void>}
  */
 async function runStackDrains(drains) {
-  const sourceFloors = [...new Set(drains.map((drain) => drain.source.floor))];
-
-  for (const floor of sourceFloors) {
-    const group = drains.filter((drain) => drain.source.floor === floor);
-    if (!(await goToBankFloor(floor, true))) continue;
-
-    const empty = character.items
-      .map((item, index) => (item ? -1 : index))
-      .filter((index) => index !== -1);
+  for (const [floor, group] of Object.entries(
+    groupByFloor(drains.map((drain) => ({ ...drain, floor: drain.source.floor }))),
+  )) {
+    const empty = getEmptyBagSlots();
     group.forEach((drain, i) => (drain.index = empty[i]));
 
-    await withTimeout(
-      Promise.allSettled(
-        group.map((drain) =>
-          bank_retrieve(drain.source.pack, drain.source.slot, drain.index),
-        ),
-      ),
-      2_500,
+    await retrieveAll(
+      group.map((drain) => ({ ...drain.source, index: drain.index })),
+      true,
     );
+    if (character.map !== floor) continue;
+
     await waitUntil(
       () => group.every((drain) => character.items[drain.index]),
-      2_500,
+      BANK_OP_TIMEOUT,
     );
 
     const ready = group.filter(
@@ -687,13 +801,13 @@ async function runStackDrains(drains) {
         .slice(0, drain.left > 0 ? undefined : -1)
         .map((piece) => split(drain.index, piece.amount)),
     );
-    await withTimeout(Promise.allSettled(splits), 2_500);
+    await withTimeout(Promise.allSettled(splits), BANK_OP_TIMEOUT);
     await waitUntil(
       () =>
         ready.every(
           (drain) => getBagSlotsOf(drain.name).length === drain.slots,
         ),
-      2_500,
+      BANK_OP_TIMEOUT,
     );
 
     const assigned = ready.filter(assignDrainSlots);
@@ -729,34 +843,22 @@ async function runStackDrains(drains) {
   }
 }
 
-/** Stores back any bag copy of an item a failed stack move left behind */
-async function returnStrays(itemName) {
-  if (!BANK_FLOORS[character.map]) return;
-
-  const promises = getBagSlotsOf(itemName).map((index) =>
-    bank_store(index).catch(() => {}),
-  );
-  if (!promises.length) return;
-
-  await withTimeout(Promise.allSettled(promises), 2_500);
-  updateBank();
-}
-
 /**
  * Merges partial bank stacks so each item has at most one, fullest first.
  * @returns {Promise<void>}
  */
 async function stackBank() {
   const names = new Set();
-  for (const pack in BANK_CACHE ?? {}) {
-    if (IGNORE_BANK_SLOTS.includes(pack)) continue;
-    for (const item of BANK_CACHE[pack])
-      if (item && getMaxStack(item.name) && locate_item(item.name) === -1)
-        names.add(item.name);
-  }
+  forEachBankSlot((item) => {
+    if (item && getMaxStack(item.name) && locate_item(item.name) === -1)
+      names.add(item.name);
+  });
 
   const countPartials = () =>
-    [...names].reduce((total, name) => total + getPartialStacks(name).length, 0);
+    [...names].reduce(
+      (total, name) => total + getPartialStacks(name).length,
+      0,
+    );
 
   await waitUntil(() => !isSortingInventory, 5_000);
   pendingItemMutations++;
@@ -779,99 +881,6 @@ async function stackBank() {
 // ---------------------------------------------------------------------------
 // Bank Loop
 // ---------------------------------------------------------------------------
-
-/**
- * Main bank loop: visits all accessible floors, stores qualifying items,
- * then retrieves items to upgrade/compound.
- * Skips if onDuty. Reschedules itself on completion or error.
- * @param {Boolean} forced to force storing weapons without checking its level
- */
-async function bankStoreRoutine(forced = false) {
-  const lastRetrieved = settleLastRetrieve();
-
-  // Indices stay valid for the whole routine: storing leaves a hole behind
-  const keepIndices = getMerchantGearKeepIndices();
-
-  // Determine which items to store
-  const toStore = character.items
-    .map((item, index) => ({ item, index }))
-    .filter(({ item, index }) => {
-      if (!item) return false;
-      if (item.l) return false; // skip locked items
-      if (keepIndices.has(index)) return false;
-      if (shouldSellItem(item)) return false;
-
-      const info = item_info(item);
-
-      // A compound wants three at that level, an upgrade wants nothing but the
-      // item. Anything else is stranded here and belongs back in the pile.
-      const isFodder = info.compound
-        ? countInventoryAtLevel(item.name, item.level ?? 0) >= 3
-        : !!info.upgrade;
-
-      // A climb only holds its ingredient back while the climb can still happen
-      const targetLevel = getCraftTargetLevel(item.name);
-      if (targetLevel > 0 && (item.level ?? 0) < targetLevel && isFodder)
-        return false;
-
-      const isRare = item_grade(item) >= 2;
-      const isHighLevel =
-        item.level >= (ITEMS_HIGHEST_LEVEL[item.name]?.level ?? 1) - 1;
-      const isStoreable = STORE_ABLE.includes(item.name);
-      const isEquipable = info.compound || info.upgrade;
-      const shouldIgnore = IGNORE.includes(item.name);
-
-      return (
-        (!shouldIgnore &&
-          (isRare || (isEquipable && (forced || isHighLevel || !isFodder)))) ||
-        isStoreable ||
-        lastRetrieved.has(item.name)
-      );
-    });
-
-  const toStoreItemSet = new Set(toStore.map(({ item }) => item.name));
-  const floors = Object.keys(BANK_FLOORS);
-
-  if (hasVisitedBank) {
-    const toStoreIndices = toStore.map(({ index }) => index);
-    const fitsSomewhere = floors.some(
-      (floor) =>
-        pickStorableIndices(toStoreIndices, getFloorCapacity(floor)).storable
-          .length,
-    );
-
-    if (!fitsSomewhere) {
-      const wasBankFull = isBankFull;
-      isBankFull = floors.every(
-        (floor) => getFloorCapacity(floor).empty === 0,
-      );
-      if (isBankFull && !wasBankFull)
-        console.log("bank full: nothing in the bag fits, skipping bank trips");
-      return;
-    }
-  }
-
-  // Group items by floor so we only travel to each floor once, and store matching items in bulk
-  for (const floor of floors) {
-    await goToBankFloor(floor, true);
-    await storeMatchingItemsOnFloor(toStoreItemSet, keepIndices);
-  }
-
-  // Backward pass (leftovers get another chance)
-  for (const floor of [...floors].reverse()) {
-    await goToBankFloor(floor, true);
-    const indices = [];
-    for (let i = 0; i < character.items.length; i++) {
-      const item = character.items[i];
-      if (!item) continue;
-      if (keepIndices.has(i)) continue;
-      if (toStoreItemSet.has(item.name)) indices.push(i);
-    }
-    await storeIndicesOnCurrentFloor(indices, 2000);
-  }
-
-  isBankFull = floors.every((floor) => getFloorCapacity(floor).empty === 0);
-}
 
 async function bankLoop() {
   let delay = 185_000;

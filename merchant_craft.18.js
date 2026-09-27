@@ -109,7 +109,7 @@ function countInventoryAtLevel(itemName, level = 0) {
 
 /**
  * Visits every unlocked copy of an item across inventory and bank.
- * Reads BANK_CACHE directly rather than going through getItemBankSlots, whose
+ * Walks the bank with forEachBankSlot rather than getItemBankSlots, whose
  * rare-grade filter would hide a harbringer +8 we already own whenever gold is
  * below IGNORE_RARE_GOLD_THRESHOLD.
  * @param {string} itemName
@@ -121,11 +121,7 @@ function forEachOwnedItem(itemName, visit) {
   };
 
   character.items.forEach(consider);
-
-  for (const pack in BANK_CACHE ?? {}) {
-    if (pack === "gold") continue;
-    BANK_CACHE[pack].forEach(consider);
-  }
+  forEachBankSlot(consider, { includePersonal: true });
 }
 
 /**
