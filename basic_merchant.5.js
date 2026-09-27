@@ -388,20 +388,7 @@ setInterval(async function () {
       // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
       // craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("basketofeggs", 1, homeLocation),
-      !isSortingInventory &&
-        Promise.all(
-          Array.from({ length: 42 }, (_, i) => i)
-            .filter((i) => {
-              if (!character.items[i]) return false;
-              if (isCraftIngredient(character.items[i].name)) return false;
-              return (
-                SALE_ABLE.includes(character.items[i].name) &&
-                !character.items[i].shiny &&
-                (character.items[i].level || 0) <= 2
-              );
-            })
-            .map(async (i) => sell(i, 1000)),
-        ),
+      !isSortingInventory && sellMarkedItems(),
     ]),
     300000,
   );
