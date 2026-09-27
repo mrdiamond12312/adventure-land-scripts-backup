@@ -349,9 +349,13 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     for (const [, name, level] of G.craft[item].items)
       if (!level) releaseCraftLevel(name, 0);
 
+  // A computer crafts anywhere but the bank, so a duty only blocks what would move us
+  const canCraftInPlace =
+    haveAComputer() && !character.map.includes("bank") && !fromBank.length;
+
   // The check above is bookkeeping and runs every call; only acting on it waits
   if (
-    onDuty ||
+    (onDuty && !canCraftInPlace) ||
     isInvFull(4) ||
     character.c.mining ||
     character.c.fishing ||
