@@ -11,6 +11,9 @@ const BANK_FLOORS = {
 // Set once bankLoop's first run has walked every floor.
 var hasVisitedBank = false;
 
+// Set by bankStoreRoutine once no floor has an empty slot left.
+var isBankFull = false;
+
 /**
  * Slots to skip globally (gold, personal storage).
  * items10 is reserved for personal items and is never touched.
@@ -22,9 +25,9 @@ const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
 // Bank Helpers
 // ---------------------------------------------------------------------------
 
-/** Syncs character bank data into BANK_CACHE */
+/** Merges character.bank into BANK_CACHE, pack by pack, keeping packs it lacks */
 async function updateBank() {
-  if (character.bank) BANK_CACHE = character.bank;
+  if (character.bank) BANK_CACHE = { ...BANK_CACHE, ...character.bank };
 }
 
 /**
@@ -283,6 +286,101 @@ async function storeToBankFloor(inventoryIndex) {
   console.warn(`Could not store item at index ${inventoryIndex} on any floor.`);
 }
 
+/**
+ * Free space on a bank floor, from BANK_CACHE.
+ * Locked (unbought) packs have no entry and count as nothing.
+ * @param {string} floor
+ * @returns {{ empty: number, stackRoom: Object<string, number[]> }} stackRoom
+ *   holds the room left in each partial stack, per item name
+ */
+function getFloorCapacity(floor) {
+  const bank = BANK_CACHE ?? character.bank ?? {};
+  const capacity = { empty: 0, stackRoom: {} };
+
+  for (const pack of getPacksOnFloor(floor)) {
+    const items = bank[pack];
+    if (!items) continue;
+
+    for (const item of items) {
+      if (!item) {
+        capacity.empty++;
+        continue;
+      }
+
+      const maxStack = G.items[item.name]?.s;
+      if (!maxStack) continue;
+
+      const room = maxStack - (item.q ?? 1);
+      if (room > 0)
+        (capacity.stackRoom[item.name] =
+          capacity.stackRoom[item.name] ?? []).push(room);
+    }
+  }
+
+  return capacity;
+}
+
+/**
+ * Splits inventory indices into those that fit on the current floor and those
+ * that don't. Consumes the given capacity as it goes.
+ * @param {number[]} indices
+ * @param {{ empty: number, stackRoom: Object<string, number[]> }} capacity
+ * @returns {{ storable: number[], skipped: number[] }}
+ */
+function pickStorableIndices(indices, capacity) {
+  const storable = [];
+  const skipped = [];
+
+  for (const index of indices) {
+    const item = character.items[index];
+    const quantity = item.q ?? 1;
+    const rooms = capacity.stackRoom[item.name] ?? [];
+    const stack = rooms.findIndex((room) => room >= quantity);
+
+    if (stack !== -1) {
+      rooms[stack] -= quantity;
+      storable.push(index);
+    } else if (capacity.empty > 0) {
+      capacity.empty--;
+      const maxStack = G.items[item.name]?.s;
+      if (maxStack > quantity)
+        (capacity.stackRoom[item.name] =
+          capacity.stackRoom[item.name] ?? []).push(maxStack - quantity);
+      storable.push(index);
+    } else {
+      skipped.push(index);
+    }
+  }
+
+  return { storable, skipped };
+}
+
+/**
+ * Fires bank_store for every index that fits on the current floor.
+ * @param {number[]} indices
+ * @param {number} timeout
+ * @returns {Promise<void>}
+ */
+async function storeIndicesOnCurrentFloor(indices, timeout) {
+  const { storable, skipped } = pickStorableIndices(
+    indices,
+    getFloorCapacity(character.map),
+  );
+
+  if (skipped.length)
+    console.log(
+      `bank full: ${skipped.length} items stay in bag on ${character.map}`,
+    );
+
+  const promises = storable.map((index) =>
+    bank_store(index).catch((e) => {
+      console.warn(`Failed storing index ${index} on ${character.map}`, e);
+    }),
+  );
+
+  return withTimeout(Promise.allSettled(promises), timeout).then(updateBank);
+}
+
 async function storeMatchingItemsOnFloor(
   toStoreItemSet,
   keepIndices = new Set(),
@@ -304,13 +402,7 @@ async function storeMatchingItemsOnFloor(
     }
   }
 
-  const promises = indices.map((index) =>
-    bank_store(index).catch((e) => {
-      console.warn(`Failed storing index ${index} on ${character.map}`, e);
-    }),
-  );
-
-  return withTimeout(Promise.allSettled(promises), 1000).then(updateBank);
+  return storeIndicesOnCurrentFloor(indices, 1000);
 }
 
 // ---------------------------------------------------------------------------
@@ -375,22 +467,17 @@ async function bankStoreRoutine(forced = false) {
   // Backward pass (leftovers get another chance)
   for (const floor of [...floors].reverse()) {
     await goToBankFloor(floor, true);
-    const promises = [];
+    const indices = [];
     for (let i = 0; i < character.items.length; i++) {
       const item = character.items[i];
       if (!item) continue;
       if (keepIndices.has(i)) continue;
-
-      if (toStoreItemSet.has(item.name)) {
-        promises.push(
-          bank_store(i).catch((e) => {
-            console.warn(`Failed storing index ${i} on ${character.map}`, e);
-          }),
-        );
-      }
+      if (toStoreItemSet.has(item.name)) indices.push(i);
     }
-    await withTimeout(Promise.allSettled(promises), 2000);
+    await storeIndicesOnCurrentFloor(indices, 2000);
   }
+
+  isBankFull = floors.every((floor) => getFloorCapacity(floor).empty === 0);
 }
 
 async function bankLoop() {

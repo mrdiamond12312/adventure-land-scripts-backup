@@ -276,7 +276,31 @@ async function retrievedBankItemToUpgrade() {
     : [];
 
   // A climb that can't be advanced this trip hands the call back to the rotation
-  if (!desiredItems.length) {
+  if (!desiredItems.length && isBankFull) {
+    desiredItemId = undefined;
+
+    if (inventoryEmptySlots < 3)
+      console.log("bank full and bag too full to compound");
+
+    // Most complete sets first: each one frees two bank slots
+    const best = Object.keys(ITEMS_HIGHEST_LEVEL)
+      .filter((id) => item_info({ name: id })?.compound)
+      .map((id) => ({
+        id,
+        sets: selectRetrievableItems(id, false, Infinity).length / 3,
+      }))
+      .filter(({ sets }) => sets > 0)
+      .sort((lhs, rhs) => rhs.sets - lhs.sets)[0];
+
+    if (best) {
+      desiredItemId = best.id;
+      desiredItems = selectRetrievableItems(
+        best.id,
+        false,
+        inventoryEmptySlots,
+      );
+    }
+  } else if (!desiredItems.length) {
     desiredItemId = undefined;
 
     // Items with biggest count (total number of item, despise the level) first

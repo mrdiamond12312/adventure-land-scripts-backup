@@ -589,6 +589,8 @@ startSkillLoops();
 
 // Register secondhands event handler
 parent.socket.on("secondhands", secondhandsHandler);
+// Keeps BANK_CACHE current whenever the server pushes character data
+parent.socket.on("player", updateBank);
 setInterval(() => {
   // Send request for Ponty inventory
   parent.socket.emit("secondhands");
