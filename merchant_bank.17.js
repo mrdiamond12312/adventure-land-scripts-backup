@@ -456,9 +456,29 @@ async function bankStoreRoutine(forced = false) {
     });
 
   const toStoreItemSet = new Set(toStore.map(({ item }) => item.name));
+  const floors = Object.keys(BANK_FLOORS);
+
+  // No trip when nothing in the bag has a spot on any floor
+  if (hasVisitedBank) {
+    const toStoreIndices = toStore.map(({ index }) => index);
+    const fitsSomewhere = floors.some(
+      (floor) =>
+        pickStorableIndices(toStoreIndices, getFloorCapacity(floor)).storable
+          .length,
+    );
+
+    if (!fitsSomewhere) {
+      const wasBankFull = isBankFull;
+      isBankFull = floors.every(
+        (floor) => getFloorCapacity(floor).empty === 0,
+      );
+      if (isBankFull && !wasBankFull)
+        console.log("bank full: nothing in the bag fits, skipping bank trips");
+      return;
+    }
+  }
 
   // Group items by floor so we only travel to each floor once, and store matching items in bulk
-  const floors = Object.keys(BANK_FLOORS);
   for (const floor of floors) {
     await goToBankFloor(floor, true);
     await storeMatchingItemsOnFloor(toStoreItemSet, keepIndices);
