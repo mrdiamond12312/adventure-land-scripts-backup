@@ -409,8 +409,11 @@ setInterval(async function () {
   // Events outrank chilling
   const hasEventToJoin = !!getEventToJoin() && !isAwaitingParcel();
 
-  if (!hasEventToJoin && !is_on_cooldown("mining")) goMining();
-  else if (!hasEventToJoin && !is_on_cooldown("fishing")) goFishing();
+  // Gathering bails on a full bag, which would leave moveHome unreachable
+  const canGather = !hasEventToJoin && !isInvFull();
+
+  if (canGather && !is_on_cooldown("mining")) goMining();
+  else if (canGather && !is_on_cooldown("fishing")) goFishing();
   else if (
     !hasEventToJoin &&
     !character.c.mining &&
