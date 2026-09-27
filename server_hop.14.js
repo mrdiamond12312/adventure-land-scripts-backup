@@ -1,6 +1,6 @@
 const HOP_SERVERS = ["US", "ASIA", "EU"];
 
-const ignoreServer = [];
+const ignoreServer = ["ASIAI", "ASIAII"];
 
 const tankableBoss = [
   // "snowman" // Commented out so newbies has time to find out about this little guy
