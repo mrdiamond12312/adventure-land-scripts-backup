@@ -368,8 +368,8 @@ setInterval(async function () {
       dismantleSomething(),
       craft("xbox", 1, homeLocation),
       craft("orba", 1, homeLocation),
-      craft("armorring", 1, homeLocation),
-      craft("resistancering", 1, homeLocation),
+      // craft("armorring", 1, homeLocation),
+      // craft("resistancering", 1, homeLocation),
       // craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
       craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
       craft("wingedboots", character.esize - 8, { map: "main", x: -2, y: 295 }),
@@ -409,7 +409,6 @@ setInterval(async function () {
   // Events outrank chilling
   const hasEventToJoin = !!getEventToJoin() && !isAwaitingParcel();
 
-  // Gathering bails on a full bag, which would leave moveHome unreachable
   const canGather = !hasEventToJoin && !isInvFull();
 
   if (canGather && !is_on_cooldown("mining")) goMining();
@@ -592,7 +591,6 @@ startSkillLoops();
 
 // Register secondhands event handler
 parent.socket.on("secondhands", secondhandsHandler);
-// Keeps BANK_CACHE current whenever the server pushes character data
 parent.socket.on("player", updateBank);
 setInterval(() => {
   // Send request for Ponty inventory

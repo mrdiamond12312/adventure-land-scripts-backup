@@ -621,7 +621,7 @@ const SALE_ABLE = [
   "iceskates",
   "stinger",
   // armorring/resistancering eat vitring +2, and the sell sweep takes level <= 2
-  // "vitring",
+  "vitring",
   // "vitearring",
   "harmor",
   "hammer",

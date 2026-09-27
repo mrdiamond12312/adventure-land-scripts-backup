@@ -11,7 +11,7 @@ const BANK_FLOORS = {
 // Set once bankLoop's first run has walked every floor.
 var hasVisitedBank = false;
 
-// Set by bankStoreRoutine once no floor has an empty slot left.
+/** Whether no floor has an empty slot */
 var isBankFull = false;
 
 /**
@@ -25,7 +25,7 @@ const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
 // Bank Helpers
 // ---------------------------------------------------------------------------
 
-/** Merges character.bank into BANK_CACHE, pack by pack, keeping packs it lacks */
+/** Merges character.bank into BANK_CACHE */
 async function updateBank() {
   if (character.bank) BANK_CACHE = { ...BANK_CACHE, ...character.bank };
 }
@@ -287,11 +287,9 @@ async function storeToBankFloor(inventoryIndex) {
 }
 
 /**
- * Free space on a bank floor, from BANK_CACHE.
- * Locked (unbought) packs have no entry and count as nothing.
+ * Free slots and stack room on a bank floor.
  * @param {string} floor
- * @returns {{ empty: number, stackRoom: Object<string, number[]> }} stackRoom
- *   holds the room left in each partial stack, per item name
+ * @returns {{ empty: number, stackRoom: Object<string, number[]> }}
  */
 function getFloorCapacity(floor) {
   const bank = BANK_CACHE ?? character.bank ?? {};
@@ -321,8 +319,7 @@ function getFloorCapacity(floor) {
 }
 
 /**
- * Splits inventory indices into those that fit on the current floor and those
- * that don't. Consumes the given capacity as it goes.
+ * Splits inventory indices by whether they fit, using up the capacity.
  * @param {number[]} indices
  * @param {{ empty: number, stackRoom: Object<string, number[]> }} capacity
  * @returns {{ storable: number[], skipped: number[] }}
@@ -356,7 +353,7 @@ function pickStorableIndices(indices, capacity) {
 }
 
 /**
- * Fires bank_store for every index that fits on the current floor.
+ * Stores every index that fits on the current floor.
  * @param {number[]} indices
  * @param {number} timeout
  * @returns {Promise<void>}
@@ -416,6 +413,8 @@ async function storeMatchingItemsOnFloor(
  * @param {Boolean} forced to force storing weapons without checking its level
  */
 async function bankStoreRoutine(forced = false) {
+  const lastRetrieved = settleLastRetrieve();
+
   // Indices stay valid for the whole routine: storing leaves a hole behind
   const keepIndices = getMerchantGearKeepIndices();
 
@@ -451,14 +450,13 @@ async function bankStoreRoutine(forced = false) {
         (!shouldIgnore &&
           (isRare || (isEquipable && (forced || isHighLevel || !isFodder)))) ||
         isStoreable ||
-        RETRIEVE_HISTORY.includes(item.name)
+        lastRetrieved.has(item.name)
       );
     });
 
   const toStoreItemSet = new Set(toStore.map(({ item }) => item.name));
   const floors = Object.keys(BANK_FLOORS);
 
-  // No trip when nothing in the bag has a spot on any floor
   if (hasVisitedBank) {
     const toStoreIndices = toStore.map(({ index }) => index);
     const fitsSomewhere = floors.some(

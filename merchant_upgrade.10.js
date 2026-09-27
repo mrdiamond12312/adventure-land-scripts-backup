@@ -45,7 +45,33 @@ const KEEP_THRESHOLD = {
 };
 
 const ITEMS_HIGHEST_LEVEL = {};
-const RETRIEVE_HISTORY = [];
+
+/** Bag slots a pull leaves free */
+const RETRIEVE_FREE_SLOTS = 8;
+
+/** Bag slots a pull may fill */
+const RETRIEVE_MAX_SLOTS = 12;
+
+/** Bag slots one item may take of a pull */
+const RETRIEVE_MAX_PER_ITEM = 6;
+
+/** How long an item that made no progress is skipped */
+const RETRIEVE_BACKOFF_MS = 10 * 60_000;
+
+/** How long a pull gets before its progress is judged */
+const RETRIEVE_SETTLE_MS = 60_000;
+
+/** How long a pulled item takes to regain its priority */
+const RETRIEVE_STALE_MS = 60 * 60_000;
+
+/** Skipped items, name -> until when */
+const RETRIEVE_BACKOFF = {};
+
+/** Pulled items, name -> when */
+const RETRIEVE_HISTORY = {};
+
+/** The last pull and each item's bag levels right after it */
+var LAST_RETRIEVED = { at: 0, signatures: {} };
 
 // ---------------------------------------------------------------------------
 // Upgrade/Compound Helpers
@@ -224,9 +250,7 @@ function filterCompoundableSets(items, inventoryEmptySlots) {
 }
 
 /**
- * Bank slots worth pulling for one item id, or an empty array when none are:
- * locked copies, the KEEP_THRESHOLD tail and incomplete compound sets all
- * disqualify, and any of them can empty a pile that looked big from its count.
+ * Bank slots worth pulling for one item id
  * @param {string} itemId
  * @param {boolean} isTargeted - a pending craft wants it at a level
  * @param {number} inventoryEmptySlots
@@ -255,95 +279,128 @@ function selectRetrievableItems(itemId, isTargeted, inventoryEmptySlots) {
 }
 
 /**
- * Selects and retrieves the best batch of items from the bank to upgrade/compound.
- * Keeps at least 4 inventory slots free for scrolls/offerings.
- * Respects KEEP_THRESHOLD and RETRIEVE_HISTORY to rotate selections.
+ * Levels of an item's unlocked bag copies.
+ * @param {string} itemName
+ * @returns {string}
+ */
+function getBagLevelSignature(itemName) {
+  return character.items
+    .filter((item) => item && !item.l && item.name === itemName)
+    .map((item) => item.level ?? 0)
+    .sort((lhs, rhs) => lhs - rhs)
+    .join(",");
+}
+
+/**
+ * Backs off the last pull's items whose bag copies never changed.
+ * @returns {Set<string>} names the last pull brought out
+ */
+function settleLastRetrieve() {
+  const names = new Set(Object.keys(LAST_RETRIEVED.signatures));
+  if (Date.now() - LAST_RETRIEVED.at < RETRIEVE_SETTLE_MS) return names;
+
+  for (const [name, signature] of Object.entries(LAST_RETRIEVED.signatures)) {
+    if (getBagLevelSignature(name) === signature)
+      RETRIEVE_BACKOFF[name] = Date.now() + RETRIEVE_BACKOFF_MS;
+  }
+
+  LAST_RETRIEVED = { at: 0, signatures: {} };
+  return names;
+}
+
+/**
+ * x3 if never pulled, else x1 after a pull recovering to x2.
+ * @param {string} itemId
+ * @returns {number}
+ */
+function getRetrieveFreshness(itemId) {
+  const pulledAt = RETRIEVE_HISTORY[itemId];
+  if (pulledAt === undefined) return 3;
+  return 1 + Math.min(1, (Date.now() - pulledAt) / RETRIEVE_STALE_MS);
+}
+
+/**
+ * How urgent a pull is: bank slots freed for compounds, copies for upgrades.
+ * @param {string} itemId
+ * @param {number} itemCount - retrievable copies
+ * @returns {number}
+ */
+function scoreRetrieveCandidate(itemId, itemCount) {
+  const base = item_info({ name: itemId })?.compound
+    ? (itemCount / 3) * 2 * (isBankFull ? 10 : 1)
+    : itemCount;
+  return base * getRetrieveFreshness(itemId);
+}
+
+/**
+ * Pulls the most urgent items to upgrade/compound, craft targets first.
  * @returns {Promise<void>}
  */
 async function retrievedBankItemToUpgrade() {
-  let inventoryEmptySlots = character.esize - 4; // reserve 4 slots for scrolls/offerings
-
-  // Crafting materials will outrank normal updates/compounds.
-  const targetedItemId = Object.keys(CRAFT_LEVEL_TARGETS).find((id) =>
-    getItemBankSlots(id, true, true).some(
-      (item) => !item.l && (item.level ?? 0) < getCraftTargetLevel(id),
-    ),
+  let budget = Math.min(
+    character.esize - RETRIEVE_FREE_SLOTS,
+    RETRIEVE_MAX_SLOTS,
   );
 
-  let desiredItemId = targetedItemId;
-  let desiredItems = targetedItemId
-    ? selectRetrievableItems(targetedItemId, true, inventoryEmptySlots)
-    : [];
+  if (budget <= 0) {
+    if (isBankFull) console.log("bank full and bag too full to compound");
+    return;
+  }
 
-  // A climb that can't be advanced this trip hands the call back to the rotation
-  if (!desiredItems.length && isBankFull) {
-    desiredItemId = undefined;
+  const picked = [];
+  const pickedIds = new Set();
 
-    if (inventoryEmptySlots < 3)
-      console.log("bank full and bag too full to compound");
+  const take = (id, isTargeted) => {
+    const limit = isTargeted ? budget : Math.min(budget, RETRIEVE_MAX_PER_ITEM);
+    const items = selectRetrievableItems(id, isTargeted, limit).slice(0, limit);
+    if (!items.length) return;
 
-    // Most complete sets first: each one frees two bank slots
-    const best = Object.keys(ITEMS_HIGHEST_LEVEL)
-      .filter((id) => item_info({ name: id })?.compound)
-      .map((id) => ({
+    budget -= items.length;
+    picked.push(...items);
+    pickedIds.add(id);
+  };
+
+  // Crafting materials will outrank normal updates/compounds.
+  for (const id of Object.keys(CRAFT_LEVEL_TARGETS)) {
+    if (budget <= 0) break;
+    take(id, true);
+  }
+
+  const targetedIds = new Set(pickedIds);
+  const now = Date.now();
+
+  const candidates = Object.keys(ITEMS_HIGHEST_LEVEL)
+    .filter(
+      (id) =>
+        !pickedIds.has(id) &&
+        item_info({ name: id }) &&
+        !((RETRIEVE_BACKOFF[id] ?? 0) > now),
+    )
+    .map((id) => ({
+      id,
+      score: scoreRetrieveCandidate(
         id,
-        sets: selectRetrievableItems(id, false, Infinity).length / 3,
-      }))
-      .filter(({ sets }) => sets > 0)
-      .sort((lhs, rhs) => rhs.sets - lhs.sets)[0];
+        selectRetrievableItems(id, false, Infinity).length,
+      ),
+    }))
+    .filter(({ score }) => score > 0)
+    .sort(
+      (lhs, rhs) =>
+        rhs.score - lhs.score ||
+        ITEMS_HIGHEST_LEVEL[rhs.id].count - ITEMS_HIGHEST_LEVEL[lhs.id].count,
+    );
 
-    if (best) {
-      desiredItemId = best.id;
-      desiredItems = selectRetrievableItems(
-        best.id,
-        false,
-        inventoryEmptySlots,
-      );
-    }
-  } else if (!desiredItems.length) {
-    desiredItemId = undefined;
-
-    // Items with biggest count (total number of item, despise the level) first
-    const candidates = Object.keys(ITEMS_HIGHEST_LEVEL)
-      .filter((id) => {
-        const info = item_info({ name: id });
-        if (!info) return false;
-        if (info.compound && inventoryEmptySlots < 3) return false;
-        return !RETRIEVE_HISTORY.includes(id);
-      })
-      .sort(
-        (lhs, rhs) =>
-          ITEMS_HIGHEST_LEVEL[rhs].count - ITEMS_HIGHEST_LEVEL[lhs].count,
-      );
-
-    for (const id of candidates) {
-      const items = selectRetrievableItems(id, false, inventoryEmptySlots);
-      if (!items.length) continue;
-
-      desiredItemId = id;
-      desiredItems = items;
-      break;
-    }
+  for (const { id } of candidates) {
+    if (budget <= 0) break;
+    take(id, false);
   }
 
-  if (!desiredItemId || !desiredItems.length) return;
-
-  if (desiredItemId !== targetedItemId) {
-    RETRIEVE_HISTORY.push(desiredItemId);
-    if (
-      RETRIEVE_HISTORY.length >=
-      Object.keys(ITEMS_HIGHEST_LEVEL).length / 5
-    ) {
-      RETRIEVE_HISTORY.shift();
-    }
-  }
+  if (!picked.length) return;
 
   // Group items by floor so we only travel to each floor once
   const byFloor = {};
-  for (const itemSlot of desiredItems) {
-    if (inventoryEmptySlots-- <= 0) break;
+  for (const itemSlot of picked)
     (byFloor[itemSlot.floor] = byFloor[itemSlot.floor] ?? []).push(itemSlot);
-  }
 
   for (const [floor, slots] of Object.entries(byFloor)) {
     if (!(await goToBankFloor(floor))) continue;
@@ -353,6 +410,14 @@ async function retrievedBankItemToUpgrade() {
     );
     updateBank();
   }
+
+  const signatures = {};
+  for (const id of pickedIds) {
+    if (targetedIds.has(id)) continue;
+    signatures[id] = getBagLevelSignature(id);
+    RETRIEVE_HISTORY[id] = Date.now();
+  }
+  LAST_RETRIEVED = { at: Date.now(), signatures };
 }
 
 // ---------------------------------------------------------------------------

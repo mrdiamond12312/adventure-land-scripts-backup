@@ -8,6 +8,9 @@
  */
 const CRAFT_LEVEL_TARGETS = {};
 
+/** Recipes whose ingredient check has run */
+const CRAFT_EVALUATED = new Set();
+
 /** Cap on vendor items bought to fill one craft target, per recipe check. */
 const MAX_CRAFT_BUY = 27;
 
@@ -313,6 +316,11 @@ function getCoveredCraftQuantity(item, wanted) {
 }
 
 async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
+  if (!G.craft[item]) {
+    log("Uncraftable/Invalid item id!");
+    return;
+  }
+
   // Check if craftable
   if (
     onDuty ||
@@ -320,13 +328,15 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     character.c.mining ||
     character.c.fishing ||
     craftQuantity < 1
-  )
-    return;
-
-  if (!G.craft[item]) {
-    log("Uncraftable/Invalid item id!");
+  ) {
+    // Keeps the sell sweep off the ingredients
+    if (!CRAFT_EVALUATED.has(item))
+      for (const [quantity, name, level] of G.craft[item].items)
+        requestCraftLevel(name, level ?? 0, quantity);
     return;
   }
+
+  CRAFT_EVALUATED.add(item);
 
   // The ingredient check below is all-or-nothing, so a batch bigger than what
   // we hold skips the craft entirely rather than making the few we can. Falls
