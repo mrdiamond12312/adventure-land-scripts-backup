@@ -52,6 +52,35 @@ function hasExchangeStock(entry) {
   return owned >= entry.quantity + (entry.keep ?? 0);
 }
 
+/** @returns {number} bag slot of an item's biggest stack, or -1 */
+function locateBiggestStack(itemName) {
+  let best = -1;
+  character.items.forEach((item, index) => {
+    if (item?.name !== itemName) return;
+    if (best === -1 || (item.q ?? 1) > (character.items[best].q ?? 1))
+      best = index;
+  });
+  return best;
+}
+
+/**
+ * The bag slot to exchange an entry from, pulling more from the bank while the
+ * biggest stack is short of one exchange.
+ * @returns {Promise<number>} the slot, or -1 if no stack is big enough
+ */
+async function prepareExchangeSlot(entry) {
+  const need = entry.quantity + (entry.keep ?? 0);
+  const isReady = (slot) => slot !== -1 && (character.items[slot].q ?? 1) >= need;
+
+  let slot = locateBiggestStack(entry.name);
+  if (!isReady(slot) && !onDuty && hasExchangeStock(entry)) {
+    await retrieveBankItem(entry.name);
+    slot = locateBiggestStack(entry.name);
+  }
+
+  return isReady(slot) ? slot : -1;
+}
+
 /** @returns {boolean} whether an exchange queue still wants this item in the bag */
 function isExchangeQueued(itemName) {
   const isReady = (entry) =>
@@ -76,16 +105,12 @@ function shouldGoExchangeXmas() {
 async function holidayExchange() {
   if (!shouldGoExchangeXmas() || !server.status["holidayseason"]) return;
 
-  const exchangableItem = HOLIDAY_EXCHANGES.find((item) => {
-    const itemName = item.name;
-    const slot = locate_item(itemName);
-    if (slot === -1 && hasExchangeStock(item)) {
-      retrieveBankItem(itemName);
-    }
-
-    if (slot === -1) return false;
-    return character.items[slot]?.q >= item.quantity + item.keep;
-  });
+  let exchangableItem;
+  for (const item of HOLIDAY_EXCHANGES) {
+    if ((await prepareExchangeSlot(item)) === -1) continue;
+    exchangableItem = item;
+    break;
+  }
 
   if (!exchangableItem || smart.moving) return;
 
@@ -94,7 +119,7 @@ async function holidayExchange() {
     await smart_move(find_npc(exchangableItem.npc));
   }
 
-  return exchange(locate_item(exchangableItem.name)).catch((e) => {
+  return exchange(locateBiggestStack(exchangableItem.name)).catch((e) => {
     switch (e.response) {
       case "inventory_full":
         invJammed = true;
@@ -107,19 +132,8 @@ async function exchangeSomething() {
 
   let slot = undefined;
   for (const item of EXCHANGE_QUEUE) {
-    if (
-      !onDuty &&
-      locate_item(item.name) === -1 &&
-      hasExchangeStock(item)
-    ) {
-      await retrieveBankItem(item.name);
-    }
-
-    const slotIndex = locate_item(item.name);
-    if (
-      slotIndex !== -1 &&
-      character.items[slotIndex].q >= item.quantity + (item.keep ?? 0)
-    ) {
+    const slotIndex = await prepareExchangeSlot(item);
+    if (slotIndex !== -1) {
       slot = slotIndex;
 
       if (

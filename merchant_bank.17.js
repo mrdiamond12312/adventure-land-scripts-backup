@@ -24,18 +24,10 @@ const BANK_OP_TIMEOUT = 2_500;
 const MERCHANT_GEAR_FREE_SLOTS = 4;
 
 /** Item types the merchant uses from the bag, never stashed */
-const BAG_SUPPLY_TYPES = [
-  "uscroll",
-  "cscroll",
-  "pscroll",
-  "offering",
-  "pot",
-  "elixir",
-  "tome",
-  "stand",
-  "computer",
-  "tracker",
-];
+const BAG_SUPPLY_TYPES = ["pot", "stand", "computer", "tracker"];
+
+/** Item types upgrading burns, stashed once the bag has nothing to upgrade */
+const BAG_WORK_TYPES = ["uscroll", "cscroll", "offering"];
 
 /** Highest level the sell sweep takes, per kind */
 const SALE_MAX_LEVEL = { compound: 1, upgrade: 2 };
@@ -118,7 +110,7 @@ async function goToBankFloor(floor, forced = false) {
  */
 function forEachBankSlot(visit, { floor, includePersonal = false } = {}) {
   for (const pack in BANK_CACHE ?? {}) {
-    if (pack === "gold") continue;
+    if (!Array.isArray(BANK_CACHE[pack])) continue;
     if (!includePersonal && IGNORE_BANK_SLOTS.includes(pack)) continue;
 
     const packFloor = getFloorOfPack(pack);
@@ -488,27 +480,39 @@ function storeIndicesOnCurrentFloor(indices) {
 }
 
 /**
- * Bag indices of the named items, the kept merchant gear aside.
- * @param {Set<string>} names
- * @param {Set<number>} keepIndices
+ * Bag indices of the picked items that still hold them.
+ * @param {Array<{ item: object, index: number }>} picked
  * @returns {number[]}
  */
-function getStoreIndices(names, keepIndices) {
-  return character.items
-    .map((item, index) =>
-      item && !keepIndices.has(index) && names.has(item.name) ? index : -1,
-    )
-    .filter((index) => index !== -1);
+function getStoreIndices(picked) {
+  return picked
+    .filter(({ item, index }) => {
+      const current = character.items[index];
+      return current?.name === item.name && !current.l;
+    })
+    .map(({ index }) => index);
 }
 
 /** @returns {boolean} whether the merchant uses this item from the bag */
 function isBagSupply(item) {
+  const type = G.items[item.name]?.type;
   return (
-    BAG_SUPPLY_TYPES.includes(G.items[item.name]?.type) ||
-    IGNORE.includes(item.name) ||
+    BAG_SUPPLY_TYPES.includes(type) ||
+    BAG_WORK_TYPES.includes(type) ||
     isCraftIngredient(item.name) ||
     isExchangeQueued(item.name)
   );
+}
+
+/**
+ * Whether an item is something upgradeInv/compoundInv may still work on.
+ * @param {Set<number>} skip - bag indices already leaving the bag
+ */
+function isUpgradeWork(item, index, skip) {
+  if (!item || item.l || skip.has(index) || IGNORE.includes(item.name))
+    return false;
+  const info = G.items[item.name];
+  return !!(info?.upgrade || info?.compound);
 }
 
 /**
@@ -564,7 +568,18 @@ async function bankStoreRoutine(forced = false) {
       );
     });
 
-  const toStoreItemSet = new Set(toStore.map(({ item }) => item.name));
+  // Scrolls and offerings follow once nothing left in the bag would burn them
+  const leaving = new Set(toStore.map(({ index }) => index));
+  const hasUpgradeWork = character.items.some(
+    (item, index) =>
+      !keepIndices.has(index) && isUpgradeWork(item, index, leaving),
+  );
+  if (!hasUpgradeWork)
+    character.items.forEach((item, index) => {
+      if (item && !item.l && BAG_WORK_TYPES.includes(G.items[item.name]?.type))
+        toStore.push({ item, index });
+    });
+
   const floors = Object.keys(BANK_FLOORS);
 
   if (hasVisitedBank) {
@@ -591,7 +606,7 @@ async function bankStoreRoutine(forced = false) {
     await goToBankFloor(floor, true);
     const floorItems = getItemNamesOnCurrentFloor();
     await storeIndicesOnCurrentFloor(
-      getStoreIndices(toStoreItemSet, keepIndices).filter((index) =>
+      getStoreIndices(toStore).filter((index) =>
         floorItems.has(character.items[index].name),
       ),
     );
@@ -600,9 +615,7 @@ async function bankStoreRoutine(forced = false) {
   // Backward pass (leftovers get another chance)
   for (const floor of [...floors].reverse()) {
     await goToBankFloor(floor, true);
-    await storeIndicesOnCurrentFloor(
-      getStoreIndices(toStoreItemSet, keepIndices),
-    );
+    await storeIndicesOnCurrentFloor(getStoreIndices(toStore));
   }
 
   isBankFull = floors.every((floor) => getFloorCapacity(floor).empty === 0);

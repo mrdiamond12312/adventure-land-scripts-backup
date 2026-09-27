@@ -128,6 +128,9 @@ async function ensureScroll(scrollType, itemGrade) {
   let scrollSlot = locate_item(scrollType);
   if (scrollSlot !== -1) return scrollSlot;
 
+  // A stashed stack is fetched on the next try, never bought over
+  if (getItemBankSlots(scrollType, true).length) return -1;
+
   if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD) return -1;
 
   try {
@@ -413,7 +416,19 @@ async function retrievedBankItemToUpgrade() {
 
   if (!picked.length) return;
 
-  await retrieveAll(picked);
+  // The scrolls they burn come along in the same visit
+  const scrollNames = new Set(
+    picked.map(
+      (item) =>
+        `${item_info(item).compound ? "cscroll" : "scroll"}${item_grade(item)}`,
+    ),
+  );
+  const scrollSlots = [...scrollNames]
+    .filter((name) => locate_item(name) === -1)
+    .map((name) => getItemBankSlots(name, true)[0])
+    .filter(Boolean);
+
+  await retrieveAll([...picked, ...scrollSlots]);
 
   const signatures = {};
   for (const id of pickedIds) {
