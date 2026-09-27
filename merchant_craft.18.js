@@ -8,9 +8,6 @@
  */
 const CRAFT_LEVEL_TARGETS = {};
 
-/** Recipes whose ingredient check has run */
-const CRAFT_EVALUATED = new Set();
-
 /** Cap on vendor items bought to fill one craft target, per recipe check. */
 const MAX_CRAFT_BUY = 27;
 
@@ -317,22 +314,8 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     return;
   }
 
-  // Check if craftable
-  if (
-    onDuty ||
-    isInvFull(4) ||
-    character.c.mining ||
-    character.c.fishing ||
-    craftQuantity < 1
-  ) {
-    // Keeps the sell sweep off the ingredients
-    if (!CRAFT_EVALUATED.has(item))
-      for (const [quantity, name, level] of G.craft[item].items)
-        requestCraftLevel(name, level ?? 0, quantity);
-    return;
-  }
-
-  CRAFT_EVALUATED.add(item);
+  const requestedQuantity = craftQuantity;
+  craftQuantity = Math.max(1, craftQuantity);
 
   // The ingredient check below is all-or-nothing, so a batch bigger than what
   // we hold skips the craft entirely rather than making the few we can. Falls
@@ -365,6 +348,16 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   if (!isEnoughIngredients)
     for (const [, name, level] of G.craft[item].items)
       if (!level) releaseCraftLevel(name, 0);
+
+  // The check above is bookkeeping and runs every call; only acting on it waits
+  if (
+    onDuty ||
+    isInvFull(4) ||
+    character.c.mining ||
+    character.c.fishing ||
+    requestedQuantity < 1
+  )
+    return;
 
   // Runs even when the craft can't fire yet — the climb needs the base items now
   if (targetBuy.length) {

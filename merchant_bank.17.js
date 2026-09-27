@@ -503,13 +503,11 @@ function getStoreIndices(names, keepIndices) {
 
 /** @returns {boolean} whether the merchant uses this item from the bag */
 function isBagSupply(item) {
-  const isQueued = (list) => list.some((entry) => entry.name === item.name);
   return (
     BAG_SUPPLY_TYPES.includes(G.items[item.name]?.type) ||
     IGNORE.includes(item.name) ||
     isCraftIngredient(item.name) ||
-    isQueued(EXCHANGE_QUEUE) ||
-    isQueued(HOLIDAY_EXCHANGES)
+    isExchangeQueued(item.name)
   );
 }
 
@@ -546,11 +544,15 @@ async function bankStoreRoutine(forced = false) {
         return false;
 
       const itemKey = getItemKey(item);
+      const isEquipable = info.compound || info.upgrade;
+
+      // A supply would only be pulled straight back out, STORE_ABLE or not
+      if (!isEquipable && isBagSupply(item)) return false;
+
       const isRare = item_grade(item) >= 2;
       const isHighLevel =
         item.level >= (ITEMS_HIGHEST_LEVEL[itemKey]?.level ?? 1) - 1;
       const isStoreable = STORE_ABLE.includes(item.name);
-      const isEquipable = info.compound || info.upgrade;
       const shouldIgnore = IGNORE.includes(item.name);
 
       return (

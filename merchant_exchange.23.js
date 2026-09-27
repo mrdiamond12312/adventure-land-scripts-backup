@@ -40,6 +40,28 @@ const EXCHANGE_QUEUE = [
   { name: "gemfragment", quantity: 50, npc: "gemmerchant" },
 ];
 
+/** @returns {boolean} whether bag and bank together hold enough of an entry to exchange */
+function hasExchangeStock(entry) {
+  const owned = [
+    ...character.items,
+    ...getItemBankSlots(entry.name, true, true),
+  ].reduce(
+    (total, item) => (item?.name === entry.name ? total + (item.q ?? 1) : total),
+    0,
+  );
+  return owned >= entry.quantity + (entry.keep ?? 0);
+}
+
+/** @returns {boolean} whether an exchange queue still wants this item in the bag */
+function isExchangeQueued(itemName) {
+  const isReady = (entry) =>
+    entry.name === itemName && hasExchangeStock(entry);
+  return (
+    EXCHANGE_QUEUE.some(isReady) ||
+    (!!server.status["holidayseason"] && HOLIDAY_EXCHANGES.some(isReady))
+  );
+}
+
 function shouldGoExchangeXmas() {
   return !(
     onDuty ||
@@ -57,7 +79,7 @@ async function holidayExchange() {
   const exchangableItem = HOLIDAY_EXCHANGES.find((item) => {
     const itemName = item.name;
     const slot = locate_item(itemName);
-    if (slot === -1 && getItemBankSlots(itemName, true).length) {
+    if (slot === -1 && hasExchangeStock(item)) {
       retrieveBankItem(itemName);
     }
 
@@ -87,14 +109,17 @@ async function exchangeSomething() {
   for (const item of EXCHANGE_QUEUE) {
     if (
       !onDuty &&
-      getItemBankSlots(item.name).length &&
-      locate_item(item.name) === -1
+      locate_item(item.name) === -1 &&
+      hasExchangeStock(item)
     ) {
       await retrieveBankItem(item.name);
     }
 
     const slotIndex = locate_item(item.name);
-    if (slotIndex !== -1 && character.items[slotIndex].q >= item.quantity) {
+    if (
+      slotIndex !== -1 &&
+      character.items[slotIndex].q >= item.quantity + (item.keep ?? 0)
+    ) {
       slot = slotIndex;
 
       if (
