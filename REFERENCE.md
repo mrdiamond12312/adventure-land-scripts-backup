@@ -1991,3 +1991,20 @@ and its independent 0.1% `cave_finish_bonus` items. After that, once `limits.amb
 reaches `limits.amber` (36), only farms may remain. Below the cap the old everything-done rule
 still applies. Amber reaches the purse only when its chest is opened, so the party walks to every
 unopened chest on the floor before `cave_exit`. The exit also turns the purse's Amber into an item.
+
+### A bank store onto an occupied slot swaps, it never merges (debugged 2026-09-27)
+
+`bank_store(num, pack, slot)` onto a slot holding the same stackable item does not stack them:
+the server swaps the two. The first stacking pass (`stackBank`, merchant_bank.17.js) stored each
+split piece into its target's exact slot, and every "merge" pulled a 49-key `cryptkey` stack into
+the bag and left the 1-key piece in its place. Nothing was lost, but the bank filled with 1-key
+stacks and the bag with 49s.
+
+Only a store without a slot (`pack_num` -1) merges, and it lands in the first stack of that pack
+with room, which is not necessarily the stack you meant. So `buildStackDrain` targets the stack
+the game will pick anyway: the lowest-slot partial stack in each pack, one piece per pack, sized to
+that stack's room. A piece aimed anywhere else can take another piece's room and spill into an
+empty slot, and the pass keeps re-running on it without ever settling.
+
+The remainder of a split source still goes back by explicit slot: that slot is the one the source
+was just pulled from, so it is empty and nothing gets swapped.

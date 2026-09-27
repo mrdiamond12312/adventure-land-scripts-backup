@@ -23,6 +23,20 @@ const BANK_OP_TIMEOUT = 2_500;
 // Bag space the gear trip leaves alone for scrolls, offerings and loot
 const MERCHANT_GEAR_FREE_SLOTS = 4;
 
+/** Item types the merchant uses from the bag, never stashed */
+const BAG_SUPPLY_TYPES = [
+  "uscroll",
+  "cscroll",
+  "pscroll",
+  "offering",
+  "pot",
+  "elixir",
+  "tome",
+  "stand",
+  "computer",
+  "tracker",
+];
+
 /** Highest level the sell sweep takes, per kind */
 const SALE_MAX_LEVEL = { compound: 1, upgrade: 2 };
 
@@ -487,6 +501,18 @@ function getStoreIndices(names, keepIndices) {
     .filter((index) => index !== -1);
 }
 
+/** @returns {boolean} whether the merchant uses this item from the bag */
+function isBagSupply(item) {
+  const isQueued = (list) => list.some((entry) => entry.name === item.name);
+  return (
+    BAG_SUPPLY_TYPES.includes(G.items[item.name]?.type) ||
+    IGNORE.includes(item.name) ||
+    isCraftIngredient(item.name) ||
+    isQueued(EXCHANGE_QUEUE) ||
+    isQueued(HOLIDAY_EXCHANGES)
+  );
+}
+
 /**
  * Stores qualifying bag items floor by floor, next to their kind first.
  * @param {Boolean} forced to force storing weapons without checking its level
@@ -530,6 +556,7 @@ async function bankStoreRoutine(forced = false) {
       return (
         (!shouldIgnore &&
           (isRare || (isEquipable && (forced || isHighLevel || !isFodder)))) ||
+        (!isEquipable && !isBagSupply(item)) ||
         isStoreable ||
         lastRetrieved.has(itemKey)
       );
@@ -690,7 +717,14 @@ function buildStackDrain(name, bagSlots) {
   const pieces = [];
   let left = source.q;
 
-  for (const target of stacks) {
+  // The game fills a pack's first stack with room, so each pack's lowest slot is its target
+  const firstInPack = {};
+  for (const stack of stacks)
+    if (!(firstInPack[stack.pack]?.slot < stack.slot))
+      firstInPack[stack.pack] = stack;
+  const targets = Object.values(firstInPack).sort((lhs, rhs) => rhs.q - lhs.q);
+
+  for (const target of targets) {
     if (!left) break;
     const amount = Math.min(maxStack - target.q, left);
     if (pieces.length + 1 + (left - amount > 0 ? 1 : 0) > bagSlots) break;
@@ -810,12 +844,13 @@ async function runStackDrains(drains) {
       BANK_OP_TIMEOUT,
     );
 
+    // Stored by pack alone: onto an occupied slot the game swaps, it doesn't merge
     const assigned = ready.filter(assignDrainSlots);
     const toStore = (onFloor) =>
       assigned.flatMap((drain) =>
         drain.pieces
           .filter((piece) => piece.target.floor === onFloor)
-          .map((piece) => [piece.index, piece.target.pack, piece.target.slot]),
+          .map((piece) => [piece.index, piece.target.pack]),
       );
 
     await storeAll([
