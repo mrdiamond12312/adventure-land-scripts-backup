@@ -2167,37 +2167,75 @@ class ProjectileManagement {
     this.init();
   }
 
-  _calculateSingleHitDamage(from, to) {
-    const damage = calculateDamage({ ...from, frequency: 1 }, to, false);
-    return to["1hp"] ? Math.min(damage, 1) : damage;
+  /** Mitigates `action.damage`, which already carries the skill multiplier. */
+  _calculateSingleHitDamage(rawDamage, source, from, to) {
+    if (to["1hp"]) return Math.min(rawDamage, 1);
+
+    const fromDef =
+      from?.type === "monster" ? G.monsters[from.mtype] : from ?? {};
+    const damageType =
+      G.skills[source]?.damage_type ??
+      fromDef.damage_type ??
+      G.classes[from?.ctype]?.damage_type;
+    const [defense, pierce] =
+      damageType === "physical"
+        ? ["armor", "apiercing"]
+        : damageType === "magical"
+          ? ["resistance", "rpiercing"]
+          : [];
+    if (!defense) return rawDamage;
+
+    const hardshellArmor =
+      defense === "armor" && to.s?.hardshell ? G.conditions.hardshell.armor : 0;
+    // Half our party's defense, so hits on us err high
+    const isOurs =
+      to === character ||
+      (to.type === "character" && partyMems.includes(to.name));
+    const defenseRate = isOurs ? 0.5 : 1;
+
+    return (
+      rawDamage *
+      damage_multiplier(
+        ((to[defense] ?? 0) - hardshellArmor) * defenseRate -
+          (fromDef[pierce] ?? 0) * 2,
+      )
+    );
   }
 
   _onIncomingProjectile = (data) => {
     if (!data?.pid || !data?.target) return;
-    if (data.source !== "attack" && data.source !== "heal") return;
     if (data.instant) return;
 
     const rawValue = data.damage ?? data.heal;
     if (typeof rawValue !== "number") return;
 
     const projectileActor = parent.entities[data.attacker];
-    const projectileTarget = parent.entities[data.target];
+    const projectileTarget =
+      parent.entities[data.target] ??
+      (data.target === character.id ? character : undefined);
 
     const projectile = {
-      type: data.source, // "attack" | "heal"
+      type: data.damage != null ? "attack" : "heal",
       attacker: data.attacker,
       eta: data.eta,
       arrival: performance.now() + data.eta,
     };
 
     // damage stored as negative, heal as positive
-    if (projectileActor && projectileTarget) {
-      projectile.value =
-        data.damage != null
-          ? -this._calculateSingleHitDamage(projectileActor, projectileTarget)
-          : calculateHeal(projectileActor, projectileTarget);
+    if (data.damage != null) {
+      projectile.value = projectileTarget
+        ? -this._calculateSingleHitDamage(
+            rawValue,
+            data.source,
+            projectileActor,
+            projectileTarget,
+          )
+        : -rawValue;
     } else {
-      projectile.value = data.damage != null ? -rawValue : rawValue;
+      projectile.value =
+        projectileActor && projectileTarget
+          ? calculateHeal(projectileActor, projectileTarget)
+          : rawValue;
     }
 
     const { target, pid } = data;

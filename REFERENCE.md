@@ -1434,6 +1434,56 @@ The merchant reads the same flag from the other end (`bossConfigs.crabxx.shouldA
 merchant_frenzinesss.100.js) — it parks with the stand open while `"1hp"` is set rather than
 spending shots for 1 damage each.
 
+The rest of the branch looks tunable, but is deliberate (confirmed 2026-09-29):
+
+- **Highest-hp crabx first, not lowest.** The aim is to level the crabx down together so they
+  die at once, which is what the warrior's cleave pays off on; finishing the weakest first would
+  leave a spread of hp and stagger the kills.
+- **`rangeRate = 0.3` for ranged classes.** It keeps them near the center, where the crabx
+  spawn, so the crabx stay inside their range. Kiting them out to full range loses targets.
+- **Stomp only while `crabxList.length <= 1`.** It is a play-maker: stun the boss once the adds
+  are cleared and let the party follow up, not a panic button. This matters more than it looks:
+  the server skips a disabled (stunned) boss's timed spawns entirely.
+- **An out-of-range crabx is still the target.** `bestCrabx` prefers one in range but falls back
+  to any crabx, so fighters walk toward it; the boss is only the fallback with no crabx at all.
+
+Server side (`server.js`, monster spawn loop): crabxx spawns one crabx per second, only while it
+has a target and is not disabled, onto a random player from its `points` (anyone who has hit it)
+who is within 400 of it and in the same group as its current target. During the shell each hit
+adds 1 to `points`, however hard it lands.
+
+## Incoming projectiles start from the server's roll (`ProjectileManagement`, 2026-09-29)
+
+`action.damage` is the attack before defense, crit and the ±10% spread, but after the skill's own
+multiplier. So every source counts (`3shot`, `supershot`, `cburst`… not just `attack`), and the
+estimate mitigates that number rather than recomputing from the attacker's `attack`, which got a
+supershot about 3x too low. Piercing counts twice because the server subtracts both
+`attacker[pierce]` and `info[pierce]`, and the latter is seeded from the former. Crit is left out
+on purpose, so predictions err on the high-hp side — except for hits on ourselves or a `partyMems`
+member, where only half the armor/resistance is counted, so harakiri and heal targeting err
+toward danger instead.
+
+## A/B Testing: score the target, roam when blind (`useEventStrategy`, 2026-09-29)
+
+`abtesting` is the daily team battle: a small instanced arena, bases at x = ±832 joined by
+corridors to a central room, teams told apart by `team`. Two things drive the branch.
+
+**Nothing in sight must not mean standing still.** The branch owns the tick for the whole event,
+so returning no target used to park the fighter wherever it was. `roamAbtesting` now picks, in
+order: an ally whose target we can't see (their fight is off-screen), the last enemy sighting
+(20s), the tanker (followers stay within 80, so the party moves as one), else the tanker walks
+`ABTESTING_PATROL` — a loop round the central room through both corridor mouths, every leg
+checked clear against `G.geometry.abtesting`. A blocked leg goes through `advanceSmartMove` with a
+`stopWatcher` on any enemy appearing: the main loops skip targeting while a smart move runs, so
+without the watcher a fighter would walk past an enemy to finish the leg.
+
+**Target choice is a score, not a class list.** Class weight (healers first), missing hp, the
+visible team's time to kill, focus fire (a bonus per ally already on it, which also converges the
+party without cm), peeling for an ally under attack (more for the priest or a low one), a small
+stickiness bonus, and penalties for distance and walls. Spawn-invincible or stoned enemies are
+skipped outright — every hit on them is 0. The old list picker also ranked anything outside the
+list (merchants, `findIndex` = -1) above everyone.
+
 ## `homeLocation` is a Merrit parcel spot, not just a parking space (2026-09-08)
 
 Merrit (`G.npcs.citizen22`, `citizen_behavior: "market_patron"`) patrols the Mainland square and

@@ -245,55 +245,25 @@ async function useEventStrategy() {
   }
 
   if (server.status.abtesting && !character.s.hopsickness) {
-    if (character.map != "abtesting") join("abtesting");
-
-    changeToNormalStrategies();
-    const priority = [
-      "priest",
-      "mage",
-      "ranger",
-      "rogue",
-      "warrior",
-      "paladin",
-    ];
-
-    let pvpTarget = {
-      priority: priority.length + 1,
-      entity: undefined,
-      sqrDistance: undefined,
-    };
-
-    for (const id in parent.entities) {
-      const currentCharacter = parent.entities[id];
-
-      if (
-        currentCharacter.team === character.team ||
-        currentCharacter.rip ||
-        currentCharacter.hp <= 0
-      )
-        continue;
-
-      const currentCharacterTarget = {
-        priority: priority.findIndex(
-          (element) => element === currentCharacter.ctype,
-        ),
-        entity: currentCharacter,
-        sqrDistance:
-          Math.pow(currentCharacter.real_x - character.real_x, 2) +
-          Math.pow(currentCharacter.real_y - character.real_y, 2),
-      };
-
-      if (currentCharacterTarget.priority < pvpTarget.priority)
-        pvpTarget = currentCharacterTarget;
-
-      if (
-        currentCharacterTarget.priority <= pvpTarget.priority &&
-        currentCharacterTarget.sqrDistance <= pvpTarget.sqrDistance
-      )
-        pvpTarget = currentCharacterTarget;
+    if (character.map !== "abtesting") {
+      await join("abtesting").catch((e) => console.warn(e));
+      return travelling();
     }
 
-    return engage(pvpTarget.entity);
+    changeToNormalStrategies();
+
+    const pvpTarget = selectAbtestingTarget();
+    if (pvpTarget) {
+      abtestingLastSighting = {
+        x: pvpTarget.real_x,
+        y: pvpTarget.real_y,
+        time: Date.now(),
+      };
+      return engage(pvpTarget);
+    }
+
+    await roamAbtesting();
+    return travelling();
   }
 
   if (server.status.wabbit?.live) {
@@ -314,4 +284,181 @@ async function useEventStrategy() {
   if (await visitAnniversaryPlayer()) return travelling();
 
   return undefined;
+}
+
+/** Kill-priority bonus by class: healers first, then the squishy damage dealers. */
+const ABTESTING_ROLE_WEIGHT = {
+  priest: 30,
+  mage: 22,
+  ranger: 20,
+  rogue: 16,
+  paladin: 12,
+  warrior: 10,
+  merchant: 5,
+};
+
+/** A loop around the central room, dipping into both corridor mouths. */
+const ABTESTING_PATROL = [
+  { x: -250, y: -150 },
+  { x: 250, y: -150 },
+  { x: 480, y: 0 },
+  { x: 250, y: 150 },
+  { x: -250, y: 150 },
+  { x: -480, y: 0 },
+];
+
+const ABTESTING_SIGHTING_TTL = 20000;
+
+/** @type {{x: number, y: number, time: number}|undefined} */
+let abtestingLastSighting;
+let abtestingPatrolIndex;
+
+/** @returns {object[]} visible teammates, me included */
+function getAbtestingAllies() {
+  return [
+    character,
+    ...Object.values(parent.entities).filter(
+      (entity) =>
+        entity.type === "character" &&
+        entity.team === character.team &&
+        !entity.rip,
+    ),
+  ];
+}
+
+/** @returns {object[]} visible enemies that can take damage right now */
+function getAbtestingEnemies() {
+  return Object.values(parent.entities).filter(
+    (entity) =>
+      entity.type === "character" &&
+      entity.team &&
+      entity.team !== character.team &&
+      !entity.rip &&
+      entity.hp > 0 &&
+      !entity.s?.invincible &&
+      !entity.s?.stoned,
+  );
+}
+
+/**
+ * Scores every visible enemy on how fast the team can burst it, how much it
+ * matters, whether allies already focus it and whether it is hurting one of us.
+ * @returns {object|undefined} the enemy to hit
+ */
+function selectAbtestingTarget() {
+  const enemies = getAbtestingEnemies();
+  if (!enemies.length) return undefined;
+
+  const allies = getAbtestingAllies();
+  const currentTarget = get_target();
+
+  let best;
+  let bestScore = -Infinity;
+
+  for (const enemy of enemies) {
+    const teamDps = allies.reduce(
+      (sum, ally) => sum + (calculateDamage(ally, enemy) || 0),
+      0,
+    );
+    const secondsToKill = enemy.hp / Math.max(teamDps, 1);
+    const focusCount = allies.filter(
+      (ally) => ally !== character && ally.target === enemy.id,
+    ).length;
+    const victim = allies.find((ally) => ally.name === enemy.target);
+
+    let score = ABTESTING_ROLE_WEIGHT[enemy.ctype] ?? 10;
+    score += 40 * (1 - enemy.hp / enemy.max_hp);
+    score += 30 / (1 + secondsToKill);
+    score += 20 * Math.min(focusCount, 3);
+
+    if (victim) {
+      score += 20;
+      if (victim.ctype === "priest") score += 15;
+      if (victim.hp < 0.5 * victim.max_hp) score += 15;
+    }
+
+    if (currentTarget?.id === enemy.id) score += 15;
+
+    score -= distance(character, enemy) / 20;
+    if (!can_move_to(enemy.real_x, enemy.real_y)) score -= 25;
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = enemy;
+    }
+  }
+
+  return best;
+}
+
+/**
+ * Keeps moving with nothing in sight: toward a teammate's fight, then the last
+ * enemy seen, then behind the tanker, else around the patrol loop.
+ */
+async function roamAbtesting() {
+  if (smart.moving || isAdvanceSmartMoving) return;
+
+  const allies = getAbtestingAllies().filter((ally) => ally !== character);
+
+  const allyInFight = allies
+    .filter((ally) => ally.target && !parent.entities[ally.target])
+    .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
+  if (allyInFight) {
+    return moveInAbtesting(allyInFight.real_x, allyInFight.real_y);
+  }
+
+  if (
+    abtestingLastSighting &&
+    Date.now() - abtestingLastSighting.time < ABTESTING_SIGHTING_TTL
+  ) {
+    if (distance(character, abtestingLastSighting) > 50) {
+      return moveInAbtesting(abtestingLastSighting.x, abtestingLastSighting.y);
+    }
+    abtestingLastSighting = undefined;
+  }
+
+  const tanker = allies.find((ally) => ally.name === TANKER);
+  if (tanker && character.name !== TANKER) {
+    if (distance(character, tanker) > 80) {
+      await moveInAbtesting(tanker.real_x, tanker.real_y);
+    }
+    return;
+  }
+
+  if (abtestingPatrolIndex === undefined) {
+    abtestingPatrolIndex = ABTESTING_PATROL.reduce(
+      (nearest, point, index) =>
+        distance(character, point) <
+        distance(character, ABTESTING_PATROL[nearest])
+          ? index
+          : nearest,
+      0,
+    );
+  }
+
+  if (distance(character, ABTESTING_PATROL[abtestingPatrolIndex]) < 40) {
+    abtestingPatrolIndex = (abtestingPatrolIndex + 1) % ABTESTING_PATROL.length;
+  }
+
+  const waypoint = ABTESTING_PATROL[abtestingPatrolIndex];
+  return moveInAbtesting(waypoint.x, waypoint.y);
+}
+
+/**
+ * Walks straight when the line is clear, otherwise paths around the walls,
+ * dropping the walk the moment an enemy comes into sight.
+ */
+async function moveInAbtesting(x, y) {
+  if (can_move_to(x, y)) return move(x, y);
+
+  await advanceSmartMove(
+    { map: "abtesting", x, y },
+    {
+      useScare: false,
+      useBlink: false,
+      useMagiport: false,
+      useTown: false,
+      stopWatcher: () => getAbtestingEnemies().length > 0,
+    },
+  ).catch((e) => console.warn(e));
 }

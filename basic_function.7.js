@@ -1574,7 +1574,7 @@ function getPlayersToHeal() {
   ]
     .map((entity) => {
       const incomingNumber =
-        PROJECTILE_MANAGER?.getIncomingNumber(entity.name) ?? 0;
+        PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
 
       const predictedHp =
         entity.name === character.name ? entity.hp : entity.hp + incomingNumber;
