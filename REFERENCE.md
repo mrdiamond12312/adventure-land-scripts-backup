@@ -2069,3 +2069,37 @@ empty slot, and the pass keeps re-running on it without ever settling.
 
 The remainder of a split source still goes back by explicit slot: that slot is the one the source
 was just pulled from, so it is empty and nothing gets swapped.
+
+## Lucky upgrade slot (`merchant_lucky_slot_finder.30.js`, 2026-09-29)
+
+The server gives every character one hidden bag slot, `player.p.item_num`, picked once with
+`parseInt(Math.random() * 42)` on load (`node/server_functions.js`) and never sent to the client.
+On a **uscroll** upgrade from that slot, 60% of the time the roll becomes
+`max(rand/1e4, roll*0.975 - 0.012)` (`node/server.js`, the `"16 cheat"` block). That can never
+exceed 0.963, and any roll under ~0.0123 collapses into [0, 0.0001). Offering-only and stat-scroll
+upgrades never reach this code. Item grade only changes `probability`, never the roll, so every
+uscroll upgrade on any item is valid data. That's why upgradeInv's upgrades count too. The
+cyberland mainframe command `swap a b` moves the slot along with the swap.
+
+**The roll leaks.** While an upgrade runs, the server writes the roll's four digits into the
+placeholder's `p.nums` and emits `q_data` (`nums[0]` ten-thousandths ... `nums[3]` tenths).
+Pass/fail would be useless here: a +0 helmet sits at 99.99999%.
+
+**Why `getLeakSafeProduction` throttles mass production.** The digits go out from the instance
+loop, which ticks every ≥75ms. They are checked against the remaining ms *before* the tick
+subtracts, so the final tick must still sit under `0.3 × len` for the last digit. That holds with
+margin at len ≥ 500ms. Massproductionpp (÷10, stacked on ÷2 → ÷20) makes cheap upgrades ~25–50ms,
+and they finish without sending a single digit. So while hunting, upgradeInv only gets the
+speedup that keeps len ≥ 500ms. Once the slot is settled it goes back to full "pp".
+
+**Scoring.** Each roll is binned at 1e-4. The lucky/normal likelihood ratio is ~74.9 for bin 0,
+~1.015 for bins below 9630, and 0.4 at 9630 and above. So a slot's tally only needs three counts
+(attempts, zeros, highs). The posterior across the 42 slots uses a uniform prior, and the slot is
+declared at 99%. Probing always takes the least-rolled slot. Simulated, that finds it in ~11k rolls
+median (~19k p90). Always probing the currently-likeliest slot would take ~1.7k, but that was not
+the chosen policy.
+
+**Probe item.** The helmet is the cheapest scroll0 vendor item (3.2k). It is in IGNORE so
+upgradeInv and the bank store leave it alone. Gift helmets get used before buying. Each helmet
+climbs until it breaks or reaches +4 (past that one attempt is 7s+), then it is sold. Once
+settled, every unlocked helmet is sold.

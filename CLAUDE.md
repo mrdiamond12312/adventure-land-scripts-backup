@@ -111,6 +111,8 @@ Merchant entry script:
     merchant_exchange.23.js  holidayExchange, exchangeSomething
     merchant_luring.24.js    lureMechaGnome, and the ent train (dragEnt and friends)
     merchant_frenzinesss.100.js  event/boss participation (merchantAttackLoop)
+    merchant_lucky_slot_finder.30.js  hunts the hidden lucky upgrade slot from leaked rolls
+                              (probeLuckySlot runs after an idle upgradeInv; exportLuckySlotTally)
 
   The merchant modules do not load each other: basic_merchant.5.js pulls them all in, and every
   cross-module reference is inside a function body, so it resolves at call time. Nothing in the repo

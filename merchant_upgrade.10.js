@@ -555,7 +555,10 @@ function findMaxLevelBagSlot(itemKey) {
   return best;
 }
 
-/** Attempts to upgrade the lowest level upgradeable item in inventory. */
+/**
+ * Attempts to upgrade the lowest level upgradeable item in inventory.
+ * @returns {Promise<boolean|undefined>} true once an upgrade was sent
+ */
 async function upgradeInv() {
   if (character.q.upgrade || character.q.exchange) return;
   if (!lockInventory("mutate")) return;
@@ -567,7 +570,7 @@ async function upgradeInv() {
   }
 }
 
-/** @returns {Promise<unknown>} upgradeInv's body, run while it holds the sort hold-off */
+/** @returns {Promise<boolean|undefined>} upgradeInv's body, run while it holds the sort hold-off */
 async function findAndUpgrade() {
   // Find the lowest level upgradeable candidate, skipping disqualified items
   let itemIndex = -1;
@@ -639,11 +642,12 @@ async function findAndUpgrade() {
   if (scrollSlot === -1) return;
 
   await ensureOffering(isRareItem);
-  activateMassProduction(true);
+  const production = getLeakSafeProduction(item);
+  if (production) activateMassProduction(production === "pp");
 
   const offeringSlot = getOfferingSlot(isRareItem);
-  if (!havePrimlingInBank || !isRareItem || offeringSlot !== undefined)
-    return upgrade(itemIndex, scrollSlot, offeringSlot)
+  if (!havePrimlingInBank || !isRareItem || offeringSlot !== undefined) {
+    await upgrade(itemIndex, scrollSlot, offeringSlot)
       .then(async (e) => {
         if (!e?.success) return;
 
@@ -663,4 +667,6 @@ async function findAndUpgrade() {
         }
       })
       .catch(() => {});
+    return true;
+  }
 }

@@ -461,6 +461,9 @@ var IGNORE = [
   "carrotsword",
   "xgloves",
   "shield",
+
+  // lucky slot probe item, merchant_lucky_slot_finder.30.js
+  "helmet",
 ];
 
 const STORE_ABLE = [

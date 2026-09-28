@@ -9,6 +9,7 @@ if (parent.caracAL) {
     "adventure-land-scripts-backup/merchant_luring.24.js",
     "adventure-land-scripts-backup/merchant_frenzinesss.100.js",
     "adventure-land-scripts-backup/merchant_scout.29.js",
+    "adventure-land-scripts-backup/merchant_lucky_slot_finder.30.js",
   ]);
 } else {
   load_code(10);
@@ -20,6 +21,7 @@ if (parent.caracAL) {
   load_code(24);
   load_code(100);
   load_code(29);
+  load_code(30);
 }
 
 // Global Vars
@@ -361,7 +363,7 @@ setInterval(async function () {
     Promise.allSettled([
       !shouldGoChilling() && equipBatch(calculateMerchantEquipments()),
       compoundInv(),
-      upgradeInv(),
+      upgradeInv().then((upgraded) => upgraded || probeLuckySlot()),
       exchangeSomething(),
       dismantleSomething(),
       craft("xbox", 1, homeLocation),
