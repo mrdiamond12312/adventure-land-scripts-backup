@@ -386,7 +386,7 @@ setInterval(async function () {
       // craft("firestaff", character.esize - 6, { map: "main", x: -2, y: 295 }),
       // craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("basketofeggs", 1, homeLocation),
-      !isSortingInventory && sellMarkedItems(),
+      !isInventorySorting() && sellMarkedItems(),
     ]),
     300000,
   );

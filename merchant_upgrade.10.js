@@ -467,13 +467,12 @@ function findCompoundSet(itemKey, level) {
 /** Attempts to compound the first valid set of 3 identical items in inventory. */
 async function compoundInv() {
   if (character.q.compound || character.q.exchange) return;
-  if (isSortingInventory) return;
+  if (!lockInventory("mutate")) return;
 
-  pendingItemMutations++;
   try {
     return await findAndCompound();
   } finally {
-    pendingItemMutations--;
+    unlockInventory("mutate");
   }
 }
 
@@ -559,13 +558,12 @@ function findMaxLevelBagSlot(itemKey) {
 /** Attempts to upgrade the lowest level upgradeable item in inventory. */
 async function upgradeInv() {
   if (character.q.upgrade || character.q.exchange) return;
-  if (isSortingInventory) return;
+  if (!lockInventory("mutate")) return;
 
-  pendingItemMutations++;
   try {
     return await findAndUpgrade();
   } finally {
-    pendingItemMutations--;
+    unlockInventory("mutate");
   }
 }
 

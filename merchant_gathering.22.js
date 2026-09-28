@@ -161,7 +161,7 @@ async function dismantleSomething() {
     isAdvanceSmartMoving ||
     character.c.mining ||
     character.c.fishing ||
-    isSortingInventory ||
+    isInventorySorting() ||
     Math.max(...parent.pings) > 300
   )
     return;

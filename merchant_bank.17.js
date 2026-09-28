@@ -910,8 +910,9 @@ async function stackBank() {
       0,
     );
 
-  await waitUntil(() => !isSortingInventory, 5_000);
-  pendingItemMutations++;
+  await waitUntil(() => !isInventorySorting(), 5_000);
+  if (!lockInventory("mutate")) return;
+
   try {
     for (let round = 0; round < STACK_MAX_ROUNDS; round++) {
       const drains = planStackDrains([...names], character.esize);
@@ -924,7 +925,7 @@ async function stackBank() {
   } catch (e) {
     console.warn("Failed stacking", e);
   } finally {
-    pendingItemMutations--;
+    unlockInventory("mutate");
   }
 }
 

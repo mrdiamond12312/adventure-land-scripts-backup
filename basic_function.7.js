@@ -730,25 +730,43 @@ async function advanceSmartMove(props, options = { useScare: true }) {
 }
 
 // Pre-set function
-var isSortingInventory = false;
+/**
+ * Bag slot order lock: -1 while sortInv swaps, n while n routines hold slots
+ * they picked, 0 when free. Mutations overlap, a sort runs alone.
+ */
+var inventoryLock = 0;
 
 /**
- * How many routines are mid-flight between picking inventory slots and spending
- * them. A count rather than a flag so compound and upgrade still overlap freely.
+ * @param {"sort"|"mutate"} kind
+ * @returns {boolean} whether the lock was taken
  */
-var pendingItemMutations = 0;
+function lockInventory(kind) {
+  if (kind === "sort") {
+    if (inventoryLock !== 0) return false;
+    inventoryLock = -1;
+    return true;
+  }
+
+  if (inventoryLock < 0) return false;
+  inventoryLock++;
+  return true;
+}
+
+/** @param {"sort"|"mutate"} kind what lockInventory took */
+function unlockInventory(kind) {
+  if (kind === "sort") inventoryLock = 0;
+  else if (inventoryLock > 0) inventoryLock--;
+}
+
+/** @returns {boolean} whether sortInv is reordering the bag */
+function isInventorySorting() {
+  return inventoryLock < 0;
+}
 
 async function sortInv() {
-  if (
-    isSortingInventory ||
-    pendingItemMutations ||
-    character.q.upgrade ||
-    character.q.compound ||
-    character.q.exchange
-  )
+  if (character.q.upgrade || character.q.compound || character.q.exchange)
     return;
-
-  isSortingInventory = true;
+  if (!lockInventory("sort")) return;
 
   // Snapshot items with their original slot
   const inv = character.items.map((item, slot) => ({ item, slot }));
@@ -813,7 +831,7 @@ async function sortInv() {
   }
 
   return Promise.all(cyclePromises).finally(() => {
-    isSortingInventory = false;
+    unlockInventory("sort");
   });
 }
 

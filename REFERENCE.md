@@ -80,8 +80,8 @@ try { ... } finally { releaseDuty(lock); }
   `exchangeSomething`'s bank-retrieval/npc-travel paths, `craft`) must check `isOnDuty()` before
   moving. Exchanging items already in inventory is allowed while on duty — with a computer that
   needs no movement.
-- **Not the duty lock:** `isSortingInventory`/`pendingItemMutations` guard inventory slot order
-  (shared with the fighters), `isAdvanceSmartMoving` is the pathfinder's own state, and
+- **Not the duty lock:** `inventoryLock` guards inventory slot order (shared with the fighters,
+  see "Sorting must not run between picking a slot and spending it"), `isAdvanceSmartMoving` is the pathfinder's own state, and
   `invJammed` is a request for an emergency bank trip.
 
 Sections below written before 2026-09-28 use the old flags, which map as: `onDuty` →
@@ -340,7 +340,7 @@ fighters (see "Splitting a class into attack loop + per-skill loops"):
   exactly the `fight()` bundling problem, one layer up.
 - **A slow pass overlaps itself.** At 750ms against a ceiling of five minutes, hundreds of
   invocations can be in flight at once. Most sub-routines bail early on their own guards
-  (`onDuty`, `character.q.*`, `isSortingInventory`, `pendingItemMutations`), which is why this has
+  (`isOnDuty()`, `character.q.*`, `inventoryLock`), which is why this has
   been survivable rather than catastrophic, but those guards are each protecting one routine — no
   one is bounding the total.
 
@@ -348,7 +348,7 @@ fighters (see "Splitting a class into attack loop + per-skill loops"):
 with its own cadence and its own lock released in a `finally` —
 
 - `craftLoop` — the craft table, slow cadence (they mostly no-op on ingredients anyway).
-- `improveLoop` — `compoundInv` + `upgradeInv`, which already hold `pendingItemMutations`.
+- `improveLoop` — `compoundInv` + `upgradeInv`, which already hold `lockInventory("mutate")`.
 - `disposalLoop` — `sell`, `dismantleSomething`, `exchangeSomething`.
 - `upkeepLoop` — stand open/close, `equipBatch`, `sortInv`, potion top-up, `scareAwayMobs`.
 - Leave the gathering/`moveHome`/emergency-banking tail where it is; it is already sequential and
@@ -1728,7 +1728,7 @@ Two guards had to move with it:
 `staff` keeps its own `IGNORE` line, so weaponbox staves are still skipped; `gstaff`'s `staff +8`
 climb reaches them through `isCraftTargeted` as before.
 
-### Sorting must not run between picking a slot and spending it (`pendingItemMutations`)
+### Sorting must not run between picking a slot and spending it (`inventoryLock`)
 
 `upgradeInv` picks `itemIndex` from a scan, then awaits `ensureScroll` (which can retrieve from
 the bank or `buy`) and `ensureOffering`, and only then calls `upgrade(itemIndex, ...)`.
@@ -1741,20 +1741,26 @@ answers `mismatch` or `no_item` (see the `upgrade` contract), and both call site
 `.catch(() => {})`. So the observable symptom was upgrade/compound throughput quietly stalling,
 with nothing in the logs.
 
-`isSortingInventory` alone doesn't close it — it only stops `sortInv` re-entering *itself*, and
-the dangerous window is `sortInv` starting *after* the slots were picked. The fix is a pair:
+The guard is a reader/writer lock in one number (basic_function.7.js, 2026-09-28; it used to be
+the `isSortingInventory` flag plus the `pendingItemMutations` count):
 
-- `upgradeInv`/`compoundInv` refuse to start while `isSortingInventory`, and each wraps its body
-  (`findAndUpgrade`/`findAndCompound`) in `pendingItemMutations++` / `finally --`.
-- `sortInv` refuses to start while `pendingItemMutations` is non-zero.
+- `inventoryLock` is `-1` while `sortInv` swaps, `n` while `n` routines hold slots they picked,
+  `0` when free. `lockInventory("sort")` only takes a free lock; `lockInventory("mutate")` takes
+  anything but a sort. Each pairs with `unlockInventory(kind)` in a `finally`.
+- Holders: `upgradeInv`/`compoundInv` (around `findAndUpgrade`/`findAndCompound`) and
+  `stackBank`. Read-only checks (`sellMarkedItems` in the tick, `dismantleSomething`, the wait at
+  the top of `stackBank`) use `isInventorySorting()`.
+- The sort has to wait for mutations *and* mutations for the sort: the dangerous window is
+  `sortInv` starting *after* the slots were picked, not only a sort already running.
 
-**A count, not a flag.** The two run concurrently by design — they are dispatched together in the
-tick's `Promise.allSettled`, and they never contend for the same item because an item is either
-compoundable or upgradeable, not both. A boolean would have serialised them for no reason.
+**Shared, not exclusive, for mutations.** Compound and upgrade run concurrently by design — they
+are dispatched together in the tick's `Promise.allSettled`, and they never contend for the same
+item because an item is either compoundable or upgradeable, not both. An exclusive lock would have
+serialised them for no reason.
 
 The bodies had to be split into separate `findAnd*` functions so the `try/finally` wraps every
 exit from a loop full of `continue`/`break`/`return`, and the inner `return await` is load-bearing
-— returning the promise unawaited would drop the count before the mutation settled.
+— returning the promise unawaited would release the lock before the mutation settled.
 
 ### Targeted climbs never burn a primling
 
