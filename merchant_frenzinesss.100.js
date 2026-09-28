@@ -19,9 +19,6 @@ const EVENT_SWITCH_MARGIN = 0.001;
 // Sniping mobs
 const SNIPE_MAX_PREDICTED_HP = 200;
 
-var isFightingBoss = false;
-// Set only when *this* loop took onDuty, so it never clears a duty it didn't acquire
-var holdsEventDuty = false;
 var lastPartyHealRequest = 0;
 
 // The event this loop is currently committed to, for the switch margin above
@@ -34,7 +31,7 @@ var currentEventName = undefined;
  * @returns {boolean}
  */
 function shouldMerchantKite() {
-  if (!isFightingBoss) return false;
+  if (!isOnDuty(DUTY.EVENT)) return false;
   if (character.slots.mainhand?.name !== ATTACK_WEAPON) return false;
 
   // Whatever we're shooting is about to die anyway — orbiting it just walks us
@@ -263,9 +260,7 @@ function isMerchantBusy() {
   return (
     // The startup bank trip comes first — everything downstream reads its cache
     !hasVisitedBank ||
-    (onDuty && !holdsEventDuty) ||
-    isLuringMobs ||
-    isDraggingMobs ||
+    (isOnDuty() && !isOnDuty(DUTY.EVENT)) ||
     mustAbandonFight()
   );
 }
@@ -278,18 +273,13 @@ function mustAbandonFight() {
   return character.rip || isInvFull(3) || invJammed;
 }
 
+/** @returns {boolean} whether the event fight holds the duty now */
 function acquireEventDuty() {
-  if (holdsEventDuty) {
-    onDuty = true;
-    renewDuty();
+  if (isOnDuty(DUTY.EVENT)) {
+    renewDuty(duty);
     return true;
   }
-  if (onDuty || isLuringMobs || isDraggingMobs) return false;
-
-  onDuty = true;
-  isFightingBoss = true;
-  holdsEventDuty = true;
-  return true;
+  return !!takeDuty(DUTY.EVENT);
 }
 
 function releaseEventDuty() {
@@ -297,11 +287,7 @@ function releaseEventDuty() {
   // hitAndRun reads this global; hand it back so nothing inherits our orbit
   rangeRate = basicRangeRate;
 
-  if (!holdsEventDuty) return;
-
-  onDuty = false;
-  isFightingBoss = false;
-  holdsEventDuty = false;
+  if (isOnDuty(DUTY.EVENT)) releaseDuty(duty);
 }
 
 /**
@@ -345,12 +331,7 @@ function getSnipeTarget() {
 
 /** @returns {boolean} whether a snipe may take over our position and gear */
 function canSnipe() {
-  return !(
-    isLuringMobs ||
-    isDraggingMobs ||
-    character.c.mining ||
-    character.c.fishing
-  );
+  return !(isLuring() || character.c.mining || character.c.fishing);
 }
 
 /**
@@ -358,7 +339,7 @@ function canSnipe() {
  * @returns {boolean}
  */
 function shouldHoldAttackWeapon() {
-  if (isDraggingMobs || isFightingBoss) return true;
+  if (isOnDuty(DUTY.DRAG) || isOnDuty(DUTY.EVENT)) return true;
 
   return canSnipe() && !!getSnipeTarget();
 }
@@ -453,7 +434,9 @@ function keepMerchantSafe() {
 async function fightCurrentEvent(promisesToAwait) {
   const eventName = getEventToJoin();
   // Once committed, only a hard blocker unseats us — see mustAbandonFight
-  const isBlocked = holdsEventDuty ? mustAbandonFight() : isMerchantBusy();
+  const isBlocked = isOnDuty(DUTY.EVENT)
+    ? mustAbandonFight()
+    : isMerchantBusy();
 
   if (!eventName || isBlocked) {
     releaseEventDuty();
@@ -466,7 +449,8 @@ async function fightCurrentEvent(promisesToAwait) {
   const config = bossConfigs[eventName];
   const target = await config.strategy();
 
-  if (!target) return false;
+  // A cm delivery may have taken the duty while we travelled
+  if (!target || !isOnDuty(DUTY.EVENT)) return false;
 
   // The loop's gear plan puts the weapon in hand; a tick behind is fine
   if (character.slots.mainhand?.name !== ATTACK_WEAPON) return false;
@@ -515,12 +499,13 @@ async function visitAnniversary() {
   if (getEventToJoin() || isMerchantBusy()) return false;
   if (!hasAnniversaryVisitToMake()) return false;
 
-  onDuty = true;
-  renewDuty();
+  const lock = takeDuty(DUTY.ERRAND);
+  if (!lock) return false;
+
   try {
     return await visitAnniversaryPlayer();
   } finally {
-    onDuty = false;
+    releaseDuty(lock);
   }
 }
 
@@ -545,7 +530,7 @@ async function merchantAttackLoop() {
       if (await strategy(promisesToAwait)) break;
     }
 
-    if (isFightingBoss || !shouldGoChilling()) {
+    if (isOnDuty(DUTY.EVENT) || !shouldGoChilling()) {
       promisesToAwait.push(equipBatch(calculateMerchantEquipments()));
     }
 

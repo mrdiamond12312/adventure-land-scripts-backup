@@ -967,7 +967,7 @@ function getMerchantGearState() {
   return {
     isArmed: shouldHoldAttackWeapon(),
     feelingLucky: shouldWearLuckGear(),
-    isBusy: !!(isLuringMobs || isFightingBoss),
+    isBusy: isLuring() || isOnDuty(DUTY.EVENT),
   };
 }
 

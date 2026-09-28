@@ -33,7 +33,7 @@ async function goFishing() {
     character.c.mining ||
     character.c.fishing ||
     is_on_cooldown("fishing") ||
-    onDuty
+    isOnDuty()
   )
     return;
 
@@ -97,7 +97,7 @@ async function goMining() {
     character.c.mining ||
     character.c.fishing ||
     is_on_cooldown("mining") ||
-    onDuty
+    isOnDuty()
   )
     return;
 
@@ -155,7 +155,7 @@ async function goMining() {
 
 async function dismantleSomething() {
   if (
-    onDuty ||
+    isOnDuty() ||
     isInvFull(4) ||
     smart.moving ||
     isAdvanceSmartMoving ||

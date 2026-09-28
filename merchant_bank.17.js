@@ -935,17 +935,13 @@ async function stackBank() {
 async function bankLoop() {
   let delay = 185_000;
 
-  // isFightingBoss is checked separately from onDuty: an event fight holds the
-  // duty, but this makes it explicit that banking waits for the fight to end
-  if (onDuty || (typeof isFightingBoss !== "undefined" && isFightingBoss)) {
-    return setTimeout(bankLoop, 5_000);
-  }
-
   if (isAwaitingParcel() && !hasVisitedBank) return setTimeout(bankLoop, 5_000);
 
-  try {
-    onDuty = true;
+  // An event fight holds the duty too, so banking waits for it to end
+  const lock = takeDuty(DUTY.ERRAND);
+  if (!lock) return setTimeout(bankLoop, 5_000);
 
+  try {
     // First run: build item level map then fetch items
     if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
       for (const floor of Object.keys(BANK_FLOORS)) {
@@ -972,7 +968,7 @@ async function bankLoop() {
     console.warn("bank loop error:", e);
     delay = 15_000;
   } finally {
-    onDuty = false;
+    releaseDuty(lock);
     setTimeout(bankLoop, delay);
   }
 }

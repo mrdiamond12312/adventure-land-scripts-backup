@@ -105,7 +105,7 @@ async function scoutSweep() {
 async function merchantScoutingLoop() {
   if (
     !hasVisitedBank ||
-    onDuty ||
+    isOnDuty() ||
     isAwaitingParcel() ||
     isAdvanceSmartMoving ||
     smart.moving ||
@@ -119,10 +119,10 @@ async function merchantScoutingLoop() {
 
   let nextDelay = SCOUT_CONFIG.NEXT_TICK;
 
-  onDuty = true;
+  const lock = takeDuty(DUTY.ERRAND);
   // A full sweep outlasts DUTY_STALE_MS, so the watchdog needs telling
   const scoutSweepInterval = setInterval(() => {
-    renewDuty();
+    renewDuty(lock);
     scoutSweep();
   }, 500);
 
@@ -154,7 +154,7 @@ async function merchantScoutingLoop() {
     console.warn(`Scout Routine is postponed`, e);
     nextDelay = SCOUT_CONFIG.FAIL_TIMEOUT;
   } finally {
-    onDuty = false;
+    releaseDuty(lock);
     clearInterval(scoutSweepInterval);
     setTimeout(merchantScoutingLoop, nextDelay);
   }

@@ -23,13 +23,12 @@ if (parent.caracAL) {
 }
 
 // Global Vars
-var onDuty = false;
-// When the current unbroken hold started, 0 while nobody holds it
-var dutyHeldSince = 0;
-var isExeing = false;
+/** Who may hold the duty lock; ERRAND covers every bounded trip */
+const DUTY = { ERRAND: "errand", EVENT: "event", LURE: "lure", DRAG: "drag" };
+/** The merchant's one duty lock, `{ owner, since }`, null while free */
+var duty = null;
 // Set when an exchange fails with inventory_full; makes the emergency banking
-// below run even if isInvFull() reads false. Cleared after the bank trip —
-// unlike the old `onDuty = true` hack, this can't leak the shared duty lock.
+// below run even if isInvFull() reads false. Cleared after the bank trip.
 var invJammed = false;
 
 const fishingLocation = { map: "main", x: -1367, y: -82 };
@@ -296,7 +295,7 @@ async function moveHome() {
     distanceToSpot(spot) <= MERRIT_MARKET.anchor_tolerance ||
     smart.moving ||
     isAdvanceSmartMoving ||
-    isDraggingMobs
+    isOnDuty(DUTY.DRAG)
   )
     return;
 
@@ -304,7 +303,7 @@ async function moveHome() {
     log("Moving back Town!");
     await advanceSmartMove(spot, {
       exact: true,
-      useScare: !isLuringMobs,
+      useScare: !isLuring(),
     });
 
     if (locate_item("stand0") === -1 && !haveAComputer()) {
@@ -329,7 +328,7 @@ setInterval(async function () {
   if (
     character.moving &&
     character.stand &&
-    (!isFightingBoss || isTravelling)
+    (!isOnDuty(DUTY.EVENT) || isTravelling)
   ) {
     close_stand();
     await equipBatch(calculateMerchantEquipments());
@@ -338,11 +337,11 @@ setInterval(async function () {
     !character.stand &&
     !smart.moving &&
     !isAdvanceSmartMoving &&
-    !isFightingBoss
+    !isOnDuty(DUTY.EVENT)
   )
     open_stand();
 
-  if (!isLuringMobs) scareAwayMobs();
+  if (!isLuring()) scareAwayMobs();
 
   await sortInv();
 
@@ -404,33 +403,64 @@ setInterval(async function () {
     !hasEventToJoin &&
     !character.c.mining &&
     !character.c.fishing &&
-    !onDuty
+    !isOnDuty()
   )
     await moveHome();
 
   if ((isInvFull() || invJammed) && !isAdvanceSmartMoving && !smart.moving) {
-    onDuty = true;
-    try {
-      await bankStoreRoutine(true);
-      invJammed = false;
-    } finally {
-      onDuty = false;
+    const lock = takeDuty(DUTY.ERRAND);
+    if (lock) {
+      try {
+        await bankStoreRoutine(true);
+        invJammed = false;
+      } finally {
+        releaseDuty(lock);
+      }
     }
   }
 }, 750);
 
-/** Tells the watchdog below the duty is still being used */
-function renewDuty() {
-  dutyHeldSince = Date.now();
+/**
+ * @param {string} [owner] one of DUTY; omitted asks whether anyone holds it
+ * @returns {boolean} whether the duty lock is held (by owner)
+ */
+function isOnDuty(owner) {
+  if (!duty) return false;
+  return owner === undefined || duty.owner === owner;
+}
+
+/** @returns {boolean} whether a lure or an ent drag holds the duty */
+function isLuring() {
+  return isOnDuty(DUTY.LURE) || isOnDuty(DUTY.DRAG);
+}
+
+/**
+ * @param {string} owner one of DUTY
+ * @param {{overEvent?: boolean}} [options] overEvent takes the lock from an event fight
+ * @returns {Object|null} the lock to hand back to releaseDuty, null when refused
+ */
+function takeDuty(owner, { overEvent = false } = {}) {
+  if (duty && !(overEvent && duty.owner === DUTY.EVENT)) return null;
+
+  duty = { owner, since: Date.now() };
+  return duty;
+}
+
+/** Frees the duty only if lock still holds it */
+function releaseDuty(lock) {
+  if (lock && duty === lock) duty = null;
+}
+
+/** Tells the watchdog below that lock is still being used */
+function renewDuty(lock) {
+  if (lock && duty === lock) lock.since = Date.now();
 }
 
 const DUTY_STALE_MS = 300000;
 const DUTY_WATCHDOG_INTERVAL = 30000;
 
 setInterval(function () {
-  if (!onDuty) dutyHeldSince = 0;
-  else if (!dutyHeldSince) renewDuty();
-  else if (Date.now() - dutyHeldSince > DUTY_STALE_MS) onDuty = false;
+  if (duty && Date.now() - duty.since > DUTY_STALE_MS) duty = null;
 }, DUTY_WATCHDOG_INTERVAL);
 
 // --- Skills, each on its own runSkillLoop (see startSkillLoops) ---

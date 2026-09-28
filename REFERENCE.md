@@ -36,49 +36,57 @@ The tanker is specifically the one responsible for making all of this happen, si
 hinges on where the tanker chooses to stand — everyone else just kites the tanker's target
 normally via `getTarget()`.
 
-## Merchant duty lock (`onDuty`, basic_merchant.5.js and friends)
+## Merchant duty lock (`duty`, basic_merchant.5.js and friends)
 
-`onDuty` is a single cooperative mutex shared by every merchant routine that moves the character
-(cm-request deliveries, `bankLoop`, `lureMechaGnome`, `dragEnt`, `openCryptInstance`, the inv-full
-emergency banking). The rules, established after debugging ent drags getting hijacked mid-route:
+`duty` is the one cooperative mutex shared by every merchant routine that moves the character.
+It is `{ owner, since }` while held and `null` while free, and nothing else records who is busy:
 
-- **Whoever sets `onDuty = true` must reset it in a `finally`.** A duty that throws between
-  acquire and release leaks the lock: everything else blocks until the watchdog fires, or —
-  worse — the watchdog frees it mid-duty and another routine smart-moves the merchant away from
-  an in-progress job. Both failure modes have actually happened; this rule is why every setter
-  is paired with a `finally` reset.
-- **Never touch `onDuty` you didn't take.** No unconditional resets outside the owning routine
-  (an old `finally { onDuty = false }` in `moveHome` released *other* routines' locks mid-duty
-  and was removed). Signal through a dedicated flag instead — e.g. `invJammed`, set when an
-  exchange fails with `inventory_full`, which asks the emergency banking to run without
-  squatting on the duty lock.
+```js
+const lock = takeDuty(DUTY.ERRAND); // null when refused
+if (!lock) return;
+try { ... } finally { releaseDuty(lock); }
+```
+
+- **Owners are what someone asks about, not who holds it.** `DUTY.EVENT`, `LURE` and `DRAG` are
+  each told apart somewhere (`isOnDuty(DUTY.EVENT)` for the stand, kiting, gear and
+  `isMerchantBusy`; `isLuring()` = lure or drag, which stops `scareAwayMobs`; `DRAG` alone holds
+  the dartgun). Everything bounded — cm deliveries, `bankLoop`, the main loop's emergency bank
+  trip, scouting, crypt opening, the anniversary visit — is `DUTY.ERRAND`, because nothing ever
+  asks *which* errand is running. A new routine gets its own owner only if some read needs it.
+- **The lock object is the ownership token.** Several errands share one owner name, so an owner
+  check can't tell a stale holder from the current one. `releaseDuty(lock)` and `renewDuty(lock)`
+  act only while `duty === lock`, so a routine whose lock was reclaimed or taken over can neither
+  release nor refresh its successor's. That makes "never touch a lock you didn't take"
+  structural instead of a convention (an old `finally { onDuty = false }` in `moveHome` used to
+  release other routines' locks mid-duty).
+- **Whoever takes it releases it in a `finally`.** A duty that throws between take and release
+  leaks the lock: everything else blocks until the watchdog fires.
 - **The watchdog is a leak-recovery safety net, not a scheduler,** and a `finally` is not enough
   to retire it. `finally` only runs if every `await` inside settles, and several never have to:
   raw `move()` (the `smartMove` walk loop, `_blinkCheck`, `_magiportCheck`, `walkEntsToSpawn`),
   native `smart_move()` (`transport`'s walk-up-to-the-door, `useTownWithRetry`'s fallback) and
   `town()` are all runner-settled with no timeout. A `stop()`, a magiport landing or a teleport
   mid-walk can leave them pending forever, and then the holder's `finally` never runs at all —
-  that is the lureMechaGnome hang below, and `walkEntsToSpawn` still has the shape (`arrived` is
-  only set if every `move()` settles, and line 498 swallows the rejection).
-- **The watchdog measures the *continuous* hold, and live owners renew it.** `dutyHeldSince`
-  (basic_merchant.5.js) is zeroed on any tick that sees `onDuty` false, so it can only ever
-  describe one unbroken hold; anything still holding after `DUTY_STALE_MS` is presumed parked and
-  the lock is reclaimed. The event loop is the one owner that legitimately holds for many minutes
-  — sometimes standing still, so no movement flag proves it alive — so `acquireEventDuty` calls
-  `renewDuty()` on every tick it re-enters holding the duty. Nothing else renews: cm deliveries,
-  bank trips, lures and drags are all bounded well under the window, and a lure that outlives it
-  is exactly the hang worth reclaiming. This replaced a flag exemption list
-  (`isLuringMobs`/`isDraggingMobs`), which had it backwards — it protected the two holders whose
-  known hang it needed to rescue, and left the event fight, which it then unlocked mid-boss.
-- **`acquireEventDuty` re-asserts `onDuty` instead of trusting `holdsEventDuty`.** The duty spans
-  ticks, so a reclaim (or any future outside reset) would otherwise leave the merchant fighting
-  with the lock free: `bankLoop` still holds off on `isFightingBoss`, but the cm handler, `craft`,
-  `dismantleSomething` and `exchangeSomething` gate on `onDuty` alone and would start an NPC trip
-  mid-fight — two `smartMove`s then preempt each other every tick (see "smartMove sessions").
+  that is the lureMechaGnome hang below, and `walkEntsToSpawn` still has the shape.
+- **The watchdog measures `duty.since`, and long owners renew it.** Anything still holding after
+  `DUTY_STALE_MS` is presumed parked and `duty` goes back to `null`. Two owners legitimately
+  outlast that: the event fight (`acquireEventDuty` renews every tick it re-enters) and a scout
+  sweep (renews on its 500ms sweep interval). Nothing else renews — a lure that outlives the
+  window is exactly the hang worth reclaiming. A reclaimed event fight simply re-takes the free
+  lock on its next tick.
+- **One take-over: deliveries outrank the event fight.** `takeDuty(DUTY.ERRAND, { overEvent: true })`
+  (the cm handler only) may replace an `EVENT` holder. See "Deliveries outrank the event fight".
 - Routines that can smart-move but run outside the lock (`goFishing`, `goMining`,
-  `exchangeSomething`'s bank-retrieval/npc-travel paths) must check `onDuty` before moving.
-  Exchanging items already in inventory is allowed while on duty — with a computer that needs
-  no movement.
+  `exchangeSomething`'s bank-retrieval/npc-travel paths, `craft`) must check `isOnDuty()` before
+  moving. Exchanging items already in inventory is allowed while on duty — with a computer that
+  needs no movement.
+- **Not the duty lock:** `isSortingInventory`/`pendingItemMutations` guard inventory slot order
+  (shared with the fighters), `isAdvanceSmartMoving` is the pathfinder's own state, and
+  `invJammed` is a request for an emergency bank trip.
+
+Sections below written before 2026-09-28 use the old flags, which map as: `onDuty` →
+`isOnDuty()`; `isFightingBoss`/`holdsEventDuty` → `isOnDuty(DUTY.EVENT)`; `isLuringMobs` →
+`isLuring()`; `isDraggingMobs` → `isOnDuty(DUTY.DRAG)`; `dutyHeldSince` → `duty.since`.
 
 Same discipline applies to `isAdvanceSmartMoving` in strategic_smart_move.21.js: every path out
 of `smartMove()` after the flag is set must go through `cleanUp()` (guaranteed via
@@ -130,7 +138,7 @@ parks `smartMove()` forever, which in turn holds whatever duty flags the caller 
 
 Adventure Land's own MCP guidance is explicit that a cm is untrusted input — the sender is
 whoever felt like typing our name — so each duty has to decide for itself whether a stranger may
-trigger it. Two lists, checked *before* `onDuty` is taken:
+trigger it. Two lists, checked *before* the duty is taken:
 
 - **`OPEN_DUTIES` (`buy_potions`, `buff_mluck`) — anyone.** Deliberate. Handing a passer-by a
   stack of potions or an mluck is the point; it costs us a walk and some gold we have plenty of.
@@ -155,6 +163,31 @@ acquire.
 
 The `default:` branch is kept even though the gate makes it unreachable for unknown messages: it
 still fires if a duty is added to one of the lists and the `case` is forgotten.
+
+### Deliveries outrank the event fight (2026-09-28)
+
+The event loop holds the duty for the whole boss, and the handler used to bail while anyone held
+it, so every fighter request was dropped for as long as the event lasted (fighters re-send every
+10s, but so did the drop). The cm handler now takes `DUTY.ERRAND` with `overEvent: true`:
+
+- **The event gives the lock up, it doesn't share it.** A lockless "serve in place beside the
+  boss" path was tried first and dropped: two requests at once (two fighters low on potions)
+  double-bought the stack and raced `biggestStackSlot`, and an in-place serve could be walked off
+  mid-`send_item` by a second request that did need to move. One lock, one server at a time.
+- **In reach costs only the broom.** `canServeInPlace` (requester inside the drift-slacked reach
+  and nothing to fetch: `inv_full`, potions via the computer, elixir/tome already in the bags)
+  only skips `equipBroom()`; the walk already short-circuits in `moveInReachOf`. The fight still
+  pauses for the serve plus its `sleep(5000)` — the price of the single lock, and requests are rare.
+- **The event loop re-joins by itself.** While the delivery holds the lock, `isMerchantBusy`
+  (`isOnDuty() && !isOnDuty(DUTY.EVENT)`) stops it re-taking; `releaseEventDuty` still resets
+  `rangeRate`/`currentEventName` on that tick. It re-takes on the first tick after the `finally`.
+- **The in-flight event tick must notice.** `fightCurrentEvent` may be mid-`config.strategy()`
+  when the take-over lands. The delivery's `smartMove` starts a new session and ends the old walk,
+  but the tick would then go on to `advanceSmartMove(target)` for the approach and take the
+  session straight back — hence the `isOnDuty(DUTY.EVENT)` re-check right after `strategy()`.
+
+Other holders (bank trips, lures, drags, scouting, crypt) still drop cm requests; only the event
+fight yields.
 
 ### Duties stop at the action's reach, not at the requester's coordinates (2026-09-08)
 
@@ -1270,8 +1303,8 @@ rather than fought through.
 - **Banking and fighting are mutually exclusive, in both directions.** The startup bank walk wins
   first: `hasVisitedBank` (merchant_bank.17.js, set at the end of `bankLoop`'s first run) is in
   `isMerchantBusy`, so no event can start before the cache the rest of the merchant reads even
-  exists. After that the fight wins: `bankLoop` waits while `isFightingBoss`, and the main loop's
-  emergency `bankStoreRoutine` skips too. A full inventory (or `invJammed`) is therefore a
+  exists. After that the fight wins: `bankLoop` and the main loop's emergency `bankStoreRoutine`
+  both fail to take the duty while the event holds it. A full inventory (or `invJammed`) is therefore a
   `mustAbandonFight` reason: there is nothing left to gain from the fight, and **releasing the duty
   is precisely what unblocks the banking** — the two guards are a handoff, not a deadlock.
 - **The stand stays open at events.** `idleAtEvent` opens it whenever the attack gate rejects the
@@ -1280,11 +1313,11 @@ rather than fought through.
   merchant moves at speed 10 with a stand open, which is fine for orbiting a boss, so the attack
   path doesn't `close_stand()` and `hitAndRun` isn't gated on it. The main loop's
   close-the-stand-when-moving rule is skipped while `isFightingBoss` for the same reason.
-- **Duty ownership is held across ticks, not per tick.** `acquireEventDuty`/`releaseEventDuty` set
-  `holdsEventDuty` so the loop only ever clears an `onDuty` it took (the rule in "Merchant duty
-  lock"). Releasing it every tick would let the 750ms main loop `moveHome()` mid-fight.
-  `isFightingBoss` is the separate cosmetic flag: it swaps gear to dartgun/armorring and suppresses
-  `open_stand()` in basic_merchant.5.js.
+- **Duty ownership is held across ticks, not per tick.** `acquireEventDuty` takes `DUTY.EVENT` once
+  and renews it every tick after; `releaseEventDuty` frees it only while the event still holds it.
+  Releasing it every tick would let the 750ms main loop `moveHome()` mid-fight. The same
+  `isOnDuty(DUTY.EVENT)` read swaps gear to dartgun/armorring and suppresses `open_stand()` in
+  basic_merchant.5.js.
 - **Concurrent bosses: lowest hp share wins** (`getEventHpRatio`/`getEventToJoin`), the same
   measure `useEventStrategy` sorts on — mrgreen/mrpumpkin in particular overlap. The
   local entity's hp beats the `server.status` copy once we're on the map, and an event reporting no hp
@@ -1517,9 +1550,9 @@ The `use_skill` call is not the confirmation — a rejected one just leaves the 
 next tick retries. `is_on_cooldown("ikissyou")` (10s) is what stops a fast loop from spamming sends
 into the window between the kiss and the condition clearing.
 
-The merchant's `visitAnniversary` takes the plain `onDuty` lock rather than `acquireEventDuty()`:
-the duty is what makes `goMining`/`goFishing`/`moveHome` yield for the walk, while the event duty
-would also set `isFightingBoss` and swap in the dartgun for a trip with nothing to shoot.
+The merchant's `visitAnniversary` takes `DUTY.ERRAND` rather than `acquireEventDuty()`: the duty is
+what makes `goMining`/`goFishing`/`moveHome` yield for the walk, while `DUTY.EVENT` would also swap
+in the dartgun for a trip with nothing to shoot.
 
 ## One definition of a weak mob
 

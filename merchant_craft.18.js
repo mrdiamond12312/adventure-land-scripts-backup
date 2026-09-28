@@ -355,7 +355,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 
   // The check above is bookkeeping and runs every call; only acting on it waits
   if (
-    (onDuty && !canCraftInPlace) ||
+    (isOnDuty() && !canCraftInPlace) ||
     isInvFull(4) ||
     character.c.mining ||
     character.c.fishing ||

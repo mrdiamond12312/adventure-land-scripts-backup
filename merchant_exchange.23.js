@@ -73,7 +73,7 @@ async function prepareExchangeSlot(entry) {
   const isReady = (slot) => slot !== -1 && (character.items[slot].q ?? 1) >= need;
 
   let slot = locateBiggestStack(entry.name);
-  if (!isReady(slot) && !onDuty && hasExchangeStock(entry)) {
+  if (!isReady(slot) && !isOnDuty() && hasExchangeStock(entry)) {
     await retrieveBankItem(entry.name);
     slot = locateBiggestStack(entry.name);
   }
@@ -93,7 +93,7 @@ function isExchangeQueued(itemName) {
 
 function shouldGoExchangeXmas() {
   return !(
-    onDuty ||
+    isOnDuty() ||
     isInvFull(6) ||
     character.q.exchange ||
     smart.moving ||
@@ -139,7 +139,7 @@ async function exchangeSomething() {
       if (
         item.npc &&
         !haveAComputer() &&
-        !onDuty &&
+        !isOnDuty() &&
         !isAdvanceSmartMoving &&
         !smart.moving
       ) {

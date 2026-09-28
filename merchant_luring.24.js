@@ -1,14 +1,10 @@
 // Luring: the mecha gnome, and the ent train dragged to the party's farm spot.
 
-var isLuringMobs = false;
-var isDraggingMobs = false;
-
 async function lureMechaGnome() {
   let nextDelay = 1000;
 
   if (
-    isLuringMobs ||
-    onDuty ||
+    isOnDuty() ||
     isAwaitingParcel() ||
     isAdvanceSmartMoving ||
     smart.moving ||
@@ -25,11 +21,10 @@ async function lureMechaGnome() {
     return setTimeout(lureMechaGnome, nextDelay);
   }
 
-  try {
-    // Global flags to prevent other tasks from interrupting
-    onDuty = true;
-    isLuringMobs = true; // Prevent scareAwayMobs
+  // LURE also stops scareAwayMobs
+  const lock = takeDuty(DUTY.LURE);
 
+  try {
     // The flag can't reach smartMove's own scare interval, and `{ map }` with no
     // x/y walks to spawns[0] — i.e. the last leg is *inside* cyberland, where a
     // gnome aggroing us gets shed seconds before the mage magiports
@@ -93,8 +88,7 @@ async function lureMechaGnome() {
   } catch (e) {
     console.error(e);
   } finally {
-    isLuringMobs = false;
-    onDuty = false;
+    releaseDuty(lock);
     setTimeout(lureMechaGnome, nextDelay);
   }
 }
@@ -459,8 +453,7 @@ async function runEntLure() {
 async function dragEnt() {
   if (
     map !== ENT_LURE_MAP ||
-    isLuringMobs ||
-    onDuty ||
+    isOnDuty() ||
     isAwaitingParcel() ||
     isAdvanceSmartMoving ||
     smart.moving ||
@@ -476,9 +469,7 @@ async function dragEnt() {
 
   let nextDelay = 10_000;
 
-  onDuty = true;
-  isLuringMobs = true;
-  isDraggingMobs = true;
+  const lock = takeDuty(DUTY.DRAG);
 
   try {
     // Tell the rest of the party we're actively dragging this in — see
@@ -493,9 +484,7 @@ async function dragEnt() {
     console.warn(`Ent lure failed: ${e.message}`);
     nextDelay = 15_000;
   } finally {
-    isDraggingMobs = false;
-    isLuringMobs = false;
-    onDuty = false;
+    releaseDuty(lock);
     set("luringMobType", undefined);
     setTimeout(dragEnt, nextDelay);
   }

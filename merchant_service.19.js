@@ -16,65 +16,110 @@ character.on("cm", async function ({ name, message }) {
     return;
   }
 
-  if (onDuty) return;
-  onDuty = true;
+  // Deliveries step out of an event fight; it rejoins once we release
+  const lock = takeDuty(DUTY.ERRAND, { overEvent: true });
+  if (!lock) return;
 
   try {
-    equipBroom();
-
-    switch (msg) {
-      case "inv_full":
-        console.warn(`Go collecting ${name}'s inventory at ${message.map}`);
-        await moveInReachOf(name, message, DELIVERY_RANGE);
-        send_cm(name, "inv_full_merchant_near");
-        await sleep(5000);
-        break;
-
-      case "buy_potions":
-        if (!desiredPotions.includes(message.potion)) break;
-        console.warn(`Buying some ${message.potion} for ${name}`);
-        await deliverPotions(name, message.potion, message);
-        send_cm(name, "buy_potions_merchant_near");
-        await sleep(5000);
-        break;
-
-      case "buff_mluck": {
-        await moveInReachOf(name, message, G.skills.mluck.range);
-        const requester = get_entity(name);
-        if (requester && !is_on_cooldown("mluck") && character.mp > 20) {
-          use_skill("mluck", requester);
-        }
-        break;
-      }
-
-      case "elixir":
-        if (!partyMems.includes(name)) break;
-        console.warn(`Fetching ${message.elixir} for ${name}`);
-        await deliverStock(name, message.elixir, message, {
-          deliver: ELIXIR_DELIVERY,
-          restock: (shortfall) =>
-            restockFromBankOrVendor(message.elixir, shortfall),
-        });
-        break;
-
-      case "xptome":
-        if (!partyMems.includes(name)) break;
-        console.warn(`Buying Tome of Protection for ${name}`);
-
-        await deliverStock(name, "xptome", message, {
-          deliver: 1,
-          restock: (shortfall) =>
-            restockFromBankOrVendor("xptome", shortfall, "premium"),
-        });
-        break;
-
-      default:
-        console.warn(`Listed but unhandled duty '${msg}'`);
-    }
+    if (!canServeInPlace(name, message)) equipBroom();
+    await serveDuty(name, message);
   } finally {
-    onDuty = false;
+    releaseDuty(lock);
   }
 });
+
+/**
+ * @param {string} name requesting character
+ * @param {object} message the requester's cm
+ * @returns {boolean} whether the duty needs neither a walk nor a bank trip
+ */
+function canServeInPlace(name, message) {
+  const { msg } = message;
+
+  if (msg === "buff_mluck")
+    return isRequesterInReach(
+      name,
+      G.skills.mluck.range * REQUESTEE_DRIFT_SLACK,
+    );
+
+  if (!isRequesterInReach(name, DELIVERY_RANGE * REQUESTEE_DRIFT_SLACK))
+    return false;
+
+  switch (msg) {
+    case "inv_full":
+      return true;
+    case "buy_potions":
+      return (
+        haveAComputer() ||
+        getTotalQuantityOf(message.potion) >= POTION_DELIVERY + POTION_STACK
+      );
+    case "elixir":
+      return getTotalQuantityOf(message.elixir) >= ELIXIR_DELIVERY;
+    case "xptome":
+      return getTotalQuantityOf("xptome") >= 1;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Carries out one cm duty; the caller holds the lock.
+ * @param {string} name requesting character
+ * @param {object} message the requester's cm
+ */
+async function serveDuty(name, message) {
+  const msg = message.msg;
+
+  switch (msg) {
+    case "inv_full":
+      console.warn(`Go collecting ${name}'s inventory at ${message.map}`);
+      await moveInReachOf(name, message, DELIVERY_RANGE);
+      send_cm(name, "inv_full_merchant_near");
+      await sleep(5000);
+      break;
+
+    case "buy_potions":
+      if (!desiredPotions.includes(message.potion)) break;
+      console.warn(`Buying some ${message.potion} for ${name}`);
+      await deliverPotions(name, message.potion, message);
+      send_cm(name, "buy_potions_merchant_near");
+      await sleep(5000);
+      break;
+
+    case "buff_mluck": {
+      await moveInReachOf(name, message, G.skills.mluck.range);
+      const requester = get_entity(name);
+      if (requester && !is_on_cooldown("mluck") && character.mp > 20) {
+        use_skill("mluck", requester);
+      }
+      break;
+    }
+
+    case "elixir":
+      if (!partyMems.includes(name)) break;
+      console.warn(`Fetching ${message.elixir} for ${name}`);
+      await deliverStock(name, message.elixir, message, {
+        deliver: ELIXIR_DELIVERY,
+        restock: (shortfall) =>
+          restockFromBankOrVendor(message.elixir, shortfall),
+      });
+      break;
+
+    case "xptome":
+      if (!partyMems.includes(name)) break;
+      console.warn(`Buying Tome of Protection for ${name}`);
+
+      await deliverStock(name, "xptome", message, {
+        deliver: 1,
+        restock: (shortfall) =>
+          restockFromBankOrVendor("xptome", shortfall, "premium"),
+      });
+      break;
+
+    default:
+      console.warn(`Listed but unhandled duty '${msg}'`);
+  }
+}
 
 /** Requesters drift while we walk, so we close in well inside the bare reach */
 const REQUESTEE_DRIFT_SLACK = 0.75;
@@ -212,12 +257,12 @@ async function restockFromBankOrVendor(itemId, shortfall, npcId) {
 }
 
 async function openCryptInstance() {
-  try {
-    if (onDuty || isAdvanceSmartMoving || smart.moving) {
-      return;
-    }
+  if (isAdvanceSmartMoving || smart.moving) return;
 
-    onDuty = true;
+  const lock = takeDuty(DUTY.ERRAND);
+  if (!lock) return;
+
+  try {
     if (locate_item("cryptkey") === -1) {
       await retrieveBankItem("cryptkey");
       await sleep(1000 + character.ping);
@@ -235,7 +280,7 @@ async function openCryptInstance() {
     set("cryptDefeatedMobs", []);
     set("lastSeenDefeatableCryptBoss", undefined);
   } finally {
-    onDuty = false;
+    releaseDuty(lock);
   }
 }
 
