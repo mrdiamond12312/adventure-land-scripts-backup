@@ -349,7 +349,7 @@ with its own cadence and its own lock released in a `finally` —
 
 - `craftLoop` — the craft table, slow cadence (they mostly no-op on ingredients anyway).
 - `improveLoop` — `compoundInv` + `upgradeInv`, which already hold `pendingItemMutations`.
-- `disposalLoop` — `sell`, `dismantleSomething`, `exchangeSomething`, `holidayExchange`.
+- `disposalLoop` — `sell`, `dismantleSomething`, `exchangeSomething`.
 - `upkeepLoop` — stand open/close, `equipBatch`, `sortInv`, potion top-up, `scareAwayMobs`.
 - Leave the gathering/`moveHome`/emergency-banking tail where it is; it is already sequential and
   duty-aware.
@@ -1574,6 +1574,28 @@ Weakness that is genuinely class-specific stays local: `MAGE_WEAK_MOB_TYPES` /
 `WARRIOR_WEAK_MOB_TYPES` are named event mobs, not a computed property. The mage's pinkie swap no
 longer guesses from `max_hp` either — it asks `canOneShotWithWeapon` with the pinkie actually
 carried, the same question the ranger asks when picking a bow.
+
+## The exchange queue (`EXCHANGE_QUEUE`, merchant_exchange.23.js, 2026-09-28)
+
+One queue and one `exchangeSomething`; the holiday turn-ins used to be a second list and function.
+
+- **`keep` is held back from the bag total, not from each stack.** A pvp-marked (`^`, item `v`) stack
+  can't merge with an unmarked one (`can_stack` only ignores the mark when asked, as the shipped
+  `bank_store` does), so one marked gift made the bag `{1^, N}`. With "biggest stack ≥ quantity + keep",
+  N stopped at 1, the pair still counted as queued, no stack reached 2 again, and every bank pull
+  left another q:1 behind. Now a stack only needs `quantity`, and `canSpareExchange` checks
+  `quantity + keep` against `getTotalQuantityOf`.
+- **Smallest stack first** (`locateExchangeStack`), so the stack that can't merge is spent before the
+  main one: `{1^, N}` ends as one stack of the kept amount.
+- **Bank pulls only when the bag total is short.** `bank_retrieve` without a bag slot merges into
+  the existing stack, so a pull never adds a slot for unmarked items.
+- **`holidayNpc`: Jayson (ornament), Faith (mistletoe), Santa (candycane)** are walked to during
+  `holidayseason`, computer or not; the rest of the year the same entries go to Xyn. `npc` (the
+  quest items: seashell, leather, gemfragment) is walked to only without a computer.
+- **A walk takes `DUTY.ERRAND` and stays until `shouldKeepExchanging` fails** (nothing to spare,
+  bag nearly full, `invJammed`, or a boss event to join). Exchanging once per trip let the tick's
+  `moveHome()` walk him back after every exchange. `massexchange`/`massexchangepp` only shorten
+  the next exchange, they never spend more than `quantity`.
 
 ## Levelled craft ingredients (`CRAFT_LEVEL_TARGETS`, merchant_craft.18.js)
 

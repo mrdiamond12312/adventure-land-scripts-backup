@@ -363,7 +363,6 @@ setInterval(async function () {
       compoundInv(),
       upgradeInv(),
       exchangeSomething(),
-      holidayExchange(),
       dismantleSomething(),
       craft("xbox", 1, homeLocation),
       craft("orba", 1, homeLocation),

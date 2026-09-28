@@ -1,29 +1,21 @@
-// Exchanging: seasonal token turn-ins and the general exchange queue.
+// Exchanging: the exchange queue, holiday tokens included.
 
 /**
- * Seasonal turn-ins, only live while server.status.holidayseason is set.
- * `keep` is held back from the exchange; `quantity` is what one turn-in costs.
- * @type {{name: string, npc: string, quantity: number, keep: number}[]}
- */
-const HOLIDAY_EXCHANGES = [
-  { name: "ornament", npc: "ornaments", quantity: 20, keep: 10 },
-  { name: "mistletoe", npc: "mistletoe", quantity: 1, keep: 0 },
-  { name: "candycane", npc: "santa", quantity: 1, keep: 0 },
-];
-
-/**
- * Exchange queue, tried in order — the first entry with enough stack wins.
- * `npc` is only set for the ones that can't be exchanged from a computer.
- * @type {{name: string, quantity: number, npc?: string}[]}
+ * Exchange queue, tried in order — the first entry with enough stock wins.
+ * `npc` is where to walk without a computer, only the quest items need one.
+ * `holidayNpc` is walked to during holidayseason, computer or not.
+ * `keep` is held back from the bag total.
+ * @type {{name: string, quantity: number, keep?: number, npc?: string, holidayNpc?: string}[]}
  */
 const EXCHANGE_QUEUE = [
+  { name: "ornament", quantity: 20, keep: 10, holidayNpc: "ornaments" },
   { name: "candy1", quantity: 1 },
   { name: "candy0", quantity: 1 },
   { name: "gem0", quantity: 1 },
   { name: "weaponbox", quantity: 1 },
   { name: "armorbox", quantity: 1 },
-  { name: "mistletoe", quantity: 1 },
-  { name: "candycane", quantity: 1 },
+  { name: "mistletoe", quantity: 1, holidayNpc: "mistletoe" },
+  { name: "candycane", quantity: 1, holidayNpc: "santa" },
   { name: "greenenvelope", quantity: 1 },
   { name: "brownenvelope", quantity: 1 },
   { name: "xbox", quantity: 1 },
@@ -52,106 +44,62 @@ function hasExchangeStock(entry) {
   return owned >= entry.quantity + (entry.keep ?? 0);
 }
 
-/** @returns {number} bag slot of an item's biggest stack, or -1 */
-function locateBiggestStack(itemName) {
+/**
+ * Smallest first, so a stack that can't merge (a pvp mark) is spent before the main one.
+ * @returns {number} bag slot of the smallest stack covering one exchange, or -1
+ */
+function locateExchangeStack(entry) {
   let best = -1;
   character.items.forEach((item, index) => {
-    if (item?.name !== itemName) return;
-    if (best === -1 || (item.q ?? 1) > (character.items[best].q ?? 1))
+    if (item?.name !== entry.name || (item.q ?? 1) < entry.quantity) return;
+    if (best === -1 || (item.q ?? 1) < (character.items[best].q ?? 1))
       best = index;
   });
   return best;
 }
 
+/** @returns {boolean} whether the bag can spare one exchange past the keep */
+function canSpareExchange(entry) {
+  return getTotalQuantityOf(entry.name) >= entry.quantity + (entry.keep ?? 0);
+}
+
+/** @returns {number} the bag slot to exchange an entry from now, or -1 */
+function getExchangeSlot(entry) {
+  return canSpareExchange(entry) ? locateExchangeStack(entry) : -1;
+}
+
 /**
  * The bag slot to exchange an entry from, pulling more from the bank while the
- * biggest stack is short of one exchange.
- * @returns {Promise<number>} the slot, or -1 if no stack is big enough
+ * bag can't spare one exchange.
+ * @returns {Promise<number>} the slot, or -1
  */
 async function prepareExchangeSlot(entry) {
-  const need = entry.quantity + (entry.keep ?? 0);
-  const isReady = (slot) => slot !== -1 && (character.items[slot].q ?? 1) >= need;
-
-  let slot = locateBiggestStack(entry.name);
-  if (!isReady(slot) && !isOnDuty() && hasExchangeStock(entry)) {
+  if (!canSpareExchange(entry) && !isOnDuty() && hasExchangeStock(entry)) {
     await retrieveBankItem(entry.name);
-    slot = locateBiggestStack(entry.name);
   }
 
-  return isReady(slot) ? slot : -1;
+  return getExchangeSlot(entry);
 }
 
-/** @returns {boolean} whether an exchange queue still wants this item in the bag */
+/** @returns {boolean} whether the exchange queue still wants this item in the bag */
 function isExchangeQueued(itemName) {
-  const isReady = (entry) =>
-    entry.name === itemName && hasExchangeStock(entry);
-  return (
-    EXCHANGE_QUEUE.some(isReady) ||
-    (!!server.status["holidayseason"] && HOLIDAY_EXCHANGES.some(isReady))
+  return EXCHANGE_QUEUE.some(
+    (entry) => entry.name === itemName && hasExchangeStock(entry),
   );
 }
 
-function shouldGoExchangeXmas() {
-  return !(
-    isOnDuty() ||
-    isInvFull(6) ||
-    character.q.exchange ||
-    smart.moving ||
-    isAdvanceSmartMoving ||
-    shouldGoChilling()
-  );
+/** @returns {string|undefined} the npc to walk to for this entry now, if any */
+function getExchangeNpc(entry) {
+  if (entry.holidayNpc && server.status["holidayseason"])
+    return entry.holidayNpc;
+  if (entry.npc && !haveAComputer()) return entry.npc;
 }
 
-async function holidayExchange() {
-  if (!shouldGoExchangeXmas() || !server.status["holidayseason"]) return;
-
-  let exchangableItem;
-  for (const item of HOLIDAY_EXCHANGES) {
-    if ((await prepareExchangeSlot(item)) === -1) continue;
-    exchangableItem = item;
-    break;
-  }
-
-  if (!exchangableItem || smart.moving) return;
-
-  if (get_nearest_npc()?.npc !== exchangableItem.npc && !haveAComputer()) {
-    await equipBroom();
-    await smart_move(find_npc(exchangableItem.npc));
-  }
-
-  return exchange(locateBiggestStack(exchangableItem.name)).catch((e) => {
-    switch (e.response) {
-      case "inventory_full":
-        invJammed = true;
-    }
-  });
-}
-
-async function exchangeSomething() {
-  if (isInvFull(6)) return;
-
-  let slot = undefined;
-  for (const item of EXCHANGE_QUEUE) {
-    const slotIndex = await prepareExchangeSlot(item);
-    if (slotIndex !== -1) {
-      slot = slotIndex;
-
-      if (
-        item.npc &&
-        !haveAComputer() &&
-        !isOnDuty() &&
-        !isAdvanceSmartMoving &&
-        !smart.moving
-      ) {
-        await advanceSmartMove(find_npc(item.npc));
-      }
-
-      break;
-    }
-  }
-
-  if (slot === undefined) return;
-
+/**
+ * Spends the mass exchange buffs on the exchange from slot.
+ * @returns {Promise<boolean>} whether the exchange went through
+ */
+function exchangeFrom(slot) {
   if (
     character.mp > 400 &&
     !is_on_cooldown("massexchangepp") &&
@@ -170,10 +118,61 @@ async function exchangeSomething() {
   )
     use_skill("massexchange");
 
-  return exchange(slot).catch((e) => {
-    switch (e.response) {
-      case "inventory_full":
-        invJammed = true;
+  return exchange(slot)
+    .then(() => true)
+    .catch((e) => {
+      switch (e.response) {
+        case "inventory_full":
+          invJammed = true;
+      }
+      return false;
+    });
+}
+
+/**
+ * Whether to stay at the npc for another exchange of this entry.
+ * @returns {boolean}
+ */
+function shouldKeepExchanging(entry) {
+  return (
+    getExchangeSlot(entry) !== -1 &&
+    !isInvFull(6) &&
+    !invJammed &&
+    !getEventToJoin()
+  );
+}
+
+async function exchangeSomething() {
+  if (isInvFull(6)) return;
+
+  let entry;
+  let slot = -1;
+  for (const candidate of EXCHANGE_QUEUE) {
+    slot = await prepareExchangeSlot(candidate);
+    if (slot === -1) continue;
+    entry = candidate;
+    break;
+  }
+
+  if (!entry) return;
+
+  const npc = getExchangeNpc(entry);
+  if (!npc) return exchangeFrom(slot);
+
+  if (isAdvanceSmartMoving || smart.moving) return;
+  const lock = takeDuty(DUTY.ERRAND);
+  if (!lock) return;
+
+  try {
+    await equipBroom();
+    await advanceSmartMove(find_npc(npc));
+
+    // Spend it all while we're here, or moveHome walks us back after each one
+    while (shouldKeepExchanging(entry)) {
+      if (!(await exchangeFrom(getExchangeSlot(entry)))) break;
+      renewDuty(lock);
     }
-  });
+  } finally {
+    releaseDuty(lock);
+  }
 }
