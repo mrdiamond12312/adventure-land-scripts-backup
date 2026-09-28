@@ -56,7 +56,10 @@ async function lureMechaGnome() {
       throw new Error("Mage did not have mana / not online");
     }
 
-    await mainframe_command("mooooooooooh", character.ping);
+    // A late reply still means the gnomes are on us, so a timeout isn't an abort
+    await mainframe_command("mooooooooooh", 2_000).catch((e) =>
+      console.warn("mooh:", e),
+    );
     await advanceSmartMove(get("mageLocation"), { useScare: false });
 
     await waitUntil(
@@ -470,6 +473,8 @@ async function dragEnt() {
   let nextDelay = 10_000;
 
   const lock = takeDuty(DUTY.DRAG);
+  // A drag can outlast DUTY_STALE_MS
+  const keepAlive = setInterval(() => renewDuty(lock), DUTY_WATCHDOG_INTERVAL);
 
   try {
     // Tell the rest of the party we're actively dragging this in — see
@@ -484,6 +489,7 @@ async function dragEnt() {
     console.warn(`Ent lure failed: ${e.message}`);
     nextDelay = 15_000;
   } finally {
+    clearInterval(keepAlive);
     releaseDuty(lock);
     set("luringMobType", undefined);
     setTimeout(dragEnt, nextDelay);

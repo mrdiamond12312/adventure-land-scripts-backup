@@ -379,6 +379,16 @@ function startSkillLoops() {
     canUse: () => shouldWarriorScare(),
     cast: () => scareAwayMobs(),
   });
+
+  runSkillLoop({
+    skill: "charge",
+    whileMoving: true,
+    canUse: () =>
+      character.moving &&
+      character.mp > G.skills["charge"].mp &&
+      !is_on_cooldown("charge"),
+    cast: () => use_skill("charge"),
+  });
 }
 
 // Main control loop
@@ -390,16 +400,6 @@ async function mainLoop() {
         ? "elixirluck"
         : "pumpkinspice";
     assignRoles();
-
-    // Use Charge if moving (for speed boost)
-    const canCharge =
-      character.moving &&
-      character.mp > G.skills["charge"].mp &&
-      !is_on_cooldown("charge");
-
-    if (canCharge) {
-      use_skill("charge");
-    }
 
     // Handle immediate death state
     if (character.rip) {
