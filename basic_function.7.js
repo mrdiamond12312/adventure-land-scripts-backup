@@ -29,7 +29,7 @@ const MIDAS_CHARACTER = [MAGE, "CrownPriest"];
 const trustedPartners = ["earthPri", "earthWar"];
 
 /** Cave of Many Dreams — the one switch for the daily run, loader and all */
-var USE_CAVE_STRATEGY = true;
+var USE_CAVE_STRATEGY = false;
 
 const CODE_SLOTS = {
   MoohThatCow: { script: 32 },
@@ -1854,7 +1854,9 @@ setInterval(async function () {
   const currentTarget =
     get_target() ?? getTarget() ?? get_nearest_monster({ target: TANKER });
 
+  // The cave strategy owns movement while gathering at Dorr
   if (
+    !isPreparingCave &&
     currentTarget &&
     currentTarget.type === "monster" &&
     distance(currentTarget, character) >
