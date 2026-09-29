@@ -520,7 +520,7 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "mluck",
-    floorMs: 250,
+    floorMs: 100,
     whileMoving: true,
     canUse: () => {
       if (character.mp < G.skills.mluck.mp) return false;
@@ -529,7 +529,9 @@ function startSkillLoops() {
     },
     cast: () => {
       mluckAimedAt[pendingMluckTarget.name] = Date.now();
-      return use_skill("mluck", pendingMluckTarget);
+      return use_skill("mluck", pendingMluckTarget).then(() =>
+        reduceCd("mluck"),
+      );
     },
   });
 }
