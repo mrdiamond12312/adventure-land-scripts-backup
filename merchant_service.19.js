@@ -225,7 +225,7 @@ function deliverPotions(name, potionId, message) {
     deliver: POTION_DELIVERY,
     reserve: POTION_STACK,
     restock: async (shortfall) => {
-      if (!haveAComputer() && !character.map.includes("bank"))
+      if (!haveAComputer() && !isInBank())
         await advanceSmartMove(POTION_SHOP);
       return buy(potionId, shortfall);
     },

@@ -171,6 +171,7 @@ function upgradeInLuckySlot(itemSlot, scrollSlot, offeringSlot) {
   if (
     luckySlot === -1 ||
     luckySlot === itemSlot ||
+    isInBank() ||
     character.q.compound ||
     character.items[luckySlot]?.name === "placeholder"
   )
@@ -318,7 +319,7 @@ async function sellProbeItems(all = false) {
 
 /** One scroll0 on the least-rolled slot; only called when upgradeInv sent nothing */
 async function probeLuckySlot() {
-  if (!FIND_LUCKY_SLOT) return;
+  if (!FIND_LUCKY_SLOT || isInBank()) return;
   if (character.q.upgrade || character.q.exchange) return;
 
   const settled = isLuckySlotSettled();

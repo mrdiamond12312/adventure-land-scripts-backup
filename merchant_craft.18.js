@@ -351,7 +351,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 
   // A computer crafts anywhere but the bank, so a duty only blocks what would move us
   const canCraftInPlace =
-    haveAComputer() && !character.map.includes("bank") && !fromBank.length;
+    haveAComputer() && !isInBank() && !fromBank.length;
 
   // The check above is bookkeeping and runs every call; only acting on it waits
   if (
@@ -385,7 +385,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
       !isAdvanceSmartMoving &&
       !smart.moving &&
       ((!hasComputer && get_nearest_npc()?.name !== "Leo") ||
-        (hasComputer && character.map.includes("bank")))
+        (hasComputer && isInBank()))
     ) {
       await advanceSmartMove(place, { useBlink: false, useMagiport: false });
     }

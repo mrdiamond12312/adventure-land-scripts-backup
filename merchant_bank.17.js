@@ -60,6 +60,11 @@ var isBankFull = false;
 // Cache & Floors
 // ---------------------------------------------------------------------------
 
+/** @returns {boolean} whether we stand on any bank map, bank_u included */
+function isInBank() {
+  return character.map.startsWith("bank");
+}
+
 /** Merges character.bank into BANK_CACHE */
 async function updateBank() {
   if (character.bank) BANK_CACHE = { ...BANK_CACHE, ...character.bank };

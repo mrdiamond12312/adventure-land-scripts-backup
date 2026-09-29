@@ -2158,7 +2158,15 @@ message. The upgrade is emitted directly, because `upgrade()` computes `clevel` 
 or upgrade the wrong item if the levels happened to match. The scroll and offering are sent at
 the slots they'll be in after the swap. The lucky move is skipped while `character.q.compound`
 is set or the lucky slot holds a placeholder: `imove` refuses placeholders, and the upgrade would
-then land on whatever is in that slot. `sortInv` puts the bag back afterwards. Probing always takes the least-rolled slot. Simulated, that finds it in ~11k rolls
+then land on whatever is in that slot. `sortInv` puts the bag back afterwards.
+
+**Both pause during an errand (fixed 2026-09-30).** `bankStoreRoutine` picks what to store by
+bag index before it walks to the bank. `getStoreIndices` then silently drops any index whose
+item name changed along the way. A probe swap every cycle, plus the `sortInv` that undoes it,
+reshuffled the bag during the trip, and most of the stash quietly stayed in the bag. The probe
+and the lucky move now stand down on any `bank*` map. There `sortInv` settles the bag back into
+its sorted order, which is the order the store list was taken in. Upgrades can't happen inside
+the bank anyway (`cant_in_bank`). Other errands (deliveries, exchange, scout) keep probing. Probing always takes the least-rolled slot. Simulated, that finds it in ~11k rolls
 median (~19k p90). Always probing the currently-likeliest slot would take ~1.7k, but that was not
 the chosen policy.
 
