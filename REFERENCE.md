@@ -2021,6 +2021,18 @@ the room turns `enemy`, which puts them back on it.
 paid nothing, so the supply gate is gone. Options that really do need a supply declare it (`needs`)
 and come back `unavailable`.
 
+### Only the red chain's wolves are refused in e10 (checked against the server, 2026-09-30)
+
+`CAVE_OPTIONS_TO_REFUSE` used to list every e10 option that spawns `cave_wolf`. The server
+(`design/events.js`, `cave_of_many_dreams.js`) only makes `e10_0`'s wolves dangerous. It spawns 6
+wolves set to level 100, with 50x wolf hp, 8x wolf attack, 1200 armor and 600 resistance.
+`e10_1` is 2 ordinary cave wolves. `e10_3` is a 50/50 between a free `cave_parcel` and 4 ordinary
+cave wolves. `e10_4` buys a sure parcel for 2,000 cave gold. Refusing both options offered meant no
+vote, a 60s stall on the timer, and then the `leave` fallback, which completes the room with nothing.
+
+The server offers the `offer: true` option (`e10_0`) plus one random affordable other, so at most one
+of `e10_1`/`e10_3`/`e10_4` is ever on the table and the bot votes it.
+
 ### The rogue is left by his side, never by name
 
 `cave_rogue` used to be in `CAVE_MOBS_TO_LEAVE`. After a rescue he betrays the party half the time
