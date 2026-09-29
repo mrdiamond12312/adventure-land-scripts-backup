@@ -647,7 +647,7 @@ async function findAndUpgrade() {
 
   const offeringSlot = getOfferingSlot(isRareItem);
   if (!havePrimlingInBank || !isRareItem || offeringSlot !== undefined) {
-    await upgrade(itemIndex, scrollSlot, offeringSlot)
+    await upgradeInLuckySlot(itemIndex, scrollSlot, offeringSlot)
       .then(async (e) => {
         if (!e?.success) return;
 

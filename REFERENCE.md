@@ -2145,7 +2145,20 @@ speedup that keeps len ≥ 500ms. Once the slot is settled it goes back to full 
 **Scoring.** Each roll is binned at 1e-4. The lucky/normal likelihood ratio is ~74.9 for bin 0,
 ~1.015 for bins below 9630, and 0.4 at 9630 and above. So a slot's tally only needs three counts
 (attempts, zeros, highs). The posterior across the 42 slots uses a uniform prior, and the slot is
-declared at 99%. Probing always takes the least-rolled slot. Simulated, that finds it in ~11k rolls
+declared at `LUCKY_SLOT_CONFIDENCE` (99.99%). `found` is re-derived from the counts on every load,
+never trusted from storage, so raising the confidence resumes probing on the next reload.
+
+**Using it.** `upgradeInv` swaps its pick into the likeliest slot once that slot is at
+`LUCKY_SLOT_USE_CONFIDENCE` (99%). That bar is lower than the probe's, so the boost starts
+while probing still runs. Those upgrades are real rolls on that slot and feed its tally too.
+`upgradeInLuckySlot` sends the `imove` and the upgrade together (`Promise.all`). Socket.io keeps
+them in order, and the server's `imove` handler finishes the move before it reads the next
+message. The upgrade is emitted directly, because `upgrade()` computes `clevel` from
+`character.items[slot]`, which still holds the pre-swap item. That would get `upgrade_mismatch`,
+or upgrade the wrong item if the levels happened to match. The scroll and offering are sent at
+the slots they'll be in after the swap. The lucky move is skipped while `character.q.compound`
+is set or the lucky slot holds a placeholder: `imove` refuses placeholders, and the upgrade would
+then land on whatever is in that slot. `sortInv` puts the bag back afterwards. Probing always takes the least-rolled slot. Simulated, that finds it in ~11k rolls
 median (~19k p90). Always probing the currently-likeliest slot would take ~1.7k, but that was not
 the chosen policy.
 

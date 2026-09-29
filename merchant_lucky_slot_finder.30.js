@@ -1,10 +1,12 @@
 // Finds the hidden lucky upgrade slot from the rolls the server leaks (see REFERENCE.md)
 
 var FIND_LUCKY_SLOT = true;
+var USE_LUCKY_SLOT = true;
 
 const LUCKY_SLOT_COUNT = 42;
 const LUCKY_SLOT_MAX_ATTEMPTS = 2000;
-const LUCKY_SLOT_CONFIDENCE = 0.99;
+const LUCKY_SLOT_CONFIDENCE = 0.9999;
+const LUCKY_SLOT_USE_CONFIDENCE = 0.99;
 const LUCKY_SLOT_GOLD_FLOOR = 4_000_000_000;
 const LUCKY_SLOT_PROBE_ITEM = "helmet";
 const LUCKY_SLOT_PROBE_MAX_LEVEL = 4;
@@ -37,6 +39,7 @@ const luckyLogLr = {
 
 /** @type {{found: number|null, slots: {attempts: number, zeros: number, highs: number}[]}} */
 const luckySlotTally = loadLuckySlotTally();
+updateLuckySlotFound();
 
 let isRollRecorded = false;
 let rollsLogged = 0;
@@ -44,7 +47,7 @@ let rollsLogged = 0;
 function loadLuckySlotTally() {
   const saved = readStore(LUCKY_SLOT_LS_KEY)[character.name];
   return {
-    found: saved?.found ?? null,
+    found: null,
     slots: Array.from({ length: LUCKY_SLOT_COUNT }, (_, slot) => ({
       attempts: 0,
       zeros: 0,
@@ -98,14 +101,11 @@ function recordLuckySlotRoll(slot, bin) {
     console.log(`Lucky slot: slot ${slot} rolled ${(bin / 1e4).toFixed(4)}`);
   }
 
-  const posterior = getLuckySlotPosterior();
-  const best = posterior.indexOf(Math.max(...posterior));
-  if (posterior[best] >= LUCKY_SLOT_CONFIDENCE) {
-    luckySlotTally.found = best;
+  const chance = updateLuckySlotFound();
+  if (luckySlotTally.found !== null)
     console.log(
-      `Lucky slot found: ${best} at ${(posterior[best] * 100).toFixed(2)}%`,
+      `Lucky slot found: ${luckySlotTally.found} at ${(chance * 100).toFixed(4)}%`,
     );
-  }
 
   saveLuckySlotTally();
 
@@ -137,6 +137,57 @@ function getLuckySlotPosterior() {
   const weights = logLr.map((value) => Math.exp(value - peak));
   const total = weights.reduce((sum, weight) => sum + weight, 0);
   return weights.map((weight) => weight / total);
+}
+
+/**
+ * Re-derives `found` from the counts, so a raised confidence resumes probing.
+ * @returns {number} the likeliest slot's chance
+ */
+function updateLuckySlotFound() {
+  const posterior = getLuckySlotPosterior();
+  const best = posterior.indexOf(Math.max(...posterior));
+  luckySlotTally.found =
+    posterior[best] >= LUCKY_SLOT_CONFIDENCE ? best : null;
+  return posterior[best];
+}
+
+/** @returns {number} the slot upgradeInv should upgrade from, or -1 while unsure */
+function getLuckyUpgradeSlot() {
+  if (!USE_LUCKY_SLOT) return -1;
+  const posterior = getLuckySlotPosterior();
+  const best = posterior.indexOf(Math.max(...posterior));
+  return posterior[best] >= LUCKY_SLOT_USE_CONFIDENCE ? best : -1;
+}
+
+/**
+ * upgrade(), from the lucky slot when one is known.
+ * @param {number} itemSlot
+ * @param {number} scrollSlot
+ * @param {number} [offeringSlot]
+ * @returns {Promise<object>} upgrade()'s result
+ */
+function upgradeInLuckySlot(itemSlot, scrollSlot, offeringSlot) {
+  const luckySlot = getLuckyUpgradeSlot();
+  if (
+    luckySlot === -1 ||
+    luckySlot === itemSlot ||
+    character.q.compound ||
+    character.items[luckySlot]?.name === "placeholder"
+  )
+    return upgrade(itemSlot, scrollSlot, offeringSlot);
+
+  const afterSwap = (slot) => (slot === luckySlot ? itemSlot : slot);
+  const moved = swap(itemSlot, luckySlot);
+  const upgraded = parent.push_deferred("upgrade");
+  parent.socket.emit("upgrade", {
+    item_num: luckySlot,
+    scroll_num: afterSwap(scrollSlot),
+    offering_num:
+      offeringSlot === undefined ? undefined : afterSwap(offeringSlot),
+    clevel: character.items[itemSlot]?.level ?? 0,
+  });
+
+  return Promise.all([moved, upgraded]).then(([, result]) => result);
 }
 
 function isLuckySlotSettled() {
