@@ -522,9 +522,22 @@ function isUpgradeWork(item, index, skip) {
 
 /**
  * Stores qualifying bag items floor by floor, next to their kind first.
+ * Holds off sortInv throughout, so the picked indices keep their items.
  * @param {Boolean} forced to force storing weapons without checking its level
  */
 async function bankStoreRoutine(forced = false) {
+  await waitUntil(() => !isInventorySorting(), 5_000);
+  if (!lockInventory("mutate")) return;
+
+  try {
+    return await runBankStoreRoutine(forced);
+  } finally {
+    unlockInventory("mutate");
+  }
+}
+
+/** bankStoreRoutine's body, run while it holds the sort hold-off */
+async function runBankStoreRoutine(forced) {
   const lastRetrieved = settleLastRetrieve();
 
   // Indices stay valid for the whole routine: storing leaves a hole behind

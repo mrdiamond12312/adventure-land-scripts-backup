@@ -2166,7 +2166,15 @@ item name changed along the way. A probe swap every cycle, plus the `sortInv` th
 reshuffled the bag during the trip, and most of the stash quietly stayed in the bag. The probe
 and the lucky move now stand down on any `bank*` map. There `sortInv` settles the bag back into
 its sorted order, which is the order the store list was taken in. Upgrades can't happen inside
-the bank anyway (`cant_in_bank`). Other errands (deliveries, exchange, scout) keep probing. Probing always takes the least-rolled slot. Simulated, that finds it in ~11k rolls
+the bank anyway (`cant_in_bank`). Other errands (deliveries, exchange, scout) keep probing.
+
+`sortInv` was the bigger half of the same bug, and older than the probe. `bankStoreRoutine` took
+no lock, and nothing upgrades inside the bank, so `sortInv` ran every tick mid-routine. Each
+store leaves a hole, and sorting sends holes to the end, so every later index shifted before the
+next floor or the backward pass. A sort swap in flight during `storeAll`'s parallel
+`bank_store(index)` calls could even store the wrong item. `bankStoreRoutine` now holds the
+`"mutate"` lock for its whole run, like `stackBank`: it waits out a running sort, and the bag gets
+sorted once afterwards. Probing always takes the least-rolled slot. Simulated, that finds it in ~11k rolls
 median (~19k p90). Always probing the currently-likeliest slot would take ~1.7k, but that was not
 the chosen policy.
 
