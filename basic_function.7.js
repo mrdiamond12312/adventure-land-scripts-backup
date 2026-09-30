@@ -1657,6 +1657,54 @@ const POTION_REQUEST_AT = 200;
 const LOOTING_LIMIT = 15;
 var isLooting = false;
 
+const MIDAS_GEAR = {
+  helmet: "wcap",
+  chest: "wattire",
+  pants: "wbreeches",
+  shoes: "wshoes",
+  gloves: "handofmidas",
+  amulet: "spookyamulet",
+  booster: "goldbooster",
+  cape: "horsecapeg",
+};
+
+/** Chest count that triggers a midas loot, scaled up against a tanky target */
+function midasLootingThreshold() {
+  const currentTarget = get_target();
+  const modifier =
+    currentTarget?.type === "monster"
+      ? Math.max(5000 / currentTarget.hp, 1)
+      : 1;
+  return LOOTING_LIMIT * modifier;
+}
+
+/** True when this midas character should be wearing MIDAS_GEAR for a loot */
+function wantsMidasGear() {
+  return (
+    MIDAS_CHARACTER.includes(character.name) &&
+    !character.cave &&
+    Object.keys(parent.chests).length >= midasLootingThreshold()
+  );
+}
+
+/**
+ * MIDAS_GEAR slots not worn yet whose item is carried.
+ * @returns {string[]}
+ */
+function midasSlotsPending() {
+  return Object.entries(MIDAS_GEAR)
+    .filter(([slot, name]) => {
+      if (slot === "booster") {
+        const booster = findInvBooster();
+        return booster && booster !== name;
+      }
+      return (
+        character.slots[slot]?.name !== name && findMaxLevelItem(name) >= 0
+      );
+    })
+    .map(([slot]) => slot);
+}
+
 /** How far cave_open_chest reaches */
 const CAVE_LOOT_RANGE = 400;
 
@@ -1710,13 +1758,7 @@ async function midasLooting(forced = false) {
     .map((id) => get_player(id))
     .filter((player) => player && MIDAS_CHARACTER.includes(player.name));
 
-  const currentTarget = get_target();
-  let modifier = 1;
-
-  if (currentTarget && currentTarget.type === "monster") {
-    modifier = Math.max(5000 / currentTarget.hp, 1);
-  }
-  const lootingThreshold = LOOTING_LIMIT * modifier;
+  const lootingThreshold = midasLootingThreshold();
 
   try {
     if (MIDAS_CHARACTER.includes(character.name)) {
@@ -1725,27 +1767,22 @@ async function midasLooting(forced = false) {
         ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) ||
         forced
       ) {
+        // In combat the gear calculator equips MIDAS_GEAR within the attack budget
+        if (
+          !forced &&
+          !smart.moving &&
+          !isAdvanceSmartMoving &&
+          midasSlotsPending().length
+        )
+          return;
+
         isLooting = true;
         shouldReset = true;
 
-        if (
-          (!smart.moving &&
-            !isAdvanceSmartMoving &&
-            ms_to_next_skill("attack")) ||
-          forced
-        )
+        if (forced)
           await withTimeout(
             equipBatch(
-              {
-                helmet: "wcap",
-                chest: "wattire",
-                pants: "wbreeches",
-                shoes: "wshoes",
-                gloves: "handofmidas",
-                amulet: "spookyamulet",
-                booster: "goldbooster",
-                cape: "horsecapeg",
-              },
+              { ...MIDAS_GEAR },
               { preventPenaltizeNextAttack: false, preventKeySnatch: false },
             ),
             500,

@@ -368,18 +368,18 @@ function calculateMageItems() {
     numberOfMonsterAroundTarget(currentTarget);
   const haveEnoughMobsToSplash =
     numberOfMobsAroundCurrentTarget >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON;
+  // Credit an mp potion that lands before the next shot
+  const incomingMp =
+    ms_to_next_skill("use_mp") < ms_to_next_skill("attack") ? 500 : 0;
   const shouldUseBlaster =
     haveEnoughMobsToSplash &&
     !currentTarget?.["1hp"] &&
-    character.mp >
-      G.skills["magiport"].mp +
-        G.skills["blink"].mp +
-        (ms_to_next_skill("use_mp") < ms_to_next_skill("attack" ? 0 : 500));
+    character.mp + incomingMp > G.skills["magiport"].mp + G.skills["blink"].mp;
 
   const feelingLucky = shouldWearLuckGear();
   const feelingWise = shouldWearExpGear();
 
-  return {
+  const items = {
     mainhand: getMageMainhand(
       currentTarget,
       shouldUseBlaster,
@@ -408,6 +408,8 @@ function calculateMageItems() {
     ring2: "cring",
     amulet: feelingWise ? "spookyamulet" : "intamulet",
   };
+
+  return wantsMidasGear() ? { ...items, ...MIDAS_GEAR } : items;
 }
 
 const STUN_FOCUS_LIST = ["crabxx", "grinch"];

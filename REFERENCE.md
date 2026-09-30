@@ -589,6 +589,19 @@ merchant specifically — his gear table flips on `shouldHoldAttackWeapon()`, so
 that dropped the chest is itself what re-equips the broom, and the resulting ~240-480ms of
 penalty covers exactly the window where the chest exists.
 
+The in-combat midas swap is owned by the gear calculator, not by `midasLooting`. Firing all of
+`MIDAS_GEAR` at once (7 equips + a booster `shift`) cost ~1s of `penalty_cd`, delaying several
+attacks. Now `calculateMageItems` overlays `MIDAS_GEAR` while `wantsMidasGear()` holds, so the
+strategy loop's budgeted `equipBatch` puts it on a few pieces per attack gap, and `midasLooting`
+waits until `midasSlotsPending()` is empty before opening chests. Two consequences:
+
+- `midasLooting` must not set `isLooting` while it waits — `equipBatch` bails on `isLooting`, which
+  would stall the very equips it is waiting on.
+- Once the chests open, the count drops below the threshold and the calculator switches the combat
+  set back on the same budgeted way. `forced` (server hop, cm) still does the unsliced full swap,
+  and smart-moving still loots in whatever is worn. Only our own mage gets the overlay;
+  `CrownPriest` is another player on `MIDAS_CHARACTER` only so our bots leave chests to him.
+
 Booster handling: a caller-suggested booster wins outright; the luck/xp auto-swap only runs when
 no booster was suggested (previously a suggested-but-already-equipped booster fell through and
 got swapped away). `suggestedItems.booster` is always deleted afterward because "booster" is not
