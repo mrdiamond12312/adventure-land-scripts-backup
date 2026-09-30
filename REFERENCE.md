@@ -1654,18 +1654,17 @@ carried, the same question the ranger asks when picking a bow.
 
 Mixed packs (ent + plantoids, stompy + wolves, mvampire + bats) are one big `max_hp` among small
 ones. Sorting by cluster then raw hp either locked onto the big mob or finished the adds one at a
-time. The mage/warrior/ranger pull-target sorts now put any candidate under `ADD_MAX_HP_RATIO` of
-the biggest candidate's `max_hp` ahead of it, healthiest hp% first, so the splash levels the adds
-and they die together. It is computed per candidate list, not a mob-type list, so a new scouting
-spot needs no config; a uniform pack has no adds and falls through to the old order. The rogue
-keeps its own hp% sort.
+time. The mage/warrior/ranger pull-target sorts now put `PACK_ADD_MOB_TYPES` (basic_function.7.js
+config) ahead of everything but cooperative mobs, healthiest hp% first, so the splash levels the
+adds and they die together. The rogue keeps its own hp% sort.
 
-Summoned minions are excluded by `G.monsters[big].spawns` (franky → nerfedmummy, crabxx → crabx,
-mrpumpkin/mrgreen → jr/greenjr), not by a lower `max_hp` bound: from `design/monsters.py`,
-plantoid is 1.5% of an ent, wolf 7.5% of stompy, bat 4% of mvampire, while nerfedmummy is 0.001%
-of franky — a floor low enough to keep plantoids would not separate minions. Those summoners are
-also all `cooperative`, which every sort ranks first anyway; crabx targets skip the pull sort
-entirely (`!target?.mtype.includes("crabx")`).
+It is a hand-kept list, not a `max_hp` ratio. A ratio (tried: under 25% of the biggest candidate)
+also caught unrelated small mobs someone else had aggroed — porcupines at the ent spot — and no
+bound separates adds from minions anyway: from `design/monsters.py`, plantoid is 1.5% of an ent,
+wolf 7.5% of stompy, bat 4% of mvampire, nerfedmummy 0.001% of franky. Anything a candidate lists
+in `G.monsters[mtype].spawns` (franky → nerfedmummy, crabxx → crabx, mrpumpkin/mrgreen →
+jr/greenjr) is never an add; those summoners are also `cooperative`, and crabx targets skip the
+pull sort entirely (`!target?.mtype.includes("crabx")`).
 
 ## The exchange queue (`EXCHANGE_QUEUE`, merchant_exchange.23.js, 2026-09-28)
 

@@ -212,18 +212,15 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   return mobsListAroundTarget(target, blastRadius).length;
 }
 
-const ADD_MAX_HP_RATIO = 0.25;
-
 /** @returns {(lhs: Object, rhs: Object) => number} adds first */
 function compareAddsFirst(mobs) {
-  const biggest = Math.max(0, ...mobs.map((mob) => mob.max_hp ?? 0));
   const summoned = new Set(
     mobs.flatMap((mob) =>
       (G.monsters[mob.mtype]?.spawns ?? []).map((spawn) => spawn[1]),
     ),
   );
   const isAdd = (mob) =>
-    (mob.max_hp ?? 0) < biggest * ADD_MAX_HP_RATIO && !summoned.has(mob.mtype);
+    PACK_ADD_MOB_TYPES.includes(mob.mtype) && !summoned.has(mob.mtype);
 
   return (lhs, rhs) => {
     const lhsAdd = isAdd(lhs);
