@@ -1759,22 +1759,14 @@ async function midasLooting(forced = false) {
     .filter((player) => player && MIDAS_CHARACTER.includes(player.name));
 
   const lootingThreshold = midasLootingThreshold();
+  const isTravelling =
+    (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
 
   try {
     if (MIDAS_CHARACTER.includes(character.name)) {
-      if (
-        chests.length >= lootingThreshold ||
-        ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) ||
-        forced
-      ) {
+      if (chests.length >= lootingThreshold || isTravelling || forced) {
         // In combat the gear calculator equips MIDAS_GEAR within the attack budget
-        if (
-          !forced &&
-          !smart.moving &&
-          !isAdvanceSmartMoving &&
-          midasSlotsPending().length
-        )
-          return;
+        if (!forced && !isTravelling && midasSlotsPending().length) return;
 
         isLooting = true;
         shouldReset = true;
@@ -1800,10 +1792,7 @@ async function midasLooting(forced = false) {
       !MIDAS_CHARACTER.includes(character.name) &&
       partyMidasUsers.length
     ) {
-      if (
-        chests.length >= lootingThreshold &&
-        (smart.moving || isAdvanceSmartMoving || forced)
-      ) {
+      if (chests.length >= lootingThreshold && (isTravelling || forced)) {
         isLooting = true;
         shouldReset = true;
 

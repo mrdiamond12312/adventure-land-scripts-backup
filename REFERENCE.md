@@ -708,6 +708,18 @@ Findings from the "warrior attacks slower than his frequency" session (2026-07-2
   (see `resolveBowInfo`).
 - `BLAST_RADIUS` is computed once at load on purpose: it's the *max* blast the character could
   field from anything in slots/inventory, not the currently-equipped blast.
+- Splash is `explosion` on physical classes and `blast` on magical ones; `splashOf(info)` and
+  `explosionScore` read either, so the ranger's bow scorer also serves the mage.
+- The mage's mainhand (`rankMageWeapons`) is a per-second score over every owned mage weapon, not
+  a mob count. Froststaff (crypt) and pinkie (one-shot) are ranked too, but their rules still
+  take precedence over the score, and doublehands
+  stay pull-strategy-only behind the mp floor. Two things only the score sees:
+  `G.classes.mage.doublehand.great_staff` carries
+  `frequency: -10` (item/class `frequency` points are /100 of `character.frequency`), and a
+  doublehand drops `wbook1`, whose attack and int are lost. The offhand term is signed against
+  what is worn now, so while holding the gstaff the firestaff is credited for regaining the book.
+  The same class entry has `mp_cost: +160` per shot, which is what drains mp toward the
+  magiport+blink floor; the score ignores mp, the floor check in `calculateMageItems` owns it.
 
 ## Splitting a class into attack loop + per-skill loops (`runSkillLoop`)
 

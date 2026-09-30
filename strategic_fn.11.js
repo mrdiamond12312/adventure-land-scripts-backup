@@ -336,13 +336,92 @@ function getOwnedItemInfo(id) {
   return findOwnedItems((entry) => entry.name === id)[0]?.info;
 }
 
-function getMageMainhand(
-  currentTarget,
-  shouldUseBlaster,
-  haveEnoughMobsToSplash,
-) {
+const MAGE_SHOOTER = "firestaff";
+const MAGE_OFFHAND = "wbook1";
+
+/** Class modifier for this weapon's wtype, and whether it is a doublehand */
+function classWeaponModifier(info) {
+  const classData = G.classes[character.ctype];
+  const doublehand = classData.doublehand?.[info?.wtype];
+  return {
+    modifier: doublehand ?? classData.mainhand?.[info?.wtype] ?? {},
+    doublehand: !!doublehand,
+  };
+}
+
+/** Owned mage weapons, best damage per second on `target` first */
+function rankMageWeapons(target) {
+  if (!target) return [];
+
+  const classData = G.classes[character.ctype];
+  const current = character.slots.mainhand;
+  const currentInfo = current ? item_info(current) : {};
+  const currentMod = classWeaponModifier(currentInfo).modifier;
+  const offhand = character.slots.offhand;
+  const offhandInfo =
+    (offhand ? item_info(offhand) : getOwnedItemInfo(MAGE_OFFHAND)) ?? {};
+  const mainStat = classData.main_stat;
+  const statMultiplier = rawAttackMultiplier() + 1;
+
+  const clusters = new Map();
+  const clusterOf = (mob, radius) => {
+    const key = `${mob.id}:${Math.round(radius)}`;
+    if (!clusters.has(key))
+      clusters.set(key, numberOfMonsterAroundTarget(mob, radius));
+    return clusters.get(key);
+  };
+
+  const damagePerSecond = (info) => {
+    const { modifier, doublehand } = classWeaponModifier(info);
+    const frequency =
+      character.frequency +
+      ((info.frequency ?? 0) +
+        (modifier.frequency ?? 0) -
+        (currentInfo.frequency ?? 0) -
+        (currentMod.frequency ?? 0)) /
+        100;
+
+    const offhandSign = (doublehand ? 0 : 1) - (offhand ? 1 : 0);
+    const statRatio =
+      (statMultiplier + (offhandSign * (offhandInfo[mainStat] ?? 0)) / 20) /
+      statMultiplier;
+
+    return (
+      frequency *
+      statRatio *
+      explosionScore(
+        {
+          ...info,
+          attack: (info.attack ?? 0) + offhandSign * (offhandInfo.attack ?? 0),
+          explosion_delta: splashOf(info) - splashOf(currentInfo),
+          crit_delta: (info.crit ?? 0) - (currentInfo.crit ?? 0),
+        },
+        [target],
+        clusterOf,
+      )
+    );
+  };
+
+  return findOwnedItems(
+    (entry) =>
+      !!(
+        classData.mainhand?.[entry.info?.wtype] ||
+        classData.doublehand?.[entry.info?.wtype]
+      ),
+    (entry) => damagePerSecond(entry.info),
+  ).map((entry) => ({
+    ...entry,
+    doublehand: classWeaponModifier(entry.info).doublehand,
+  }));
+}
+
+function getMageMainhand(currentTarget, blasterAllowed) {
   if (character.map === "crypt" && !currentTarget?.s?.frozen)
     return "froststaff";
+
+  const ranked = rankMageWeapons(currentTarget);
+  const blasterWins =
+    currentStrategy === usePullStrategies && !!ranked[0]?.doublehand;
 
   const isWeakMobType = MAGE_WEAK_MOB_TYPES.includes(currentTarget?.mtype);
 
@@ -352,45 +431,33 @@ function getMageMainhand(
     !!pinkieInfo &&
     !!currentTarget &&
     canOneShotWithWeapon(pinkieInfo, [currentTarget]) &&
-    (currentStrategy !== usePullStrategies || !haveEnoughMobsToSplash);
+    !blasterWins;
 
   if (isWeakMobType || pinkieOneShots) return "pinkie";
 
-  if (currentStrategy === usePullStrategies && shouldUseBlaster)
-    return "gstaff";
-
-  return "firestaff";
+  const best = ranked.find((weapon) => blasterAllowed || !weapon.doublehand);
+  return best?.name ?? character.slots.mainhand?.name ?? MAGE_SHOOTER;
 }
 
 function calculateMageItems() {
   const currentTarget = get_target();
-  const numberOfMobsAroundCurrentTarget =
-    numberOfMonsterAroundTarget(currentTarget);
-  const haveEnoughMobsToSplash =
-    numberOfMobsAroundCurrentTarget >= TARGET_TO_SWITCH_TO_BLASTER_WEAPON;
-  // Credit an mp potion that lands before the next shot
   const incomingMp =
     ms_to_next_skill("use_mp") < ms_to_next_skill("attack") ? 500 : 0;
-  const shouldUseBlaster =
-    haveEnoughMobsToSplash &&
+  const blasterAllowed =
+    currentStrategy === usePullStrategies &&
     !currentTarget?.["1hp"] &&
     character.mp + incomingMp > G.skills["magiport"].mp + G.skills["blink"].mp;
 
   const feelingLucky = shouldWearLuckGear();
   const feelingWise = shouldWearExpGear();
 
+  const mainhand = getMageMainhand(currentTarget, blasterAllowed);
+
   const items = {
-    mainhand: getMageMainhand(
-      currentTarget,
-      shouldUseBlaster,
-      haveEnoughMobsToSplash,
-    ),
-    offhand:
-      currentStrategy === usePullStrategies
-        ? shouldUseBlaster
-          ? undefined
-          : "wbook1"
-        : "wbook1",
+    mainhand,
+    offhand: classWeaponModifier(item_info({ name: mainhand })).doublehand
+      ? undefined
+      : MAGE_OFFHAND,
     helmet: feelingLucky ? "wcap" : "gphelmet",
     chest: "wattire",
     pants: feelingLucky ? "wbreeches" : "starkillers",
@@ -523,6 +590,11 @@ function getCupidHealees(playersToHeal = getPlayersToHeal()) {
   );
 }
 
+/** Splash stat of an item: explosion for physical classes, blast for magical */
+function splashOf(info) {
+  return info?.explosion ?? info?.blast ?? 0;
+}
+
 function explosionScore(
   itemInfo,
   targets,
@@ -532,8 +604,13 @@ function explosionScore(
 
   const attack = effectiveAttackWith(itemInfo);
   const explosion =
-    (character.explosion ?? 0) + (itemInfo.explosion_delta ?? 0);
+    (character.explosion || character.blast || 0) +
+    (itemInfo.explosion_delta ?? 0);
   const radius = explosion / BLAST_DIVISOR || BLAST_RADIUS;
+  const piercing =
+    G.classes[character.ctype].damage_type === "physical"
+      ? (character.apiercing ?? 0) * 2
+      : character.rpiercing ?? 0;
 
   // Expected damage with this bow's crit over the one we hold: a crit doubles
   // the hit, so each point of crit chance is worth one extra point of damage
@@ -549,7 +626,7 @@ function explosionScore(
 
     // Burn lands on every mob we shoot, never on the ones the splash catches
     const burn = burnChance
-      ? dps_multiplier((mob.armor ?? 0) - (character.apiercing ?? 0) * 2) *
+      ? dps_multiplier(getMobDefense(mob) - piercing) *
         ((100 - (mob.firesistance ?? 0)) / 100) *
         BURN_DAMAGE_MULTIPLIER *
         attack *
@@ -576,7 +653,7 @@ function explosionScore(
 function chooseBowForSplashing(targets) {
   const currentBow = character.slots.mainhand;
   const currentInfo = currentBow ? item_info(currentBow) : undefined;
-  const currentExplosion = currentInfo?.explosion ?? 0;
+  const currentExplosion = splashOf(currentInfo);
   const currentCrit = currentInfo?.crit ?? 0;
 
   // Bows sharing a radius share their cluster counts, for this call only
@@ -596,7 +673,7 @@ function chooseBowForSplashing(targets) {
       explosionScore(
         {
           ...entry.info,
-          explosion_delta: (entry.info.explosion ?? 0) - currentExplosion,
+          explosion_delta: splashOf(entry.info) - currentExplosion,
           crit_delta: (entry.info.crit ?? 0) - currentCrit,
         },
         targets,
