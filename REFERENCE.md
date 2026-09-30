@@ -712,8 +712,10 @@ Findings from the "warrior attacks slower than his frequency" session (2026-07-2
   `explosionScore` read either, so the ranger's bow scorer also serves the mage.
 - The mage's mainhand (`rankMageWeapons`) is a per-second score over every owned mage weapon, not
   a mob count. Froststaff (crypt) and pinkie (one-shot) are ranked too, but their rules still
-  take precedence over the score, and doublehands
-  stay pull-strategy-only behind the mp floor. Two things only the score sees:
+  take precedence over the score. Doublehands stay pull-strategy-only, behind the mp floor and a
+  cluster of at least `TARGET_TO_SWITCH_TO_BLASTER_WEAPON`: on a lone mob splash scores 0, but the
+  tier-3 gstaff still out-attacks the firestaff (its burn is `attr0: 2` +0.5/level, a few % of
+  attack), so the score alone picked the blaster for 1 mob. Two things only the score sees:
   `G.classes.mage.doublehand.great_staff` carries
   `frequency: -10` (item/class `frequency` points are /100 of `character.frequency`), and a
   doublehand drops `wbook1`, whose attack and int are lost. The offhand term is signed against
@@ -1650,21 +1652,16 @@ Weakness that is genuinely class-specific stays local: `MAGE_WEAK_MOB_TYPES` /
 longer guesses from `max_hp` either — it asks `canOneShotWithWeapon` with the pinkie actually
 carried, the same question the ranger asks when picking a bow.
 
-## Adds before the big mob (`compareAddsFirst`, strategic_fn.11.js)
+## Pull targets stay clumpiest-first (tried adds-first, 2026-10-01)
 
-Mixed packs (ent + plantoids, stompy + wolves, mvampire + bats) are one big `max_hp` among small
-ones. Sorting by cluster then raw hp either locked onto the big mob or finished the adds one at a
-time. The mage/warrior/ranger pull-target sorts now put `PACK_ADD_MOB_TYPES` (basic_function.7.js
-config) ahead of everything but cooperative mobs, healthiest hp% first, so the splash levels the
-adds and they die together. The rogue keeps its own hp% sort.
-
-It is a hand-kept list, not a `max_hp` ratio. A ratio (tried: under 25% of the biggest candidate)
-also caught unrelated small mobs someone else had aggroed — porcupines at the ent spot — and no
-bound separates adds from minions anyway: from `design/monsters.py`, plantoid is 1.5% of an ent,
-wolf 7.5% of stompy, bat 4% of mvampire, nerfedmummy 0.001% of franky. Anything a candidate lists
-in `G.monsters[mtype].spawns` (franky → nerfedmummy, crabxx → crabx, mrpumpkin/mrgreen →
-jr/greenjr) is never an add; those summoners are also `cooperative`, and crabx targets skip the
-pull sort entirely (`!target?.mtype.includes("crabx")`).
+The mage/warrior/ranger pull sorts all go through `sortPullTargets` (strategic_fn.11.js): an
+optional class-specific `first` comparator (mage: `cooperativeFirst`; ranger: cooperative, then
+aggroed before harmless), then cluster count, hp, nearest. An experiment put a mixed pack's
+adds (plantoid next to ent, wolf next to stompy, bat next to mvampire) first, healthiest hp% first,
+so the splash would kill them together. Observed in play it cut party dps a lot and was reverted.
+Two dead ends from it: a `max_hp` ratio cannot tell adds from unrelated small mobs someone else
+aggroed (porcupines at the ent spot) or from summoned minions (plantoid is 1.5% of an ent,
+nerfedmummy 0.001% of franky); a summoner's minions are listed in `G.monsters[mtype].spawns`.
 
 ## The exchange queue (`EXCHANGE_QUEUE`, merchant_exchange.23.js, 2026-09-28)
 

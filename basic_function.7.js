@@ -288,9 +288,6 @@ var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 // var mobsToFarm = ["jr", "booboo"];
 // var mobsToFarm = ["odino"];
 
-// Killed ahead of the big mob they gather around, evenly
-const PACK_ADD_MOB_TYPES = ["plantoid", "wolf", "bat", "ghost"];
-
 // desired elixir named
 var desiredElixir = "elixirluck";
 

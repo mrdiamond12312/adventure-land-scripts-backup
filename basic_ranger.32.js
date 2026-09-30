@@ -72,8 +72,6 @@ const isCupidEquipped = () => character.slots.mainhand?.name === "cupid";
  * @returns {Object[]} the sorted candidates
  */
 function getPotentialTargets() {
-  const explosionRadius = getSplashRadius();
-
   const candidates = Object.values(parent.entities)
     .filter(
       (entity) =>
@@ -88,29 +86,15 @@ function getPotentialTargets() {
           entity.target),
     )
     .map((entity) => {
-      // Optimization: Pre-calculate cluster count, distance and splash safety
-      entity.cluster_count = numberOfMonsterAroundTarget(
-        entity,
-        explosionRadius,
-      );
       entity.distance = distance(character, entity);
       entity.safe_to_shoot = isSafeToShoot(entity);
       return entity;
     });
-  const addsFirst = compareAddsFirst(candidates);
 
-  return candidates.sort((lhs, rhs) => {
-    // Cooperative and target prioritization (Highest Priority)
+  return sortPullTargets(candidates, getSplashRadius(), (lhs, rhs) => {
     if (lhs.cooperative || (lhs.target && !rhs.target)) return -1;
     if (rhs.cooperative || (rhs.target && !lhs.target)) return 1;
-
-    return (
-      addsFirst(lhs, rhs) ||
-      // Sort by cluster count
-      rhs.cluster_count - lhs.cluster_count ||
-      rhs.hp - lhs.hp ||
-      lhs.distance - rhs.distance
-    );
+    return 0;
   });
 }
 

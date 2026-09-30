@@ -212,22 +212,27 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   return mobsListAroundTarget(target, blastRadius).length;
 }
 
-/** @returns {(lhs: Object, rhs: Object) => number} adds first */
-function compareAddsFirst(mobs) {
-  const summoned = new Set(
-    mobs.flatMap((mob) =>
-      (G.monsters[mob.mtype]?.spawns ?? []).map((spawn) => spawn[1]),
-    ),
-  );
-  const isAdd = (mob) =>
-    PACK_ADD_MOB_TYPES.includes(mob.mtype) && !summoned.has(mob.mtype);
+/**
+ * @param {Object[]} mobs - sorted in place, each tagged with cluster_count
+ * @param {number} blastRadius
+ * @param {(lhs: Object, rhs: Object) => number} [first] - outranks the cluster order
+ * @returns {Object[]} clumpiest first, then highest hp, then nearest
+ */
+function sortPullTargets(mobs, blastRadius, first = () => 0) {
+  for (const mob of mobs)
+    mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
 
-  return (lhs, rhs) => {
-    const lhsAdd = isAdd(lhs);
-    if (lhsAdd !== isAdd(rhs)) return lhsAdd ? -1 : 1;
-    if (!lhsAdd) return 0;
-    return rhs.hp / rhs.max_hp - lhs.hp / lhs.max_hp;
-  };
+  return mobs.sort(
+    (lhs, rhs) =>
+      first(lhs, rhs) ||
+      rhs.cluster_count - lhs.cluster_count ||
+      rhs.hp - lhs.hp ||
+      distance(character, lhs) - distance(character, rhs),
+  );
+}
+
+function cooperativeFirst(lhs, rhs) {
+  return (rhs.cooperative ? 1 : 0) - (lhs.cooperative ? 1 : 0);
 }
 
 function findInvBooster() {
@@ -438,8 +443,7 @@ function getMageMainhand(currentTarget, blasterAllowed) {
     return "froststaff";
 
   const ranked = rankMageWeapons(currentTarget);
-  const blasterWins =
-    currentStrategy === usePullStrategies && !!ranked[0]?.doublehand;
+  const blasterWins = blasterAllowed && !!ranked[0]?.doublehand;
 
   const isWeakMobType = MAGE_WEAK_MOB_TYPES.includes(currentTarget?.mtype);
 
@@ -464,6 +468,8 @@ function calculateMageItems() {
   const blasterAllowed =
     currentStrategy === usePullStrategies &&
     !currentTarget?.["1hp"] &&
+    numberOfMonsterAroundTarget(currentTarget) >=
+      TARGET_TO_SWITCH_TO_BLASTER_WEAPON &&
     character.mp + incomingMp > G.skills["magiport"].mp + G.skills["blink"].mp;
 
   const feelingLucky = shouldWearLuckGear();

@@ -54,30 +54,12 @@ async function fight(target) {
     currentStrategy === usePullStrategies &&
     !target?.mtype.includes("crabx")
   ) {
-    const blastRadius = getSplashRadius();
-
     if (aggroedMobs.length) {
-      const addsFirst = compareAddsFirst(aggroedMobs);
-      // Sort: Find the best mob to target for cluster damage
-      const bestTarget = aggroedMobs
-        // Map: Pre-calculate the cluster count (The performance optimization)
-        .map((mob) => {
-          mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
-          return mob;
-        })
-        .sort((lhs, rhs) => {
-          if (lhs.cooperative !== rhs.cooperative) {
-            return lhs.cooperative ? -1 : 1;
-          }
-          const addOrder = addsFirst(lhs, rhs);
-          if (addOrder) return addOrder;
-          // Prioritize highest cluster count
-          if (lhs.cluster_count !== rhs.cluster_count) {
-            return rhs.cluster_count - lhs.cluster_count;
-          }
-          // If cluster counts are equal, prioritize highest HP to apply max damage
-          return rhs.hp - lhs.hp;
-        })[0]; // Get the first (best) target
+      const bestTarget = sortPullTargets(
+        aggroedMobs,
+        getSplashRadius(),
+        cooperativeFirst,
+      )[0];
 
       target = bestTarget ?? target;
       change_target(target);
