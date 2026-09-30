@@ -247,6 +247,9 @@ function getZapTarget() {
     character.slots.ring2?.name === "zapper";
   const mpPct = character.mp / character.max_mp;
 
+  // Aggro at Dorr fails the cave entry
+  if (isPreparingCave && !character.cave) return null;
+
   if (
     mpPct < 0.6 ||
     character.s.penalty_cd ||

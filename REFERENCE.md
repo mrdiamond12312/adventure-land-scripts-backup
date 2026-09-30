@@ -2033,6 +2033,16 @@ vote, a 60s stall on the timer, and then the `leave` fallback, which completes t
 The server offers the `offer: true` option (`e10_0`) plus one random affordable other, so at most one
 of `e10_1`/`e10_3`/`e10_4` is ever on the table and the bot votes it.
 
+### A zap at Dorr cancels the cave entry (checked against the server, 2026-10-01)
+
+`open_generated_zone` runs `generated_admission` again after the 1.8s entry animation. It throws
+`bring_party_to_keeper` if any member has `targets > 0`, is off `main`, is more than 160 from
+Dorr (816, 1200), or cannot walk. Only the party freezes during the animation. Monsters on `main`
+keep walking, so a mob the priest's zapper tagged at Dorr can reach the party inside that window. The
+client then cancels the animation, which looks like a town squish back to Dorr. The failed entry
+deletes its daily reservation, so the visit is not spent. `getZapTarget` now holds while
+`isPreparingCave` is set outside the cave.
+
 ### The rogue is left by his side, never by name
 
 `cave_rogue` used to be in `CAVE_MOBS_TO_LEAVE`. After a rescue he betrays the party half the time
