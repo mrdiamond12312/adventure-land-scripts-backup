@@ -1668,7 +1668,7 @@ const MIDAS_GEAR = {
   cape: "horsecapeg",
 };
 
-/** Chest count that triggers a midas loot, scaled up against a tanky target */
+/** @returns {number} chest count that triggers a midas loot */
 function midasLootingThreshold() {
   const currentTarget = get_target();
   const modifier =
@@ -1678,7 +1678,7 @@ function midasLootingThreshold() {
   return LOOTING_LIMIT * modifier;
 }
 
-/** True when this midas character should be wearing MIDAS_GEAR for a loot */
+/** @returns {boolean} whether to wear MIDAS_GEAR */
 function wantsMidasGear() {
   return (
     MIDAS_CHARACTER.includes(character.name) &&
@@ -1765,7 +1765,6 @@ async function midasLooting(forced = false) {
   try {
     if (MIDAS_CHARACTER.includes(character.name)) {
       if (chests.length >= lootingThreshold || isTravelling || forced) {
-        // In combat the gear calculator equips MIDAS_GEAR within the attack budget
         if (!forced && !isTravelling && midasSlotsPending().length) return;
 
         isLooting = true;

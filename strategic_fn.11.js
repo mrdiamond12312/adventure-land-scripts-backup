@@ -212,6 +212,27 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
   return mobsListAroundTarget(target, blastRadius).length;
 }
 
+const ADD_MAX_HP_RATIO = 0.25;
+
+/** @returns {(lhs: Object, rhs: Object) => number} adds first */
+function compareAddsFirst(mobs) {
+  const biggest = Math.max(0, ...mobs.map((mob) => mob.max_hp ?? 0));
+  const summoned = new Set(
+    mobs.flatMap((mob) =>
+      (G.monsters[mob.mtype]?.spawns ?? []).map((spawn) => spawn[1]),
+    ),
+  );
+  const isAdd = (mob) =>
+    (mob.max_hp ?? 0) < biggest * ADD_MAX_HP_RATIO && !summoned.has(mob.mtype);
+
+  return (lhs, rhs) => {
+    const lhsAdd = isAdd(lhs);
+    if (lhsAdd !== isAdd(rhs)) return lhsAdd ? -1 : 1;
+    if (!lhsAdd) return 0;
+    return rhs.hp / rhs.max_hp - lhs.hp / lhs.max_hp;
+  };
+}
+
 function findInvBooster() {
   return BOOSTERS.find((booster) => locate_item(booster) !== -1);
 }
@@ -339,7 +360,7 @@ function getOwnedItemInfo(id) {
 const MAGE_SHOOTER = "firestaff";
 const MAGE_OFFHAND = "wbook1";
 
-/** Class modifier for this weapon's wtype, and whether it is a doublehand */
+/** @returns {{modifier: Object, doublehand: boolean}} */
 function classWeaponModifier(info) {
   const classData = G.classes[character.ctype];
   const doublehand = classData.doublehand?.[info?.wtype];
@@ -349,7 +370,7 @@ function classWeaponModifier(info) {
   };
 }
 
-/** Owned mage weapons, best damage per second on `target` first */
+/** @returns {Object[]} owned mage weapons, best first */
 function rankMageWeapons(target) {
   if (!target) return [];
 
@@ -590,7 +611,7 @@ function getCupidHealees(playersToHeal = getPlayersToHeal()) {
   );
 }
 
-/** Splash stat of an item: explosion for physical classes, blast for magical */
+/** @returns {number} the item's explosion or blast */
 function splashOf(info) {
   return info?.explosion ?? info?.blast ?? 0;
 }

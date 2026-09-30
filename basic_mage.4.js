@@ -57,6 +57,7 @@ async function fight(target) {
     const blastRadius = getSplashRadius();
 
     if (aggroedMobs.length) {
+      const addsFirst = compareAddsFirst(aggroedMobs);
       // Sort: Find the best mob to target for cluster damage
       const bestTarget = aggroedMobs
         // Map: Pre-calculate the cluster count (The performance optimization)
@@ -68,6 +69,8 @@ async function fight(target) {
           if (lhs.cooperative !== rhs.cooperative) {
             return lhs.cooperative ? -1 : 1;
           }
+          const addOrder = addsFirst(lhs, rhs);
+          if (addOrder) return addOrder;
           // Prioritize highest cluster count
           if (lhs.cluster_count !== rhs.cluster_count) {
             return rhs.cluster_count - lhs.cluster_count;

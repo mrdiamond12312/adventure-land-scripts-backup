@@ -143,7 +143,7 @@ async function fight(target) {
 
   // --- Target Aggregation & Selection (usePullStrategies) ---
   let altTarget = undefined;
-  const aggroedMobs = Object.values(parent.entities)
+  const candidates = Object.values(parent.entities)
     .filter((entity) => {
       return (
         entity.type === "monster" &&
@@ -159,16 +159,20 @@ async function fight(target) {
     .map((mob) => {
       mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
       return mob;
-    })
-    .sort((lhs, rhs) => {
-      // Prioritize highest cluster count (using pre-calculated value)
-      if (lhs.cluster_count !== rhs.cluster_count) {
-        return rhs.cluster_count - lhs.cluster_count;
-      }
-
-      // Hit one with more HP
-      return rhs.hp - lhs.hp;
     });
+  const addsFirst = compareAddsFirst(candidates);
+  const aggroedMobs = candidates.sort((lhs, rhs) => {
+    const addOrder = addsFirst(lhs, rhs);
+    if (addOrder) return addOrder;
+
+    // Prioritize highest cluster count (using pre-calculated value)
+    if (lhs.cluster_count !== rhs.cluster_count) {
+      return rhs.cluster_count - lhs.cluster_count;
+    }
+
+    // Hit one with more HP
+    return rhs.hp - lhs.hp;
+  });
 
   if (
     typeof usePullStrategies === "function" &&

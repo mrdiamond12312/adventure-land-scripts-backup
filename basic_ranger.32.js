@@ -74,7 +74,7 @@ const isCupidEquipped = () => character.slots.mainhand?.name === "cupid";
 function getPotentialTargets() {
   const explosionRadius = getSplashRadius();
 
-  return Object.values(parent.entities)
+  const candidates = Object.values(parent.entities)
     .filter(
       (entity) =>
         entity.type === "monster" &&
@@ -96,19 +96,22 @@ function getPotentialTargets() {
       entity.distance = distance(character, entity);
       entity.safe_to_shoot = isSafeToShoot(entity);
       return entity;
-    })
-    .sort((lhs, rhs) => {
-      // Cooperative and target prioritization (Highest Priority)
-      if (lhs.cooperative || (lhs.target && !rhs.target)) return -1;
-      if (rhs.cooperative || (rhs.target && !lhs.target)) return 1;
-
-      return (
-        // Sort by cluster count
-        rhs.cluster_count - lhs.cluster_count ||
-        rhs.hp - lhs.hp ||
-        lhs.distance - rhs.distance
-      );
     });
+  const addsFirst = compareAddsFirst(candidates);
+
+  return candidates.sort((lhs, rhs) => {
+    // Cooperative and target prioritization (Highest Priority)
+    if (lhs.cooperative || (lhs.target && !rhs.target)) return -1;
+    if (rhs.cooperative || (rhs.target && !lhs.target)) return 1;
+
+    return (
+      addsFirst(lhs, rhs) ||
+      // Sort by cluster count
+      rhs.cluster_count - lhs.cluster_count ||
+      rhs.hp - lhs.hp ||
+      lhs.distance - rhs.distance
+    );
+  });
 }
 
 /**
