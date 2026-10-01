@@ -17,6 +17,9 @@ const CAVE_ENTER_COOLDOWN_MS = 10 * 1000;
 /** How close a scheduled event may be before a run is skipped */
 const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
 
+/** How long after the realm's daily reset a fresh run may start */
+const CAVE_RESET_DELAY_MS = 9 * 60 * 60 * 1000;
+
 /** Run length to assume when the state carries no deadline */
 const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
 
@@ -203,6 +206,21 @@ function isEventDueSoon() {
   if (typeof msUntilHomeScheduledEvent !== "function") return false;
 
   return msUntilHomeScheduledEvent() <= CAVE_EVENT_LEAD_MS;
+}
+
+/**
+ * Time since the last daily reset; visit.resets is the next one.
+ * @param {object} [visit]
+ * @returns {number} ms, 0 when unknown
+ */
+function msSinceCaveReset(visit) {
+  if (!Number.isFinite(visit?.resets) || !Number.isFinite(visit?.server_time))
+    return 0;
+
+  const DAY_MS = 86400000;
+  const serverNow = visit.server_time + (Date.now() - caveState.checkedAt);
+
+  return serverNow - (visit.resets - DAY_MS);
 }
 
 /**
@@ -1116,6 +1134,12 @@ async function approachCave() {
       });
 
     if (!visit?.available) return caveLog("no visit left", visit);
+
+    const sinceReset = msSinceCaveReset(visit);
+    if (sinceReset < CAVE_RESET_DELAY_MS)
+      return caveLog("skipped: too soon after reset", {
+        minutes: Math.round(sinceReset / 60000),
+      });
   }
 
   isPreparingCave = true;
