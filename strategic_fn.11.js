@@ -590,7 +590,7 @@ function calculateWarriorItems() {
     pants: "fallen",
     ring1: currentTarget?.armor > 99 ? "suckerpunch" : "strring",
     ring2: currentTarget?.armor > 99 ? "suckerpunch" : "strring",
-    earring1: feelingLucky ? "cloverstud" : "molesteeth",
+    earring1: feelingLucky ? "cloverstud" : "cearring",
     earring2: feelingLucky ? "cloverstud" : "cearring",
   };
 }
@@ -2298,8 +2298,8 @@ class ProjectileManagement {
       damageType === "physical"
         ? ["armor", "apiercing"]
         : damageType === "magical"
-          ? ["resistance", "rpiercing"]
-          : [];
+        ? ["resistance", "rpiercing"]
+        : [];
     if (!defense) return rawDamage;
 
     const hardshellArmor =
