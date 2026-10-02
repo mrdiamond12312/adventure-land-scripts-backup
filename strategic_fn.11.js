@@ -498,6 +498,8 @@ function calculateMageItems() {
     ring1: "glacierseal",
     ring2: "cring",
     amulet: feelingWise ? "spookyamulet" : "intamulet",
+    earring1: feelingLucky ? "cloverstud" : "cearring",
+    earring2: feelingLucky ? "cloverstud" : "cearring",
   };
 
   return wantsMidasGear() ? { ...items, ...MIDAS_GEAR } : items;
@@ -588,6 +590,8 @@ function calculateWarriorItems() {
     pants: "fallen",
     ring1: currentTarget?.armor > 99 ? "suckerpunch" : "strring",
     ring2: currentTarget?.armor > 99 ? "suckerpunch" : "strring",
+    earring1: feelingLucky ? "cloverstud" : "molesteeth",
+    earring2: feelingLucky ? "cloverstud" : "cearring",
   };
 }
 
@@ -854,6 +858,12 @@ function calculateRangerItems(target) {
     amulet: feelingWise ? "spookyamulet" : "dexamulet",
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
+    earring1: feelingLucky ? "cloverstud" : "dexearring",
+    earring2: feelingLucky
+      ? "cloverstud"
+      : character.name === RANGER2
+      ? "molesteeth"
+      : "dexearring",
   };
 }
 
@@ -934,6 +944,8 @@ function calculatePriestItems(target) {
     ring1: feelingLucky ? "ringhs" : "zapper",
     ring2: feelingLucky ? "ringhs" : "zapper",
     cape: "angelwings",
+    earring1: feelingLucky ? "cloverstud" : "cearring",
+    earring2: feelingLucky ? "cloverstud" : "cearring",
   };
 }
 
@@ -951,6 +963,8 @@ function calculateRogueItems(target) {
     orb: feelingLucky ? "rabbitsfoot" : "orbofdex",
     chest: "wattire",
     pants: "wbreeches",
+    earring1: feelingLucky ? "cloverstud" : "molesteeth",
+    earring2: feelingLucky ? "cloverstud" : "dexearring",
   };
 
   if (!target) return baseItems;
@@ -1098,8 +1112,8 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
     shoes: "eslippers",
     gloves: "gloves1",
     belt: "sbelt",
-    earring1: "dexearring",
-    earring2: "dexearring",
+    earring1: feelingLucky ? "cloverstud" : "dexearring",
+    earring2: feelingLucky ? "cloverstud" : "dexearring",
   };
 }
 

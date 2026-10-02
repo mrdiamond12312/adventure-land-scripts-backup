@@ -314,14 +314,39 @@ function msUntilHomeScheduledEvent() {
   return msUntilNextScheduledEvent(getHomeRealmStatus()?.schedule);
 }
 
-/** @returns {string[]} home-table monsters currently live or announced on the home realm */
+/**
+ * Time to the soonest announced respawn of a home-table boss on the home realm.
+ * A dead seasonal boss publishes `{live: false, spawn}` with its respawn date.
+ * @returns {number} ms until it spawns, 0 when overdue, Infinity when none is announced
+ */
+function msUntilHomeBossSpawn() {
+  const status = getHomeRealmStatus();
+  if (!status) return Infinity;
+
+  let soonest = Infinity;
+  for (const name of homeDropMonsters()) {
+    const state = status[name];
+    if (!state || state.live || !state.spawn) continue;
+
+    const at = new Date(state.spawn).getTime();
+    if (Number.isFinite(at))
+      soonest = Math.min(soonest, Math.max(0, at - Date.now()));
+  }
+
+  return soonest;
+}
+
+/** @returns {number} ms until the next home window: a daily/nightly or a home-table boss respawn */
+function msUntilHomeWindow() {
+  return Math.min(msUntilHomeScheduledEvent(), msUntilHomeBossSpawn());
+}
+
+/** @returns {string[]} home-table monsters currently live on the home realm */
 function homeDropBossesLiveAtHome() {
   const status = getHomeRealmStatus();
   if (!status) return [];
 
-  return [...homeDropMonsters()].filter(
-    (name) => status[name]?.live || status[name]?.spawn,
-  );
+  return [...homeDropMonsters()].filter((name) => status[name]?.live);
 }
 
 // ---------------------------------------------------------------------------
@@ -339,9 +364,9 @@ function shouldHoldAtHome() {
   const liveBosses = homeDropBossesLiveAtHome();
   if (liveBosses.length) return `home-table boss up: ${liveBosses.join(", ")}`;
 
-  const untilEvent = msUntilHomeScheduledEvent();
+  const untilEvent = msUntilHomeWindow();
   if (untilEvent <= HOME_HOLD_LEAD_MS)
-    return `scheduled window in ${Math.round(untilEvent / 60000)}m`;
+    return `home window in ${Math.round(untilEvent / 60000)}m`;
 
   return false;
 }
@@ -355,7 +380,7 @@ function shouldHoldAtHome() {
 function shouldReturnHomeToSettle() {
   if (!FATIGUE_AWARE_HOPPING || isAtHomeServer()) return false;
 
-  const untilEvent = msUntilHomeScheduledEvent();
+  const untilEvent = msUntilHomeWindow();
   if (untilEvent > HOME_RETURN_LEAD_MS) return false;
   if (untilEvent < REALM_FATIGUE_MS) return false;
 

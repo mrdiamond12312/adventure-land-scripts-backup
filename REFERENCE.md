@@ -231,6 +231,33 @@ Our hop routine moves the whole squad at once, so every hop re-arms the conditio
 the mechanic is aimed squarely at what `server_hop.14.js` does. Being *settled* at home is the
 asset, and it costs 30 uninterrupted minutes to buy.
 
+**What the server actually checks** (`realmfatigue_logic` in `node/server_functions.js`, the
+`server_information` cache, `node/test/home_server_bonus.test.js`):
+
+- It is re-evaluated for every online player on each `server_loop` save (about every 15s), not
+  only on entry. The deadline is the **last time a sibling was seen on another realm + 30 min**,
+  so the clock starts when the sibling *leaves* that realm, and keeps sliding while it stays.
+- Siblings are keyed by **account owner**. A character's own past hops never fatigue *itself*;
+  only another non-merchant character on the same account does. Other accounts never count.
+- Each kill's home table is rolled per recipient with that recipient's own `has_home_server_bonus`
+  (for a cooperative boss, every character with credit rolls separately), and the 5x contribution
+  uses the same helper.
+- So a **split home** is permanent fatigue: one non-merchant on another realm, from the same
+  account, keeps every sibling fatigued on both realms for as long as it plays there.
+- The obvious workarounds are covered by tests: prelogging onto the destination doesn't erase the
+  previous realm's history, a saved deadline survives a relog, and stale cache snapshots don't
+  extend it. The only remaining slack is the ~15–45s it takes a new sighting to propagate.
+
+**Seasonal bosses publish their respawn.** Once `mrpumpkin`/`mrgreen` (and the other `eventmap`
+bosses in `server_functions.js`) die, the realm's `S[name]` becomes `{live: false, spawn: <date>}`,
+`spawn` being death + `G.monsters[name].respawn` (54 min for mrpumpkin, 94 min for mrgreen).
+`msUntilHomeBossSpawn` turns that into a window just like a daily/nightly, so the hold and settle
+policies go through `msUntilHomeWindow`. Before this, `homeDropBossesLiveAtHome` counted a
+`spawn` entry as "up", which pinned the whole squad at home for the entire season. Now the gap
+after a kill is hoppable until `HOME_HOLD_LEAD_MS` (37 min) before the next respawn: roughly 17
+min after a mrpumpkin kill, 57 after a mrgreen one, less whatever the kill itself ran over.
+`isEventDueSoon` in the cave strat still reads `msUntilHomeScheduledEvent` alone.
+
 **Which monsters actually care** — `G.drops.monsters_home_server`, read live rather than copied,
 so a patch that adds one is picked up for free. As of data version 6732 it is `crabxx`,
 `icegolem`, `dragold`, `franky`, `mrpumpkin`, `mrgreen`, `phoenix`, `rharpy`. Six of those are
