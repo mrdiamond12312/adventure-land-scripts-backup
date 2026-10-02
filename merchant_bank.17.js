@@ -14,7 +14,7 @@ const BANK_FLOORS = {
  * Slots to skip globally (gold, personal storage).
  * items10 is reserved for personal items and is never touched.
  */
-const IGNORE_BANK_SLOTS = ["gold", "items10"];
+const IGNORE_BANK_SLOTS = ["gold", "items23"];
 const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
 
 /** How long a batch of bank calls may take */
