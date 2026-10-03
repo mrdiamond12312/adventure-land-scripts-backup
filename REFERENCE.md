@@ -609,6 +609,34 @@ fits in the time left before the next attack, minus:
 
 Sliced-off items aren't lost — the next `equipBatch` tick picks them up.
 
+"Time left before the next attack" when the attack cooldown reads 0 (written 2026-10-04): it used
+to count as a whole free attack period. But 0 also means "shot ready but `mainLoop` hasn't fired
+it yet" and "`attack()` sent, reply not back" — the client only re-bases `next_skill.attack` on the
+reply, so for a full ping after every shot the cooldown still reads 0. The 100ms strategy loop
+landed in that window all the time, swapped a full gear set, and the resulting `penalty_cd` held
+`fight()`'s `!character.s.penalty_cd` gate shut past the next ready time: the mage visibly fired
+off-rhythm, bunched around kills and target changes (luck set at <=15% hp, weapon picks). Now 0
+budgets nothing while `isShotPending()` (target alive, in attack range, `shouldAttack`), and the full
+period only when no shot is coming. The projectile's flight is after the reply, so it is ordinary
+budget. A controlled smart move counts as "no shot coming" (mainLoop throws before `fight()`):
+otherwise the warrior's mid-move cleave restore saw a ready cooldown plus a target in melee range,
+budgeted 0, and walked on with the cleave axe and no offhand, since the strategy loop that would
+retry is paused while moving too.
+
+Budget 0 there starves laggy bots: the only budget left is reply-to-next-shot, roughly
+`period - ping - ping*0.95` after `reduceCd`, so at ~400ms ping a 9-slot luck set would take ~9
+shots. Hence the starvation release: `equipHold` remembers since when the budget has kept trimming
+a swap (or skipping a booster `shift`); once that exceeds `EQUIP_STARVE_ATTACK_PERIODS` attack
+periods the next call goes out unsliced and accepts the delayed shot. Callers only call
+`equipBatch` while a slot mismatches, so a swap that stops being wanted never clears the hold
+itself — a hold not refreshed within one attack period is treated as dropped, not starved.
+
+The hold is keyed by the wanted set (every suggested slot plus the target booster), and a
+different set restarts the clock. Otherwise gear that flips faster than it can be applied (luck
+set at <=15% hp, normal set after the kill, per-target weapons) keeps one hold running across
+sets and periodically releases a full swap, i.e. a delayed shot. The cost: under that churn on
+high ping a swap may never finish, which was preferred over spending shots on it.
+
 `midasLooting`'s own `penalty_cd` bail is scoped to `MIDAS_CHARACTER` for the same reason in
 reverse: only its first branch spends penalty, by swapping into the midas set. The other two
 branches just call `open_chest`/`loot()`, which cost nothing. Unscoped, the guard starved the

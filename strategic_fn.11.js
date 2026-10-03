@@ -7,6 +7,8 @@ const MAX_MOB_DPS = 2500;
 const CBURST_MIN_BATCH = 3;
 const EQUIP_PENALTY_MS = 120;
 const SHIFT_PENALTY_MS = 240;
+// Attack periods a budget-trimmed swap may wait before it is allowed to cost a shot
+const EQUIP_STARVE_ATTACK_PERIODS = 6;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
 const WATCHOUT_ABILITIES = ["burn", "stone"];
 const IGNORE_ABILITIES = ["stone"];
@@ -1175,6 +1177,29 @@ function findMaxLevelItem(id, offset = 0) {
 
 let isEquipingItems = false;
 
+/** @type {{set: string, since: number, lastAt: number}|null} the swap the penalty budget keeps holding back */
+let equipHold = null;
+
+/**
+ * Whether a ready attack is about to go out, or was sent and awaits its reply.
+ * mainLoop never attacks during a controlled smart move.
+ * @param {Object} [target]
+ * @returns {boolean}
+ */
+function isShotPending(target = get_target()) {
+  const isMovingControlled =
+    (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
+
+  return (
+    !isMovingControlled &&
+    !!target &&
+    !target.rip &&
+    !target.dead &&
+    is_in_range(target, "attack") &&
+    shouldAttack(target)
+  );
+}
+
 // withTimeout in the callers only bounds the wait — the equip promise it raced
 // stays pending. Without a bound here, one unanswered equip latches
 // isEquipingItems forever and silently ends all gear changes until a restart.
@@ -1235,9 +1260,10 @@ function buildEquipPromises(suggestedItems, options) {
   const currentBooster = findInvBooster();
 
   // Budget of penalty_cd we can spend before the next attack comes off cooldown
+  const attackPeriod = 1000 / character.frequency;
   const msToNextAttack = ms_to_next_skill("attack");
   const timeToNextAttack =
-    msToNextAttack === 0 ? 1000 / character.frequency : msToNextAttack;
+    msToNextAttack > 0 ? msToNextAttack : isShotPending() ? 0 : attackPeriod;
   const currentPenalty = penaltyModifier(character.s.penalty_cd?.ms ?? 0);
   const equipLatency = Math.min(character.ping / 2, 100);
   let penaltyBudget = timeToNextAttack - currentPenalty - equipLatency;
@@ -1253,14 +1279,33 @@ function buildEquipPromises(suggestedItems, options) {
       targetBooster = "xpbooster";
     }
   }
+
+  // Only the same wanted set can starve; a hold not seen for a whole attack
+  // period was dropped
+  const now = Date.now();
+  const wantedSet = JSON.stringify({
+    ...suggestedItems,
+    booster: targetBooster ?? currentBooster,
+  });
+  const heldSince =
+    equipHold?.set === wantedSet && now - equipHold.lastAt <= attackPeriod
+      ? equipHold.since
+      : null;
+  const isStarved =
+    heldSince !== null &&
+    now - heldSince > EQUIP_STARVE_ATTACK_PERIODS * attackPeriod;
+  const isBudgeted = preventPenaltizeNextAttack && !isStarved;
+  let isHoldingBack = false;
+
   // Shifting a booster costs more penalty than a regular equip — only pay for
-  // it when there's room in the budget, or when the caller forces the swap
-  if (
-    targetBooster &&
-    (!preventPenaltizeNextAttack || penaltyBudget >= SHIFT_PENALTY_MS)
-  ) {
-    promises.push(shift(locate_item(currentBooster), targetBooster));
-    penaltyBudget -= SHIFT_PENALTY_MS;
+  // it when there's room in the budget, or the swap is forced or starved
+  if (targetBooster) {
+    if (!isBudgeted || penaltyBudget >= SHIFT_PENALTY_MS) {
+      promises.push(shift(locate_item(currentBooster), targetBooster));
+      penaltyBudget -= SHIFT_PENALTY_MS;
+    } else {
+      isHoldingBack = true;
+    }
   }
   delete suggestedItems.booster;
 
@@ -1303,9 +1348,14 @@ function buildEquipPromises(suggestedItems, options) {
     Math.floor(penaltyBudget / EQUIP_PENALTY_MS),
   );
 
-  if (itemSlots.length > maxItemsToEquip && preventPenaltizeNextAttack) {
+  if (itemSlots.length > maxItemsToEquip && isBudgeted) {
     itemSlots.splice(maxItemsToEquip);
+    isHoldingBack = true;
   }
+
+  equipHold = isHoldingBack
+    ? { set: wantedSet, since: heldSince ?? now, lastAt: now }
+    : null;
 
   if (itemSlots.length <= 1) {
     for (const item of itemSlots) promises.push(equip(item.num, item.slot));
