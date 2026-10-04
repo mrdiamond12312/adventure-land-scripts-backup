@@ -2287,7 +2287,7 @@ const shouldDeployRogue = () => {
 
 const DYNAMIC_PARTY_PRESETS = {
   mrgreen: {
-    USI: [WARRIOR, PRIEST, MAGE],
+    USI: [WARRIOR, PRIEST, ROGUE],
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
