@@ -2287,7 +2287,7 @@ const shouldDeployRogue = () => {
 
 const DYNAMIC_PARTY_PRESETS = {
   mrgreen: {
-    USI: [MAGE, PRIEST, ROGUE],
+    USI: [WARRIOR, PRIEST, ROGUE],
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
@@ -2300,7 +2300,20 @@ const DYNAMIC_PARTY_PRESETS = {
     },
     default: [WARRIOR, PRIEST, ROGUE],
   },
-  mrpumpkin: "mrgreen", // share config
+  mrpumpkin: {
+    USI: [MAGE, PRIEST, ROGUE],
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, ROGUE];
+    },
+    EUI: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, ROGUE];
+    },
+    default: [WARRIOR, PRIEST, ROGUE],
+  }, 
   franky: {
     EUII: () => {
       RANGER = RANGER2;
