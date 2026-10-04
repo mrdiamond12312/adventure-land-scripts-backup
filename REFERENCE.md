@@ -264,6 +264,8 @@ so a patch that adds one is picked up for free. As of data version 6732 it is `c
 already hop targets; `grinch`, `pinkgoo`, `snowman` and `wabbit` have no home table, which makes
 them the *cheap* ones to chase. Chasing one of the six abroad is the worst trade available: it
 renews the fatigue **and** lands us where its best table cannot roll.
+`IGNORED_HOME_DROP_MONSTERS` (`grinch`, `slenderman`) is filtered out of `homeDropMonsters()`, so
+those two never hold us home, trigger a settle hop, or get reranked, even if G gives them a home table.
 
 **Reading other realms without logging into them (`ServerRealmData`).** An unauthenticated
 socket.io v4 connection to any realm is enough. On connect it answers `welcome`, whose `S` has
@@ -342,8 +344,13 @@ content we would forfeit. The at-home path is unaffected either way, since
 `shouldReturnHomeToSettle` returns false the moment `isAtHomeServer()` is true.
 
 - `homeDropRank()` reweights the candidate sort. A home-table boss on our own realm jumps ahead of
-  the HP race entirely; a home-table boss abroad drops to last **after** HP, replacing the old
-  plain home tie-break which only ever broke exact HP ties.
+  the HP race entirely; a home-table boss abroad sorts behind every boss without a home table,
+  whatever their HP. The rank must sit **before** the HP fraction in `hopPriority`: as a key after
+  it, a continuous number, it only ever broke exact HP ties and deprioritized nothing.
+- An announced `spawn` more than `SPAWN_OVERDUE_GRACE_MS` (5 min) in the past is ignored by
+  `msUntilHomeBossSpawn`. Clamped to 0 instead, a `{live: false, spawn: <past>}` entry the server
+  never refreshes (e.g. after a season ends) would read as "window in 0m" and pin the squad home
+  forever.
 
 **Where home actually is.** `HOME_SERVER` lives in the config at the top of slot 7 with
 `getCurrentServer`/`getHomeServer`/`isAtHomeServer` — first moved out of slot 14 into 25 so the

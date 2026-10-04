@@ -76,18 +76,16 @@ function isHopCandidate(candidate) {
 
 /**
  * Ordering key; the first entry that differs decides, all ascending.
- * Tankable first, then a home-table boss on our own realm, then the HP race,
- * and last a home-table boss abroad whose drops we would be forfeiting.
+ * Tankable first, then a home-table boss on our own realm, then everything
+ * without a home table, and last a home-table boss abroad whose drops we would
+ * be forfeiting; the HP race decides within each tier.
  * @returns {number[]}
  */
 function hopPriority(candidate) {
-  const dropRank = homeDropRank(candidate);
-
   return [
     tankableBoss.includes(candidate.type) ? 0 : 1,
-    dropRank === 0 ? 0 : 1,
+    homeDropRank(candidate),
     candidate.hp / G.monsters[candidate.type].hp,
-    dropRank,
   ];
 }
 

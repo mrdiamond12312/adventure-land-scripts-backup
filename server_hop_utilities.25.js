@@ -15,6 +15,9 @@ const HOME_RETURN_LEAD_MS = REALM_FATIGUE_MS + HOME_SETTLE_MARGIN_MS;
 /** Stop hopping out this long before a scheduled window, even while home */
 const HOME_HOLD_LEAD_MS = HOME_RETURN_LEAD_MS + 300000;
 
+/** An announced respawn this far in the past is treated as abandoned, not imminent */
+const SPAWN_OVERDUE_GRACE_MS = 300000;
+
 /** Retry cadence while get_servers() has nothing to connect to yet */
 const REALM_INIT_RETRY_MS = 15000;
 
@@ -251,13 +254,20 @@ function getRealmData() {
 // Home realm reads
 // ---------------------------------------------------------------------------
 
+/** Home-table monsters not worth holding, settling or reranking for */
+const IGNORED_HOME_DROP_MONSTERS = ["grinch", "slenderman"];
+
 /**
  * Monsters whose extra drop table only rolls while you are on your home realm.
  * Read from G every call so a patch that adds one is picked up without an edit.
  * @returns {Set<string>}
  */
 function homeDropMonsters() {
-  return new Set(Object.keys(G.drops?.monsters_home_server ?? {}));
+  return new Set(
+    Object.keys(G.drops?.monsters_home_server ?? {}).filter(
+      (name) => !IGNORED_HOME_DROP_MONSTERS.includes(name),
+    ),
+  );
 }
 
 /** @returns {boolean} whether the home contribution bonus and home drops are suppressed */
@@ -317,7 +327,7 @@ function msUntilHomeScheduledEvent() {
 /**
  * Time to the soonest announced respawn of a home-table boss on the home realm.
  * A dead seasonal boss publishes `{live: false, spawn}` with its respawn date.
- * @returns {number} ms until it spawns, 0 when overdue, Infinity when none is announced
+ * @returns {number} ms until it spawns, 0 when just overdue, Infinity when none is announced
  */
 function msUntilHomeBossSpawn() {
   const status = getHomeRealmStatus();
@@ -328,9 +338,9 @@ function msUntilHomeBossSpawn() {
     const state = status[name];
     if (!state || state.live || !state.spawn) continue;
 
-    const at = new Date(state.spawn).getTime();
-    if (Number.isFinite(at))
-      soonest = Math.min(soonest, Math.max(0, at - Date.now()));
+    const until = new Date(state.spawn).getTime() - Date.now();
+    if (Number.isFinite(until) && until > -SPAWN_OVERDUE_GRACE_MS)
+      soonest = Math.min(soonest, Math.max(0, until));
   }
 
   return soonest;
