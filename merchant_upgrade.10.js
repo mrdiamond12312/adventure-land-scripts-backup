@@ -16,6 +16,8 @@ const KEEP_THRESHOLD = {
   froststaff: 8,
   frankypants: 8,
   gphelmet: 12,
+  ololipop: 12,
+  glolipop: 12,
 
   // new stuffs!
   cloverstud: 16,

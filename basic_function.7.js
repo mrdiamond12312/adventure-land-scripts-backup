@@ -640,7 +640,7 @@ const SALE_ABLE = [
   "hgloves",
   "harmor",
   "hpants",
-  "glolipop",
+  // "glolipop",
   "hboots",
   "sword",
   "spear",
