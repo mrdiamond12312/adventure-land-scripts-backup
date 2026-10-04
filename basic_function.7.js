@@ -2469,12 +2469,21 @@ function getPresetMembers(preset, currentServer) {
   return typeof value === "function" ? value() : value;
 }
 
+/** Bosses useEventStrategy fights lowest hp fraction first */
+const HP_RANKED_BOSSES = ["mrpumpkin", "mrgreen", "icegolem"];
+
 function dynamicParty() {
   const currentServer = `${server.region}${server.id}`;
+  const liveEvents = Object.keys(DYNAMIC_PARTY_PRESETS).filter(
+    (name) => server.status[name]?.live,
+  );
+  const hpFraction = (name) => server.status[name].hp / G.monsters[name].hp;
   const activeEvent =
-    Object.keys(DYNAMIC_PARTY_PRESETS).find(
-      (name) => server.status[name]?.live,
-    ) ?? "default";
+    liveEvents
+      .filter((name) => HP_RANKED_BOSSES.includes(name))
+      .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs))[0] ??
+    liveEvents[0] ??
+    "default";
 
   if (!activeEvent) return;
 
