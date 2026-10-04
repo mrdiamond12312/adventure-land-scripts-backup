@@ -373,7 +373,7 @@ setInterval(async function () {
       // craft("froststaff", 1, { map: "main", x: -2, y: 295 }),
       craft("carrotsword", 1, { map: "main", x: -2, y: 295 }),
       craft("wingedboots", character.esize - 8, { map: "main", x: -2, y: 295 }),
-      craft("pouchbow", character.esize - 8, { map: "main", x: -2, y: 295 }),
+      // craft("pouchbow", character.esize - 8, { map: "main", x: -2, y: 295 }),
       craft("elixirdex1", 1, { map: "main", x: -2, y: 295 }),
       craft("elixirdex2", 1, { map: "main", x: -2, y: 295 }),
       craft("elixirint1", 1, { map: "main", x: -2, y: 295 }),
