@@ -55,7 +55,11 @@ async function fight(target, isMovingControlled = false) {
     );
     // Taunt and poison spread both need the mob actually reachable
     const mobsInRange = mobsInSearchRange.filter((mob) => inRange(mob));
+    const heldWeaponInfo = character.slots.mainhand
+      ? item_info(character.slots.mainhand)
+      : {};
 
+    // A taunt that one-shots is just a wasted swing
     const targetToTaunt =
       isAssignedAsTanker() &&
       typeof usePullStrategies === "function" &&
@@ -64,6 +68,7 @@ async function fight(target, isMovingControlled = false) {
             .filter(
               (mob) =>
                 !mob.target &&
+                !canOneShotWithWeapon(heldWeaponInfo, [mob]) &&
                 partyDmgRecieved + calculateDamage(mob, character) <
                   character.heal * 0.9 * character.frequency,
             )
