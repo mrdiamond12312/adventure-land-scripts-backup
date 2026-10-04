@@ -351,6 +351,16 @@ content we would forfeit. The at-home path is unaffected either way, since
   `msUntilHomeBossSpawn`. Clamped to 0 instead, a `{live: false, spawn: <past>}` entry the server
   never refreshes (e.g. after a season ends) would read as "window in 0m" and pin the squad home
   forever.
+- **Kill-time credit.** Home drops roll at death, not spawn, so the fatigue only has to be gone
+  before the kill ends. `trackHomeBossKills` (fed from every home-realm `_absorb`) logs each
+  home-table boss's spawn-to-death time into localStorage `homeBossKills`: the spawn is the
+  `spawn` date announced while it was dead, the death is the first status carrying a new
+  announcement. A kill is only recorded if the boss was seen live within `REALM_STALE_MS` of that,
+  so a death we missed (offline, stale socket) never logs an inflated time. Only the kill list is
+  persisted; the in-progress watch (`HOME_BOSS_WATCH`) is in memory, so a reload mid-fight skips
+  that kill instead of timing it from an old spawn date. `msUntilHomeBossSpawn`
+  adds `KILL_TIME_CREDIT` (0.25) × the average of the last 5 kills, which shifts the settle band,
+  its 30-min floor and the hold lead together. Scheduled dailies/nightlies get no credit.
 
 **Where home actually is.** `HOME_SERVER` lives in the config at the top of slot 7 with
 `getCurrentServer`/`getHomeServer`/`isAtHomeServer` — first moved out of slot 14 into 25 so the

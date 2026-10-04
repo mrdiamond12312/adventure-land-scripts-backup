@@ -74,13 +74,7 @@ function isHopCandidate(candidate) {
   return isReachableRealm(candidate) && isWorthHopping(candidate);
 }
 
-/**
- * Ordering key; the first entry that differs decides, all ascending.
- * Tankable first, then a home-table boss on our own realm, then everything
- * without a home table, and last a home-table boss abroad whose drops we would
- * be forfeiting; the HP race decides within each tier.
- * @returns {number[]}
- */
+/** @returns {number[]} ascending sort key */
 function hopPriority(candidate) {
   return [
     tankableBoss.includes(candidate.type) ? 0 : 1,

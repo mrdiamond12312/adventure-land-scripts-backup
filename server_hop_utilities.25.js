@@ -15,8 +15,17 @@ const HOME_RETURN_LEAD_MS = REALM_FATIGUE_MS + HOME_SETTLE_MARGIN_MS;
 /** Stop hopping out this long before a scheduled window, even while home */
 const HOME_HOLD_LEAD_MS = HOME_RETURN_LEAD_MS + 300000;
 
-/** An announced respawn this far in the past is treated as abandoned, not imminent */
+/** Overdue respawns past this are ignored */
 const SPAWN_OVERDUE_GRACE_MS = 300000;
+
+/** Share of kill time the fatigue may overlap */
+const KILL_TIME_CREDIT = 0.25;
+
+/** Kills kept for the average */
+const KILL_TIME_SAMPLES = 5;
+
+/** localStorage key for home-boss kill times */
+const HOME_BOSS_KILLS_LS_KEY = "homeBossKills";
 
 /** Retry cadence while get_servers() has nothing to connect to yet */
 const REALM_INIT_RETRY_MS = 15000;
@@ -154,6 +163,8 @@ class ServerRealmData {
       S: status,
       at: Date.now(),
     };
+
+    if (key === getHomeServer()) trackHomeBossKills(status);
   }
 
   /**
@@ -254,7 +265,7 @@ function getRealmData() {
 // Home realm reads
 // ---------------------------------------------------------------------------
 
-/** Home-table monsters not worth holding, settling or reranking for */
+/** Excluded from home-drop checks */
 const IGNORED_HOME_DROP_MONSTERS = ["grinch", "slenderman"];
 
 /**
@@ -324,11 +335,50 @@ function msUntilHomeScheduledEvent() {
   return msUntilNextScheduledEvent(getHomeRealmStatus()?.schedule);
 }
 
+/** @type {Object<string, {spawnAt?: number, lastLiveAt?: number}>} */
+const HOME_BOSS_WATCH = {};
+
+/** @param {object} status the home realm's S */
+function trackHomeBossKills(status) {
+  const now = Date.now();
+
+  for (const name of homeDropMonsters()) {
+    const state = status[name];
+    const watch = (HOME_BOSS_WATCH[name] ??= {});
+
+    if (state?.live) {
+      watch.lastLiveAt = now;
+      continue;
+    }
+    if (!state?.spawn) continue;
+
+    const justDied = now - watch.lastLiveAt <= REALM_STALE_MS;
+    if (justDied && watch.spawnAt) recordHomeBossKill(name, now - watch.spawnAt);
+
+    watch.spawnAt = new Date(state.spawn).getTime();
+    watch.lastLiveAt = undefined;
+  }
+}
+
 /**
- * Time to the soonest announced respawn of a home-table boss on the home realm.
- * A dead seasonal boss publishes `{live: false, spawn}` with its respawn date.
- * @returns {number} ms until it spawns, 0 when just overdue, Infinity when none is announced
+ * @param {string} name
+ * @param {number} killMs
  */
+function recordHomeBossKill(name, killMs) {
+  const kills = readStore(HOME_BOSS_KILLS_LS_KEY)[name]?.kills ?? [];
+  updateStoreEntry(HOME_BOSS_KILLS_LS_KEY, name, {
+    kills: [...kills, killMs].slice(-KILL_TIME_SAMPLES),
+  });
+}
+
+/** @returns {number} average spawn-to-death ms, 0 when unknown */
+function homeBossKillMs(name) {
+  const kills = readStore(HOME_BOSS_KILLS_LS_KEY)[name]?.kills ?? [];
+  if (!kills.length) return 0;
+  return kills.reduce((sum, ms) => sum + ms, 0) / kills.length;
+}
+
+/** @returns {number} ms until fatigue must clear for the next home boss */
 function msUntilHomeBossSpawn() {
   const status = getHomeRealmStatus();
   if (!status) return Infinity;
@@ -339,8 +389,10 @@ function msUntilHomeBossSpawn() {
     if (!state || state.live || !state.spawn) continue;
 
     const until = new Date(state.spawn).getTime() - Date.now();
-    if (Number.isFinite(until) && until > -SPAWN_OVERDUE_GRACE_MS)
-      soonest = Math.min(soonest, Math.max(0, until));
+    if (!Number.isFinite(until) || until <= -SPAWN_OVERDUE_GRACE_MS) continue;
+
+    const credit = KILL_TIME_CREDIT * homeBossKillMs(name);
+    soonest = Math.min(soonest, Math.max(0, until + credit));
   }
 
   return soonest;
