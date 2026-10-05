@@ -566,7 +566,7 @@ const ITEM_NEEDED = [
   // { name: "throwingstars", maxLevel: 0 },
   { name: "angelwings" },
   // { name: "smoke" },
-  { name: "gphelmet" },
+  // { name: "gphelmet" },
   { name: "vitring", maxLevel: 3 },
   { name: "vitearring", maxLevel: 3 },
   // { name: "wbook0", maxLevel: 4 },

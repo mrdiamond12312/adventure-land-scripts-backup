@@ -2301,7 +2301,7 @@ const DYNAMIC_PARTY_PRESETS = {
     default: [WARRIOR, PRIEST, ROGUE],
   },
   mrpumpkin: {
-    USI: [MAGE, PRIEST, ROGUE],
+    USI: [MAGE, PRIEST, WARRIOR],
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;

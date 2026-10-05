@@ -12,9 +12,6 @@ const HOME_SETTLE_MARGIN_MS = 120000;
 /** Head home once the next scheduled window is this close */
 const HOME_RETURN_LEAD_MS = REALM_FATIGUE_MS + HOME_SETTLE_MARGIN_MS;
 
-/** Stop hopping out this long before a scheduled window, even while home */
-const HOME_HOLD_LEAD_MS = HOME_RETURN_LEAD_MS + 300000;
-
 /** Overdue respawns past this are ignored */
 const SPAWN_OVERDUE_GRACE_MS = 300000;
 
@@ -427,7 +424,7 @@ function shouldHoldAtHome() {
   if (liveBosses.length) return `home-table boss up: ${liveBosses.join(", ")}`;
 
   const untilEvent = msUntilHomeWindow();
-  if (untilEvent <= HOME_HOLD_LEAD_MS)
+  if (untilEvent <= HOME_RETURN_LEAD_MS)
     return `home window in ${Math.round(untilEvent / 60000)}m`;
 
   return false;

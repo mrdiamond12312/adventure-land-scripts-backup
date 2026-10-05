@@ -254,8 +254,8 @@ bosses in `server_functions.js`) die, the realm's `S[name]` becomes `{live: fals
 `msUntilHomeBossSpawn` turns that into a window just like a daily/nightly, so the hold and settle
 policies go through `msUntilHomeWindow`. Before this, `homeDropBossesLiveAtHome` counted a
 `spawn` entry as "up", which pinned the whole squad at home for the entire season. Now the gap
-after a kill is hoppable until `HOME_HOLD_LEAD_MS` (37 min) before the next respawn: roughly 17
-min after a mrpumpkin kill, 57 after a mrgreen one, less whatever the kill itself ran over.
+after a kill is hoppable until `HOME_RETURN_LEAD_MS` (32 min) before the next respawn: roughly 22
+min after a mrpumpkin kill, 62 after a mrgreen one, less whatever the kill itself ran over.
 `isEventDueSoon` in the cave strat still reads `msUntilHomeScheduledEvent` alone.
 
 **Which monsters actually care** — `G.drops.monsters_home_server`, read live rather than copied,
@@ -329,7 +329,7 @@ nightly, and all three carry home tables, so a window is worth being home for. `
 **The two policies**, both behind `FATIGUE_AWARE_HOPPING`:
 
 - `shouldHoldAtHome()` — refuse to leave home when a home-table boss is live or `spawn`-scheduled
-  here, or when the next window is within `HOME_HOLD_LEAD_MS`.
+  here, or when the next window is within `HOME_RETURN_LEAD_MS`, the same lead the settle hop uses.
 - `shouldReturnHomeToSettle()` — while away, go home once the next home window is within
   `HOME_RETURN_LEAD_MS` (fatigue + 2 min slack). It deliberately does **nothing** below
   `REALM_FATIGUE_MS`: under 30 minutes it is already too late to settle, so burning the trip buys
