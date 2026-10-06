@@ -790,7 +790,7 @@ function sellMarkedItems() {
 
 /**
  * Pulls stray saleables, and purgeable surplus once the bank is full, then sells them.
- * @returns {Promise<void>}
+ * @returns {Promise<number>} bank slots the surplus sale freed
  */
 async function purgeBank() {
   const slots = [];
@@ -807,15 +807,27 @@ async function purgeBank() {
     await sellMarkedItems();
   }
 
-  if (isBankFull) await freeSlotsForUpgrading();
+  return isBankFull ? await freeSlotsForUpgrading() : 0;
 }
 
-/** Sells a few surplus copies so a full bank still leaves room to work */
-async function freeSlotsForUpgrading() {
-  const victims = findPurgeVictims(PURGE_FREE_SLOTS);
-  if (!victims.length) return;
+/**
+ * Slots to free this pass: the steady valve, or enough to unjam a bag too full
+ * for retrievedBankItemToUpgrade to pull a thing.
+ * @returns {number}
+ */
+function getPurgeSlotTarget() {
+  const working = RETRIEVE_FREE_SLOTS + RETRIEVE_MAX_SLOTS;
+  return Math.max(PURGE_FREE_SLOTS, working - character.esize);
+}
 
-  for (const victim of victims) {
+/**
+ * Sells a few surplus copies so a full bank still leaves room to work.
+ * @returns {Promise<number>} slots freed
+ */
+async function freeSlotsForUpgrading() {
+  let freed = 0;
+
+  for (const victim of findPurgeVictims(getPurgeSlotTarget())) {
     const held = new Set(
       character.items.flatMap((item, index) =>
         matchesPurgeVictim(item, victim) ? [index] : [],
@@ -829,10 +841,15 @@ async function freeSlotsForUpgrading() {
     );
     if (slot === -1) continue;
 
-    await sell(slot, 1).catch((e) =>
-      console.warn(`Failed purging ${victim.item.name}`, e),
-    );
+    try {
+      await sell(slot, 1);
+      freed++;
+    } catch (e) {
+      console.warn(`Failed purging ${victim.item.name}`, e);
+    }
   }
+
+  return freed;
 }
 
 /** @returns {boolean} whether a bag item is the copy pickPurgeVictim chose */
@@ -1139,7 +1156,8 @@ async function bankLoop() {
     }
 
     await bankStoreRoutine();
-    await purgeBank();
+    // The purge frees room after the store pass gave up, so retry it
+    if (await purgeBank()) await bankStoreRoutine();
     await stackBank();
 
     retrieveMaxItemsLevel();

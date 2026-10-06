@@ -2336,6 +2336,17 @@ first. A tier of exactly 3 is skipped — it is one compound away. `findPurgeVic
 own tally between picks, so taking one from a tier of 4 leaves 3 and the second pick looks
 elsewhere rather than breaking the set.
 
+**The bag is the binding constraint, not the bank.** A merchant found with `esize` 1 (30 unlocked
+items, 12 locked) could not compound at all: `retrievedBankItemToUpgrade` computes
+`min(esize - RETRIEVE_FREE_SLOTS, RETRIEVE_MAX_SLOTS)` and bails on a budget of -7, and every
+compoundable in the bag was a partial set, so `findAndCompound` skipped all of them. The bag
+could not drain either, because a full bank makes `bankStoreRoutine` return at `!fitsSomewhere`.
+That is a closed cycle: bank full → nothing stored → bag jammed → no pull → no compound → nothing
+freed. `getPurgeSlotTarget` therefore scales the purge past `PURGE_FREE_SLOTS` to
+`RETRIEVE_FREE_SLOTS + RETRIEVE_MAX_SLOTS - esize` whenever the bag is that tight, and `bankLoop`
+runs `bankStoreRoutine` a second time when the purge freed anything — otherwise the room arrives
+after the store pass has already given up and recovery costs an extra 185s cycle.
+
 A bulk trim was built first and rejected. Keyed off a per-level ceiling it swallowed a whole tier,
 which is where the fodder lives: jacko would have kept only L2 ×2, L3 ×2, L4 ×3, so only one
 compound could ever fire again. Refusing any tier that can form a set inverts the problem instead —
