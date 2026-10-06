@@ -2395,3 +2395,18 @@ spent, which fed the `fitsSomewhere` check that decides whether the merchant tra
 `pickStorableIndices` also needed it on the source side — a marked bag item cannot merge into an
 unmarked bank stack, so it may only take an empty slot and must not advertise its own leftover
 room afterwards.
+
+**A pull completes the bag's sets, it does not fetch fresh ones.** `filterCompoundableSets` grouped
+only the *bank* copies and took whole multiples of 3, so a bag holding two `intamulet` +0 could
+never ask for the single copy that finishes the set — and the trailing
+`slice(0, floor(esize / 3) * 3)` rounded a one-item pull down to nothing. It now adds
+`countInventoryAtLevel` per level and takes `sets * 3 - inBag`, so two in the bag pull one, and the
+tail clamps to `inventoryEmptySlots` directly. Stranded singles of merchant gear (`dexring`,
+`dexearring` at +0) were the same bug: the fodder path has no merchant-gear exclusion, so it pulled
+them and then could not finish the set. `retrieveMerchantGear` itself is not involved — it skips
+anything already carried.
+
+`RETRIEVE_MIN_SLOTS` exists because `min(esize - RETRIEVE_FREE_SLOTS, RETRIEVE_MAX_SLOTS)` went
+negative below 9 free slots, so a tight bag pulled nothing at all and its partial sets stayed one
+copy short forever. Below the reserve a pull now gets `min(esize - 1, 3)` instead of a negative
+budget.

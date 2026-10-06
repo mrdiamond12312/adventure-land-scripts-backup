@@ -54,6 +54,9 @@ const RETRIEVE_FREE_SLOTS = 8;
 /** Bag slots a pull may fill */
 const RETRIEVE_MAX_SLOTS = 12;
 
+/** Bag slots a pull may use when the bag is too tight for the full reserve */
+const RETRIEVE_MIN_SLOTS = 3;
+
 /** How long an item that made no progress is skipped */
 const RETRIEVE_BACKOFF_MS = 10 * 60_000;
 
@@ -254,8 +257,7 @@ function groupItemsByLevel(items) {
 }
 
 /**
- * Returns items that form complete compoundable sets of 3,
- * limited by available inventory slots.
+ * Returns the copies needed to complete sets of 3, counting what the bag holds.
  * @param {Array} items
  * @param {number} inventoryEmptySlots
  * @returns {Array}
@@ -266,11 +268,14 @@ function filterCompoundableSets(items, inventoryEmptySlots) {
 
   for (const level in byLevel) {
     const group = byLevel[level];
-    const setCount = Math.floor(group.length / 3);
-    if (setCount > 0) result.push(...group.slice(0, setCount * 3));
+    const inBag = countInventoryAtLevel(group[0].name, Number(level));
+    const sets = Math.floor((inBag + group.length) / 3);
+    const take = Math.min(group.length, Math.max(0, sets * 3 - inBag));
+
+    if (take > 0) result.push(...group.slice(0, take));
   }
 
-  return result.slice(0, Math.floor(inventoryEmptySlots / 3) * 3);
+  return result.slice(0, inventoryEmptySlots);
 }
 
 /**
@@ -362,8 +367,9 @@ function scoreRetrieveCandidate(itemId, itemCount) {
  * @returns {Promise<boolean>} whether the bank had anything worth pulling
  */
 async function retrievedBankItemToUpgrade() {
+  const spare = character.esize - RETRIEVE_FREE_SLOTS;
   let budget = Math.min(
-    character.esize - RETRIEVE_FREE_SLOTS,
+    spare > 0 ? spare : Math.min(character.esize - 1, RETRIEVE_MIN_SLOTS),
     RETRIEVE_MAX_SLOTS,
   );
 
