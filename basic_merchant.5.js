@@ -408,7 +408,13 @@ setInterval(async function () {
   )
     await moveHome();
 
-  if ((isInvFull() || invJammed) && !isAdvanceSmartMoving && !smart.moving) {
+  // A full bank makes the store a no-op, so don't hold the duty off an event for it
+  if (
+    (isInvFull() || invJammed) &&
+    !isBankFull &&
+    !isAdvanceSmartMoving &&
+    !smart.moving
+  ) {
     const lock = takeDuty(DUTY.ERRAND);
     if (lock) {
       try {
