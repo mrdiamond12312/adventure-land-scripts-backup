@@ -353,7 +353,7 @@ setInterval(async function () {
 
   const computerSlot = locate_item("computer");
   if (computerSlot === -1 && getItemBankSlots("computer", true).length) {
-    retrieveBankItem("computer");
+    retrieveBankItem("computer", 0, { travel: false });
   }
 
   if (

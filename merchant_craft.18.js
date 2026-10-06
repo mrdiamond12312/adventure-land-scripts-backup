@@ -374,7 +374,9 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
 
   if (fromBank.length && isEnoughIngredients) {
     for (const ingredient of fromBank) {
-      await retrieveBankItem(ingredient.name, ingredient.level);
+      await retrieveBankItem(ingredient.name, ingredient.level, {
+        travel: false,
+      });
     }
   }
 

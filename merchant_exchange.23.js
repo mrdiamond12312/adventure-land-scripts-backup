@@ -75,7 +75,7 @@ function getExchangeSlot(entry) {
  */
 async function prepareExchangeSlot(entry) {
   if (!canSpareExchange(entry) && !isOnDuty() && hasExchangeStock(entry)) {
-    await retrieveBankItem(entry.name);
+    await retrieveBankItem(entry.name, 0, { travel: false });
   }
 
   return getExchangeSlot(entry);

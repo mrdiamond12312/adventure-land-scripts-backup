@@ -2534,3 +2534,16 @@ because it is in neither `PURGE_LEVELS` nor `PURGE_SETS` and no NPC merchant ven
 so every copy in the bag arrived from Ponty. Upgrading cannot drain it either while
 `item_grade >= 2` and gold sits under `IGNORE_RARE_GOLD_THRESHOLD`, since `ensureScroll` returns -1
 before buying — the attempt repeats and never consumes anything.
+
+**A retrieve on the 750ms tick relocates the character.** `retrieveBankItem` ends in
+`goToBankFloor`, which smart-moves, so every tick-path caller was a standing instruction to walk
+back to the bank. `ensureScroll` is the worst of them: `findAndCompound` and `findAndUpgrade` both
+call it every tick, and with the needed scroll stashed (`cscroll1` ×9118 in `items7`) and the bag
+too full for `bank_retrieve` to land it, the fetch failed and repeated forever — the merchant simply
+lived in the bank. `craft()`'s ingredient fetch, `exchangeSomething`, `ensureOffering`, `equipBroom`
+and the `computer` top-up were all the same shape, and the tick calls `craft()` eighteen times.
+`moveHome` could not win the race either: it bails on `isAdvanceSmartMoving`, which whichever fetch
+is in flight has already set. `retrieveBankItem` now takes `travel`, and every caller reachable from
+the tick passes `travel: false`, giving up unless the merchant already stands on that floor;
+`bankLoop` and the duty-holding routines keep the default. `ensureScroll` also stops returning -1
+for a stashed stack it cannot reach — from anywhere but the bank, buying beats walking off the spot.

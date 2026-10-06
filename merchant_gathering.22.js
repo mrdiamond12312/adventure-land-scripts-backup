@@ -11,7 +11,7 @@ async function equipBroom() {
   const currentWeapon = character.slots.mainhand;
   if (!currentWeapon || currentWeapon.name !== "broom") {
     const broom = findMaxLevelItem("broom");
-    if (broom === -1) await retrieveBankItem("broom");
+    if (broom === -1) await retrieveBankItem("broom", 0, { travel: false });
     return equipBatch({
       mainhand: "broom",
       offhand: "wbookhs",

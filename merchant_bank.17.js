@@ -281,12 +281,15 @@ function storeAll(entries) {
 
 /**
  * Retrieves an item from the bank by name and optional level.
- * Automatically navigates to the correct floor where the item lives.
+ * Navigates to the floor the item lives on, which a caller on the 750ms tick
+ * must opt out of with travel:false — it relocates the character.
  * @param {string} searchId
  * @param {number} [level=0] - if 0, matches any level
+ * @param {{ travel?: boolean }} [options] - travel:false gives up unless the
+ *   merchant already stands on the item's floor
  * @returns {Promise<void>}
  */
-async function retrieveBankItem(searchId, level = 0) {
+async function retrieveBankItem(searchId, level = 0, { travel = true } = {}) {
   let target;
   forEachBankSlot(
     (item, pack, slot, floor) => {
@@ -297,6 +300,7 @@ async function retrieveBankItem(searchId, level = 0) {
   );
 
   if (!target) return;
+  if (!travel && character.map !== target.floor) return;
   if (!(await goToBankFloor(target.floor))) return;
 
   return bank_retrieve(target.pack, target.slot).then(updateBank);

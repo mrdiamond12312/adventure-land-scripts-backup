@@ -139,19 +139,18 @@ function getKeepThreshold(itemKey) {
  * @returns {Promise<number>} inventory slot of the scroll, or -1 on failure
  */
 async function ensureScroll(scrollType, itemGrade) {
-  if (
-    !character.c.fishing &&
-    !character.c.mining &&
-    getItemBankSlots(scrollType, true).length > 0
-  ) {
-    await retrieveBankItem(scrollType);
+  const isStashed = getItemBankSlots(scrollType, true).length > 0;
+
+  if (isStashed && !character.c.fishing && !character.c.mining) {
+    await retrieveBankItem(scrollType, 0, { travel: false });
   }
 
   let scrollSlot = locate_item(scrollType);
   if (scrollSlot !== -1) return scrollSlot;
 
-  // A stashed stack is fetched on the next try, never bought over
-  if (getItemBankSlots(scrollType, true).length) return -1;
+  // A stack the merchant is standing next to is fetched on the next try, never
+  // bought over; from anywhere else buying beats walking off the spot
+  if (isStashed && isInBank()) return -1;
 
   if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD) return -1;
 
@@ -183,7 +182,7 @@ async function ensureOffering(isRareItem) {
     getItemBankSlots("offeringp").length > 0 &&
     !smart.moving
   ) {
-    await retrieveBankItem("offeringp");
+    await retrieveBankItem("offeringp", 0, { travel: false });
   }
 }
 
