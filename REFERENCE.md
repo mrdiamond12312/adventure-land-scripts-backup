@@ -2517,14 +2517,18 @@ latch: `runBankStoreRoutine`'s head may only set it, and only the tail may clear
 room and `getStoreIndices(toStore)` empty — a real store attempt that stranded nothing. The
 `!fitsSomewhere` early return never reaches the tail, which is correct: nothing fit, so it is tight.
 
-**The tick's emergency store was the "goes to the bank and does nothing" loop.** `invJammed` is
-declared and only ever assigned `false` — never `true` — so the block's trigger was `isInvFull()`
-alone, and a chronically full bag met it on every 750ms tick. Each pass took `DUTY.ERRAND` and ran
+**The tick's emergency store was the "goes to the bank and does nothing" loop.** A chronically full
+bag met its `isInvFull()` trigger on every 750ms tick. Each pass took `DUTY.ERRAND` and ran
 `bankStoreRoutine(true)`, whose `goToBankFloor(floor, true)` is forced and so ignores the
 smart-move abort: four forced floor travels per tick, continuously, which is what pinned the
 merchant in the bank. It is now gated on `isBankTight` rather than `isBankFull` — a bank with eight
 slots left cannot absorb a jammed bag — and throttled by `JAM_STORE_COOLDOWN`, armed only when a
-pass came back without freeing a slot, so a productive pass may still run straight away.
+pass came back without freeing a slot, so a productive pass may still run straight away. The throttle
+and the `isBankTight` gate both skip the trip, which used to be `invJammed`'s only clearing point, so
+the flag is now also cleared by the bag simply having room again at the `isInvFull(6)` threshold
+`shouldKeepExchanging` reads — otherwise a tight bank would have switched exchanging off for good.
+`invJammed` lives in `basic_merchant.5.js` because `merchant_exchange.23.js` sets it and
+`merchant_frenzinesss.100.js` reads it, and only the entry script is loaded by both.
 
 **`ololipop` is a one-way ratchet into the bag.** `ITEM_NEEDED` carries `{ name: "ololipop" }` with
 no level filter, so Ponty's handler buys every copy it offers while `esize > 6`. Nothing downstream

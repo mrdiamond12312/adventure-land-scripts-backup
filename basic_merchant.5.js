@@ -30,7 +30,10 @@ const DUTY = { ERRAND: "errand", EVENT: "event", LURE: "lure", DRAG: "drag" };
 /** The merchant's one duty lock, `{ owner, since }`, null while free */
 var duty = null;
 // Set when an exchange fails with inventory_full; makes the emergency banking
-// below run even if isInvFull() reads false. Cleared after the bank trip.
+// below run even if isInvFull() reads false. Read by merchant_exchange.23.js
+// and merchant_frenzinesss.100.js, so it is declared here for all of them.
+var invJammed = false;
+
 /** How long the tick's emergency store waits after a pass that freed nothing */
 const JAM_STORE_COOLDOWN = 60_000;
 
@@ -415,11 +418,14 @@ setInterval(async function () {
   )
     await moveHome();
 
+  // Room of its own clears the jam, so a tight bank cannot strand exchanging
+  if (invJammed && !isInvFull(6)) invJammed = false;
+
   // A tight bank makes the store a no-op, so don't hold the duty off an event
   // for it, and back off a whole minute after a pass that freed nothing rather
   // than forcing the trip again on the next tick
   if (
-    isInvFull() &&
+    (isInvFull() || invJammed) &&
     !isBankTight &&
     Date.now() - jamStoreAt > JAM_STORE_COOLDOWN &&
     !isAdvanceSmartMoving &&
@@ -431,6 +437,7 @@ setInterval(async function () {
         const freeBefore = character.esize;
         await bankStoreRoutine(true);
         if (character.esize <= freeBefore) jamStoreAt = Date.now();
+        else invJammed = false;
       } finally {
         releaseDuty(lock);
       }
