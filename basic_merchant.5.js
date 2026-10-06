@@ -31,7 +31,11 @@ const DUTY = { ERRAND: "errand", EVENT: "event", LURE: "lure", DRAG: "drag" };
 var duty = null;
 // Set when an exchange fails with inventory_full; makes the emergency banking
 // below run even if isInvFull() reads false. Cleared after the bank trip.
-var invJammed = false;
+/** How long the tick's emergency store waits after a pass that freed nothing */
+const JAM_STORE_COOLDOWN = 60_000;
+
+/** When the last emergency store pass came back empty-handed */
+var jamStoreAt = 0;
 
 const fishingLocation = { map: "main", x: -1367, y: -82 };
 const miningLocation = { map: "tunnel", x: -279, y: -148 };
@@ -411,18 +415,22 @@ setInterval(async function () {
   )
     await moveHome();
 
-  // A full bank makes the store a no-op, so don't hold the duty off an event for it
+  // A tight bank makes the store a no-op, so don't hold the duty off an event
+  // for it, and back off a whole minute after a pass that freed nothing rather
+  // than forcing the trip again on the next tick
   if (
-    (isInvFull() || invJammed) &&
-    !isBankFull &&
+    isInvFull() &&
+    !isBankTight &&
+    Date.now() - jamStoreAt > JAM_STORE_COOLDOWN &&
     !isAdvanceSmartMoving &&
     !smart.moving
   ) {
     const lock = takeDuty(DUTY.ERRAND);
     if (lock) {
       try {
+        const freeBefore = character.esize;
         await bankStoreRoutine(true);
-        invJammed = false;
+        if (character.esize <= freeBefore) jamStoreAt = Date.now();
       } finally {
         releaseDuty(lock);
       }

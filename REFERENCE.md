@@ -2516,3 +2516,21 @@ once the stash hands them back. `empty === 0` had the same flaw, just rarely. `i
 latch: `runBankStoreRoutine`'s head may only set it, and only the tail may clear it, requiring both
 room and `getStoreIndices(toStore)` empty — a real store attempt that stranded nothing. The
 `!fitsSomewhere` early return never reaches the tail, which is correct: nothing fit, so it is tight.
+
+**The tick's emergency store was the "goes to the bank and does nothing" loop.** `invJammed` is
+declared and only ever assigned `false` — never `true` — so the block's trigger was `isInvFull()`
+alone, and a chronically full bag met it on every 750ms tick. Each pass took `DUTY.ERRAND` and ran
+`bankStoreRoutine(true)`, whose `goToBankFloor(floor, true)` is forced and so ignores the
+smart-move abort: four forced floor travels per tick, continuously, which is what pinned the
+merchant in the bank. It is now gated on `isBankTight` rather than `isBankFull` — a bank with eight
+slots left cannot absorb a jammed bag — and throttled by `JAM_STORE_COOLDOWN`, armed only when a
+pass came back without freeing a slot, so a productive pass may still run straight away.
+
+**`ololipop` is a one-way ratchet into the bag.** `ITEM_NEEDED` carries `{ name: "ololipop" }` with
+no level filter, so Ponty's handler buys every copy it offers while `esize > 6`. Nothing downstream
+can remove it: it is not in `SALE_ABLE`, so the tick's sweep ignores it; `isPurgeable` is false
+because it is in neither `PURGE_LEVELS` nor `PURGE_SETS` and no NPC merchant vends it; and
+`KEEP_THRESHOLD.ololipop` of 12 against ~6 owned copies means `selectRetrievableItems` pulls none,
+so every copy in the bag arrived from Ponty. Upgrading cannot drain it either while
+`item_grade >= 2` and gold sits under `IGNORE_RARE_GOLD_THRESHOLD`, since `ensureScroll` returns -1
+before buying — the attempt repeats and never consumes anything.
