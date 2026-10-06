@@ -359,6 +359,9 @@ setInterval(async function () {
     requestPartyHeal();
   }
 
+  // Upgrading needs a slot for its scroll, so a jammed bag sells one copy first
+  await freeBagSlotForWork();
+
   await withTimeout(
     Promise.allSettled([
       !shouldGoChilling() && equipBatch(calculateMerchantEquipments()),

@@ -2450,3 +2450,20 @@ spent, never charged against it. On the `RETRIEVE_MIN_SLOTS` path that left one 
 five scroll names, so the extras failed to retrieve and the pulled items had nothing to burn. The
 budget is now computed off `esize - RETRIEVE_SCROLL_SLOTS`, and the scroll list clamps to the space
 `picked` actually left — the reserve is the policy, the clamp is the guarantee.
+
+**The gentle valve has to run off the tick, not off `bankLoop`.** `freeSlotsForUpgrading` is the only
+thing that sells a copy so upgrading can proceed, and it is reachable solely through `purgeBank`,
+which `bankLoop` calls at most every `BANK_LOOP_DELAY` while holding `DUTY.ERRAND`. Between those
+visits a bag at 0 free fails every 750ms tick silently: `ensureScroll` begins with
+`retrieveBankItem(scrollType)`, which needs a free slot and gets none, then returns at "a stashed
+stack is fetched on the next try" because the stack is still in the bank — so it never reaches the
+`no slot to buy` log and the console shows nothing at all. `freeBagSlotForWork` sells one surplus
+bag copy from the tick instead, gated on `isInvFull(RETRIEVE_SCROLL_SLOTS)` and `hasBagUpgradeWork`
+so it only fires when there is work the bag has no room to do. It self-limits: three sales take
+`esize` past the gate.
+
+Selection was never the problem. A bag `intamulet` +0 ranks 0, the best rank `pickPurgeVictim` can
+give — bag copy, compoundable, tier of 4 (`items9`, `items12`, `items21`, bag), lowest level, and
+`amulet`'s threshold of 2 is far under the line's ~17 copies. It sat unsold because `purgeBank`
+returns before `freeSlotsForUpgrading` unless `isBankFull`, and four stray `null` slots held that
+`false`.

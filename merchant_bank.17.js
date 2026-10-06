@@ -916,6 +916,35 @@ async function freeSlotsForUpgrading() {
   return freed;
 }
 
+/**
+ * Sells one surplus bag copy while the bag has no room for the scrolls an
+ * upgrade or compound has to buy. Runs off the merchant tick, so it does not
+ * wait on the bank being full or on bankLoop's cycle.
+ * @returns {Promise<boolean>} whether a slot was freed
+ */
+async function freeBagSlotForWork() {
+  if (!isInvFull(RETRIEVE_SCROLL_SLOTS)) return false;
+  if (!hasBagUpgradeWork()) return false;
+  if (!lockInventory("mutate")) return false;
+
+  try {
+    const victim = pickPurgeVictim(tallyPurgeLines(), new Set(), 0, {
+      bagOnly: true,
+    });
+    if (!victim || !matchesPurgeVictim(character.items[victim.index], victim))
+      return false;
+
+    await sell(victim.index, 1);
+    console.log(`purge: sold ${victim.item.name}+${victim.level} for bag room`);
+    return true;
+  } catch (e) {
+    console.warn("Failed freeing a bag slot", e);
+    return false;
+  } finally {
+    unlockInventory("mutate");
+  }
+}
+
 /** @returns {boolean} whether a bag item is the copy pickPurgeVictim chose */
 function matchesPurgeVictim(item, victim) {
   return (
