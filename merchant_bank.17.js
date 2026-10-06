@@ -41,14 +41,24 @@ const PURGE_SETS = ["rugged"];
 /** Vendor gear and PURGE_SETS are sold below this level */
 const PURGE_GEAR_LEVEL = 8;
 
+/** Copies a line keeps past its keep threshold before the purge trims it */
+const PURGE_SURPLUS_HEADROOM = 9;
+
+/** Slots the purge frees while the bank is full */
+const PURGE_FREE_SLOTS = 2;
+
 /** Rounds one stacking pass may run */
 const STACK_MAX_ROUNDS = 5;
+
+const BANK_LOOP_DELAY = 185_000;
+const BANK_MIN_DELAY = 15_000;
+const BANK_IDLE_POLL_MS = 5_000;
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-var BANK_CACHE = undefined;
+var bankCache = undefined;
 
 // Set once bankLoop's first run has walked every floor.
 var hasVisitedBank = false;
@@ -65,9 +75,9 @@ function isInBank() {
   return character.map.startsWith("bank");
 }
 
-/** Merges character.bank into BANK_CACHE */
+/** Merges character.bank into bankCache */
 async function updateBank() {
-  if (character.bank) BANK_CACHE = { ...BANK_CACHE, ...character.bank };
+  if (character.bank) bankCache = { ...bankCache, ...character.bank };
 }
 
 /**
@@ -114,14 +124,14 @@ async function goToBankFloor(floor, forced = false) {
  *   limits the walk to one floor, includePersonal also walks IGNORE_BANK_SLOTS
  */
 function forEachBankSlot(visit, { floor, includePersonal = false } = {}) {
-  for (const pack in BANK_CACHE ?? {}) {
-    if (!Array.isArray(BANK_CACHE[pack])) continue;
+  for (const pack in bankCache ?? {}) {
+    if (!Array.isArray(bankCache[pack])) continue;
     if (!includePersonal && IGNORE_BANK_SLOTS.includes(pack)) continue;
 
     const packFloor = getFloorOfPack(pack);
     if (floor && packFloor !== floor) continue;
 
-    BANK_CACHE[pack].forEach((item, slot) => visit(item, pack, slot, packFloor));
+    bankCache[pack].forEach((item, slot) => visit(item, pack, slot, packFloor));
   }
 }
 
@@ -404,7 +414,7 @@ function pickStorableIndices(indices, capacity) {
  * @returns {Promise<void>}
  */
 async function retrieveMerchantGear() {
-  if (character.ctype !== "merchant" || !BANK_CACHE) return;
+  if (character.ctype !== "merchant" || !bankCache) return;
 
   const carried = new Set(
     [
@@ -573,7 +583,7 @@ async function runBankStoreRoutine(forced) {
 
       const isRare = item_grade(item) >= 2;
       const isHighLevel =
-        item.level >= (ITEMS_HIGHEST_LEVEL[itemKey]?.level ?? 1) - 1;
+        item.level >= (itemsHighestLevel[itemKey]?.level ?? 1) - 1;
       const isStoreable = STORE_ABLE.includes(item.name);
       const shouldIgnore = IGNORE.includes(item.name);
 
@@ -655,22 +665,107 @@ function isSaleableItem(item) {
   return (item.level ?? 0) <= maxLevel;
 }
 
-/** @returns {boolean} whether this item is surplus to sell once the bank is full */
-function isPurgeable(item) {
-  if (!item || item.l || item.p) return false;
+/** @returns {boolean} whether a purge pass may consider this item at all */
+function isPurgeCandidate(item) {
+  if (!item || item.l || item.p || item.ach) return false;
+  if (item_grade(item) >= 2) return false;
 
   const def = G.items[item.name];
   if (!def?.upgrade && !def?.compound) return false;
-  if (isCraftIngredient(item.name) || getMerchantGearNames().has(item.name))
-    return false;
+  return !isCraftIngredient(item.name) && !getMerchantGearNames().has(item.name);
+}
+
+/** @returns {boolean} whether this item is surplus to sell once the bank is full */
+function isPurgeable(item) {
+  if (!isPurgeCandidate(item)) return false;
 
   const level = item.level ?? 0;
   if (PURGE_LEVELS[item.name] !== undefined)
     return level <= PURGE_LEVELS[item.name];
 
+  const def = G.items[item.name];
   const isPurgeGear =
     PURGE_SETS.includes(def.set) || !!findVendorMerchantOf(item.name);
   return isPurgeGear && level < PURGE_GEAR_LEVEL;
+}
+
+/** @returns {Object<string, { total: number, top: number, byLevel: object }>} */
+function tallyPurgeLines() {
+  const lines = {};
+
+  const visit = (item) => {
+    if (!isPurgeCandidate(item)) return;
+
+    const key = getItemKey(item);
+    const level = item.level ?? 0;
+    const line = (lines[key] ??= { total: 0, top: 0, byLevel: {} });
+
+    line.total++;
+    line.top = Math.max(line.top, level);
+    line.byLevel[level] = (line.byLevel[level] ?? 0) + 1;
+  };
+
+  character.items.forEach(visit);
+  forEachBankSlot(visit);
+  return lines;
+}
+
+/**
+ * One bank slot worth selling, compoundable lines first, then a tier that keeps
+ * a set of 3 without it, then a tier too small to ever compound.
+ * @param {object} lines - tallyPurgeLines(), decremented as victims are taken
+ * @param {Set<string>} taken - "pack:slot" of victims already picked
+ * @returns {{ pack: string, slot: number, floor: string, item: object, key: string, level: number } | undefined}
+ */
+function pickPurgeVictim(lines, taken) {
+  let best;
+  let bestRank = Infinity;
+
+  forEachBankSlot((item, pack, slot, floor) => {
+    if (!isPurgeCandidate(item) || taken.has(`${pack}:${slot}`)) return;
+
+    const key = getItemKey(item);
+    const line = lines[key];
+    const level = item.level ?? 0;
+
+    if (line.total <= getKeepThreshold(key) + PURGE_SURPLUS_HEADROOM) return;
+    if (level >= line.top) return;
+
+    // A tier of exactly 3 is one compound away; taking from it breaks the set
+    const tier = line.byLevel[level] ?? 0;
+    if (tier === 3) return;
+
+    const rank =
+      (item_info(item).compound ? 0 : 10_000) + (tier >= 4 ? 0 : 100) + level;
+    if (rank >= bestRank) return;
+
+    best = { pack, slot, floor, item, key, level };
+    bestRank = rank;
+  });
+
+  return best;
+}
+
+/**
+ * @param {number} limit
+ * @returns {Array<object>} up to limit bank slots to sell
+ */
+function findPurgeVictims(limit) {
+  const lines = tallyPurgeLines();
+  const taken = new Set();
+  const victims = [];
+
+  while (victims.length < limit) {
+    const pick = pickPurgeVictim(lines, taken);
+    if (!pick) break;
+
+    taken.add(`${pick.pack}:${pick.slot}`);
+    lines[pick.key].total--;
+    lines[pick.key].byLevel[pick.level]--;
+    victims.push(pick);
+  }
+
+  return victims;
 }
 
 /** @returns {boolean} whether this item should be sold now */
@@ -711,6 +806,43 @@ async function purgeBank() {
     await retrieveAll(batch);
     await sellMarkedItems();
   }
+
+  if (isBankFull) await freeSlotsForUpgrading();
+}
+
+/** Sells a few surplus copies so a full bank still leaves room to work */
+async function freeSlotsForUpgrading() {
+  const victims = findPurgeVictims(PURGE_FREE_SLOTS);
+  if (!victims.length) return;
+
+  for (const victim of victims) {
+    const held = new Set(
+      character.items.flatMap((item, index) =>
+        matchesPurgeVictim(item, victim) ? [index] : [],
+      ),
+    );
+
+    await retrieveAll([victim]);
+
+    const slot = character.items.findIndex(
+      (item, index) => !held.has(index) && matchesPurgeVictim(item, victim),
+    );
+    if (slot === -1) continue;
+
+    await sell(slot, 1).catch((e) =>
+      console.warn(`Failed purging ${victim.item.name}`, e),
+    );
+  }
+}
+
+/** @returns {boolean} whether a bag item is the copy pickPurgeVictim chose */
+function matchesPurgeVictim(item, victim) {
+  return (
+    !!item &&
+    !item.l &&
+    item.name === victim.item.name &&
+    (item.level ?? 0) === victim.level
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -951,8 +1083,38 @@ async function stackBank() {
 // Bank Loop
 // ---------------------------------------------------------------------------
 
+/** @returns {boolean} whether the bag still holds something to upgrade or compound */
+function hasBagUpgradeWork() {
+  const nothingLeaving = new Set();
+  return character.items.some((item, index) =>
+    isUpgradeWork(item, index, nothingLeaving),
+  );
+}
+
+/**
+ * Re-runs bankLoop after delay, or once the bag has nothing left to upgrade.
+ * @param {number} delay
+ * @param {boolean} allowEarly - whether the last visit pulled anything
+ */
+function scheduleNextBankRun(delay, allowEarly) {
+  if (!allowEarly) return setTimeout(bankLoop, delay);
+
+  const now = Date.now();
+  const earliest = now + Math.min(delay, BANK_MIN_DELAY);
+  const due = now + delay;
+
+  const poll = () => {
+    const at = Date.now();
+    if (at >= due || (at >= earliest && !hasBagUpgradeWork())) return bankLoop();
+    setTimeout(poll, BANK_IDLE_POLL_MS);
+  };
+
+  setTimeout(poll, BANK_IDLE_POLL_MS);
+}
+
 async function bankLoop() {
-  let delay = 185_000;
+  let delay = BANK_LOOP_DELAY;
+  let pulled = false;
 
   if (isAwaitingParcel() && !hasVisitedBank) return setTimeout(bankLoop, 5_000);
 
@@ -962,7 +1124,7 @@ async function bankLoop() {
 
   try {
     // First run: build item level map then fetch items
-    if (Object.keys(ITEMS_HIGHEST_LEVEL).length === 0) {
+    if (Object.keys(itemsHighestLevel).length === 0) {
       for (const floor of Object.keys(BANK_FLOORS)) {
         await goToBankFloor(floor, true);
       }
@@ -971,7 +1133,7 @@ async function bankLoop() {
 
       retrieveMaxItemsLevel();
       await retrieveMerchantGear();
-      await retrievedBankItemToUpgrade();
+      pulled = await retrievedBankItemToUpgrade();
       delay = 60_000;
       return;
     }
@@ -982,13 +1144,14 @@ async function bankLoop() {
 
     retrieveMaxItemsLevel();
     await retrieveMerchantGear();
-    await retrievedBankItemToUpgrade();
+    pulled = await retrievedBankItemToUpgrade();
   } catch (e) {
     console.warn("bank loop error:", e);
     delay = 15_000;
+    pulled = false;
   } finally {
     releaseDuty(lock);
-    setTimeout(bankLoop, delay);
+    scheduleNextBankRun(delay, pulled);
   }
 }
 
@@ -999,14 +1162,14 @@ async function bankLoop() {
 /** Pushes bank + inventory data to earthiverse's API every 60s. */
 const syncBankData = async () => {
   try {
-    if (!BANK_CACHE) throw new Error("Have yet enter the bank once!");
+    if (!bankCache) throw new Error("Have yet enter the bank once!");
 
     await fetch(
       `https://aldata.earthiverse.ca/bank/${character.owner}/${character.name}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...BANK_CACHE, inv: character.items }),
+        body: JSON.stringify({ ...bankCache, inv: character.items }),
       },
     );
 

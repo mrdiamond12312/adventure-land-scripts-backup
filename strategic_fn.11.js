@@ -2493,6 +2493,6 @@ class ProjectileManagement {
   }
 }
 
-if (typeof PROJECTILE_MANAGER === "undefined" && parent.socket) {
-  var PROJECTILE_MANAGER = new ProjectileManagement(parent.socket);
+if (typeof projectileManager === "undefined" && parent.socket) {
+  var projectileManager = new ProjectileManagement(parent.socket);
 }

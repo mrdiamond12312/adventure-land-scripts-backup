@@ -357,7 +357,7 @@ content we would forfeit. The at-home path is unaffected either way, since
   `spawn` date announced while it was dead, the death is the first status carrying a new
   announcement. A kill is only recorded if the boss was seen live within `REALM_STALE_MS` of that,
   so a death we missed (offline, stale socket) never logs an inflated time. Only the kill list is
-  persisted; the in-progress watch (`HOME_BOSS_WATCH`) is in memory, so a reload mid-fight skips
+  persisted; the in-progress watch (`homeBossWatch`) is in memory, so a reload mid-fight skips
   that kill instead of timing it from an old spawn date. `msUntilHomeBossSpawn`
   adds `KILL_TIME_CREDIT` (0.25) × the average of the last 5 kills, which shifts the settle band,
   its 30-min floor and the hold lead together. Scheduled dailies/nightlies get no credit.
@@ -1369,7 +1369,7 @@ rather than fought through.
   ranks by raw copy count, but count is not the same question as *retrievable*: locked copies, the
   `KEEP_THRESHOLD` tail and `filterCompoundableSets`' set-of-3 grouping each empty a pile that
   looked big — nine `+0` and one `+8` under a keep of 8 leaves two `+0`s and no set. The old code
-  pushed the id onto `RETRIEVE_HISTORY` *before* computing the items, so a pile in that state
+  pushed the id onto `retrieveHistory` *before* computing the items, so a pile in that state
   burned a rotation slot every visit and starved the rest. `selectRetrievableItems` answers the
   real question for one id, and the rotation now walks the count-ordered candidates until one
   actually yields. Its clamp matters too: `slice(0, length - keep)` goes *negative* for a pile
@@ -1438,7 +1438,7 @@ rather than fought through.
   `SNIPE_MAX_PREDICTED_HP` already inside `is_in_range(entity, "attack")` gets a shot. It takes no
   duty and never moves — a free kill costs the merchant only the shot, and chasing would put it
   where nothing else expects it to be. `getPredictedHp` subtracts what is already in the air (the
-  `PROJECTILE_MANAGER` measure `getCrabsForCrabxx` annotates crabs with), so the merchant doesn't
+  `projectileManager` measure `getCrabsForCrabxx` annotates crabs with), so the merchant doesn't
   waste its shot on a mob the party has already killed. The idle branch ticks at attack speed
   while a candidate is visible and drops back to `EVENT_IDLE_TICK` otherwise.
 - **The "about to die" kite cutoff is a snipe rule, and must not read the boss** (debugged
@@ -1757,7 +1757,7 @@ One queue and one `exchangeSomething`; the holiday turn-ins used to be a second 
   `moveHome()` walk him back after every exchange. `massexchange`/`massexchangepp` only shorten
   the next exchange, they never spend more than `quantity`.
 
-## Levelled craft ingredients (`CRAFT_LEVEL_TARGETS`, merchant_craft.18.js)
+## Levelled craft ingredients (`craftLevelTargets`, merchant_craft.18.js)
 
 A `G.craft` recipe entry is `[quantity, name, level?]`. The third element was ignored: `craft()`
 matched ingredients by name only and filtered bank slots to `!item.level`, so a recipe like
@@ -1769,7 +1769,7 @@ level they can reach and skip everything in `IGNORE`, which at the time swallowe
 so the two halves worked against each other: the ingredient the craft needed was either never lifted, or lifted
 straight past the level the recipe pinned.
 
-`CRAFT_LEVEL_TARGETS` (`name -> { [level]: quantity }`) is the handshake between them. Keying by
+`craftLevelTargets` (`name -> { [level]: quantity }`) is the handshake between them. Keying by
 level rather than holding one `{ level, quantity }` pair is load-bearing in two ways.
 
 It keeps sibling recipes apart. `threadneedle` wants `blade +5`, `brinefang` wants `+7`, `wblade`
@@ -1823,7 +1823,7 @@ its level, so a grade-0 blade climbs on `scroll0` the whole way and the retry co
 What it does spend is upgrade tempo — targeted items outrank everything in `upgradeInv`, so a deep
 climb starves ordinary upgrading until the craft lands or the target is released.
 
-Counting deliberately reads `BANK_CACHE` directly (`forEachOwnedItem`) instead of going through
+Counting deliberately reads `bankCache` directly (`forEachOwnedItem`) instead of going through
 `getItemBankSlots`, whose rare-grade filter drops grade >= 2 items whenever gold is under
 `IGNORE_RARE_GOLD_THRESHOLD`. `worldrootcrook`'s `harbringer +8` is exactly that case: the filter
 would hide the finished ingredient sitting in the bank, and the merchant would register a target and
@@ -1847,7 +1847,7 @@ would stall it. For the same reason a covered quantity of 0 leaves `craftQuantit
 through to the old path: the checks still run, the climbs still register, the craft still fails
 this tick.
 
-Counting goes through `countItemsAtLevel` (inventory + `BANK_CACHE`, no rare filter), and
+Counting goes through `countItemsAtLevel` (inventory + `bankCache`, no rare filter), and
 `hasFlatIngredient`'s bank count now passes `includeRare` to match. The two must agree — a clamp
 that sees a rare bank ingredient while the check that follows it does not would arrive at a batch
 size the craft then refuses. The reasoning is the one already recorded above for
@@ -1861,11 +1861,11 @@ loop that never entered.
 ### Vendor gear became upgradable once reservations existed (2026-09-08)
 
 `IGNORE` used to spread all of `BUYABLE` into itself, so the four gates reading it — the
-`ITEMS_HIGHEST_LEVEL` scan, `findAndUpgrade`, `findAndCompound`, and `bankStoreRoutine`'s
+`itemsHighestLevel` scan, `findAndUpgrade`, `findAndCompound`, and `bankStoreRoutine`'s
 `shouldIgnore` — treated vendor gear as untouchable. That was right while nothing reserved a plain
 copy: an upgrade could eat the staff `craft("pickaxe")` needed.
 
-`CRAFT_LEVEL_TARGETS` removed the hazard. The only `buy()` of a `BUYABLE` id is inside `craft()`
+`craftLevelTargets` removed the hazard. The only `buy()` of a `BUYABLE` id is inside `craft()`
 (`vendorBuy`/`targetBuy`), and both paths call `requestCraftLevel` first, so `countSpareAtLevel`
 already withholds every copy a recipe holds. There is no path by which the merchant buys shop stock
 and then feeds it to its own upgrade rotation.
@@ -1874,7 +1874,7 @@ What made it worth changing is `weaponbox`/`armorbox` in `EXCHANGE_QUEUE`: they 
 faster than anything consumed it, and `shouldIgnore` blocked the *store* path too, so the pile had
 nowhere to go but the merchant's bag. Removing the spread hands them to the ordinary machinery —
 `KEEP_THRESHOLD` already carries type-level entries (`helmet`/`pants`/`gloves`/`shoes` 3,
-`weapon`/`shield` 2) that only resolve once `ITEMS_HIGHEST_LEVEL` tracks the name.
+`weapon`/`shield` 2) that only resolve once `itemsHighestLevel` tracks the name.
 
 Two guards had to move with it:
 
@@ -1928,7 +1928,7 @@ exit from a loop full of `continue`/`break`/`return`, and the inner `return awai
 the way to a craft ingredient costs one more base item — which the next tick re-buys or re-registers
 — whereas an offering spent to protect it is gone either way. The same reasoning suppresses the
 post-upgrade `storeToBankFloor`: a targeted item mid-climb belongs in the inventory, and its
-`ITEMS_HIGHEST_LEVEL` entry is often absent (it was `IGNORE`d until the target existed), which would
+`itemsHighestLevel` entry is often absent (it was `IGNORE`d until the target existed), which would
 have made `e.level >= (highest ?? 0) - 1` true for every single level.
 
 ### `KEEP_THRESHOLD` is not a rare-item rule (`compoundInv`, debugged 2026-09-07)
@@ -2314,3 +2314,61 @@ the chosen policy.
 upgradeInv and the bank store leave it alone. Gift helmets get used before buying. Each helmet
 climbs until it breaks or reaches +4 (past that one attempt is 7s+), then it is sold. Once
 settled, every unlocked helmet is sold.
+
+## Bank purge keys off keep thresholds, not vendors (`isPurgeable`, 2026-10-06)
+
+A bank audit found 1008 slots split roughly into 177 slots of dungeon keys, ~103 slots of named
+weapon lines sitting at exactly their `KEEP_THRESHOLD`, and ~200 slots of boss-loot jewelry.
+The last group was the flood: xscorpion and mrpumpkin drop amulets and jackos faster than they
+leave, giving jacko 29, intamulet 26, stramulet 21, dexamulet 21 against keep thresholds of 3 and 2.
+
+**Why nothing drained it.** Three exits, all shut. `isSaleableItem` requires `SALE_ABLE`
+membership and none of those names are in it. `isPurgeable` asked whether an item was vendor gear
+or in `PURGE_SETS`, so the bank-full sweep ran every cycle and sold nothing — boss loot is
+neither. Compounding was the only exit, and it only reads `character.items`, so fodder reaches it
+solely through `retrievedBankItemToUpgrade`, called just from `bankLoop`.
+
+**A full bank frees two slots, not fifty.** `freeSlotsForUpgrading` runs at the end of `purgeBank`
+while `isBankFull` and sells `PURGE_FREE_SLOTS` copies. `pickPurgeVictim` considers only lines over
+`getKeepThreshold + PURGE_SURPLUS_HEADROOM` and never a line's top level, then ranks compoundable
+lines ahead of upgrade-only ones, a tier of 4 or more ahead of a tier under 3, and the lowest level
+first. A tier of exactly 3 is skipped — it is one compound away. `findPurgeVictims` decrements its
+own tally between picks, so taking one from a tier of 4 leaves 3 and the second pick looks
+elsewhere rather than breaking the set.
+
+A bulk trim was built first and rejected. Keyed off a per-level ceiling it swallowed a whole tier,
+which is where the fodder lives: jacko would have kept only L2 ×2, L3 ×2, L4 ×3, so only one
+compound could ever fire again. Refusing any tier that can form a set inverts the problem instead —
+it protects the 12 cheap copies and sells the scarce +2s and +3s. One slot at a time sidesteps
+both, and lets compounding (3 for 1, so 2 slots per success) do the actual draining.
+
+The purge sells through its own `sell()` rather than `shouldSellItem`, so it cannot touch the
+fodder `retrievedBankItemToUpgrade` just pulled into the bag, and the 750ms tick's
+`sellMarkedItems` stays limited to `SALE_ABLE`. `isPurgeable` is therefore back to its original
+vendor-gear meaning.
+
+**Why the per-item retrieve cap went away.** `RETRIEVE_MAX_PER_ITEM` was 6, which is two compound
+sets. `filterCompoundableSets` needs three copies at the *same* level, so six slots spread across
+levels 0/1/2 often formed one set or none — the cap was costing sets, not just volume. With the
+budget free to go to one line, the `isBankFull` ×10 score already aims it at the worst offender,
+and `getRetrieveFreshness` (×3 untouched, ×1 just-pulled) plus `retrieveBackoff` rotate lines
+between visits, so one line cannot capture the budget permanently.
+
+**Why the loop waits on an idle bag.** `bankLoop`'s 185s delay meant a merchant that burned
+through its pull in 40s idled for two minutes. `scheduleNextBankRun` keeps 185s as a ceiling but
+polls `hasBagUpgradeWork` every 5s and goes early once the bag has nothing left to upgrade,
+floored at `BANK_MIN_DELAY` so the 15s error backoff is not short-circuited into a tight loop.
+Event fights still hold banking off: the `takeDuty(DUTY.ERRAND)` gate is unchanged, so an early
+wake during a fight just retries in 5s.
+
+**Ponty must not buy what the purge sells.** `secondhandsHandler` guarded only on `SALE_ABLE`,
+which knew nothing about the ceilings. `jacko` is in `ITEM_NEEDED` with no level filter and is a
+purge line at ceiling 1, so Ponty would have bought a level-0 jacko every 12s and the tick would
+have sold it to an NPC below Ponty's price — a standing gold leak. The guard is now
+`shouldSellItem`, which covers both paths at once, wrapped so an unreadable entry fails closed
+(left alone, not bought). `dexearring`, `strring` and `intring` are also in `ITEM_NEEDED` and sit
+just under their caps, so they would join the leak after one more flood.
+
+**The purge skips rares and achievement copies.** `isPurgeCandidate` rejects `item.ach` and
+`item_grade >= 2`. A ceiling never reaches a line's top level, so grade stays 0 in practice, but
+`acc`/`ach` copies carry no `p` and so were not otherwise exempt — selling one is unrecoverable.

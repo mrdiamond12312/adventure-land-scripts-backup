@@ -295,7 +295,7 @@ function releaseEventDuty() {
  * @returns {number}
  */
 function getPredictedHp(entity) {
-  const incoming = PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
+  const incoming = projectileManager?.getIncomingNumber(entity.id) ?? 0;
   return (entity.hp ?? 0) + incoming;
 }
 

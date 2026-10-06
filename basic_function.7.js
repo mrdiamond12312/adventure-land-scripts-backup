@@ -1574,7 +1574,7 @@ function getPlayersToHeal() {
   ]
     .map((entity) => {
       const incomingNumber =
-        PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
+        projectileManager?.getIncomingNumber(entity.id) ?? 0;
 
       const predictedHp =
         entity.name === character.name ? entity.hp : entity.hp + incomingNumber;
@@ -1827,7 +1827,7 @@ function suicide() {
   if (
     !character.rip &&
     character.hp +
-      (PROJECTILE_MANAGER?.getIncomingNumber(character.name) ?? 0) <
+      (projectileManager?.getIncomingNumber(character.name) ?? 0) <
       Math.max(0.15 * character.max_hp, 3500) &&
     (avgDmgTaken(character) > character.hp ||
       character.ping > 600 ||
@@ -2509,7 +2509,7 @@ const getCrabsForCrabxx = () => {
     }
 
     const incomingNumber =
-      PROJECTILE_MANAGER?.getIncomingNumber(entity.id) ?? 0;
+      projectileManager?.getIncomingNumber(entity.id) ?? 0;
 
     const predictedHp =
       entity.name === character.name ? entity.hp : entity.hp + incomingNumber;

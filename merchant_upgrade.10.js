@@ -46,16 +46,13 @@ const KEEP_THRESHOLD = {
   belt: 2,
 };
 
-const ITEMS_HIGHEST_LEVEL = {};
+const itemsHighestLevel = {};
 
 /** Bag slots a pull leaves free */
 const RETRIEVE_FREE_SLOTS = 8;
 
 /** Bag slots a pull may fill */
 const RETRIEVE_MAX_SLOTS = 12;
-
-/** Bag slots one item may take of a pull */
-const RETRIEVE_MAX_PER_ITEM = 6;
 
 /** How long an item that made no progress is skipped */
 const RETRIEVE_BACKOFF_MS = 10 * 60_000;
@@ -67,20 +64,20 @@ const RETRIEVE_SETTLE_MS = 60_000;
 const RETRIEVE_STALE_MS = 60 * 60_000;
 
 /** Skipped items, name -> until when */
-const RETRIEVE_BACKOFF = {};
+const retrieveBackoff = {};
 
 /** Pulled items, name -> when */
-const RETRIEVE_HISTORY = {};
+const retrieveHistory = {};
 
 /** The last pull and each item's bag levels right after it */
-var LAST_RETRIEVED = { at: 0, signatures: {} };
+var lastRetrievePull = { at: 0, signatures: {} };
 
 // ---------------------------------------------------------------------------
 // Upgrade/Compound Helpers
 // ---------------------------------------------------------------------------
 
 /**
- * An item's line in ITEMS_HIGHEST_LEVEL: titled copies (.p) are tracked apart.
+ * An item's line in itemsHighestLevel: titled copies (.p) are tracked apart.
  * @param {{ name: string, p?: string }} item
  * @returns {string} name, or name#p
  */
@@ -106,7 +103,7 @@ function matchesItemKey(item, itemKey) {
 function getKeepThreshold(itemKey) {
   return (
     KEEP_THRESHOLD[getKeyName(itemKey)] ??
-    KEEP_THRESHOLD[ITEMS_HIGHEST_LEVEL[itemKey]?.type] ??
+    KEEP_THRESHOLD[itemsHighestLevel[itemKey]?.type] ??
     2
   );
 }
@@ -198,13 +195,13 @@ function getOfferingSlot(isRareItem) {
 // ---------------------------------------------------------------------------
 
 /**
- * Scans inventory + bank cache to build ITEMS_HIGHEST_LEVEL map.
- * Call after visiting all bank floors so BANK_CACHE is fully populated.
+ * Scans inventory + bank cache to build itemsHighestLevel map.
+ * Call after visiting all bank floors so bankCache is fully populated.
  */
 function retrieveMaxItemsLevel() {
   if (!Object.keys(BANK_FLOORS).includes(character.map)) return;
 
-  for (const key in ITEMS_HIGHEST_LEVEL) delete ITEMS_HIGHEST_LEVEL[key];
+  for (const key in itemsHighestLevel) delete itemsHighestLevel[key];
   updateBank();
 
   const processItem = (item) => {
@@ -212,9 +209,9 @@ function retrieveMaxItemsLevel() {
     if (IGNORE.includes(item.name) && !isCraftTargeted(item.name)) return;
 
     const key = getItemKey(item);
-    const existing = ITEMS_HIGHEST_LEVEL[key];
+    const existing = itemsHighestLevel[key];
     if (!existing) {
-      ITEMS_HIGHEST_LEVEL[key] = {
+      itemsHighestLevel[key] = {
         level: item.level,
         quantity: 1,
         count: 1,
@@ -317,15 +314,15 @@ function getBagLevelSignature(itemKey) {
  * @returns {Set<string>} item keys the last pull brought out
  */
 function settleLastRetrieve() {
-  const names = new Set(Object.keys(LAST_RETRIEVED.signatures));
-  if (Date.now() - LAST_RETRIEVED.at < RETRIEVE_SETTLE_MS) return names;
+  const names = new Set(Object.keys(lastRetrievePull.signatures));
+  if (Date.now() - lastRetrievePull.at < RETRIEVE_SETTLE_MS) return names;
 
-  for (const [name, signature] of Object.entries(LAST_RETRIEVED.signatures)) {
+  for (const [name, signature] of Object.entries(lastRetrievePull.signatures)) {
     if (getBagLevelSignature(name) === signature)
-      RETRIEVE_BACKOFF[name] = Date.now() + RETRIEVE_BACKOFF_MS;
+      retrieveBackoff[name] = Date.now() + RETRIEVE_BACKOFF_MS;
   }
 
-  LAST_RETRIEVED = { at: 0, signatures: {} };
+  lastRetrievePull = { at: 0, signatures: {} };
   return names;
 }
 
@@ -335,7 +332,7 @@ function settleLastRetrieve() {
  * @returns {number}
  */
 function getRetrieveFreshness(itemId) {
-  const pulledAt = RETRIEVE_HISTORY[itemId];
+  const pulledAt = retrieveHistory[itemId];
   if (pulledAt === undefined) return 3;
   return 1 + Math.min(1, (Date.now() - pulledAt) / RETRIEVE_STALE_MS);
 }
@@ -355,7 +352,7 @@ function scoreRetrieveCandidate(itemId, itemCount) {
 
 /**
  * Pulls the most urgent items to upgrade/compound, craft targets first.
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>} whether the bank had anything worth pulling
  */
 async function retrievedBankItemToUpgrade() {
   let budget = Math.min(
@@ -365,15 +362,14 @@ async function retrievedBankItemToUpgrade() {
 
   if (budget <= 0) {
     if (isBankFull) console.log("bank full and bag too full to compound");
-    return;
+    return false;
   }
 
   const picked = [];
   const pickedIds = new Set();
 
   const take = (id, isTargeted) => {
-    const limit = isTargeted ? budget : Math.min(budget, RETRIEVE_MAX_PER_ITEM);
-    const items = selectRetrievableItems(id, isTargeted, limit).slice(0, limit);
+    const items = selectRetrievableItems(id, isTargeted, budget).slice(0, budget);
     if (!items.length) return;
 
     budget -= items.length;
@@ -382,7 +378,7 @@ async function retrievedBankItemToUpgrade() {
   };
 
   // Crafting materials will outrank normal updates/compounds.
-  for (const id of Object.keys(CRAFT_LEVEL_TARGETS)) {
+  for (const id of Object.keys(craftLevelTargets)) {
     if (budget <= 0) break;
     take(id, true);
   }
@@ -390,12 +386,12 @@ async function retrievedBankItemToUpgrade() {
   const targetedIds = new Set(pickedIds);
   const now = Date.now();
 
-  const candidates = Object.keys(ITEMS_HIGHEST_LEVEL)
+  const candidates = Object.keys(itemsHighestLevel)
     .filter(
       (id) =>
         !pickedIds.has(id) &&
         item_info({ name: getKeyName(id) }) &&
-        !((RETRIEVE_BACKOFF[id] ?? 0) > now),
+        !((retrieveBackoff[id] ?? 0) > now),
     )
     .map((id) => ({
       id,
@@ -408,7 +404,7 @@ async function retrievedBankItemToUpgrade() {
     .sort(
       (lhs, rhs) =>
         rhs.score - lhs.score ||
-        ITEMS_HIGHEST_LEVEL[rhs.id].count - ITEMS_HIGHEST_LEVEL[lhs.id].count,
+        itemsHighestLevel[rhs.id].count - itemsHighestLevel[lhs.id].count,
     );
 
   for (const { id } of candidates) {
@@ -416,7 +412,7 @@ async function retrievedBankItemToUpgrade() {
     take(id, false);
   }
 
-  if (!picked.length) return;
+  if (!picked.length) return false;
 
   // The scrolls they burn come along in the same visit
   const scrollNames = new Set(
@@ -436,9 +432,10 @@ async function retrievedBankItemToUpgrade() {
   for (const id of pickedIds) {
     if (targetedIds.has(id)) continue;
     signatures[id] = getBagLevelSignature(id);
-    RETRIEVE_HISTORY[id] = Date.now();
+    retrieveHistory[id] = Date.now();
   }
-  LAST_RETRIEVED = { at: Date.now(), signatures };
+  lastRetrievePull = { at: Date.now(), signatures };
+  return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -515,7 +512,7 @@ async function findAndCompound() {
 
     // Skip if we don't have enough of this item yet: a compound burns three of
     // the pile for one, so the tail has to survive it
-    const highestLevel = ITEMS_HIGHEST_LEVEL[itemKey];
+    const highestLevel = itemsHighestLevel[itemKey];
     if (
       !targeted &&
       highestLevel &&
@@ -599,7 +596,7 @@ async function findAndUpgrade() {
 
     const itemGrade = item_grade(item);
     const itemKey = getItemKey(item);
-    const highestLevel = ITEMS_HIGHEST_LEVEL[itemKey];
+    const highestLevel = itemsHighestLevel[itemKey];
 
     if (!targeted) {
       const overLeveled =
@@ -654,7 +651,7 @@ async function findAndUpgrade() {
         if (!e?.success) return;
 
         if (e.level > (selectedHighestLevel?.level ?? 0)) {
-          ITEMS_HIGHEST_LEVEL[itemKey] = {
+          itemsHighestLevel[itemKey] = {
             level: e.level,
             quantity: 1,
             ...item_info({ name: itemName }),

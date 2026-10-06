@@ -586,7 +586,16 @@ function secondhandsHandler(events) {
   if (isInvFull(6)) return false;
   for (const item of events) {
     if (!item) continue;
-    if (SALE_ABLE.includes(item.name)) continue;
+
+    // Fails closed: an unreadable item is left alone rather than bought to be resold
+    let wouldResell = true;
+    try {
+      wouldResell = shouldSellItem(item);
+    } catch (e) {
+      console.warn("secondhands sell check failed", item.name, e);
+    }
+    if (wouldResell) continue;
+
     const wanted = ITEM_NEEDED.find((w) => w.name === item.name);
     if (!wanted) continue;
     if (!matchesWantedItem(item, wanted)) continue;
@@ -618,7 +627,7 @@ setInterval(() => {
 }, 12000);
 
 // setInterval(() => {
-//   const blade = ITEMS_HIGHEST_LEVEL["blade"];
+//   const blade = itemsHighestLevel["blade"];
 //   const quantity = blade?.quantity ?? 0; // # of blades at highest level
 //   const level = blade?.level ?? 0; // that highest level
 //   const count = blade?.count ?? 0; // total blades owned

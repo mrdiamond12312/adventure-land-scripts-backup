@@ -100,11 +100,11 @@ Merchant entry script:
                           loads every module below, then
                           syncBankData() -> bankLoop() -> lureMechaGnome() -> dragEnt()
                           -> merchantAttackLoop()
-    merchant_upgrade.10.js   scrolls/offerings/massproduction, ITEMS_HIGHEST_LEVEL,
+    merchant_upgrade.10.js   scrolls/offerings/massproduction, itemsHighestLevel,
                               compoundInv/upgradeInv (also loads basic_function.7.js — the ONLY
                               edge to slot 7 in the merchant graph, so it is listed first)
-    merchant_bank.17.js      BANK_CACHE, floors, retrieve/store, bankStoreRoutine/bankLoop, syncBankData
-    merchant_craft.18.js     CRAFT_LEVEL_TARGETS registry, ingredient counting, craft()
+    merchant_bank.17.js      bankCache, floors, retrieve/store, bankStoreRoutine/bankLoop, syncBankData
+    merchant_craft.18.js     craftLevelTargets registry, ingredient counting, craft()
     merchant_service.19.js   duty fulfillment for fighters' cm requests (potions, elixir, item pickup)
                               and crypt-opening
     merchant_gathering.22.js equipBroom/shouldGoChilling, goFishing, goMining, dismantleSomething

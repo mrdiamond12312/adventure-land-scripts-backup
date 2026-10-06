@@ -249,13 +249,13 @@ class ServerRealmData {
 }
 
 /** @type {ServerRealmData | undefined} */
-var REALM_DATA = undefined;
+var realmDataCache = undefined;
 
 /** @returns {ServerRealmData | undefined} the distributor, built on first use */
 function getRealmData() {
-  if (!REALM_DATA && shouldOwnRealmSockets())
-    REALM_DATA = new ServerRealmData();
-  return REALM_DATA;
+  if (!realmDataCache && shouldOwnRealmSockets())
+    realmDataCache = new ServerRealmData();
+  return realmDataCache;
 }
 
 // ---------------------------------------------------------------------------
@@ -333,7 +333,7 @@ function msUntilHomeScheduledEvent() {
 }
 
 /** @type {Object<string, {spawnAt?: number, lastLiveAt?: number}>} */
-const HOME_BOSS_WATCH = {};
+const homeBossWatch = {};
 
 /** @param {object} status the home realm's S */
 function trackHomeBossKills(status) {
@@ -341,7 +341,7 @@ function trackHomeBossKills(status) {
 
   for (const name of homeDropMonsters()) {
     const state = status[name];
-    const watch = (HOME_BOSS_WATCH[name] ??= {});
+    const watch = (homeBossWatch[name] ??= {});
 
     if (state?.live) {
       watch.lastLiveAt = now;
@@ -463,7 +463,7 @@ function homeDropRank(candidate) {
 // Assigned rather than declared so basic_merchant.5.js's own handler still wins
 if (!isMerchant()) {
   on_destroy = function () {
-    REALM_DATA?.destroy();
+    realmDataCache?.destroy();
     clear_drawings();
     clear_buttons();
   };

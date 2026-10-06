@@ -6,7 +6,7 @@
  * to survive a gstaff climb. Entries above 0 are climb targets and bypass IGNORE.
  * Written by craft(), read by the upgrade, compound, retrieve and store routines.
  */
-const CRAFT_LEVEL_TARGETS = {};
+const craftLevelTargets = {};
 
 /** Cap on vendor items bought to fill one craft target, per recipe check. */
 const MAX_CRAFT_BUY = 27;
@@ -20,7 +20,7 @@ const MAX_CRAFT_BUY = 27;
  * @returns {number} deepest level any pending craft wants, or -1 if none
  */
 function getCraftTargetLevel(itemName) {
-  const target = CRAFT_LEVEL_TARGETS[itemName];
+  const target = craftLevelTargets[itemName];
   if (!target) return -1;
 
   return Object.keys(target).reduce((max, level) => Math.max(max, +level), -1);
@@ -32,7 +32,7 @@ function getCraftTargetLevel(itemName) {
  * @returns {number} copies at exactly that level a pending craft is holding
  */
 function getCraftReserved(itemName, level) {
-  return CRAFT_LEVEL_TARGETS[itemName]?.[level] ?? 0;
+  return craftLevelTargets[itemName]?.[level] ?? 0;
 }
 
 /**
@@ -58,7 +58,7 @@ function isCraftTargeted(itemName) {
  * @returns {boolean} whether a pending craft wants this item at any level
  */
 function isCraftIngredient(itemName) {
-  return CRAFT_LEVEL_TARGETS[itemName] !== undefined;
+  return craftLevelTargets[itemName] !== undefined;
 }
 
 /**
@@ -70,8 +70,8 @@ function isCraftIngredient(itemName) {
  * @param {number} quantity
  */
 function requestCraftLevel(itemName, level, quantity) {
-  const target = (CRAFT_LEVEL_TARGETS[itemName] =
-    CRAFT_LEVEL_TARGETS[itemName] ?? {});
+  const target = (craftLevelTargets[itemName] =
+    craftLevelTargets[itemName] ?? {});
 
   target[level] = Math.max(target[level] ?? 0, quantity);
 }
@@ -82,11 +82,11 @@ function requestCraftLevel(itemName, level, quantity) {
  * @param {number} level
  */
 function releaseCraftLevel(itemName, level) {
-  const target = CRAFT_LEVEL_TARGETS[itemName];
+  const target = craftLevelTargets[itemName];
   if (!target) return;
 
   delete target[level];
-  if (!Object.keys(target).length) delete CRAFT_LEVEL_TARGETS[itemName];
+  if (!Object.keys(target).length) delete craftLevelTargets[itemName];
 }
 
 /**
@@ -164,7 +164,7 @@ function countCraftStock(itemName, level) {
  * @returns {number}
  */
 function countCraftStockNeeded(itemName) {
-  const target = CRAFT_LEVEL_TARGETS[itemName];
+  const target = craftLevelTargets[itemName];
   if (!target) return 0;
 
   const isCompound = !!item_info({ name: itemName })?.compound;
