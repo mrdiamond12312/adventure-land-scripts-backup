@@ -827,7 +827,12 @@ function getPurgeSlotTarget() {
 async function freeSlotsForUpgrading() {
   let freed = 0;
 
-  for (const victim of findPurgeVictims(getPurgeSlotTarget())) {
+  // One floor at a time: a jammed bag forces one sale per trip
+  const victims = findPurgeVictims(getPurgeSlotTarget()).sort((lhs, rhs) =>
+    lhs.floor.localeCompare(rhs.floor),
+  );
+
+  for (const victim of victims) {
     const held = new Set(
       character.items.flatMap((item, index) =>
         matchesPurgeVictim(item, victim) ? [index] : [],
