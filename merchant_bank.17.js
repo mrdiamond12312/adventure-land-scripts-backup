@@ -47,8 +47,14 @@ const PURGE_HEADROOM_STEPS = [9, 3, 0];
 /** Slots the purge frees while the bank is full */
 const PURGE_FREE_SLOTS = 2;
 
+/** Victims one purge pass sells, however jammed the bag is */
+const PURGE_MAX_PER_PASS = 6;
+
 /** Free shared slots at or below which the bank counts as full */
-const BANK_FULL_SLACK = 8;
+const BANK_FULL_SLACK = 0;
+
+/** Free shared slots at or below which the purge starts trimming surplus */
+const BANK_TIGHT_SLACK = 8;
 
 /** Rounds one stacking pass may run */
 const STACK_MAX_ROUNDS = 5;
@@ -66,8 +72,11 @@ var bankCache = undefined;
 // Set once bankLoop's first run has walked every floor.
 var hasVisitedBank = false;
 
-/** Whether no floor has an empty slot */
+/** Whether no shared pack has an empty slot */
 var isBankFull = false;
+
+/** Whether the shared packs are down to BANK_TIGHT_SLACK, the purge's trigger */
+var isBankTight = false;
 
 // ---------------------------------------------------------------------------
 // Cache & Floors
@@ -632,11 +641,15 @@ async function runBankStoreRoutine(forced) {
   const floors = Object.keys(BANK_FLOORS);
 
   if (hasVisitedBank) {
-    const wasBankFull = isBankFull;
     const free = countSharedEmptySlots();
     isBankFull = free <= BANK_FULL_SLACK;
-    if (isBankFull && !wasBankFull)
-      console.log(`bank full: ${free} shared slots left, purge is on`);
+
+    // Only the tail may clear the latch: a pull of its own empties slots the
+    // bag is about to hand straight back, so free alone flaps every cycle
+    if (free <= BANK_TIGHT_SLACK && !isBankTight) {
+      isBankTight = true;
+      console.log(`bank tight: ${free} shared slots left, purge is on`);
+    }
 
     const toStoreIndices = toStore.map(({ index }) => index);
     const fitsSomewhere = floors.some(
@@ -665,7 +678,15 @@ async function runBankStoreRoutine(forced) {
     await storeIndicesOnCurrentFloor(getStoreIndices(toStore));
   }
 
-  isBankFull = countSharedEmptySlots() <= BANK_FULL_SLACK;
+  const free = countSharedEmptySlots();
+  const stranded = getStoreIndices(toStore).length;
+
+  isBankFull = free <= BANK_FULL_SLACK;
+  // Cleared only after a real store attempt that left nothing behind
+  const wasBankTight = isBankTight;
+  isBankTight = free <= BANK_TIGHT_SLACK || stranded > 0;
+  if (wasBankTight && !isBankTight)
+    console.log(`bank has room again: ${free} shared slots, purge is off`);
 }
 
 // ---------------------------------------------------------------------------
@@ -821,11 +842,15 @@ function shouldSellItem(item) {
   return isSaleableItem(item) || (isBankFull && isPurgeable(item));
 }
 
-/** Sells every bag item shouldSellItem picks */
-function sellMarkedItems() {
+/**
+ * Sells every bag item the predicate picks. The 750ms tick leaves it at
+ * isSaleableItem, so only purgeBank's own pass may reach purgeable surplus.
+ * @param {(item: object) => boolean} [predicate=isSaleableItem]
+ */
+function sellMarkedItems(predicate = isSaleableItem) {
   const sales = [];
   character.items.forEach((item, index) => {
-    if (shouldSellItem(item))
+    if (predicate(item))
       sales.push(
         sell(index, item.q ?? 1).catch((e) =>
           console.warn(`Failed selling ${item.name}`, e),
@@ -852,20 +877,24 @@ async function purgeBank() {
     if (!batch.length) break;
 
     await retrieveAll(batch);
-    await sellMarkedItems();
+    await sellMarkedItems(shouldSellItem);
   }
 
-  return isBankFull ? await freeSlotsForUpgrading() : 0;
+  return isBankTight ? await freeSlotsForUpgrading() : 0;
 }
 
 /**
  * Slots to free this pass: the steady valve, or enough to unjam a bag too full
- * for retrievedBankItemToUpgrade to pull a thing.
+ * for retrievedBankItemToUpgrade to pull a thing, capped so one pass cannot
+ * hold DUTY.ERRAND through dozens of retrieve-sell round trips.
  * @returns {number}
  */
 function getPurgeSlotTarget() {
   const working = RETRIEVE_FREE_SLOTS + RETRIEVE_MAX_SLOTS;
-  return Math.max(PURGE_FREE_SLOTS, working - character.esize);
+  return Math.min(
+    PURGE_MAX_PER_PASS,
+    Math.max(PURGE_FREE_SLOTS, working - character.esize),
+  );
 }
 
 /**
@@ -924,7 +953,7 @@ async function freeSlotsForUpgrading() {
  * @returns {Promise<boolean>} whether a slot was freed
  */
 async function freeBagSlotForWork() {
-  if (!isBankFull) return false;
+  if (!isBankTight) return false;
   if (!isInvFull(RETRIEVE_SCROLL_SLOTS)) return false;
   if (!hasBagUpgradeWork()) return false;
   if (!lockInventory("mutate")) return false;

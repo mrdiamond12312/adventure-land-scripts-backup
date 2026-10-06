@@ -2495,3 +2495,24 @@ into fishing loot. `GATHER_FREE_SLOTS` (6) sits above the valve's ceiling, so th
 opens are never a trip's to take. The valve is also gated on `isBankFull` now: with room in the bank
 the drain is a stash, which the tick's own `bankStoreRoutine(true)` already does, so selling there
 was destroying gear the bank would have held.
+
+**`isBankFull` was widened and five unrelated behaviours rode along.** `BANK_FULL_SLACK = 8` turned
+an emergency flag that was almost never true into a normally-true one, and six call sites read it.
+The tick's `sellMarkedItems` went from `SALE_ABLE` to every purgeable in the bag, twice a second,
+wherever the merchant stood — breaking the invariant stated above it. The tick's own
+`(isInvFull() || invJammed) && !isBankFull` store gate inverted, so a jammed bag stopped being
+stashed from the tick at exactly the moment it needed to be. `scoreRetrieveCandidate`'s ×10 and
+`getPurgeSlotTarget`'s scaling-to-20 became the normal case, and 20 victims one retrieve-sell at a
+time, with floor hops between, parked the merchant on a bank floor holding `DUTY.ERRAND`.
+`BANK_TIGHT_SLACK` and `isBankTight` now carry the purge's trigger — `purgeBank`'s tail and
+`freeBagSlotForWork` — while `isBankFull` keeps its literal meaning for the other four.
+`sellMarkedItems` takes a predicate, defaulting to `isSaleableItem`, so only `purgeBank`'s own pass
+reaches surplus. `PURGE_MAX_PER_PASS` bounds one pass.
+
+**The flag flapped because the merchant swings its own input.** Both flags were computed from live
+free slots, and `retrievedBankItemToUpgrade` pulls up to `RETRIEVE_MAX_SLOTS` (12) copies out — so a
+bank at 0 free reads 12 free right after a pull, turns the purge off mid-jam, and turns it back on
+once the stash hands them back. `empty === 0` had the same flaw, just rarely. `isBankTight` is now a
+latch: `runBankStoreRoutine`'s head may only set it, and only the tail may clear it, requiring both
+room and `getStoreIndices(toStore)` empty — a real store attempt that stranded nothing. The
+`!fitsSomewhere` early return never reaches the tail, which is correct: nothing fit, so it is tight.
