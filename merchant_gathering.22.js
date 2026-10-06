@@ -1,5 +1,12 @@
 // Gathering: fishing, mining and dismantling, plus the gear they need.
 
+/**
+ * Bag slots a trip needs free before it sets off. It has to clear the ceiling
+ * freeBagSlotForWork sells up to, or a trip takes the slot the purge just
+ * opened for a scroll, plus the 4 the rod/pickaxe craft branches below ask for.
+ */
+const GATHER_FREE_SLOTS = RETRIEVE_SCROLL_SLOTS + 4;
+
 async function equipBroom() {
   const currentWeapon = character.slots.mainhand;
   if (!currentWeapon || currentWeapon.name !== "broom") {
@@ -27,7 +34,7 @@ function shouldGoChilling() {
 
 async function goFishing() {
   if (
-    isInvFull() ||
+    isInvFull(GATHER_FREE_SLOTS) ||
     smart.moving ||
     isAdvanceSmartMoving ||
     character.c.mining ||
@@ -91,7 +98,7 @@ async function goFishing() {
 
 async function goMining() {
   if (
-    isInvFull() ||
+    isInvFull(GATHER_FREE_SLOTS) ||
     smart.moving ||
     isAdvanceSmartMoving ||
     character.c.mining ||

@@ -2467,3 +2467,31 @@ give — bag copy, compoundable, tier of 4 (`items9`, `items12`, `items21`, bag)
 `amulet`'s threshold of 2 is far under the line's ~17 copies. It sat unsold because `purgeBank`
 returns before `freeSlotsForUpgrading` unless `isBankFull`, and four stray `null` slots held that
 `false`.
+
+**A budget cut at the wrong end pulls the wrong level.** `filterCompoundableSets` ended on
+`result.slice(0, inventoryEmptySlots)` and `take()` re-sliced to `budget` on top. `for...in` over
+numeric keys walks ascending, so level 0's whole `take` entered `result` first and the trailing cut
+kept those and dropped the higher tier — a bag holding one amulet +1 got two amulets +0, which need
+a third and so could never compound, and `runBankStoreRoutine` stashed them back next pass. Trimming
+by 3 inside the per-level loop keeps `inBag + take` a multiple of 3 and lets a level that does not
+fit be skipped rather than truncated.
+
+**Set accounting has to be keyed, not named.** `countInventoryAtLevel` matches on `name` alone, but
+`findCompoundSet` and `findAndCompound` work per `getItemKey`, so a titled bag copy (`glolipop` +3
+`p:"shiny"`) inflated the plain line's `inBag`, the pull came one copy short, and the partial set was
+stashed back — the same churn from the other direction. `runBankStoreRoutine`'s fodder test had it
+too, and worse: it counted plain + titled as three and kept all of them in the bag for a compound
+that can never fire. Both now use `countBagKeyAtLevel`. `countInventoryAtLevel` stays name-based for
+`craft()`, where a recipe does not care about titles. `groupItemsByLevel` also keyed on `item.level`
+raw, so a copy with no level field (`oxhelmet`) landed under `"undefined"` and `Number(level)` came
+back `NaN`, zeroing its `inBag`.
+
+**The gather gate and the purge valve fought over the same slot.** `freeBagSlotForWork` sells until
+`esize` passes `RETRIEVE_SCROLL_SLOTS`, but `canGather` and both `goFishing`/`goMining` guards read
+plain `isInvFull()`, which is `esize <= 1`. The freed slot therefore made gathering viable before
+`ensureScroll` could spend it: the merchant sold a copy, walked to the pond, filled the slot with
+loot, walked home, sold another — a town/fishing bounce every few ticks that converted surplus gear
+into fishing loot. `GATHER_FREE_SLOTS` (6) sits above the valve's ceiling, so the slots the purge
+opens are never a trip's to take. The valve is also gated on `isBankFull` now: with room in the bank
+the drain is a stash, which the tick's own `bankStoreRoutine(true)` already does, so selling there
+was destroying gear the bank would have held.

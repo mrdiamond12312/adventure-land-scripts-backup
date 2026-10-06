@@ -588,7 +588,7 @@ async function runBankStoreRoutine(forced) {
       // A compound wants three at that level, an upgrade wants nothing but the
       // item. Anything else is stranded here and belongs back in the pile.
       const isFodder = info.compound
-        ? countInventoryAtLevel(item.name, item.level ?? 0) >= 3
+        ? countBagKeyAtLevel(getItemKey(item), item.level ?? 0) >= 3
         : !!info.upgrade;
 
       // A climb only holds its ingredient back while the climb can still happen
@@ -918,11 +918,13 @@ async function freeSlotsForUpgrading() {
 
 /**
  * Sells one surplus bag copy while the bag has no room for the scrolls an
- * upgrade or compound has to buy. Runs off the merchant tick, so it does not
- * wait on the bank being full or on bankLoop's cycle.
+ * upgrade or compound has to buy. Runs off the merchant tick rather than
+ * bankLoop's cycle, and only once the bank can no longer take the overflow —
+ * with room in the bank the drain is a stash, not a sale.
  * @returns {Promise<boolean>} whether a slot was freed
  */
 async function freeBagSlotForWork() {
+  if (!isBankFull) return false;
   if (!isInvFull(RETRIEVE_SCROLL_SLOTS)) return false;
   if (!hasBagUpgradeWork()) return false;
   if (!lockInventory("mutate")) return false;

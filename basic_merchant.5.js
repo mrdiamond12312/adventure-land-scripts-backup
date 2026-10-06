@@ -399,7 +399,7 @@ setInterval(async function () {
   // Events outrank chilling
   const hasEventToJoin = !!getEventToJoin() && !isAwaitingParcel();
 
-  const canGather = !hasEventToJoin && !isInvFull();
+  const canGather = !hasEventToJoin && !isInvFull(GATHER_FREE_SLOTS);
 
   if (canGather && !is_on_cooldown("mining")) goMining();
   else if (canGather && !is_on_cooldown("fishing")) goFishing();

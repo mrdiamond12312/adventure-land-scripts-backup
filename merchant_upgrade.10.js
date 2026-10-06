@@ -102,6 +102,23 @@ function matchesItemKey(item, itemKey) {
 }
 
 /**
+ * Unlocked bag copies of one line at one level. Keyed like findCompoundSet, so a
+ * titled copy never counts towards the plain line's set.
+ * @param {string} itemKey - see getItemKey
+ * @param {number} level
+ * @returns {number}
+ */
+function countBagKeyAtLevel(itemKey, level) {
+  return character.items.filter(
+    (item) =>
+      item &&
+      !item.l &&
+      matchesItemKey(item, itemKey) &&
+      (item.level ?? 0) === level,
+  ).length;
+}
+
+/**
  * Returns the keep threshold for an item line, falling back to its type.
  * @param {string} itemKey - see getItemKey
  * @returns {number}
@@ -254,7 +271,7 @@ function retrieveMaxItemsLevel() {
 function groupItemsByLevel(items) {
   return items.reduce((acc, item) => {
     if (item.l) return acc; // skip locked items
-    (acc[item.level] = acc[item.level] ?? []).push(item);
+    (acc[item.level ?? 0] = acc[item.level ?? 0] ?? []).push(item);
     return acc;
   }, {});
 }
@@ -272,7 +289,7 @@ function filterCompoundableSets(items, inventoryEmptySlots) {
 
   for (const level in byLevel) {
     const group = byLevel[level];
-    const inBag = countInventoryAtLevel(group[0].name, Number(level));
+    const inBag = countBagKeyAtLevel(getItemKey(group[0]), Number(level));
     const sets = Math.floor((inBag + group.length) / 3);
     let take = Math.min(group.length, Math.max(0, sets * 3 - inBag));
 
