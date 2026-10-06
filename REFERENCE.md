@@ -2330,7 +2330,7 @@ solely through `retrievedBankItemToUpgrade`, called just from `bankLoop`.
 
 **A full bank frees two slots, not fifty.** `freeSlotsForUpgrading` runs at the end of `purgeBank`
 while `isBankFull` and sells `PURGE_FREE_SLOTS` copies. `pickPurgeVictim` considers only lines over
-`getKeepThreshold + PURGE_SURPLUS_HEADROOM` and never a line's top level, then ranks compoundable
+`getKeepThreshold` plus a headroom from `PURGE_HEADROOM_STEPS` and never a line's top level, then ranks compoundable
 lines ahead of upgrade-only ones, a tier of 4 or more ahead of a tier under 3, and the lowest level
 first. A tier of exactly 3 is skipped — it is one compound away. `findPurgeVictims` decrements its
 own tally between picks, so taking one from a tier of 4 leaves 3 and the second pick looks
@@ -2410,3 +2410,11 @@ anything already carried.
 negative below 9 free slots, so a tight bag pulled nothing at all and its partial sets stayed one
 copy short forever. Below the reserve a pull now gets `min(esize - 1, 3)` instead of a negative
 budget.
+
+**The headroom has to escalate or a full bank wedges.** A fixed `PURGE_SURPLUS_HEADROOM` of 9 is
+additive per line, so once the few big offenders were trimmed, every remaining line sat under its
+own cap (`strbelt` 11 of 11, `intbelt` 11 of 11, `gphelmet` 17 of 21, `glolipop` 20 of 21) and
+`findPurgeVictims` returned nothing — with the bank 100% full and the bag at 0 free. The merchant
+then parked on a bank floor holding `DUTY.ERRAND`, which also blocked `merchantAttackLoop` from
+taking `DUTY.EVENT` for a live boss. `PURGE_HEADROOM_STEPS` retries at 9, then 3, then 0, stopping
+at the first step that yields a victim, so the trim stays gentle until gentle stops working.

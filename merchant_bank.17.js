@@ -41,8 +41,8 @@ const PURGE_SETS = ["rugged"];
 /** Vendor gear and PURGE_SETS are sold below this level */
 const PURGE_GEAR_LEVEL = 8;
 
-/** Copies a line keeps past its keep threshold before the purge trims it */
-const PURGE_SURPLUS_HEADROOM = 9;
+/** Copies a line keeps past its keep threshold, tightened until a victim turns up */
+const PURGE_HEADROOM_STEPS = [9, 3, 0];
 
 /** Slots the purge frees while the bank is full */
 const PURGE_FREE_SLOTS = 2;
@@ -721,9 +721,10 @@ function tallyPurgeLines() {
  * too small to ever compound.
  * @param {object} lines - tallyPurgeLines(), decremented as victims are taken
  * @param {Set<string>} taken - ids of victims already picked
+ * @param {number} headroom - copies a line keeps past its keep threshold
  * @returns {object | undefined}
  */
-function pickPurgeVictim(lines, taken) {
+function pickPurgeVictim(lines, taken, headroom) {
   let best;
   let bestRank = Infinity;
 
@@ -734,7 +735,7 @@ function pickPurgeVictim(lines, taken) {
     const line = lines[key];
     const level = item.level ?? 0;
 
-    if (line.total <= getKeepThreshold(key) + PURGE_SURPLUS_HEADROOM) return;
+    if (line.total <= getKeepThreshold(key) + headroom) return;
     if (level >= line.top) return;
 
     // A tier of exactly 3 is one compound away; taking from it breaks the set
@@ -771,14 +772,18 @@ function findPurgeVictims(limit) {
   const taken = new Set();
   const victims = [];
 
-  while (victims.length < limit) {
-    const pick = pickPurgeVictim(lines, taken);
-    if (!pick) break;
+  for (const headroom of PURGE_HEADROOM_STEPS) {
+    while (victims.length < limit) {
+      const pick = pickPurgeVictim(lines, taken, headroom);
+      if (!pick) break;
 
-    taken.add(pick.id);
-    lines[pick.key].total--;
-    lines[pick.key].byLevel[pick.level]--;
-    victims.push(pick);
+      taken.add(pick.id);
+      lines[pick.key].total--;
+      lines[pick.key].byLevel[pick.level]--;
+      victims.push(pick);
+    }
+
+    if (victims.length) break;
   }
 
   return victims;
