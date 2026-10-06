@@ -102,8 +102,12 @@ parent.socket?.on("merrit_status", (data) => {
   };
 
   if (reasons.some((r) => r.code === "unavailable")) return;
+
+  // Only a cooldown reason carries a parcel ETA. A missing one is not a zero
+  // cooldown: any other status, "warming up" among them, would otherwise set
+  // the hold to now and park the stand for a parcel that is not coming.
   const cooldown = reasons.find((r) => r.code === "cooldown");
-  parcelCooldownEndsAt = now + (cooldown?.remaining_ms ?? 0);
+  parcelCooldownEndsAt = cooldown ? now + cooldown.remaining_ms : 0;
 });
 
 parent.socket?.emit("interaction", { type: "merrit_info" });

@@ -484,22 +484,42 @@ async function retrieveMerchantGear() {
   );
 }
 
+/** @returns {Object<string, number>} best level worn, per item name */
+function getEquippedLevels() {
+  const levels = {};
+
+  for (const slot in character.slots) {
+    const item = character.slots[slot];
+    if (!item) continue;
+
+    const level = item.level ?? 0;
+    if (level > (levels[item.name] ?? -1)) levels[item.name] = level;
+  }
+
+  return levels;
+}
+
 /**
  * Inventory indices holding the copy of each merchant-gear item we keep — the
- * highest level one. Spares stay bankable, so the upgrade rotation still gets
- * them and only what a swap would reach for is pinned to the bag.
+ * highest level one, and only when nothing worn already beats it. Spares stay
+ * bankable, so the upgrade rotation still gets them and only what a swap would
+ * reach for is pinned to the bag.
  * @returns {Set<number>}
  */
 function getMerchantGearKeepIndices() {
   if (character.ctype !== "merchant") return new Set();
 
   const gear = getMerchantGearNames();
+  const worn = getEquippedLevels();
   const keepers = {};
 
   character.items.forEach((item, index) => {
     if (!item || !gear.has(item.name)) return;
-    if ((item.level ?? 0) <= (keepers[item.name]?.level ?? -1)) return;
-    keepers[item.name] = { level: item.level ?? 0, index };
+    const level = item.level ?? 0;
+    // A copy already worn at this level or better needs no spare in the bag
+    if (level <= (worn[item.name] ?? -1)) return;
+    if (level <= (keepers[item.name]?.level ?? -1)) return;
+    keepers[item.name] = { level, index };
   });
 
   return new Set(Object.values(keepers).map((keeper) => keeper.index));
@@ -1237,9 +1257,19 @@ function hasBagUpgradeWork() {
 }
 
 /**
- * Re-runs bankLoop after delay, or once the bag has nothing left to upgrade.
+ * @returns {boolean} whether a waiting run should cut its delay short: nothing
+ *   left in the bag to work, too little room left to work any of it, or enough
+ *   room for a full pull while sets wait in the bank
+ */
+function shouldWakeBankEarly() {
+  const spare = character.esize - RETRIEVE_SCROLL_SLOTS - RETRIEVE_FREE_SLOTS;
+  return !hasBagUpgradeWork() || isInvFull(RETRIEVE_SCROLL_SLOTS) || spare > 0;
+}
+
+/**
+ * Re-runs bankLoop after delay, or early once shouldWakeBankEarly agrees.
  * @param {number} delay
- * @param {boolean} allowEarly - whether the last visit pulled anything
+ * @param {boolean} allowEarly - whether the last visit made any progress
  */
 function scheduleNextBankRun(delay, allowEarly) {
   if (!allowEarly) return setTimeout(bankLoop, delay);
@@ -1250,7 +1280,8 @@ function scheduleNextBankRun(delay, allowEarly) {
 
   const poll = () => {
     const at = Date.now();
-    if (at >= due || (at >= earliest && !hasBagUpgradeWork())) return bankLoop();
+    if (at >= due || (at >= earliest && shouldWakeBankEarly()))
+      return bankLoop();
     setTimeout(poll, BANK_IDLE_POLL_MS);
   };
 
@@ -1260,6 +1291,7 @@ function scheduleNextBankRun(delay, allowEarly) {
 async function bankLoop() {
   let delay = BANK_LOOP_DELAY;
   let pulled = false;
+  let freed = 0;
 
   if (isAwaitingParcel() && !hasVisitedBank) return setTimeout(bankLoop, 5_000);
 
@@ -1285,7 +1317,8 @@ async function bankLoop() {
 
     await bankStoreRoutine();
     // The purge frees room after the store pass gave up, so retry it
-    if (await purgeBank()) await bankStoreRoutine();
+    freed = await purgeBank();
+    if (freed) await bankStoreRoutine();
     await stackBank();
 
     retrieveMaxItemsLevel();
@@ -1295,9 +1328,12 @@ async function bankLoop() {
     console.warn("bank loop error:", e);
     delay = 15_000;
     pulled = false;
+    freed = 0;
   } finally {
     releaseDuty(lock);
-    scheduleNextBankRun(delay, pulled);
+    // Only real progress earns an early retry, or a stuck bag would round-trip
+    // to the bank every BANK_MIN_DELAY achieving nothing
+    scheduleNextBankRun(delay, pulled || freed > 0);
   }
 }
 

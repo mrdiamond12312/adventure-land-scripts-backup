@@ -2551,3 +2551,37 @@ is in flight has already set. `retrieveBankItem` now takes `travel`, and every c
 the tick passes `travel: false`, giving up unless the merchant already stands on that floor;
 `bankLoop` and the duty-holding routines keep the default. `ensureScroll` also stops returning -1
 for a stashed stack it cannot reach — from anywhere but the bank, buying beats walking off the spot.
+
+**The early wake was gated on the one thing a jammed bag cannot do.**
+`scheduleNextBankRun(delay, allowEarly)` takes `allowEarly` from `pulled`, and `bankLoop` sets that
+from `retrievedBankItemToUpgrade`, which returns false at `budget <= 0` — exactly what a full bag
+produces. So `scheduleNextBankRun` fell to its plain `setTimeout(bankLoop, delay)` with no polling
+at all, and the recovery path waited the full 185s precisely in the state that wanted the shortest
+one. The poll condition could not have saved it either: `!hasBagUpgradeWork()` is
+`info.upgrade || info.compound` over the bag, so a bag of `ololipop` and partial amulet sets holds
+it true forever. `shouldWakeBankEarly` now also fires on `isInvFull(RETRIEVE_SCROLL_SLOTS)`, and
+`allowEarly` is `pulled || freed > 0` — the count `purgeBank` already returned and `bankLoop` threw
+away. Progress of either kind earns the early retry; a pass that achieved nothing still waits out
+the ceiling, so a stuck bag cannot round-trip to the bank every `BANK_MIN_DELAY`.
+
+**Room for a pull is reason enough to go back.** `shouldWakeBankEarly` only fired on an empty bag
+or a jammed one, and `hasBagUpgradeWork` is true for any `compound`/`upgrade` item in the bag, so a
+merchant holding ordinary fodder with plenty of free slots waited out the full `BANK_LOOP_DELAY`
+while completable sets sat in the bank — seven `strbelt` +1 take two or three trips, so nine minutes
+of idling. It now also fires on `esize - RETRIEVE_SCROLL_SLOTS - RETRIEVE_FREE_SLOTS > 0`, which is
+exactly `retrievedBankItemToUpgrade`'s own `spare > 0` test for a full-size pull. It self-limits: a
+pull fills the bag and the term goes false, `allowEarly` still requires the last visit to have made
+progress, and `retrieveBackoff` with `getRetrieveFreshness` keeps one line from taking every budget.
+
+**A gear spare is only a spare if nothing worn already beats it.** `getMerchantGearKeepIndices`
+pinned the highest-level bag copy of every name in `getMerchantGearNames()` without ever reading
+`character.slots`, so a merchant wearing `pants` +10 still had `pants` +8 held in the bag, exempt
+from both the store filter and `isPurgeCandidate`. `pants` is the clear case — all eight gear states
+ask for `"pants"`, so no swap can ever need a bag copy of it — and `quiver` joins the set whenever
+`getMerchantOffhand` resolves `getBestQuiver()`. `getEquippedLevels` now screens them out.
+`retrieveMerchantGear` needed no matching change: its `carried` set already spans
+`character.slots` as well as the bag, so the stashed copy is not pulled straight back.
+
+Keying by `item.name` rather than `getItemKey` is deliberate here: a titled copy and a plain one
+compete as one line and ties fall to bag order, which can pin the arbitrary one of two `quiver` +7s,
+but switching to the key would pin one of each instead — more slots held, not fewer.
