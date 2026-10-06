@@ -2418,3 +2418,35 @@ own cap (`strbelt` 11 of 11, `intbelt` 11 of 11, `gphelmet` 17 of 21, `glolipop`
 then parked on a bank floor holding `DUTY.ERRAND`, which also blocked `merchantAttackLoop` from
 taking `DUTY.EVENT` for a live boss. `PURGE_HEADROOM_STEPS` retries at 9, then 3, then 0, stopping
 at the first step that yields a victim, so the trim stays gentle until gentle stops working.
+
+**`isBankFull` is a threshold, not literal zero.** `floors.every(getFloorCapacity(floor).empty === 0)`
+demanded every floor be at exactly zero, so four stray `null` slots in ~1000 (`items3`, `items7` x2,
+`items16`) held it `false` forever. That switched off the whole surplus path — `shouldSellItem` drops
+its `isPurgeable` branch and `purgeBank` returns before `freeSlotsForUpgrading` — while the bag sat at
+42/42 with 12 locked items and `retrievedBankItemToUpgrade` could not pull a thing. The old assignment
+also lived inside the `!fitsSomewhere` branch, and `getFloorCapacity` counts stack room, so one
+mergeable partial stack anywhere (an `anniversarygift q:1`) kept it from ever being evaluated.
+`countSharedEmptySlots` now counts only the packs a store or purge pass can actually use —
+`forEachBankSlot` without `includePersonal`, so `items23` is excluded, unlike `getFloorCapacity`,
+which counts personal slots no pass can reach — and `BANK_FULL_SLACK` is checked on every run.
+
+**The purge needs a bag copy before it can touch the bank.** `freeSlotsForUpgrading` skips every bank
+victim while `isInvFull(0)`, because a retrieve has nowhere to land. Victims sort bag-first, so one
+bag copy unjams the rest one retrieve-sell at a time — but `findPurgeVictims` stops at the first
+headroom step that yields anything, and that step can yield bank copies only. `freed` stayed 0 and
+the bank never opened. A full bag now gets a `bagOnly` pick at headroom 0 prepended, which reuses the
+same keep-threshold, not-top-level and tier-of-3 guards rather than inventing a looser rule.
+
+**A short compound pull is pure churn.** `take()` re-sliced `selectRetrievableItems` to `budget` after
+`filterCompoundableSets` had already aligned the pull to whole sets, and `filterCompoundableSets`
+ended on its own `slice(0, inventoryEmptySlots)`. Either cut could leave 2 of a 3-set in the bag,
+which `runBankStoreRoutine` then classifies as not-fodder (`countInventoryAtLevel < 3`) and stashes
+straight back — a bank trip that fills the bag, stashes it and achieves nothing. Trimming by 3 instead
+keeps `inBag + take` a multiple of 3, so a tight budget pulls a smaller whole set or nothing;
+`selectRetrievableItems` now owns the clamp for both kinds and `take()` does not re-slice.
+
+`RETRIEVE_SCROLL_SLOTS` exists because the scrolls were appended to `picked` after the budget was
+spent, never charged against it. On the `RETRIEVE_MIN_SLOTS` path that left one free slot for up to
+five scroll names, so the extras failed to retrieve and the pulled items had nothing to burn. The
+budget is now computed off `esize - RETRIEVE_SCROLL_SLOTS`, and the scroll list clamps to the space
+`picked` actually left — the reserve is the policy, the clamp is the guarantee.

@@ -57,6 +57,9 @@ const RETRIEVE_MAX_SLOTS = 12;
 /** Bag slots a pull may use when the bag is too tight for the full reserve */
 const RETRIEVE_MIN_SLOTS = 3;
 
+/** Bag slots a pull holds back for the scrolls its items burn */
+const RETRIEVE_SCROLL_SLOTS = 2;
+
 /** How long an item that made no progress is skipped */
 const RETRIEVE_BACKOFF_MS = 10 * 60_000;
 
@@ -265,17 +268,23 @@ function groupItemsByLevel(items) {
 function filterCompoundableSets(items, inventoryEmptySlots) {
   const byLevel = groupItemsByLevel(items);
   const result = [];
+  let room = inventoryEmptySlots;
 
   for (const level in byLevel) {
     const group = byLevel[level];
     const inBag = countInventoryAtLevel(group[0].name, Number(level));
     const sets = Math.floor((inBag + group.length) / 3);
-    const take = Math.min(group.length, Math.max(0, sets * 3 - inBag));
+    let take = Math.min(group.length, Math.max(0, sets * 3 - inBag));
 
-    if (take > 0) result.push(...group.slice(0, take));
+    // Whole sets only: a short pull can never compound and gets stashed back
+    while (take > room) take -= 3;
+    if (take <= 0) continue;
+
+    result.push(...group.slice(0, take));
+    room -= take;
   }
 
-  return result.slice(0, inventoryEmptySlots);
+  return result;
 }
 
 /**
@@ -301,11 +310,10 @@ function selectRetrievableItems(itemId, isTargeted, inventoryEmptySlots) {
     items = items.slice(0, Math.max(0, items.length - keep));
   }
 
-  if (item_info({ name }).compound) {
-    items = filterCompoundableSets(items, inventoryEmptySlots);
-  }
+  if (item_info({ name }).compound)
+    return filterCompoundableSets(items, inventoryEmptySlots);
 
-  return items;
+  return items.slice(0, inventoryEmptySlots);
 }
 
 /**
@@ -367,9 +375,10 @@ function scoreRetrieveCandidate(itemId, itemCount) {
  * @returns {Promise<boolean>} whether the bank had anything worth pulling
  */
 async function retrievedBankItemToUpgrade() {
-  const spare = character.esize - RETRIEVE_FREE_SLOTS;
+  const usable = character.esize - RETRIEVE_SCROLL_SLOTS;
+  const spare = usable - RETRIEVE_FREE_SLOTS;
   let budget = Math.min(
-    spare > 0 ? spare : Math.min(character.esize - 1, RETRIEVE_MIN_SLOTS),
+    spare > 0 ? spare : Math.min(usable - 1, RETRIEVE_MIN_SLOTS),
     RETRIEVE_MAX_SLOTS,
   );
 
@@ -382,7 +391,7 @@ async function retrievedBankItemToUpgrade() {
   const pickedIds = new Set();
 
   const take = (id, isTargeted) => {
-    const items = selectRetrievableItems(id, isTargeted, budget).slice(0, budget);
+    const items = selectRetrievableItems(id, isTargeted, budget);
     if (!items.length) return;
 
     budget -= items.length;
@@ -437,7 +446,8 @@ async function retrievedBankItemToUpgrade() {
   const scrollSlots = [...scrollNames]
     .filter((name) => locate_item(name) === -1)
     .map((name) => getItemBankSlots(name, true)[0])
-    .filter(Boolean);
+    .filter(Boolean)
+    .slice(0, Math.max(0, character.esize - picked.length));
 
   await retrieveAll([...picked, ...scrollSlots]);
 

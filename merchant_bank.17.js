@@ -12,7 +12,7 @@ const BANK_FLOORS = {
 
 /**
  * Slots to skip globally (gold, personal storage).
- * items10 is reserved for personal items and is never touched.
+ * items23 is reserved for personal items and is never touched.
  */
 const IGNORE_BANK_SLOTS = ["gold", "items23"];
 const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
@@ -46,6 +46,9 @@ const PURGE_HEADROOM_STEPS = [9, 3, 0];
 
 /** Slots the purge frees while the bank is full */
 const PURGE_FREE_SLOTS = 2;
+
+/** Free shared slots at or below which the bank counts as full */
+const BANK_FULL_SLACK = 8;
 
 /** Rounds one stacking pass may run */
 const STACK_MAX_ROUNDS = 5;
@@ -371,6 +374,19 @@ function getFloorCapacity(floor) {
 }
 
 /**
+ * Empty slots across the packs a store or purge pass may actually use,
+ * personal storage excluded.
+ * @returns {number}
+ */
+function countSharedEmptySlots() {
+  let empty = 0;
+  forEachBankSlot((item) => {
+    if (!item) empty++;
+  });
+  return empty;
+}
+
+/**
  * Splits inventory indices by whether they fit, using up the capacity.
  * @param {number[]} indices
  * @param {{ empty: number, stackRoom: Object<string, number[]> }} capacity
@@ -616,6 +632,12 @@ async function runBankStoreRoutine(forced) {
   const floors = Object.keys(BANK_FLOORS);
 
   if (hasVisitedBank) {
+    const wasBankFull = isBankFull;
+    const free = countSharedEmptySlots();
+    isBankFull = free <= BANK_FULL_SLACK;
+    if (isBankFull && !wasBankFull)
+      console.log(`bank full: ${free} shared slots left, purge is on`);
+
     const toStoreIndices = toStore.map(({ index }) => index);
     const fitsSomewhere = floors.some(
       (floor) =>
@@ -623,15 +645,7 @@ async function runBankStoreRoutine(forced) {
           .length,
     );
 
-    if (!fitsSomewhere) {
-      const wasBankFull = isBankFull;
-      isBankFull = floors.every(
-        (floor) => getFloorCapacity(floor).empty === 0,
-      );
-      if (isBankFull && !wasBankFull)
-        console.log("bank full: nothing in the bag fits, skipping bank trips");
-      return;
-    }
+    if (!fitsSomewhere) return;
   }
 
   // Forward pass: each floor takes what it already holds a copy of
@@ -651,7 +665,7 @@ async function runBankStoreRoutine(forced) {
     await storeIndicesOnCurrentFloor(getStoreIndices(toStore));
   }
 
-  isBankFull = floors.every((floor) => getFloorCapacity(floor).empty === 0);
+  isBankFull = countSharedEmptySlots() <= BANK_FULL_SLACK;
 }
 
 // ---------------------------------------------------------------------------
@@ -722,9 +736,10 @@ function tallyPurgeLines() {
  * @param {object} lines - tallyPurgeLines(), decremented as victims are taken
  * @param {Set<string>} taken - ids of victims already picked
  * @param {number} headroom - copies a line keeps past its keep threshold
+ * @param {{ bagOnly?: boolean }} [options] - bagOnly skips the bank walk
  * @returns {object | undefined}
  */
-function pickPurgeVictim(lines, taken, headroom) {
+function pickPurgeVictim(lines, taken, headroom, { bagOnly = false } = {}) {
   let best;
   let bestRank = Infinity;
 
@@ -756,9 +771,10 @@ function pickPurgeVictim(lines, taken, headroom) {
   character.items.forEach((item, index) =>
     consider(item, `bag:${index}`, { index }),
   );
-  forEachBankSlot((item, pack, slot, floor) =>
-    consider(item, `${pack}:${slot}`, { pack, slot, floor }),
-  );
+  if (!bagOnly)
+    forEachBankSlot((item, pack, slot, floor) =>
+      consider(item, `${pack}:${slot}`, { pack, slot, floor }),
+    );
 
   return best;
 }
@@ -784,6 +800,17 @@ function findPurgeVictims(limit) {
     }
 
     if (victims.length) break;
+  }
+
+  // A bank victim needs a bag slot to land in, so a full bag has to sell one of
+  // its own copies first or every pick below is skipped
+  if (
+    victims.length &&
+    isInvFull(0) &&
+    !victims.some((victim) => victim.index !== undefined)
+  ) {
+    const opener = pickPurgeVictim(lines, taken, 0, { bagOnly: true });
+    if (opener) victims.unshift(opener);
   }
 
   return victims;
