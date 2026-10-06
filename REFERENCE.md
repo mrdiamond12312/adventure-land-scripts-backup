@@ -2585,3 +2585,22 @@ ask for `"pants"`, so no swap can ever need a bag copy of it — and `quiver` jo
 Keying by `item.name` rather than `getItemKey` is deliberate here: a titled copy and a plain one
 compete as one line and ties fall to bag order, which can pin the arbitrary one of two `quiver` +7s,
 but switching to the key would pin one of each instead — more slots held, not fewer.
+
+**`shouldGoChilling` and `canGather` have to agree about space.** `shouldGoChilling` read only the
+skill cooldowns and whether a rod or pickaxe sits in the bag, never inventory room, which was
+harmless while `canGather` used plain `isInvFull()` — the merchant deferred to a trip it was about
+to take. Once `GATHER_FREE_SLOTS` raised `canGather`'s bar, the two disagreed: no trip happened and
+yet four call sites still deferred to one. `basic_merchant.5.js` gates
+`equipBatch(calculateMerchantEquipments())` on it, so the merchant stopped equipping altogether —
+standing in a boss with stale gear and the wrong offhand, because `getMerchantOffhand` never got
+applied — and luring (×2) and scouting were switched off too. It now returns false when
+`isInvFull(GATHER_FREE_SLOTS)`, with the `character.c.mining`/`c.fishing` test hoisted above it so a
+channel already in progress still owns the gear even if its own loot filled the bag.
+
+**A tie on range kept the wrong quiver equipped.** `getBestQuiver` compared only `info.range` with a
+strict `>`, and `getCarriedItems` lists `character.slots.mainhand` and `offhand` before the bag — so
+whichever quiver was already worn was examined first and held every tie permanently, leaving a plain
+`quiver` +7 in the offhand while a `t2quiver` +7 of equal reach sat in the bag. Its being locked was
+never the obstacle: `getCarriedItems` has no `.l` filter. `dex` now breaks the tie. The `!range`
+guard preserves the old behaviour of ignoring a quiver with no reach at all, which is what let
+`getMerchantOffhand` fall through to `ATTACK_OFFHAND`.

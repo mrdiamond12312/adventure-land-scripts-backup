@@ -20,15 +20,19 @@ async function equipBroom() {
 }
 
 function shouldGoChilling() {
+  // A channel already running owns the gear whatever the bag looks like
+  if (character.c.mining || character.c.fishing) return true;
+
+  // Without room for the loot there is no trip, so nothing should defer to one
+  if (isInvFull(GATHER_FREE_SLOTS)) return false;
+
   return (
     (!is_on_cooldown("fishing") &&
       (locate_item("rod") !== -1 ||
         character.slots.mainhand?.name === "rod")) ||
     (!is_on_cooldown("mining") &&
       (locate_item("pickaxe") !== -1 ||
-        character.slots.mainhand?.name === "pickaxe")) ||
-    character.c.mining ||
-    character.c.fishing
+        character.slots.mainhand?.name === "pickaxe"))
   );
 }
 

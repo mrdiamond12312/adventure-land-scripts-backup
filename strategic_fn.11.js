@@ -1021,8 +1021,8 @@ function getCarriedItems() {
 }
 
 /**
- * Longest-ranged quiver we are carrying.
- * @returns {{name: string, range: number}|undefined}
+ * Longest-ranged quiver we are carrying, dex breaking a tie.
+ * @returns {{name: string, range: number, dex: number}|undefined}
  */
 function getBestQuiver() {
   let best;
@@ -1032,7 +1032,13 @@ function getBestQuiver() {
     if ((info?.wtype ?? info?.type) !== "quiver") continue;
 
     const range = info.range ?? 0;
-    if (range > (best?.range ?? 0)) best = { name: item.name, range };
+    const dex = info.dex ?? 0;
+    if (!range) continue;
+
+    // getCarriedItems lists the equipped copy first, so range alone let it hold
+    // every tie against a better twin forever
+    if (!best || range > best.range || (range === best.range && dex > best.dex))
+      best = { name: item.name, range, dex };
   }
 
   return best;
