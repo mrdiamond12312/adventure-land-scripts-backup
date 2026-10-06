@@ -336,7 +336,9 @@ function getMaxStack(itemName) {
 /** @returns {boolean} whether this stack can take more of its item */
 function isStackMergeable(item) {
   const hasTitle = item.p && !G.titles?.[item.p]?.stackable;
-  return !item.l && !hasTitle && !item.b && !item.v && !item.data;
+  return (
+    !item.l && !hasTitle && !item.b && !item.v && !item.data && !item.m
+  );
 }
 
 /**
@@ -381,7 +383,10 @@ function pickStorableIndices(indices, capacity) {
   for (const index of indices) {
     const item = character.items[index];
     const quantity = item.q ?? 1;
-    const rooms = capacity.stackRoom[item.name] ?? [];
+    // A marked stack merges with nothing, so it only ever takes an empty slot
+    const rooms = isStackMergeable(item)
+      ? capacity.stackRoom[item.name] ?? []
+      : [];
     const stack = rooms.findIndex((room) => room >= quantity);
 
     if (stack !== -1) {
@@ -390,7 +395,7 @@ function pickStorableIndices(indices, capacity) {
     } else if (capacity.empty > 0) {
       capacity.empty--;
       const maxStack = getMaxStack(item.name);
-      if (maxStack > quantity)
+      if (maxStack > quantity && isStackMergeable(item))
         (capacity.stackRoom[item.name] =
           capacity.stackRoom[item.name] ?? []).push(maxStack - quantity);
       storable.push(index);
@@ -668,7 +673,7 @@ function isSaleableItem(item) {
 /** @returns {boolean} whether a purge pass may consider this item at all */
 function isPurgeCandidate(item) {
   if (!item || item.l || item.p || item.ach) return false;
-  if (item_grade(item) >= 2) return false;
+  if (IGNORE.includes(item.name) || item_grade(item) >= 2) return false;
 
   const def = G.items[item.name];
   if (!def?.upgrade && !def?.compound) return false;
@@ -711,18 +716,19 @@ function tallyPurgeLines() {
 }
 
 /**
- * One bank slot worth selling, compoundable lines first, then a tier that keeps
- * a set of 3 without it, then a tier too small to ever compound.
+ * One copy worth selling: bag before bank since it needs no retrieve, then
+ * compoundable lines, then a tier that keeps a set of 3 without it, then a tier
+ * too small to ever compound.
  * @param {object} lines - tallyPurgeLines(), decremented as victims are taken
- * @param {Set<string>} taken - "pack:slot" of victims already picked
- * @returns {{ pack: string, slot: number, floor: string, item: object, key: string, level: number } | undefined}
+ * @param {Set<string>} taken - ids of victims already picked
+ * @returns {object | undefined}
  */
 function pickPurgeVictim(lines, taken) {
   let best;
   let bestRank = Infinity;
 
-  forEachBankSlot((item, pack, slot, floor) => {
-    if (!isPurgeCandidate(item) || taken.has(`${pack}:${slot}`)) return;
+  const consider = (item, id, where) => {
+    if (!isPurgeCandidate(item) || taken.has(id)) return;
 
     const key = getItemKey(item);
     const line = lines[key];
@@ -736,19 +742,29 @@ function pickPurgeVictim(lines, taken) {
     if (tier === 3) return;
 
     const rank =
-      (item_info(item).compound ? 0 : 10_000) + (tier >= 4 ? 0 : 100) + level;
+      (where.index === undefined ? 1_000_000 : 0) +
+      (item_info(item).compound ? 0 : 10_000) +
+      (tier >= 4 ? 0 : 100) +
+      level;
     if (rank >= bestRank) return;
 
-    best = { pack, slot, floor, item, key, level };
+    best = { ...where, id, item, key, level };
     bestRank = rank;
-  });
+  };
+
+  character.items.forEach((item, index) =>
+    consider(item, `bag:${index}`, { index }),
+  );
+  forEachBankSlot((item, pack, slot, floor) =>
+    consider(item, `${pack}:${slot}`, { pack, slot, floor }),
+  );
 
   return best;
 }
 
 /**
  * @param {number} limit
- * @returns {Array<object>} up to limit bank slots to sell
+ * @returns {Array<object>} up to limit copies to sell
  */
 function findPurgeVictims(limit) {
   const lines = tallyPurgeLines();
@@ -759,7 +775,7 @@ function findPurgeVictims(limit) {
     const pick = pickPurgeVictim(lines, taken);
     if (!pick) break;
 
-    taken.add(`${pick.pack}:${pick.slot}`);
+    taken.add(pick.id);
     lines[pick.key].total--;
     lines[pick.key].byLevel[pick.level]--;
     victims.push(pick);
@@ -827,24 +843,35 @@ function getPurgeSlotTarget() {
 async function freeSlotsForUpgrading() {
   let freed = 0;
 
-  // One floor at a time: a jammed bag forces one sale per trip
-  const victims = findPurgeVictims(getPurgeSlotTarget()).sort((lhs, rhs) =>
-    lhs.floor.localeCompare(rhs.floor),
+  // Bag copies first, then one floor at a time
+  const victims = findPurgeVictims(getPurgeSlotTarget()).sort(
+    (lhs, rhs) =>
+      (lhs.index === undefined) - (rhs.index === undefined) ||
+      (lhs.floor ?? "").localeCompare(rhs.floor ?? ""),
   );
 
   for (const victim of victims) {
-    const held = new Set(
-      character.items.flatMap((item, index) =>
-        matchesPurgeVictim(item, victim) ? [index] : [],
-      ),
-    );
+    let slot = victim.index;
 
-    await retrieveAll([victim]);
+    if (slot === undefined) {
+      // A retrieve needs somewhere to land; bag sales above make that room
+      if (isInvFull(0)) continue;
 
-    const slot = character.items.findIndex(
-      (item, index) => !held.has(index) && matchesPurgeVictim(item, victim),
-    );
-    if (slot === -1) continue;
+      const held = new Set(
+        character.items.flatMap((item, index) =>
+          matchesPurgeVictim(item, victim) ? [index] : [],
+        ),
+      );
+
+      await retrieveAll([victim]);
+
+      slot = character.items.findIndex(
+        (item, index) => !held.has(index) && matchesPurgeVictim(item, victim),
+      );
+    }
+
+    if (slot === -1 || !matchesPurgeVictim(character.items[slot], victim))
+      continue;
 
     try {
       await sell(slot, 1);

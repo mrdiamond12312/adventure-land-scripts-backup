@@ -132,9 +132,16 @@ async function ensureScroll(scrollType, itemGrade) {
 
   if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD) return -1;
 
+  // A new stack needs a slot of its own, and the bag is what runs out first
+  if (isInvFull()) {
+    console.log(`no slot to buy ${scrollType}`);
+    return -1;
+  }
+
   try {
     await buy(scrollType, 1);
   } catch (e) {
+    console.warn(`Failed buying ${scrollType}`, e);
     return -1;
   }
 

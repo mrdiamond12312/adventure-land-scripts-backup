@@ -2383,3 +2383,15 @@ just under their caps, so they would join the leak after one more flood.
 **The purge skips rares and achievement copies.** `isPurgeCandidate` rejects `item.ach` and
 `item_grade >= 2`. A ceiling never reaches a line's top level, so grade stays 0 in practice, but
 `acc`/`ach` copies carry no `p` and so were not otherwise exempt — selling one is unrecoverable.
+
+**A pvp-marked stack merges with nothing.** `isStackMergeable` screened `l`, `p`, `b`, `v` and
+`data` but not `m`, the mark naming whoever dropped it. A merchant was found with
+`anniversarygift` and `candy1` each in two slots — one marked, one not — and `whiteegg` sitting as
+1999 + 2000 in the bank, both far under the 9999 cap. Three paths read the predicate, so all three
+lied: `getPartialStacks` kept picking a marked stack as a drain target, so `runStackDrains` made
+no progress and the `STACK_MAX_ROUNDS` loop broke out before the merges that *would* have worked;
+and `getFloorCapacity` counted a marked stack's headroom as free room, which `pickStorableIndices`
+spent, which fed the `fitsSomewhere` check that decides whether the merchant travels at all.
+`pickStorableIndices` also needed it on the source side — a marked bag item cannot merge into an
+unmarked bank stack, so it may only take an empty slot and must not advertise its own leftover
+room afterwards.
