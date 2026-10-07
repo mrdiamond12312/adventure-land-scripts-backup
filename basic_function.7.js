@@ -1976,7 +1976,7 @@ setInterval(async function () {
           ].includes(item.name)
         )
           return;
-        await send_item(partyMerchant, index, 1000);
+        await send_item(partyMerchant, index, 1000).catch((e) => log(e));
       }),
     );
   }

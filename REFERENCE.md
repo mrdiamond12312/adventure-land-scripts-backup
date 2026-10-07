@@ -189,6 +189,15 @@ it, so every fighter request was dropped for as long as the event lasted (fighte
 Other holders (bank trips, lures, drags, scouting, crypt) still drop cm requests; only the event
 fight yields.
 
+### A failed hand-off must not cost the request (2026-10-08)
+
+The fighters' 10s cm tick hands the merchant gold and loot first, whenever it is in view, and only
+then sends `inv_full`/`buy_potions`/`elixir`/`xptome`. `send_item` rejects on a failed server
+response (out of send reach, the merchant's bags full), and one rejection inside that
+`Promise.all` used to abort the whole tick. In view is exactly where the merchant is during an
+event fight, so mid-boss potion requests went missing tick after tick. Each `send_item` now
+swallows its own rejection; the request always goes out.
+
 ### Duties stop at the action's reach, not at the requester's coordinates (2026-09-08)
 
 Every duty used to `advanceSmartMove(message)` all the way to the `x`/`y` the fighter sent. A
