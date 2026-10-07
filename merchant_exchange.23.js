@@ -68,14 +68,26 @@ function getExchangeSlot(entry) {
   return canSpareExchange(entry) ? locateExchangeStack(entry) : -1;
 }
 
+/** @returns {boolean} whether a travel-free bank pull may run right now */
+function canPullFromBank() {
+  return !isOnDuty() || isOnDuty(DUTY.ERRAND);
+}
+
 /**
  * The bag slot to exchange an entry from, pulling more from the bank while the
  * bag can't spare one exchange.
  * @returns {Promise<number>} the slot, or -1
  */
 async function prepareExchangeSlot(entry) {
-  if (!canSpareExchange(entry) && !isOnDuty() && hasExchangeStock(entry)) {
+  while (
+    canPullFromBank() &&
+    !canSpareExchange(entry) &&
+    hasExchangeStock(entry) &&
+    !isInvFull(1)
+  ) {
+    const before = getTotalQuantityOf(entry.name);
     await retrieveBankItem(entry.name, 0, { travel: false });
+    if (getTotalQuantityOf(entry.name) <= before) break;
   }
 
   return getExchangeSlot(entry);
