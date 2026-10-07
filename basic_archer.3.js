@@ -192,14 +192,15 @@ setInterval(async function () {
 
   await cupidHeal();
 
-  if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug) return;
+  //// EVENTS, THE CRYPT, THEN THE FARMING SPOT
+  // Mid-trip it only hands back a target when a higher strategy took over
+  const target = await selectFightTarget();
+
+  if (isOnTrip()) return;
 
   if (character.fear) {
     await scareAwayMobs();
   }
-
-  //// EVENTS, THE CRYPT, THEN THE FARMING SPOT
-  const target = await selectFightTarget();
 
   if (character.hp < 0.6 * character.max_hp && !get_entity(HEALER)) {
     send_cm(HEALER, "party_heal");

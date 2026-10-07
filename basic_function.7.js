@@ -252,8 +252,8 @@ const SPECIAL_MOB_IDS = [
 // var mapY = 425;
 
 var map = "spookytown";
-var mapX = 255;
-var mapY = -1160;
+var mapX = 256;
+var mapY = -1253;
 
 // var map = "spookytown";
 // var mapX = 412;
@@ -708,8 +708,48 @@ if (parent.caracAL) {
   load_code(16);
 }
 
+/** Chain rank of the fighter strategy running right now, undefined outside the chain */
+var activeStrategyRank;
+
+/** Chain rank of the strategy that started the trip under way, -1 outside the chain */
+var tripRank = -1;
+
+/** @returns {boolean} whether a controlled move is under way */
+function isOnTrip() {
+  return (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
+}
+
+/**
+ * Whether the running strategy has to wait out the trip under way — its own or
+ * a higher-priority one. Outside the chain every trip holds.
+ * @returns {boolean}
+ */
+function isTripHeld() {
+  return isOnTrip() && !(activeStrategyRank < tripRank);
+}
+
+/** Drops the trip under way, resolving once the mover has let go of it. */
+async function abandonTrip() {
+  if (parent.caracAL) {
+    if (typeof strategicSmartMove === "undefined") return;
+    strategicSmartMove.cleanUp();
+    strategicSmartMove.cancelTown();
+    return;
+  }
+
+  stop("move");
+
+  const deadline = Date.now() + 3000;
+  while ((smart.moving || isAdvanceSmartMoving) && Date.now() < deadline)
+    await sleep(50);
+}
+
 // Wrapper to use which depends on client platform
 async function advanceSmartMove(props, options = { useScare: true }) {
+  const rank = activeStrategyRank ?? -1;
+  const isTakeover = isOnTrip() && rank >= 0 && rank < tripRank;
+  if (parent.caracAL || !isOnTrip() || isTakeover) tripRank = rank;
+
   if (
     parent.caracAL &&
     (typeof smartMove !== "function" ||
@@ -720,6 +760,9 @@ async function advanceSmartMove(props, options = { useScare: true }) {
   if (parent.caracAL) {
     return smartMove(props, options);
   }
+
+  // smartMove drops the old trip itself, the native mover refuses while moving
+  if (isTakeover) await abandonTrip();
 
   if (!options.stopWatcher) return oldAdvanceSmartMove(props, options);
 
@@ -2678,14 +2721,28 @@ const travelling = () => ({});
 /**
  * Runs the fighter strategies in priority order. The first one to claim the
  * tick decides it, and only one that found something answers with a target.
+ * Mid-trip only the strategies outranking the trip's owner run, and one of
+ * them claiming the tick takes the trip over.
  * @returns {Promise<object|undefined>} the entity to fight, if any
  */
 async function selectFightTarget() {
   rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
 
-  for (const strategy of fighterStrategies) {
-    const outcome = await strategy();
-    if (outcome) return outcome.target;
+  try {
+    for (const [rank, strategy] of fighterStrategies.entries()) {
+      if (isOnTrip() && rank >= tripRank) return undefined;
+
+      activeStrategyRank = rank;
+      const outcome = await strategy();
+      if (!outcome) continue;
+
+      // Claimed without a trip of its own, so the lower one is stale
+      if (isOnTrip() && rank < tripRank) await abandonTrip();
+
+      return outcome.target;
+    }
+  } finally {
+    activeStrategyRank = undefined;
   }
 
   return undefined;

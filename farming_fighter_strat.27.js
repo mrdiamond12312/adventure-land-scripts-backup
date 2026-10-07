@@ -84,7 +84,7 @@ async function useFarmingStrategy() {
     return engage(target);
   }
 
-  if (smart.moving || isAdvanceSmartMoving) return travelling();
+  if (isTripHeld()) return travelling();
 
   // On the spot a mob that just died leaves an empty tick, and the walk it
   // would start cannot be taken back

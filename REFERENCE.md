@@ -1528,6 +1528,33 @@ basic_ranger.32.js never got either. The trip needs no `scareAwayMobs()` loop of
 `server.status.goobrawl` alone rather than on a goo being in sight — leaving for the farming spot
 mid-brawl costs the whole event.
 
+### A higher strategy takes over a trip (`tripRank`, 2026-10-08)
+
+Every class's mainLoop used to bail before `selectFightTarget()` whenever `smart.moving ||
+isAdvanceSmartMoving`, and every strategy had the same guard. So a trip, once started, ran to the
+end: the party walking home after a skeletor kill could not turn round for a phoenix the merchant
+scouted mid-walk, and only went for it after arriving.
+
+Now a trip remembers who started it. `advanceSmartMove` stamps `tripRank` with `activeStrategyRank`,
+the strategy's index in `fighterStrategies` that `selectFightTarget()` sets while running it (`-1`
+for calls from outside the chain — kiting, `suicide`, the merchant — which nothing may take over).
+Mid-trip, `selectFightTarget()` runs only the strategies *above* the trip's owner and stops at the
+owner, so the owner and everything below still wait the trip out exactly as before. A strategy
+above it either:
+
+- starts its own move — `advanceSmartMove` replaces the trip (caracAL's `smartMove` already drops the
+  old session; the native branch `stop("move")`s and waits for `oldAdvanceSmartMove` to unwind, since
+  it refuses to start while `isAdvanceSmartMoving`), or
+- claims the tick without moving (a boss in sight, goobrawl, waiting at Dorr) — `selectFightTarget()`
+  calls `abandonTrip()` so the stale walk does not carry the fighter away from what it now owns.
+
+Strategies guard with `isTripHeld()` rather than the raw moving flags: true only for a trip at or above
+their own rank, and identical to the old guard outside the chain. mainLoops call `selectFightTarget()`
+every tick and fight only when `!isOnTrip()`; the priest still heals mid-trip.
+
+The cave-internal guards (`stepToDarkMageRange`, `blinkToDarkMageRange`, `walkToCaveDestination`) keep
+the raw flags on purpose: they are cave rank 0 moving within the run, and no lower trip exists in there.
+
 ## Crabxx targeting keys off the shell, not the crabx (`useEventStrategy`)
 
 `crabxx` carries `"1hp"` while its shell is up: every hit lands for exactly 1, whoever throws it.

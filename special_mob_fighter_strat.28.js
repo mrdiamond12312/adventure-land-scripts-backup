@@ -126,7 +126,7 @@ async function useSpecialMobStrategy() {
     return engage(inVision);
   }
 
-  if (smart.moving || isAdvanceSmartMoving) return travelling();
+  if (isTripHeld()) return travelling();
 
   const sighting = getSpecialMobSighting();
   if (!sighting) return undefined;

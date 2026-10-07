@@ -1144,7 +1144,7 @@ async function approachCave() {
 
   isPreparingCave = true;
 
-  if (smart.moving || isAdvanceSmartMoving) return travelling();
+  if (isTripHeld()) return travelling();
 
   if (distance(character, DORR_SPOT) > DORR_SLACK) {
     caveLog(resuming ? "walking back to Dorr" : "walking to Dorr");

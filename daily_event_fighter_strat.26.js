@@ -418,7 +418,7 @@ function selectAbtestingTarget() {
  * enemy seen, then behind the tanker, else around the patrol loop.
  */
 async function roamAbtesting() {
-  if (smart.moving || isAdvanceSmartMoving) return;
+  if (isTripHeld()) return;
 
   const allies = getAbtestingAllies().filter((ally) => ally !== character);
 

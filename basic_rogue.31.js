@@ -218,15 +218,11 @@ async function mainLoop() {
       });
     }
 
-    if ((smart.moving || isAdvanceSmartMoving) && !smartmoveDebug)
-      throw new Error("Smart moving", {
-        cause: "smart_move",
-      });
-
     //// EVENTS, THE CRYPT, THEN THE FARMING SPOT
+    // Mid-trip it only hands back a target when a higher strategy took over
     const target = await selectFightTarget();
 
-    if (target) await fight(target);
+    if (target && !isOnTrip()) await fight(target);
   } catch (e) {
     if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
   }

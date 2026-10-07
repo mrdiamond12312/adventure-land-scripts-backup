@@ -465,20 +465,12 @@ async function mainLoop() {
     const isDeterminedToBeCupid = cupidHealees.length > 0;
     if (isDeterminedToBeCupid) await firePlan(getCupidPlan(cupidHealees));
 
-    // Prevent the rest of loop while smartmoving
-    const isMovingControlled =
-      (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
-    if (isMovingControlled) {
-      throw new Error("Smart moving", {
-        cause: "smart_move",
-      });
-    }
-
     // Events, the crypt, then the farming spot — each carries its own move
+    // Mid-trip it only hands back a target when a higher strategy took over
     const target = await selectFightTarget();
 
     // Target found, engage in combat
-    if (target && !isDeterminedToBeCupid) await fight(target);
+    if (target && !isDeterminedToBeCupid && !isOnTrip()) await fight(target);
   } catch (e) {
     // Only log unhandled errors
     if (e.cause !== "smart_move" && e.cause !== "death") {

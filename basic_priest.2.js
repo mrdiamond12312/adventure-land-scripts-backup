@@ -438,17 +438,13 @@ async function mainLoop() {
       }
     }
 
-    const isMovingControlled =
-      (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
-
-    // Target Selection — skipped during controlled moves (getTarget can
-    // reposition us); target stays undefined then and fight() only heals.
-    let target;
-    if (!isMovingControlled) target = await selectFightTarget();
+    // Target Selection — mid-trip it only hands back a target when a higher
+    // strategy took over; fight() only heals while the trip goes on.
+    const target = await selectFightTarget();
 
     // Heal (always) XOR attack (when we have a target). Runs every tick so the
     // priest keeps healing with no mob in reach or while smart-moving.
-    await fight(target, isMovingControlled);
+    await fight(target, isOnTrip());
   } catch (e) {
     if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
   }

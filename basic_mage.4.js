@@ -234,20 +234,12 @@ async function mainLoop() {
       });
     }
 
-    // Halt logic if character is performing a controlled move
-    const isMovingControlled =
-      (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
-    if (isMovingControlled) {
-      throw new Error("Smart moving", {
-        cause: "smart_move",
-      });
-    }
-
     // --- Target Selection --- events, then the crypt, then the farming spot
+    // Mid-trip it only hands back a target when a higher strategy took over
     const target = await selectFightTarget();
 
     // Target found, chilling with my staff :cow2:
-    if (target) await fight(target);
+    if (target && !isOnTrip()) await fight(target);
   } catch (e) {
     // If the error is 'smart_move' or 'death', it was handled internally (by the throw)
     // If it's a real runtime error, log it
