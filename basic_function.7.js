@@ -243,17 +243,17 @@ const SPECIAL_MOB_IDS = [
 // var mapX = -1111;
 // var mapY = 132;
 
-var map = "desertland";
-var mapX = -840.75;
-var mapY = -340.75;
+// var map = "desertland";
+// var mapX = -840.75;
+// var mapY = -340.75;
 
 // var map = "level1";
 // var mapX = 50;
 // var mapY = 425;
 
-// var map = "spookytown";
-// var mapX = 255;
-// var mapY = -1160;
+var map = "spookytown";
+var mapX = 255;
+var mapY = -1160;
 
 // var map = "spookytown";
 // var mapX = 412;
@@ -282,9 +282,9 @@ var mapY = -340.75;
 //   "turtle",
 //   "crabx",
 // ];
-var mobsToFarm = ["ent", "plantoid", "mechagnome"];
+// var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 // var mobsToFarm = ["prat"];
-// var mobsToFarm = ["mummy"];
+var mobsToFarm = ["mummy"];
 // var mobsToFarm = ["jr", "booboo"];
 // var mobsToFarm = ["odino"];
 
