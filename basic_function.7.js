@@ -439,10 +439,10 @@ var IGNORE = [
   "snring",
   // "bowofthedead",
   // "daggerofthedead",
-  "maceofthedead",
-  "pmaceofthedead",
-  "staffofthedead",
-  "swordofthedead",
+  // "maceofthedead",
+  // "pmaceofthedead",
+  // "staffofthedead",
+  // "swordofthedead",
   "supermittens",
 
   // "horsecapeg",
@@ -667,14 +667,18 @@ const SALE_ABLE = [
   // Halloween temp for gold
   // "bowofthedead",
   // "daggerofthedead",
+  "pmaceofthedead",
+  "maceofthedead",
+  "staffofthedead",
+  "swordofthedead",
   "throwingstars",
 ];
 
 const DISMANTLE_LIST = [
-  "maceofthedead",
-  "pmaceofthedead",
-  "staffofthedead",
-  "swordofthedead",
+  // "maceofthedead",
+  // "pmaceofthedead",
+  // "staffofthedead",
+  // "swordofthedead",
 ];
 
 var maxUpgrade = 7;
@@ -1826,8 +1830,7 @@ async function midasLooting(forced = false) {
 function suicide() {
   if (
     !character.rip &&
-    character.hp +
-      (projectileManager?.getIncomingNumber(character.name) ?? 0) <
+    character.hp + (projectileManager?.getIncomingNumber(character.name) ?? 0) <
       Math.max(0.15 * character.max_hp, 3500) &&
     (avgDmgTaken(character) > character.hp ||
       character.ping > 600 ||
@@ -2313,7 +2316,7 @@ const DYNAMIC_PARTY_PRESETS = {
       return [WARRIOR, RANGER, ROGUE];
     },
     default: [WARRIOR, PRIEST, ROGUE],
-  }, 
+  },
   franky: {
     EUII: () => {
       RANGER = RANGER2;
@@ -2508,8 +2511,7 @@ const getCrabsForCrabxx = () => {
       crabxxInstance = entity;
     }
 
-    const incomingNumber =
-      projectileManager?.getIncomingNumber(entity.id) ?? 0;
+    const incomingNumber = projectileManager?.getIncomingNumber(entity.id) ?? 0;
 
     const predictedHp =
       entity.name === character.name ? entity.hp : entity.hp + incomingNumber;
