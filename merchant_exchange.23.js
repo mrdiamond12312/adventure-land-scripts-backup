@@ -1,5 +1,14 @@
 // Exchanging: the exchange queue, holiday tokens included.
 
+/** Bag slots exchanging leaves free for what the exchange hands back */
+const EXCHANGE_FREE_SLOTS = 6;
+
+/** How long a fetch trip waits after one that came back empty-handed */
+const EXCHANGE_FETCH_COOLDOWN = 120_000;
+
+/** When the last fetch trip came back without stock */
+var exchangeFetchAt = 0;
+
 /**
  * Exchange queue, tried in order — the first entry with enough stock wins.
  * `npc` is where to walk without a computer, only the quest items need one.
@@ -42,6 +51,12 @@ function hasExchangeStock(entry) {
     0,
   );
   return owned >= entry.quantity + (entry.keep ?? 0);
+}
+
+/** @returns {boolean} whether this entry's npc is around to take the exchange */
+function isExchangeOpen(entry) {
+  if (entry.holidayNpc && !entry.npc) return !!server.status["holidayseason"];
+  return true;
 }
 
 /**
@@ -99,9 +114,10 @@ async function prepareExchangeSlot(entry) {
  * @returns {object|undefined}
  */
 function getActiveExchangeEntry() {
+  const open = EXCHANGE_QUEUE.filter((entry) => isExchangeOpen(entry));
   return (
-    EXCHANGE_QUEUE.find((entry) => getExchangeSlot(entry) !== -1) ??
-    EXCHANGE_QUEUE.find((entry) => hasExchangeStock(entry))
+    open.find((entry) => getExchangeSlot(entry) !== -1) ??
+    open.find((entry) => hasExchangeStock(entry))
   );
 }
 
@@ -158,25 +174,85 @@ function exchangeFrom(slot) {
 function shouldKeepExchanging(entry) {
   return (
     getExchangeSlot(entry) !== -1 &&
-    !isInvFull(6) &&
+    !isInvFull(EXCHANGE_FREE_SLOTS) &&
     !invJammed &&
     !getEventToJoin()
   );
 }
 
+/**
+ * Bank slots covering what the bag still needs of an entry.
+ * @returns {Array<{pack: string, slot: number, floor: string}>}
+ */
+function getExchangeStockSlots(entry) {
+  let needed =
+    entry.quantity + (entry.keep ?? 0) - getTotalQuantityOf(entry.name);
+  const picked = [];
+
+  for (const found of getItemBankSlots(entry.name, true, true)) {
+    if (needed <= 0 || picked.length >= character.esize - EXCHANGE_FREE_SLOTS)
+      break;
+    picked.push(found);
+    needed -= found.q ?? 1;
+  }
+
+  return picked;
+}
+
+/** @returns {object|undefined} the first entry only the bank can cover */
+function getExchangeEntryToFetch() {
+  return EXCHANGE_QUEUE.find(
+    (entry) =>
+      isExchangeOpen(entry) &&
+      !canSpareExchange(entry) &&
+      hasExchangeStock(entry),
+  );
+}
+
+/**
+ * Walks to the bank for stock the bag can't cover, so a drained queue doesn't
+ * wait on bankLoop's next pass.
+ * @returns {Promise<void>}
+ */
+async function fetchExchangeStock() {
+  if (isOnDuty() || isAdvanceSmartMoving || smart.moving) return;
+  if (invJammed || getEventToJoin() || isAwaitingParcel()) return;
+  if (character.c.mining || character.c.fishing) return;
+  if (Date.now() - exchangeFetchAt < EXCHANGE_FETCH_COOLDOWN) return;
+
+  const entry = getExchangeEntryToFetch();
+  if (!entry) return;
+
+  const slots = getExchangeStockSlots(entry);
+  if (!slots.length) return;
+
+  const lock = takeDuty(DUTY.ERRAND);
+  if (!lock) return;
+
+  try {
+    await equipBroom();
+    const before = getTotalQuantityOf(entry.name);
+    await retrieveAll(slots, true);
+    if (getTotalQuantityOf(entry.name) <= before) exchangeFetchAt = Date.now();
+  } finally {
+    releaseDuty(lock);
+  }
+}
+
 async function exchangeSomething() {
-  if (isInvFull(6)) return;
+  if (isInvFull(EXCHANGE_FREE_SLOTS)) return;
 
   let entry;
   let slot = -1;
   for (const candidate of EXCHANGE_QUEUE) {
+    if (!isExchangeOpen(candidate)) continue;
     slot = await prepareExchangeSlot(candidate);
     if (slot === -1) continue;
     entry = candidate;
     break;
   }
 
-  if (!entry) return;
+  if (!entry) return fetchExchangeStock();
 
   const npc = getExchangeNpc(entry);
   if (!npc) return exchangeFrom(slot);
