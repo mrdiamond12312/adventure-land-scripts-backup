@@ -81,11 +81,21 @@ async function prepareExchangeSlot(entry) {
   return getExchangeSlot(entry);
 }
 
-/** @returns {boolean} whether the exchange queue still wants this item in the bag */
-function isExchangeQueued(itemName) {
-  return EXCHANGE_QUEUE.some(
-    (entry) => entry.name === itemName && hasExchangeStock(entry),
+/**
+ * The one entry exchangeSomething works on now: the first the bag can spend,
+ * else the first holding stock anywhere.
+ * @returns {object|undefined}
+ */
+function getActiveExchangeEntry() {
+  return (
+    EXCHANGE_QUEUE.find((entry) => getExchangeSlot(entry) !== -1) ??
+    EXCHANGE_QUEUE.find((entry) => hasExchangeStock(entry))
   );
+}
+
+/** @returns {boolean} whether the active exchange still wants this item in the bag */
+function isExchangeQueued(itemName) {
+  return getActiveExchangeEntry()?.name === itemName;
 }
 
 /** @returns {string|undefined} the npc to walk to for this entry now, if any */
