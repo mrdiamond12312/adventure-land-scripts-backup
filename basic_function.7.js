@@ -45,7 +45,7 @@ const CODE_SLOTS = {
 /** The realm this character told Bean to call home — Bean's choice is not readable from CODE */
 const HOME_SERVER = {
   serverRegion: "US",
-  serverIdentifier: "I",
+  serverIdentifier: "III",
 };
 
 /** @returns {string} the realm we are on right now, e.g. "USII" */
@@ -2291,6 +2291,11 @@ const shouldDeployRogue = () => {
 const DYNAMIC_PARTY_PRESETS = {
   mrgreen: {
     USI: [WARRIOR, PRIEST, ROGUE],
+    USIII: () => {
+      RANGER = RANGER1;
+      HEALER = RANGER;
+      return [WARRIOR, RANGER, ROGUE];
+    },
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
@@ -2305,6 +2310,7 @@ const DYNAMIC_PARTY_PRESETS = {
   },
   mrpumpkin: {
     USI: [MAGE, PRIEST, WARRIOR],
+    USIII: [MAGE, PRIEST, WARRIOR],
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
@@ -2340,6 +2346,7 @@ const DYNAMIC_PARTY_PRESETS = {
       return [RANGER, ROGUE, MAGE];
     },
     USI: [WARRIOR, PRIEST, MAGE],
+    USIII: [WARRIOR, PRIEST, MAGE],
     default: () => {
       HEALER = PRIEST;
       return [PRIEST, ROGUE, MAGE];
@@ -2358,6 +2365,10 @@ const DYNAMIC_PARTY_PRESETS = {
       return [WARRIOR, RANGER, PRIEST];
     },
     USI: () => {
+      HEALER = PRIEST;
+      return [WARRIOR, MAGE, PRIEST];
+    },
+    USIII: () => {
       HEALER = PRIEST;
       return [WARRIOR, MAGE, PRIEST];
     },
@@ -2382,6 +2393,7 @@ const DYNAMIC_PARTY_PRESETS = {
   pinkgoo: {
     USII: [MAGE, PRIEST, ROGUE],
     USI: [WARRIOR, MAGE, PRIEST],
+    USIII: [WARRIOR, MAGE, PRIEST],
     EUI: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
