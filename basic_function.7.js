@@ -747,8 +747,9 @@ async function abandonTrip() {
 // Wrapper to use which depends on client platform
 async function advanceSmartMove(props, options = { useScare: true }) {
   const rank = activeStrategyRank ?? -1;
-  const isTakeover = isOnTrip() && rank >= 0 && rank < tripRank;
-  if (parent.caracAL || !isOnTrip() || isTakeover) tripRank = rank;
+  // Mid-trip the chain only runs strategies above the trip's owner
+  const isTakeover = rank >= 0 && isOnTrip();
+  if (parent.caracAL || isTakeover || !isOnTrip()) tripRank = rank;
 
   if (
     parent.caracAL &&
