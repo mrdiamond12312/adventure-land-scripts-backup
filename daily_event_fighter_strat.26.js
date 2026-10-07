@@ -80,6 +80,9 @@ async function useEventStrategy() {
     if (bossToFight) {
       bossToFight.strategy();
 
+      const minion = getBossMinion(bossToFight.type);
+      if (minion) return engage(minion);
+
       let bossInstance = get_nearest_monster({ type: bossToFight.type });
       if (!bossInstance) {
         await advanceSmartMove(bossToFight);
@@ -284,6 +287,25 @@ async function useEventStrategy() {
   if (await visitAnniversaryPlayer()) return travelling();
 
   return undefined;
+}
+
+/**
+ * A visible add from the boss's `G.monsters[].spawns`, sticking with the one already targeted.
+ * @param {string} bossType
+ * @returns {object|undefined}
+ */
+function getBossMinion(bossType) {
+  const minionTypes = (parent.G.monsters[bossType].spawns ?? []).map(
+    ([, type]) => type,
+  );
+  if (!minionTypes.length) return undefined;
+
+  const current = get_targeted_monster();
+  if (minionTypes.includes(current?.mtype)) return current;
+
+  return minionTypes
+    .map((type) => get_nearest_monster({ type }))
+    .find(Boolean);
 }
 
 /** Kill-priority bonus by class: healers first, then the squishy damage dealers. */
