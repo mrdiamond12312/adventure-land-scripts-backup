@@ -84,6 +84,9 @@ basic_function.7.js          [SHARED — the core library]
     crypt_fighter_strat.16.js         | its own smart move and owns the tick or defers
     special_mob_fighter_strat.28.js   |
     farming_fighter_strat.27.js      /
+    taut_path.33.js              corner-to-corner same-map planner over G.geometry (both
+                                 environments): the kite's wall detour, and smartMove's walking when
+                                 passed useTautPath (kiting/engaging only)
     strategic_smart_move.21.js   \_ pathing layered on top of
     advance_smart_move.20.js     /  the native smart_move
 

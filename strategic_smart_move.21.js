@@ -18,6 +18,11 @@ const SMART_MOVE_CONFIG = Object.freeze({
   MAGICAL_WAIT_MS: 500, // walk loop poll while a blink/magiport is in flight
   LOOP_DEBUG: false,
 
+  // Taut walking (_walkTautStep)
+  TAUT_HORIZON: 600, // farthest path node within this is what each taut step aims at
+  TAUT_MAX_STALLS: 2, // taut steps that leave us in place before the node is walked as given
+  TAUT_STALL_DISTANCE: 2,
+
   // Magiport (_magiportCheck)
   MAGIPORT_CHECK_INTERVAL_MS: 200,
   MAGIPORT_MAGE_NEAR_DEST_DISTANCE: 200, // mage counts as "parked at the destination" within this
@@ -526,6 +531,51 @@ class StrategicSmartMove {
   }
 
   /**
+   * Walks one corner of the taut path toward the farthest node of the current
+   * same-map run within TAUT_HORIZON. The cursor jumps to that node, and past
+   * it once it is reached.
+   * @param {Array<Object>} pathFindingResult - the path segments being walked
+   * @param {{segmentIndex: number, tautStalls?: number}} progress - segment cursor shared with the blink loop
+   * @returns {Promise<boolean>} false when the segment should be walked as given
+   */
+  async _walkTautStep(pathFindingResult, progress) {
+    if ((progress.tautStalls ?? 0) >= SMART_MOVE_CONFIG.TAUT_MAX_STALLS)
+      return false;
+
+    const idx = progress.segmentIndex;
+    let horizon = idx;
+    for (let j = idx; j < pathFindingResult.length; j++) {
+      const node = pathFindingResult[j];
+      if (node.method !== "move" || node.map !== character.map) break;
+      if (distance(character, node) > SMART_MOVE_CONFIG.TAUT_HORIZON) break;
+      horizon = j;
+    }
+
+    const step = getTautStep(pathFindingResult[horizon]);
+    if (!step) return false;
+
+    if (progress.segmentIndex === idx) progress.segmentIndex = horizon;
+
+    const beforeX = character.real_x;
+    const beforeY = character.real_y;
+    await this.unsafeMove(step.x, step.y);
+
+    const walked = Math.hypot(
+      character.real_x - beforeX,
+      character.real_y - beforeY,
+    );
+    if (walked < SMART_MOVE_CONFIG.TAUT_STALL_DISTANCE) {
+      progress.tautStalls = (progress.tautStalls ?? 0) + 1;
+      return true;
+    }
+
+    progress.tautStalls = 0;
+    if (step.isGoal && progress.segmentIndex === horizon)
+      progress.segmentIndex = horizon + 1;
+    return true;
+  }
+
+  /**
    * Throws when a map-changing segment left us anywhere but the map it leads
    * to, so the rest of the path is never walked on the wrong map.
    * @param {Object} segment - an enter or leave path node
@@ -595,6 +645,7 @@ class StrategicSmartMove {
    * @param {number} extraOptions.speed - the speed to use for pathfinding, set to a very big number to disable use_town, default: character's speed
    * @param {string[]} extraOptions.avoidMaps - maps the path may not enter, pass through, or end on, default: DEFAULT_AVOID_MAPS
    * @param {boolean} extraOptions.useTown - whether to town back to the map's first spawn when no path is found, default: true. Set false when towning is worse than not moving (e.g. a tanker holding mobs)
+   * @param {boolean} extraOptions.useTautPath - whether to walk each map's leg corner to corner (taut_path.33.js) rather than node by node, for kiting and engaging, default: false
    */
   async smartMove(toPosition, extraOptions = {}) {
     // Stop any existing smart move
@@ -615,6 +666,7 @@ class StrategicSmartMove {
       wait: 0,
       speed: Math.max(character.speed, SMART_MOVE_CONFIG.MIN_PATHING_SPEED),
       useTown: true,
+      useTautPath: false,
       avoidMaps: DEFAULT_AVOID_MAPS,
       exact: false,
       smartmoveDebug: false, // to set the global var smartmoveDebug
@@ -700,6 +752,23 @@ class StrategicSmartMove {
         options.speed,
         options.avoidMaps,
       );
+
+      if (
+        (!pathFindingResult || !pathFindingResult.length) &&
+        options.useTautPath &&
+        toPosition.map === character.map
+      ) {
+        pathFindingResult = getTautPath(
+          character.map,
+          { x: character.real_x, y: character.real_y },
+          toPosition,
+        )?.map((point) => ({
+          map: character.map,
+          x: point.x,
+          y: point.y,
+          method: "move",
+        }));
+      }
 
       // Standable fallback
       if (
@@ -839,7 +908,15 @@ class StrategicSmartMove {
         };
 
         if (segment.method === "move") {
+          if (
+            options.useTautPath &&
+            segment.map === character.map &&
+            (await this._walkTautStep(pathFindingResult, progress))
+          )
+            continue;
+
           await this.unsafeMove(segment.x, segment.y);
+          progress.tautStalls = 0;
           advance();
           continue;
         }

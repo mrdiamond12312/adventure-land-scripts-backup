@@ -205,6 +205,7 @@ const SPECIAL_MOB_IDS = [
   "goldenbat",
   "phoenix",
   "goldenbot",
+  "rharpy",
 ];
 
 // var map = "main";
@@ -452,7 +453,6 @@ var IGNORE = [
 
   // avoid for manually upgrade/compound
   "northstar",
-  "fallen",
   "fury",
   "starkillers",
 
@@ -700,12 +700,14 @@ var isAdvanceSmartMoving = false;
 if (parent.caracAL) {
   parent.caracAL.load_scripts([
     "adventure-land-scripts-backup/crypt_fighter_strat.16.js",
+    "adventure-land-scripts-backup/taut_path.33.js",
     "adventure-land-scripts-backup/strategic_smart_move.21.js",
     "adventure-land-scripts-backup/advance_smart_move.20.js",
   ]);
 } else {
   load_code(20);
   load_code(16);
+  load_code(33);
 }
 
 /** Chain rank of the fighter strategy running right now, undefined outside the chain */
@@ -1292,6 +1294,7 @@ async function resolveKiteTarget(target) {
           useScare: false,
           useMagiport: false,
           useBlink: false,
+          useTautPath: true,
           smartmoveDebug: true,
         });
       } finally {
@@ -1446,46 +1449,81 @@ function applyMicroRotation(target, rangeRateFn) {
   flipRotationCooldown--;
 }
 
+/** Least time between two smart moves the kite falls back to around a wall */
+const KITE_WALL_SMART_MOVE_COOLDOWN_MS = 3000;
+var lastKiteWallSmartMoveAt = 0;
+
+/**
+ * Smart-moves to a point the taut planner could not reach, as a kite step
+ * rather than a trip.
+ * @param {{x: number, y: number}} position
+ * @param {Object} options - advanceSmartMove options on top of the kite's own
+ */
+async function smartMoveAroundWall(position, options = {}) {
+  if (Date.now() - lastKiteWallSmartMoveAt < KITE_WALL_SMART_MOVE_COOLDOWN_MS)
+    return;
+  lastKiteWallSmartMoveAt = Date.now();
+
+  smartmoveDebug = true;
+  try {
+    await advanceSmartMove(
+      { x: position.x, y: position.y, map: character.map },
+      {
+        speed: 200,
+        useTown: false,
+        // A run refuses magiport both ways
+        useMagiport: !character.cave,
+        useTautPath: true,
+        smartmoveDebug: true,
+        ...options,
+      },
+    );
+  } finally {
+    smartmoveDebug = false;
+  }
+}
+
 // Returns the actual point to move to: the desired orbit spot if reachable, an
-// alternative point swept around the same radius if not, or null if a farm-mob
-// tanker instead needs a full smart-move to path around the obstacle.
-async function resolveDestination(desired, orbit, radiusTotal) {
+// alternative point swept around the same radius if not, else the next corner
+// of the taut path toward the spot (flagged isDetour). Null after falling back
+// to a smart move, or when nothing is reachable.
+async function resolveDestination(desired, orbit, radiusTotal, target) {
   if (can_move_to(desired.x, desired.y)) return desired;
 
-  if (orbit.isTankerHoldingFarmMob) {
-    smartmoveDebug = true;
-    try {
-      await advanceSmartMove(
-        { x: desired.x, y: desired.y, map: character.map },
-        {
-          useScare: false,
-          speed: 200,
-          useTown: false,
-          // A run refuses magiport both ways
-          useMagiport: !character.cave,
-          smartmoveDebug: true,
-        },
-      );
-    } finally {
-      smartmoveDebug = false;
+  if (!orbit.isTankerHoldingFarmMob) {
+    if (flipRotationCooldown < 0) {
+      flipRotation *= -1;
+      flipRotationCooldown = 6;
     }
+    for (let i = 1; i <= 48; i++) {
+      const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
+      const alt = {
+        x: orbit.orbitCenter.x + radiusTotal * Math.cos(adjustedAngle),
+        y: orbit.orbitCenter.y + radiusTotal * Math.sin(adjustedAngle),
+      };
+      if (can_move_to(alt.x, alt.y)) {
+        angle = adjustedAngle;
+        return alt;
+      }
+    }
+  }
+
+  const detour = getTautStep(desired) ?? getTautStep(target);
+  if (detour) return { x: detour.x, y: detour.y, isDetour: true };
+
+  if (orbit.isTankerHoldingFarmMob) {
+    await smartMoveAroundWall(desired, { useScare: false });
     return null;
   }
 
-  if (flipRotationCooldown < 0) {
-    flipRotation *= -1;
-    flipRotationCooldown = 6;
-  }
-  for (let i = 1; i <= 48; i++) {
-    const adjustedAngle = angle + (flipRotation * Math.PI) / (48 / i);
-    const alt = {
-      x: orbit.orbitCenter.x + radiusTotal * Math.cos(adjustedAngle),
-      y: orbit.orbitCenter.y + radiusTotal * Math.sin(adjustedAngle),
-    };
-    if (can_move_to(alt.x, alt.y)) {
-      angle = adjustedAngle;
-      return alt;
-    }
+  // The cave strategy owns movement while gathering at Dorr
+  const isOutOfReach =
+    target.type === "monster" &&
+    distance(target, character) > character.range + character.xrange * 0.9;
+  if (isOutOfReach && !isPreparingCave) {
+    await smartMoveAroundWall(target, {
+      useScare: ![TANKER, PRIEST].includes(character.name),
+    });
   }
   return null;
 }
@@ -1561,13 +1599,19 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
     const desired = getOrbitDestination(target, orbit, radiusTotal, cosA, sinA);
     applyMicroRotation(target, rangeRateFn);
 
-    const destination = await resolveDestination(desired, orbit, radiusTotal);
+    const destination = await resolveDestination(
+      desired,
+      orbit,
+      radiusTotal,
+      target,
+    );
     if (!destination) return;
 
     const moved = moveTowardDestination(destination);
     if (!moved) return;
 
-    advanceOrbitAngle(target, orbit, radiusTotal, loopInterval);
+    if (!destination.isDetour)
+      advanceOrbitAngle(target, orbit, radiusTotal, loopInterval);
     nextDelay = Math.max(
       (distance(character, moved) / character.speed) * 1000,
       200,
@@ -1920,62 +1964,6 @@ setInterval(async function () {
       }
     }
     return;
-  }
-
-  // Fix a bug where character is stuck to corner
-  const currentTarget =
-    get_target() ?? getTarget() ?? get_nearest_monster({ target: TANKER });
-
-  // The cave strategy owns movement while gathering at Dorr
-  if (
-    !isPreparingCave &&
-    currentTarget &&
-    currentTarget.type === "monster" &&
-    distance(currentTarget, character) >
-      character.range + character.xrange * 0.9 &&
-    !smart.moving &&
-    !character.moving &&
-    !isAdvanceSmartMoving
-  ) {
-    smartmoveDebug = true;
-    log("Debug being stuck while kiting");
-    try {
-      if (parent.caracAL) {
-        if (can_move_to(currentTarget.x, currentTarget.y))
-          await move(
-            (currentTarget.real_x + character.real_x) / 2,
-            (currentTarget.real_y + character.real_y) / 2,
-          );
-        else
-          await advanceSmartMove(
-            {
-              map: character.map,
-              x: currentTarget.real_x,
-              y: currentTarget.real_y,
-            },
-            {
-              useScare: ![TANKER, PRIEST].includes(character.name),
-              useTown: false,
-              speed: 200,
-              smartmoveDebug: true,
-            },
-          );
-      } else {
-        if (can_move_to(currentTarget.x, currentTarget.y))
-          await move(
-            (currentTarget.real_x + character.real_x) / 2,
-            (currentTarget.real_y + character.real_y) / 2,
-          );
-        else
-          await advanceSmartMove({
-            map: character.map,
-            x: currentTarget.real_x,
-            y: currentTarget.real_y,
-          });
-      }
-    } finally {
-      smartmoveDebug = false;
-    }
   }
 
   const obj = {

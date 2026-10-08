@@ -473,7 +473,7 @@ async function fightCurrentEvent(promisesToAwait) {
     // hitAndRun walks us into orbit; only a real gap needs the pathfinder
     const reach = character.range + character.xrange;
     if (distance(character, target) > reach * EVENT_APPROACH_MULTIPLIER) {
-      await advanceSmartMove(target, { useScare: false });
+      await advanceSmartMove(target, { useScare: false, useTautPath: true });
     }
     return false;
   }

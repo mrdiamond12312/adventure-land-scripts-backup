@@ -2667,3 +2667,78 @@ whichever quiver was already worn was examined first and held every tie permanen
 never the obstacle: `getCarriedItems` has no `.l` filter. `dex` now breaks the tie. The `!range`
 guard preserves the old behaviour of ignoring a quiver with no reach at all, which is what let
 `getMerchantOffhand` fall through to `ATTACK_OFFHAND`.
+
+## Same-map walking is corner to corner (`taut_path.33.js`, 2026-10-09)
+
+AL walls are axis-aligned segments, and `can_move` treats us as a `base`-sized box whose four
+corners may not cross a line. Inflating every line by `base` (`h` sideways, `vn` above, `v` below)
+gives the bands our center may not enter, and the shortest walk around a set of rectangles only
+ever bends at their corners. `getTautPath` is A* over those corners plus start and goal, with
+every edge confirmed by the game's own `can_move`, so it walks straight lines between real wall
+corners. alpathfinder's Delaunay nodes sit on triangle vertices and edges, which is what made its
+paths zig-zag in the open.
+
+- **Only a window is searched.** The corners in the box around start and goal (+150, then +400,
+  then +900) are searched, capped at `MAX_NODES` and `MAX_EDGE_CHECKS`. A whole-map graph is out:
+  `main` alone has ~2.7k corners after merging collinear segments. Corner pairs are only checked
+  when they would improve a node, must be tangent at both ends (the bitangent filter), and are
+  cached per map, so the kite's every-tick re-plan mostly pays for the start's own edges.
+- **Measured on G 17397** against the game's `can_move` and alpathfinder 0.4.7: no illegal
+  segment; paths ~10% shorter for hops up to 900px; 1–6ms typical, ~40–60ms worst. Where it comes
+  out "longer" than alpathfinder, the difference is either the 2px corner offset (≤0.6%) or
+  alpathfinder's path crossing a line by `can_move`'s rules.
+- **It does not replace alpathfinder.** Trips whose real route is several times the straight
+  distance blow the window cap. Doors, transports and town are alpathfinder's job.
+  With `useTautPath` (off by default — opted into only for kiting and engaging: the kite's
+  `smartMoveAroundWall`, the tanker's Franky spot, the merchant's event approach; travel stays
+  plain alpathfinder) `smartMove` keeps alpathfinder's path for topology, and `_walkTautStep`
+  walks each same-map run on a rolling horizon: aim at the farthest node within `TAUT_HORIZON`, walk the first corner
+  of the taut path there, re-plan. On long trips that came out 3–5% shorter with ~15% fewer stops.
+  The remaining stops are real wall corners, so a one-node lookahead past the horizon was tried and
+  dropped (no measurable gain).
+- **The kite detours in-tick.** When neither the orbit point nor any of the 48 swept alternatives
+  is in a straight line, `resolveDestination` walks the next taut corner toward the orbit point
+  (then the target) and leaves the orbit angle alone. That replaced the 10s "stuck while kiting"
+  check in the code-message interval, which only noticed after the fact. The smart-move fallback
+  (`smartMoveAroundWall`) is kept for when no taut path exists, e.g. standing inside a band, since
+  `unsafeMove` can still get out of one. It is rate-limited so a failing path search can't spin
+  every tick.
+- The mesh reads `parent.G.geometry` (see `refreshPathfinderFor` for why), and a map whose walls
+  haven't arrived yet is not cached as empty.
+
+## Scouting a roaming mini-boss (`rharpy`, merchant_scout.29.js, 2026-10-09)
+
+The rharpy's spawn spot says little about where it is now. Both `harpy` and `rharpy` carry `roam: true`
+in `winter_cove`'s monster list, and the server's roam branch (`server.js`, idle-move logic) never
+clamps a roamer to its `boundary`. Each idle move goes up to 500px in one of 8 directions, and only a
+wall (`can_move`) stops it. So given time it can be anywhere reachable in Frozen Cove
+(x -1032..904, y -2376..56). It is slow, though (speed 18, harpy 12), so a sighting stays good for
+minutes.
+
+**Vision, not spots, sets the route.** The server sends entities inside `B.vision = [700, 500]`, a
+±700 × ±500 box around the character that walls don't block. And `scoutSweep` runs every 500ms for
+the whole errand, so the walk between stops counts as much as the stops. The four stops were picked
+offline against data version 17397 with alpathfinder 0.4.7, in three steps:
+
+1. Flood-fill the walkable cells from the cove's entrance (spawn 0).
+2. Greedily set-cover them with stops.
+3. Exhaustively order and prune the stops, scoring coverage along the actual alpathfinder legs.
+
+The spawn box (`135, -311`) is forced first, because `useTemporalSurge` only reads spawn boundaries
+within 160px, and that stop is what publishes a dead rharpy's `respawnEta`. The resulting loop is
+spawn → north rim → west corridor → central pocket, about 5.7k px. It covers every reachable cell even
+with the vision box shrunk to ±500 × ±300, and it ends about 970px from the exit. Re-run the coverage
+check if the cove's geometry changes.
+
+**Every mini-boss's spots end at the first sighting.** The `stopWatcher` halts the walk as soon as
+anyone (the sweep or a fighter's `reportSpecialMobInSight`) stamps a `seenAt` newer than the start of
+that mini-boss's spots, and its remaining spots are skipped. Once it has been seen, the remaining spots
+can't tell us anything more. It also keeps the merchant out of reach of the ones that aggro, the
+rharpy most of all (`aggro` 1.2, `rage` 1.2, 1420 attack): it stops at roughly vision range instead
+of walking on into them. `checkedAt` is not written after a sighting, so `getSpecialMobSighting` can't
+read the stop as "checked and gone" and treat the fresh sighting as a mob that is down until its
+`respawnEta`.
+
+`rharpy` is also in `SPECIAL_MOB_IDS`, so fighters hunt it and the home-realm observer records it. It
+is one of the `monsters_home_server` drops (see the realm fatigue section), so the same rule applies:
+it is worth chasing at home, not abroad.

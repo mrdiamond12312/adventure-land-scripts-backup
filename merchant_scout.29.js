@@ -63,6 +63,16 @@ const MINI_BOSSES_TO_SCOUT = {
     spotsToCheck: [{ map: "uhills", x: 328, y: -271 }],
     useTeleportation: true,
   },
+  rharpy: {
+    // Spawn box first for the surge, then a loop whose vision covers all of winter_cove
+    spotsToCheck: [
+      { map: "winter_cove", x: 135, y: -311 },
+      { map: "winter_cove", x: 432, y: -1776 },
+      { map: "winter_cove", x: -576, y: -1104 },
+      { map: "winter_cove", x: 336, y: -768 },
+    ],
+    useTeleportation: true,
+  },
 };
 
 const SCOUT_CONFIG = {
@@ -82,6 +92,16 @@ const SCOUT_CONFIG = {
  */
 function updateScoutInfo(mobId, mobData) {
   updateStoreEntry(SCOUT_LS_KEY, mobId, mobData);
+}
+
+/**
+ * Whether anyone has reported the mob since the given time
+ * @param {keyof typeof MINI_BOSSES_TO_SCOUT} mobId
+ * @param {number} since Date.now() to compare against
+ * @returns {boolean}
+ */
+function isSightedSince(mobId, since) {
+  return (readStore(SCOUT_LS_KEY)[mobId]?.seenAt ?? 0) >= since;
 }
 
 /**
@@ -132,11 +152,19 @@ async function merchantScoutingLoop() {
     for (const miniBossKey of SCOUT_CONFIG.MINI_BOSSES_KEYS) {
       const miniBossConfig = MINI_BOSSES_TO_SCOUT[miniBossKey];
       if (!miniBossConfig.spotsToCheck) continue;
+
+      // Once it is sighted, its remaining spots have nothing left to tell
+      const routeStartedAt = Date.now();
+      const isSighted = () => isSightedSince(miniBossKey, routeStartedAt);
+
       for (const spotToCheck of miniBossConfig.spotsToCheck) {
         await advanceSmartMove(spotToCheck, {
           useTown: miniBossConfig.useTeleportation,
           speed: miniBossConfig.useTeleportation ? character.speed : 250, // prevent town
+          stopWatcher: isSighted,
         });
+
+        if (isSighted()) break;
 
         updateScoutInfo(miniBossKey, { checkedAt: Date.now() });
 

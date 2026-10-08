@@ -18,6 +18,7 @@ const KEEP_THRESHOLD = {
   gphelmet: 12,
   ololipop: 12,
   glolipop: 12,
+  fallen: 16,
 
   // new stuffs!
   cloverstud: 16,
