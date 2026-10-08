@@ -2411,15 +2411,9 @@ const DYNAMIC_PARTY_PRESETS = {
       RANGER = RANGER2;
       return [WARRIOR, RANGER, PRIEST];
     },
-    EUI: () => {
+    default: () => {
       RANGER = RANGER1;
       return [WARRIOR, RANGER, PRIEST];
-    },
-    USII: () => {
-      return [WARRIOR, ROGUE, PRIEST];
-    },
-    default: () => {
-      return [WARRIOR, PRIEST, MAGE];
     },
   },
   pinkgoo: {
