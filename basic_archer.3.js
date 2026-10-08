@@ -29,14 +29,7 @@ async function fight(target) {
   if (ms_to_next_skill("attack") === 0) {
     set_message("Attacking");
 
-    const suggestedItems = calculateCupidItems();
-    if (
-      Object.keys(suggestedItems).some(
-        (slot) => character.slots[slot]?.name !== suggestedItems[slot],
-      )
-    ) {
-      await equipBatch(suggestedItems);
-    }
+    await equipBatch(calculateCupidItems());
 
     // Debuff
     if (

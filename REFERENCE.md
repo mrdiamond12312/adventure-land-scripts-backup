@@ -1011,6 +1011,18 @@ Which skills opt in is decided by **where the code used to live**, not by taste:
 Deliberate divergence: rogue `quickstab` used to run while moving (it was in `fuaLoop`) and is now
 blocked anyway.
 
+**A side door: the cleave/stomp gear restore (2026-10-08).** `warriorCleave` and `warriorStomp`
+handed the gear restore to `setTimeout(() => currentStrategy(...))`, which no loop gates, and
+`cleaveLoop` runs mid-trip on purpose. Under `usePullStrategies` that call also fired agitate and
+pull-taunt, so the warrior pulled the path's mobs along while smart-moving. The restore now calls
+`equipBatch(calculateWarriorItems())`, the gear half of both strategies, and nothing else — keep it
+that way: a restore that runs the whole strategy runs its skills too.
+
+The strategies call `equipBatch` unconditionally, no "is any slot off" pre-check: `buildEquipPromises`
+already drops slots that match, and returns synchronously when nothing is left. The pre-check also
+kept `equipBatch` from shifting boosters or upgrading to a higher-level copy unless some *other*
+slot happened to differ.
+
 ## `smartmoveDebug` must be passed as an option, not just set (debugged 2026-08-25)
 
 `smartmoveDebug` is the exemption from that `isMovingControlled` gate: the three kite-internal
@@ -2187,7 +2199,22 @@ Dorr (816, 1200), or cannot walk. Only the party freezes during the animation. M
 keep walking, so a mob the priest's zapper tagged at Dorr can reach the party inside that window. The
 client then cancels the animation, which looks like a town squish back to Dorr. The failed entry
 deletes its daily reservation, so the visit is not spent. `getZapTarget` now holds while
-`isPreparingCave` is set outside the cave.
+`isPreparingCave` is set outside the cave, and so does the warrior's `cleaveLoop`, which runs on
+its own timer and kept tagging Dorr's mobs while the strategy chain sat waiting.
+
+### A stale resume opened a solo run (checked against the server, 2026-10-08)
+
+Server-side `cave_enter` is one call for both cases (`open_generated_zone`, generated_maps.js): if
+`generated_return_run` finds a run where this character is `disconnected`, not `left`, and the run is
+neither closing nor expired, it rejoins alone (admission checks only that character). Otherwise it
+**opens a fresh run with `generated_party(player)`**, whoever the server sees in the party right now.
+
+`enterCave` skips the party checks when resuming, and the resume decision came from `cave_info`
+cached for `CAVE_VISIT_TTL_MS`. Once the run ended, the leader's cache still said "resume": the first
+attempt was really a fresh open refused with `bring_party_to_keeper`, and a later one, with the party
+list empty, opened a run for the warrior alone. A resume now re-reads `cave_info` right before
+`cave_enter` and drops to the fresh-entry path (party and Dorr checks) when the run is gone. A small
+window remains between that read and the enter; the server offers no "resume only" call.
 
 ### The rogue is left by his side, never by name
 

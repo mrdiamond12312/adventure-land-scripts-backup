@@ -227,7 +227,11 @@ async function fight(target) {
 
 async function cleaveLoop() {
   try {
+    // Aggro at Dorr fails the cave entry
+    const isWaitingAtDorr = isPreparingCave && !character.cave;
+
     if (
+      !isWaitingAtDorr &&
       canAffordSwap(2) &&
       character.mp > 1720 &&
       !Object.keys(character.c).length

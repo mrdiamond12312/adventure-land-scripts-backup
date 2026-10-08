@@ -2,68 +2,28 @@ async function useNormalStrategy(target) {
   const promises = [];
   switch (character.ctype) {
     case "mage":
-      const suggestedMageItems = calculateMageItems(target);
-
-      if (
-        Object.keys(suggestedMageItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedMageItems));
-      }
+      promises.push(equipBatch(calculateMageItems(target)));
       break;
 
     case "warrior":
-      const suggestedWarriorItems = calculateWarriorItems(target);
-
-      if (
-        Object.keys(suggestedWarriorItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedWarriorItems));
-      }
+      promises.push(equipBatch(calculateWarriorItems()));
       break;
 
     case "ranger":
-      const suggestedRangerItems = calculateRangerItems(target);
-
-      if (
-        Object.keys(suggestedRangerItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
-        )
-      ) {
-        promises.push(
-          equipBatch(suggestedRangerItems, {
-            preventPenaltizeNextAttack:
-              character.slots.mainhand?.name !== "cupid",
-            preventKeySnatch: character.slots.mainhand?.name !== "cupid",
-          }),
-        );
-      }
+      promises.push(
+        equipBatch(calculateRangerItems(target), {
+          preventPenaltizeNextAttack: character.slots.mainhand?.name !== "cupid",
+          preventKeySnatch: character.slots.mainhand?.name !== "cupid",
+        }),
+      );
       break;
 
     case "rogue":
-      const suggestedRogueItems = calculateRogueItems(target);
-      if (
-        Object.keys(suggestedRogueItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedRogueItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedRogueItems));
-      }
+      promises.push(equipBatch(calculateRogueItems(target)));
       break;
 
     case "priest":
-      const suggestedPriestItems = calculatePriestItems(target);
-
-      if (
-        Object.keys(suggestedPriestItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedPriestItems));
-      }
+      promises.push(equipBatch(calculatePriestItems(target)));
       break;
   }
   return Promise.all(promises);

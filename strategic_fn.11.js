@@ -1849,10 +1849,10 @@ async function warriorCleave(strategyName) {
     // Only release the flag if the aggro branch above claimed it
     if (promises.length) {
       isEquipingItems = false;
-      // equipBatch bails while penalty_cd is up, so hand the restore to
-      // currentStrategy at the earliest moment it can actually equip
+      // equipBatch bails while penalty_cd is up, so retry the restore at the
+      // earliest moment it can actually equip
       setTimeout(
-        () => currentStrategy(get_target()),
+        () => equipBatch(calculateWarriorItems()),
         character.s.penalty_cd?.ms ?? 0,
       );
     }
@@ -1904,10 +1904,10 @@ async function warriorStomp() {
 
   return Promise.allSettled(promises).finally(() => {
     isStomping = false;
-    // equipBatch bails while penalty_cd is up, so hand the restore to
-    // currentStrategy at the earliest moment it can actually equip
+    // equipBatch bails while penalty_cd is up, so retry the restore at the
+    // earliest moment it can actually equip
     setTimeout(
-      () => currentStrategy(get_target()),
+      () => equipBatch(calculateWarriorItems()),
       character.s.penalty_cd?.ms ?? 0,
     );
   });

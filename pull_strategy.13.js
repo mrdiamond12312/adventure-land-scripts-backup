@@ -19,15 +19,7 @@ async function usePullStrategies(target) {
 
   switch (character.ctype) {
     case "mage":
-      const suggestedMageItems = calculateMageItems(target);
-
-      if (
-        Object.keys(suggestedMageItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedMageItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedMageItems));
-      }
+      promises.push(equipBatch(calculateMageItems(target)));
 
       // Spend spare mp to help the priest keep the party topped off, but only
       // when the healer is close, healthy and actually a priest. Only a batch
@@ -55,15 +47,7 @@ async function usePullStrategies(target) {
       break;
 
     case "warrior":
-      const suggestedWarriorItems = calculateWarriorItems(target);
-
-      if (
-        Object.keys(suggestedWarriorItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedWarriorItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedWarriorItems));
-      }
+      promises.push(equipBatch(calculateWarriorItems()));
 
       // Everything agitate would reach — what the pull is judged on
       const mobsInAgitateRange = mobsList.filter((mob) =>
@@ -241,41 +225,22 @@ async function usePullStrategies(target) {
       break;
 
     case "rogue":
-      const suggestedRogueItems = calculateRogueItems(target);
-      if (
-        Object.keys(suggestedRogueItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedRogueItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedRogueItems));
-      }
+      promises.push(equipBatch(calculateRogueItems(target)));
       break;
 
     case "ranger":
-      const suggestedRangerItems = calculateRangerItems(
-        target,
-        character.slots.mainhand?.name === "cupid",
+      promises.push(
+        equipBatch(
+          calculateRangerItems(
+            target,
+            character.slots.mainhand?.name === "cupid",
+          ),
+        ),
       );
-
-      if (
-        Object.keys(suggestedRangerItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedRangerItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedRangerItems));
-      }
       break;
 
     case "priest":
-      const suggestedPriestItems = calculatePriestItems(target);
-
-      if (
-        Object.keys(suggestedPriestItems).some(
-          (slot) => character.slots[slot]?.name !== suggestedPriestItems[slot],
-        )
-      ) {
-        promises.push(equipBatch(suggestedPriestItems));
-      }
+      promises.push(equipBatch(calculatePriestItems(target)));
       break;
 
     default:

@@ -6,13 +6,13 @@
 const DORR_SPOT = { map: "main", x: 816, y: 1200 };
 
 /** How close to Dorr everyone must stand to enter */
-const DORR_SLACK = 160;
+const DORR_SLACK = 80;
 
 /** How long a daily-visit answer is trusted */
 const CAVE_VISIT_TTL_MS = 60 * 1000;
 
-/** How long an entry request waits before it is sent again */
-const CAVE_ENTER_COOLDOWN_MS = 10 * 1000;
+/** How long an entry request waits before it is sent again — past the 1.8s entry animation */
+const CAVE_ENTER_COOLDOWN_MS = 3 * 1000;
 
 /** How close a scheduled event may be before a run is skipped */
 const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
@@ -262,18 +262,30 @@ function isPartyAtDorr() {
  * @returns {Promise<void>}
  */
 async function enterCave(resuming) {
-  // Only the leader starts a fresh run
-  if (!resuming && character.name !== partyMems[0]) return;
   if (Date.now() - caveState.enteredAt < CAVE_ENTER_COOLDOWN_MS) return;
 
-  const outsiders = parent.party_list.filter(
-    (name) => !partyMems.includes(name),
-  );
-  if (!resuming && outsiders.length)
-    return caveLog("entry held: outsiders", outsiders);
+  // cave_enter opens a fresh run with whatever party we have once the open one
+  // is gone, so a cached resume is not enough to skip the party checks
+  if (resuming) {
+    caveState.checkedAt = 0;
+    resuming = canResumeCaveRun(await getCaveVisit());
+  }
 
-  if (!resuming && parent.party_list.length !== partyMems.length)
-    return caveLog("entry held: party", parent.party_list);
+  if (!resuming) {
+    // Only the leader starts a fresh run
+    if (character.name !== partyMems[0]) return;
+
+    if (!isPartyAtDorr())
+      return caveLog("at Dorr, waiting on the party");
+
+    const outsiders = parent.party_list.filter(
+      (name) => !partyMems.includes(name),
+    );
+    if (outsiders.length) return caveLog("entry held: outsiders", outsiders);
+
+    if (parent.party_list.length !== partyMems.length)
+      return caveLog("entry held: party", parent.party_list);
+  }
 
   caveLog(resuming ? "resuming" : "entering", parent.party_list);
   caveState.enteredAt = Date.now();
@@ -632,7 +644,7 @@ function isCaveShopObjective(objective) {
 function getSettledCaveShops() {
   const stored = get(CAVE_SHOPS_KEY);
 
-  return stored?.run === character.cave?.run ? (stored.rooms ?? []) : [];
+  return stored?.run === character.cave?.run ? stored.rooms ?? [] : [];
 }
 
 /**

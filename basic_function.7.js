@@ -2719,15 +2719,6 @@ const engage = (target) => ({ target });
 /** This tick is mine with nothing to hit: it went into the trip. */
 const travelling = () => ({});
 
-// TEMP: diagnosing fighters idling at Dorr — remove once found
-var chainDebugAt = new Map();
-function chainDebug(stage) {
-  const line = `[chain] ${stage} | trip=${isOnTrip()} rank=${tripRank} smart=${!!smart.moving} adv=${isAdvanceSmartMoving} at=${character.map}:${Math.round(character.x / 50) * 50},${Math.round(character.y / 50) * 50}`;
-  if (Date.now() - (chainDebugAt.get(line) ?? 0) < 10000) return;
-  chainDebugAt.set(line, Date.now());
-  console.warn(line);
-}
-
 /**
  * Runs the fighter strategies in priority order. The first one to claim the
  * tick decides it, and only one that found something answers with a target.
@@ -2737,29 +2728,22 @@ function chainDebug(stage) {
  */
 async function selectFightTarget() {
   rangeRate = calculateRangeRate() ?? originRangeRate ?? basicRangeRate;
-  let decided = "none";
 
   try {
     for (const [rank, strategy] of fighterStrategies.entries()) {
-      if (isOnTrip() && rank >= tripRank) {
-        decided = `held by trip at ${rank}`;
-        return undefined;
-      }
+      if (isOnTrip() && rank >= tripRank) return undefined;
 
       activeStrategyRank = rank;
-      chainDebug(`running ${rank} ${strategy.name}`);
       const outcome = await strategy();
       if (!outcome) continue;
 
       // Claimed without a trip of its own, so the lower one is stale
       if (isOnTrip() && rank < tripRank) await abandonTrip();
 
-      decided = `${strategy.name} -> ${outcome.target?.mtype ?? "travelling"}`;
       return outcome.target;
     }
   } finally {
     activeStrategyRank = undefined;
-    chainDebug(decided);
   }
 
   return undefined;
