@@ -489,6 +489,7 @@ function calculateMageItems() {
     pants: feelingLucky ? "wbreeches" : "starkillers",
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
+    belt: "intbelt",
     cape: "horsecapeg",
     orb: feelingLucky
       ? "rabbitsfoot"
@@ -590,8 +591,9 @@ function calculateWarriorItems() {
     chest: getWarriorChest(feelingLucky, isTanker),
     // pants: isTanker ? "frankypants" : "fallen",
     pants: "fallen",
-    ring1: currentTarget?.armor > 99 ? "suckerpunch" : "strring",
-    ring2: currentTarget?.armor > 99 ? "suckerpunch" : "strring",
+    belt: "strbelt",
+    ring1: currentTarget?.armor > 49 ? "suckerpunch" : "strring",
+    ring2: currentTarget?.armor > 49 ? "suckerpunch" : "strring",
     earring1: feelingLucky ? "cloverstud" : "cearring",
     earring2: feelingLucky ? "cloverstud" : "cearring",
   };
@@ -860,6 +862,7 @@ function calculateRangerItems(target) {
     amulet: feelingWise ? "spookyamulet" : "dexamulet",
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
+    belt: "dexbelt",
     earring1: feelingLucky ? "cloverstud" : "dexearring",
     earring2: feelingLucky
       ? "cloverstud"
@@ -942,6 +945,7 @@ function calculatePriestItems(target) {
     offhand: getPriestOffhand(isTanking, feelingLucky),
     orb: getPriestOrb(target, isTanking, feelingLucky, feelingWise),
     gloves: "supermittens",
+    belt: "intbelt",
     amulet: getPriestAmulet(isTanking, feelingLucky, feelingWise),
     ring1: feelingLucky ? "ringhs" : "zapper",
     ring2: feelingLucky ? "ringhs" : "zapper",
@@ -965,8 +969,11 @@ function calculateRogueItems(target) {
     orb: feelingLucky ? "rabbitsfoot" : "orbofdex",
     chest: "wattire",
     pants: "wbreeches",
+    belt: "dexbelt",
     earring1: feelingLucky ? "cloverstud" : "molesteeth",
     earring2: feelingLucky ? "cloverstud" : "dexearring",
+    ring1: "suckerpunch",
+    ring2: "suckerpunch",
   };
 
   if (!target) return baseItems;
