@@ -48,6 +48,9 @@ const HOME_SERVER = {
   serverIdentifier: "III",
 };
 
+/** Whether fighters harakiri on a server hop's loot-before-hopping cm */
+var HARAKIRI_ON_SERVER_HOP = false;
+
 /** @returns {string} the realm we are on right now, e.g. "USII" */
 function getCurrentServer() {
   return `${server.region}${server.id}`;
