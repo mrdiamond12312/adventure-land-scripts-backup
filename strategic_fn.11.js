@@ -748,6 +748,19 @@ function isSafeToShoot(mob, splashRadius = getSplashRadius(0)) {
   );
 }
 
+/**
+ * @param {Object|Object[]} [target] - forwarded to calculateRangerItems
+ * @returns {Promise} the gear swap, forced while holding cupid
+ */
+function equipRangerItems(target) {
+  const isHoldingCupid =
+    character.slots.mainhand?.name === RANGER_INV_ITEMS.cupid;
+  return equipBatch(calculateRangerItems(target), {
+    preventPenaltizeNextAttack: !isHoldingCupid,
+    preventKeySnatch: !isHoldingCupid,
+  });
+}
+
 function calculateRangerItems(target) {
   const targets = !target ? [] : Array.isArray(target) ? target : [target];
   const feelingLucky = shouldWearLuckGear();
@@ -1218,6 +1231,26 @@ function isShotPending(target = get_target()) {
 // isEquipingItems forever and silently ends all gear changes until a restart.
 const EQUIP_TIMEOUT_MS = 1000;
 
+/** @type {{name: string, num: number, previous: (string|undefined)}|null} unanswered mainhand equip */
+var inFlightMainhand = null;
+
+/** @returns {string|undefined} the mainhand as the server holds it */
+const getServerMainhand = () =>
+  inFlightMainhand?.name ?? character.slots.mainhand?.name;
+
+/**
+ * @param {Object} entry - the inFlightMainhand value
+ * @param {Promise} promise - the equip carrying it
+ */
+function trackMainhandEquip(entry, promise) {
+  inFlightMainhand = entry;
+  const clear = () => {
+    if (inFlightMainhand === entry) inFlightMainhand = null;
+  };
+  Promise.resolve(promise).then(clear, clear);
+  setTimeout(clear, EQUIP_TIMEOUT_MS);
+}
+
 /**
  * @param {Object} suggestedItems - slot -> item name
  * @param {Object} [options]
@@ -1375,6 +1408,17 @@ function buildEquipPromises(suggestedItems, options) {
   } else {
     promises.push(equip_batch(itemSlots));
   }
+
+  const mainhandEquip = itemSlots.find((item) => item.slot === "mainhand");
+  if (mainhandEquip)
+    trackMainhandEquip(
+      {
+        name: suggestedItems.mainhand,
+        num: mainhandEquip.num,
+        previous: getServerMainhand(),
+      },
+      promises[promises.length - 1],
+    );
 
   return promises;
 }

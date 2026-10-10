@@ -939,12 +939,31 @@ can never disagree because they read one object.
   mainhand in exactly that case — so the shot lands as a heal on the mob. `fight()` must therefore
   go through `getActionPlan`, not `getShotPlan` directly: with cupid in hand and healees pending it
   yields a *cupid* plan (heal the allies) instead of a bow-mode shot whose swap can never fire.
+- **Cupid-ness is decided when the attack *reaches* the server**, from whatever mainhand it holds
+  then (`commence_attack`, server.js ~L3272: `slots.mainhand.name == "cupid"` ⇒ `info.heal`). Gear
+  at projectile landing doesn't matter, and equips/attacks on one socket apply in send order. So the
+  danger is the ~1 ping after `equip(cupid)` is *sent*: `character.slots` still shows the bow, the
+  plan is a bow-mode shot, and the server heals the mob. The equip budget doesn't prevent it — it
+  only spares the next shot from `penalty_cd`, and the starvation release and supershot ignore it
+  entirely. Fix: `buildEquipPromises` records every mainhand equip in `inFlightMainhand`
+  (`{ name, num, previous }`) until its reply (the server's slot update precedes the reply, so slots
+  are fresh on settle) or `EQUIP_TIMEOUT_MS`; `getServerMainhand()` reads it first. A mob shot with
+  cupid in flight force-equips `previous` with `fallback: { mainhand: num }` — the bow is not in the
+  client's inventory yet, it lands where cupid left — in the same tick, so it arrives first. The
+  forced restore was preferred over rerouting the tick into a cupid heal.
+- **The pull strategy forces the cupid swap too.** It used to call `equipBatch` with defaults, so
+  the swap-out in `firePlan` was silently dropped (attack ready + target in range ⇒ budget 0, or
+  `penalty_cd` from swapping cupid in) and the shot healed the mob. Both strategies now share
+  `equipRangerItems`, which forces the swap while `character.slots` shows cupid. It reads slots,
+  not `getServerMainhand()`, on purpose: with cupid still in flight the swap would be built against
+  stale slots and could re-equip cupid from the slot the bow is about to land in.
 - **Supershot doubles as an emergency heal** — it inherits cupid's heal-on-hit and outranges it, so
   with cupid equipped it targets the lowest-hp ally in *supershot* range (`getEmergencyHealee`).
   With a bow it targets mobs, and only ones **out of bow range** — anything closer is already being
   shot by the normal attack, so spending a long cooldown on it is waste.
-- **`cast` re-checks `isCupidEquipped()`** before firing supershot: the gear loop can flip the
-  mainhand between `canUse` and `cast`, and a stale plan would heal a mob or shoot an ally.
+- **`cast` re-checks `getServerMainhand()`** before firing supershot: the gear loop can flip the
+  mainhand between `canUse` and `cast` (or have it in flight), and a stale plan would heal a mob or
+  shoot an ally. A skipped supershot stays off cooldown and retries on the next 100ms tick.
 - **An empty mainhand is self-locking.** No weapon → no `character.range` → nothing passes
   `inRange` → no plan → the gear loop's `if (!pendingPlan) return false` → never equips. Two
   guards: `calculateRangerItems` falls back to `fireBow` when `character.slots.mainhand?.name` is

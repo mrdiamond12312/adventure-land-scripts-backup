@@ -66,6 +66,9 @@ const shouldPiercingShot = (target) =>
 // on the first mainLoop tick.
 const isCupidEquipped = () => character.slots.mainhand?.name === "cupid";
 
+/** @returns {boolean} whether the server holds cupid */
+const isCupidOnServer = () => getServerMainhand() === "cupid";
+
 /**
  * Mobs worth shooting right now, annotated with cluster count and distance,
  * best first.
@@ -217,6 +220,21 @@ function getActionPlan(incomingTarget = get_targeted_monster()) {
 
 // --- Act ---
 
+/** @returns {Promise|null} the forced swap back to the bow cupid displaced */
+function restoreAttackingBow() {
+  const { previous, num } = inFlightMainhand;
+  if (!previous || previous === RANGER_INV_ITEMS.cupid) return null;
+
+  return equipBatch(
+    { mainhand: previous, booster: findInvBooster() },
+    {
+      fallback: { mainhand: num },
+      preventPenaltizeNextAttack: false,
+      preventKeySnatch: false,
+    },
+  );
+}
+
 /**
  * Fires the plan's skill: a cupid heal at allies, or a shot at mobs.
  * @param {Object} plan - from getActionPlan
@@ -229,8 +247,12 @@ async function firePlan(plan) {
 
   // Cupid heals whatever it hits, so shooting mobs with it feeds them. Swap
   // concurrently with the shot instead of waiting for the gear loop's gap.
-  if (plan.mode === "shot" && isCupidEquipped()) {
-    promisesToAwait.push(currentStrategy(plan.gearTargets));
+  if (plan.mode === "shot" && isCupidOnServer()) {
+    const swap = inFlightMainhand
+      ? restoreAttackingBow()
+      : currentStrategy(plan.gearTargets);
+    if (!swap) return;
+    promisesToAwait.push(swap);
   }
 
   if (plan.skill === "attack" || plan.skill === "piercingshot") {
@@ -426,10 +448,9 @@ function startSkillLoops() {
       return pendingSuperShotTarget != null;
     },
     cast: () => {
-      // The mainhand can flip between canUse and cast: never supershot a mob
-      // with cupid (it heals the mob), nor an ally with a bow.
+      // Never supershot a mob with cupid, nor an ally with a bow
       const isHealee = pendingSuperShotTarget.type === "character";
-      if (isHealee !== isCupidEquipped()) return Promise.resolve();
+      if (isHealee !== isCupidOnServer()) return Promise.resolve();
 
       return use_skill("supershot", pendingSuperShotTarget).then(() =>
         reduceCd("supershot"),

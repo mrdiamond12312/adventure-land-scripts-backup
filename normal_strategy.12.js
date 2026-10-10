@@ -10,12 +10,7 @@ async function useNormalStrategy(target) {
       break;
 
     case "ranger":
-      promises.push(
-        equipBatch(calculateRangerItems(target), {
-          preventPenaltizeNextAttack: character.slots.mainhand?.name !== "cupid",
-          preventKeySnatch: character.slots.mainhand?.name !== "cupid",
-        }),
-      );
+      promises.push(equipRangerItems(target));
       break;
 
     case "rogue":

@@ -229,14 +229,7 @@ async function usePullStrategies(target) {
       break;
 
     case "ranger":
-      promises.push(
-        equipBatch(
-          calculateRangerItems(
-            target,
-            character.slots.mainhand?.name === "cupid",
-          ),
-        ),
-      );
+      promises.push(equipRangerItems(target));
       break;
 
     case "priest":
