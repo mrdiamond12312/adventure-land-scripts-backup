@@ -725,7 +725,7 @@ class StrategicSmartMove {
 
       // Fill x/y from spawn
       if (
-        mapData.spawns?.length &&
+        mapData?.spawns?.length &&
         (toPosition.x === undefined || toPosition.y === undefined)
       ) {
         toPosition.x = mapData.spawns[0][0];

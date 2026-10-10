@@ -212,7 +212,7 @@ function getEventHpRatio(eventName) {
 
 /** @returns {boolean} whether the event is still running */
 function isEventStillLive(eventName) {
-  return !!server.status[eventName] || !!get_nearest_monster({ type: eventName });
+  return !!server.status[eventName]?.live || !!get_nearest_monster({ type: eventName });
 }
 
 /**
