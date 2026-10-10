@@ -1,5 +1,124 @@
 // Daily events and world bosses — the fighter's highest priority strategy.
 
+/** Event fights in priority order; each claims the tick only while its event is on. */
+const EVENT_FIGHTS = [
+  fightGoobrawl,
+  () => fightSimpleBoss(["dragold", "mrpumpkin", "mrgreen", "icegolem"]),
+  fightCrabxx,
+  fightFranky,
+  fightSnowman,
+  fightAbtesting,
+  () => fightSimpleBoss(["pinkgoo", "wabbit"]),
+  // Last: every live boss above outranks the kiss
+  takeAnniversaryVisit,
+];
+
+/**
+ * Targets whatever live event outranks farming, walking there when it is out of
+ * sight. A live event owns the tick even with nothing in reach: the field is
+ * empty between waves, and going back to the farming spot loses the fight.
+ * @returns {Promise<object|undefined>} the event outcome, if one owns this tick
+ */
+async function useEventStrategy() {
+  for (const fight of EVENT_FIGHTS) {
+    const outcome = await fight();
+    if (outcome) return outcome;
+  }
+  return undefined;
+}
+
+// --- Goobrawl ---
+
+/** @returns {Promise<object|undefined>} the outcome, while goobrawl is on */
+async function fightGoobrawl() {
+  const isGoobrawlOn =
+    server.status.goobrawl ||
+    get_nearest_monster({ type: "bgoo" }) ||
+    get_nearest_monster({ type: "rgoo" });
+  if (!isGoobrawlOn || character.s["hopsickness"]) return;
+
+  changeToPullStrategies();
+  if (character.map !== "goobrawl") {
+    await join("goobrawl");
+    await sleep(character.ping);
+  }
+
+  const engagedGoo = ["bgoo", "rgoo"].includes(get_targeted_monster()?.mtype)
+    ? get_targeted_monster()
+    : undefined;
+
+  return engage(
+    get_nearest_monster({ type: "rgoo" }) ??
+      engagedGoo ??
+      get_nearest_monster({ type: "bgoo" }),
+  );
+}
+
+// --- Simple bosses: walk up and hit ---
+
+/**
+ * Per-boss overrides; the default is the pull strategy at the usual kite distance.
+ * @type {Object<string, {usePull?: boolean, rangeRate?: function(): number}>}
+ */
+const SIMPLE_BOSSES = {
+  dragold: {},
+  mrpumpkin: {},
+  mrgreen: {},
+  icegolem: { usePull: false },
+  pinkgoo: {},
+  wabbit: { rangeRate: () => (character.range < 100 ? 0.1 : 0.4) },
+};
+
+/**
+ * Minions first, then the boss, walking to its last known spot when out of sight.
+ * @param {string[]} types - the bosses to pick from, lowest hp ratio first
+ * @returns {Promise<object|undefined>} the outcome, while one of them is live
+ */
+async function fightSimpleBoss(types) {
+  const hpRatio = (boss) => boss.hp / boss.max_hp;
+  const bossToFight = types
+    .filter((type) => server.status[type]?.live)
+    .map((type) => ({ ...server.status[type], type }))
+    .sort((lhs, rhs) => hpRatio(lhs) - hpRatio(rhs))[0];
+  if (!bossToFight) return;
+
+  const { usePull = true, rangeRate: bossRangeRate } =
+    SIMPLE_BOSSES[bossToFight.type];
+  if (usePull) changeToPullStrategies();
+  else changeToNormalStrategies();
+  if (bossRangeRate) rangeRate = bossRangeRate();
+
+  const minion = getBossMinion(bossToFight.type);
+  if (minion) return engage(minion);
+
+  let bossInstance = get_nearest_monster({ type: bossToFight.type });
+  if (!bossInstance && bossToFight.x !== undefined) {
+    await advanceSmartMove(bossToFight);
+    bossInstance = get_nearest_monster({ type: bossToFight.type });
+  }
+
+  return engage(bossInstance);
+}
+
+/**
+ * A visible add from the boss's `G.monsters[].spawns`, sticking with the one already targeted.
+ * @param {string} bossType
+ * @returns {object|undefined}
+ */
+function getBossMinion(bossType) {
+  const minionTypes = (parent.G.monsters[bossType].spawns ?? []).map(
+    ([, type]) => type,
+  );
+  if (!minionTypes.length) return undefined;
+
+  const current = get_targeted_monster();
+  if (minionTypes.includes(current?.mtype)) return current;
+
+  return minionTypes.map((type) => get_nearest_monster({ type })).find(Boolean);
+}
+
+// --- Crabxx ---
+
 const CRABXX_OFF_CENTER_DISTANCE = 100;
 const CRABXX_FETCH_LEASH = 2000;
 const CRABXX_RETURN_DISTANCE = 300;
@@ -45,6 +164,115 @@ const isCrabxxDraggedOff = (crabxx) =>
   isCrabxxStolen(crabxx) &&
   distance(character, crabxx) < G.skills["agitate"].range;
 
+/** @returns {Promise<object|undefined>} the outcome, while crabxx is live */
+async function fightCrabxx() {
+  if (!server.status.crabxx?.live) return;
+
+  if (character.range > 100) rangeRate = 0.3;
+
+  let { crabxxInstance, crabxList } = getCrabsForCrabxx();
+
+  if (!crabxxInstance) {
+    if (character.s.hopsickness) {
+      await advanceSmartMove(server.status.crabxx);
+    } else {
+      await join("crabxx");
+      await sleep(character.ping);
+    }
+    ({ crabxxInstance, crabxList } = getCrabsForCrabxx());
+
+    if (!crabxxInstance) return travelling();
+  }
+
+  if (
+    character.ctype === "warrior" &&
+    (!crabxxInstance.s.stunned ||
+      crabxxInstance.s.stunned.ms < character.ping / 2) &&
+    crabxList.length <= 1
+  ) {
+    await warriorStomp();
+  }
+
+  const targetCrab = pickCrabxxTarget(crabxxInstance, crabxList);
+  await holdCrabxxAggro(crabxxInstance, crabxList);
+
+  changeToPullStrategies();
+  return engage(targetCrab);
+}
+
+/**
+ * @param {Object} crabxx - the boss
+ * @param {Object[]} crabxList - its adds
+ * @returns {Object|undefined} the boss once its shell is down, else the crabx to hit
+ */
+function pickCrabxxTarget(crabxx, crabxList) {
+  if (!crabxx["1hp"]) return crabxx;
+
+  const inRange = (entity) =>
+    distance(entity, character) < character.range + character.xrange * 0.8;
+  const hpOf = (entity) => entity?.predictedHp ?? entity?.hp ?? 0;
+
+  let bestCrabx;
+  let bestClusteredCrabx;
+
+  for (const crabx of crabxList) {
+    if (!bestCrabx) {
+      bestCrabx = crabx;
+    } else {
+      const isCurrentCrabxInRange = inRange(crabx);
+      const isBestCrabxInRange = inRange(bestCrabx);
+
+      if (isCurrentCrabxInRange && !isBestCrabxInRange) {
+        bestCrabx = crabx;
+      } else if (
+        isCurrentCrabxInRange === isBestCrabxInRange &&
+        hpOf(crabx) > hpOf(bestCrabx)
+      ) {
+        bestCrabx = crabx;
+      }
+    }
+
+    if (
+      distance(crabx, crabxx) <= BLAST_RADIUS &&
+      (!bestClusteredCrabx || hpOf(crabx) > hpOf(bestClusteredCrabx))
+    ) {
+      bestClusteredCrabx = crabx;
+    }
+  }
+
+  if (character.ctype === "warrior") return bestClusteredCrabx || crabxx;
+  return bestCrabx || (crabxx.target ? crabxx : undefined);
+}
+
+/**
+ * The tanker fetches the boss home; newborn crabx on us are scared off, the
+ * tanker agitating back whatever the scare shed.
+ * @param {Object} crabxx - the boss
+ * @param {Object[]} crabxList - its adds
+ */
+async function holdCrabxxAggro(crabxx, crabxList) {
+  const isTanker = isAssignedAsTanker();
+  const canAgitate =
+    isTanker &&
+    !is_on_cooldown("agitate") &&
+    character.mp > G.skills["agitate"].mp + 500;
+
+  const hasCrabxSpawnedByCrabxx = crabxList.some(
+    (entity) => entity.s?.young && entity.target === character.name,
+  );
+
+  if (isTanker) await fetchCrabxx(crabxx);
+
+  const promisesToAwait = [];
+  if (hasCrabxSpawnedByCrabxx && (!isTanker || canAgitate))
+    promisesToAwait.push(scareAwayMobs());
+
+  if (canAgitate && (hasCrabxSpawnedByCrabxx || isCrabxxDraggedOff(crabxx)))
+    promisesToAwait.push(use_skill("agitate"));
+
+  await Promise.all(promisesToAwait);
+}
+
 /** @param {Object} crabxx - the boss to fetch or lead home */
 async function fetchCrabxx(crabxx) {
   const center = getCrabxxCenter();
@@ -87,314 +315,134 @@ async function fetchCrabxx(crabxx) {
   }
 }
 
-/**
- * Targets whatever live event outranks farming, walking there when it is out of
- * sight. A live event owns the tick even with nothing in reach: the field is
- * empty between waves, and going back to the farming spot loses the fight.
- * @returns {Promise<object|undefined>} the event outcome, if one owns this tick
- */
-async function useEventStrategy() {
-  if (
-    (server.status.goobrawl ||
-      get_nearest_monster({ type: "bgoo" }) ||
-      get_nearest_monster({ type: "rgoo" })) &&
-    !character.s["hopsickness"]
-  ) {
-    changeToPullStrategies();
-    if (character.map !== "goobrawl") {
-      await join("goobrawl");
-      await sleep(character.ping);
-    }
+// --- Franky ---
 
-    const engagedGoo = ["bgoo", "rgoo"].includes(get_targeted_monster()?.mtype)
-      ? get_targeted_monster()
-      : undefined;
+/** @returns {Promise<object|undefined>} the outcome, while franky is live */
+async function fightFranky() {
+  if (!server.status.franky?.live) return;
 
-    return engage(
-      get_nearest_monster({ type: "rgoo" }) ??
-        engagedGoo ??
-        get_nearest_monster({ type: "bgoo" }),
-    );
+  if (character.ctype === "warrior") changeToPullStrategies();
+  else changeToNormalStrategies();
+
+  let frankyInstance = get_nearest_monster({ type: "franky" });
+  if (!frankyInstance) {
+    await join("franky").catch((e) => console.warn(e));
+    await sleep(character.ping);
+    await advanceSmartMove(server.status.franky);
+    frankyInstance = get_nearest_monster({ type: "franky" });
   }
 
-  if (server.status.dragold?.live) {
-    changeToPullStrategies();
-
-    let dragoldInstance = get_nearest_monster({ type: "dragold" });
-    if (!dragoldInstance) {
-      await advanceSmartMove(server.status.dragold);
-      dragoldInstance = get_nearest_monster({ type: "dragold" });
-    }
-
-    return engage(dragoldInstance);
+  if (frankyInstance) {
+    rangeRate = 0.2;
+    await scareAwayMobs();
   }
 
-  const activeBosses = [];
-
-  if (server.status.mrpumpkin?.live) {
-    activeBosses.push({
-      ...server.status.mrpumpkin,
-      type: "mrpumpkin",
-      strategy: changeToPullStrategies,
-    });
-  }
-
-  if (server.status.mrgreen?.live) {
-    activeBosses.push({
-      ...server.status.mrgreen,
-      type: "mrgreen",
-      strategy: changeToPullStrategies,
-    });
-  }
-
-  if (server.status.icegolem?.live) {
-    activeBosses.push({
-      ...server.status.icegolem,
-      type: "icegolem",
-      strategy: changeToNormalStrategies,
-    });
-  }
-
-  if (activeBosses.length) {
-    const bossToFight = activeBosses
-      .sort(
-        (lhs, rhs) =>
-          lhs.hp / parent.G.monsters[lhs.type].hp -
-          rhs.hp / parent.G.monsters[rhs.type].hp,
-      )
-      .shift();
-
-    if (bossToFight) {
-      bossToFight.strategy();
-
-      const minion = getBossMinion(bossToFight.type);
-      if (minion) return engage(minion);
-
-      let bossInstance = get_nearest_monster({ type: bossToFight.type });
-      if (!bossInstance) {
-        await advanceSmartMove(bossToFight);
-        bossInstance = get_nearest_monster({ type: bossToFight.type });
-      }
-
-      return engage(bossInstance);
-    }
-  }
-
-  if (server.status.crabxx?.live) {
-    if (character.range > 100) rangeRate = 0.3;
-
-    const inRange = (entity) =>
-      distance(entity, character) < character.range + character.xrange * 0.8;
-
-    let { crabxxInstance, crabxList } = getCrabsForCrabxx();
-
-    if (!crabxxInstance) {
-      if (character.s.hopsickness) {
-        await advanceSmartMove(server.status.crabxx);
-      } else {
-        await join("crabxx");
-        await sleep(character.ping);
-      }
-      ({ crabxxInstance, crabxList } = getCrabsForCrabxx());
-
-      if (!crabxxInstance) return travelling();
-    }
-
-    let bestCrabx;
-    let bestClusteredCrabx;
-
-    for (const crabx of crabxList) {
-      const isCurrentCrabxInRange = inRange(crabx);
-      const currentCrabxHp = crabx.predictedHp ?? crabx.hp ?? 0;
-      const bestCrabxHp = bestCrabx?.predictedHp ?? bestCrabx?.hp ?? 0;
-
-      if (!bestCrabx) {
-        bestCrabx = crabx;
-      } else {
-        const isBestCrabxInRange = inRange(bestCrabx);
-
-        if (isCurrentCrabxInRange && !isBestCrabxInRange) {
-          bestCrabx = crabx;
-        } else if (isCurrentCrabxInRange === isBestCrabxInRange) {
-          if (currentCrabxHp > bestCrabxHp) {
-            bestCrabx = crabx;
-          }
-        }
-      }
-
-      if (distance(crabx, crabxxInstance) <= BLAST_RADIUS) {
-        const bestClusteredCrabxHp =
-          bestClusteredCrabx?.predictedHp ?? bestClusteredCrabx?.hp ?? 0;
-        if (!bestClusteredCrabx || currentCrabxHp > bestClusteredCrabxHp) {
-          bestClusteredCrabx = crabx;
-        }
-      }
-    }
-
-    if (
-      character.ctype === "warrior" &&
-      (!crabxxInstance.s.stunned ||
-        crabxxInstance.s.stunned.ms < character.ping / 2) &&
-      crabxList.length <= 1
-    ) {
-      await warriorStomp();
-    }
-
-    let targetCrab;
-
-    if (!crabxxInstance["1hp"]) {
-      targetCrab = crabxxInstance;
-    } else if (character.ctype === "warrior") {
-      targetCrab = bestClusteredCrabx || crabxxInstance;
-    } else {
-      targetCrab =
-        bestCrabx || (crabxxInstance?.target ? crabxxInstance : undefined);
-    }
-
-    const isTanker = isAssignedAsTanker();
-    const canAgitate =
-      isTanker &&
-      !is_on_cooldown("agitate") &&
-      character.mp > G.skills["agitate"].mp + 500;
-
-    const hasCrabxSpawnedByCrabxx = crabxList.some(
-      (entity) => entity.s?.young && entity.target === character.name,
-    );
-
-    if (isTanker) await fetchCrabxx(crabxxInstance);
-
-    const promisesToAwait = [];
-    if (hasCrabxSpawnedByCrabxx && (!isTanker || canAgitate))
-      promisesToAwait.push(scareAwayMobs());
-
-    // Retakes whatever the scare shed along with the newborns
-    if (
-      canAgitate &&
-      (hasCrabxSpawnedByCrabxx || isCrabxxDraggedOff(crabxxInstance))
-    )
-      promisesToAwait.push(use_skill("agitate"));
-
-    await Promise.all(promisesToAwait);
-
-    changeToPullStrategies();
-    return engage(targetCrab);
-  }
-
-  if (server.status.franky?.live) {
-    if (character.ctype === "warrior") changeToPullStrategies();
-    else changeToNormalStrategies();
-
-    let frankyInstance = get_nearest_monster({ type: "franky" });
-    if (!frankyInstance) {
-      await join("franky").catch((e) => console.warn(e));
-      await sleep(character.ping);
-      await advanceSmartMove(server.status.franky);
-      frankyInstance = get_nearest_monster({ type: "franky" });
-    }
-
-    if (frankyInstance) {
-      rangeRate = 0.2;
-      await scareAwayMobs();
-    }
-
-    return engage(frankyInstance);
-  }
-
-  if (server.status.pinkgoo?.live) {
-    changeToPullStrategies();
-
-    let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
-    if (!pinkgooInstance && server.status.pinkgoo?.x) {
-      await advanceSmartMove(server.status.pinkgoo);
-      pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
-    }
-
-    return engage(pinkgooInstance);
-  }
-
-  if (server.status.snowman?.live) {
-    changeToPullStrategies();
-
-    let snowmanInstance = get_nearest_monster({ type: "snowman" });
-
-    if (!snowmanInstance) {
-      await advanceSmartMove(server.status.snowman);
-      snowmanInstance = get_nearest_monster({ type: "snowman" });
-    }
-
-    const currentTarget = get_target();
-    const grinchInstance = get_nearest_monster({ type: "grinch" });
-    const beeToAttack =
-      currentTarget && currentTarget.mtype === "arcticbee"
-        ? currentTarget
-        : get_nearest_monster({ type: "arcticbee" });
-
-    // The shielded snowman takes nothing, so its bees are the way in
-    return engage(
-      grinchInstance ??
-        (snowmanInstance?.s?.fullguardx ? beeToAttack : snowmanInstance),
-    );
-  }
-
-  if (server.status.abtesting && !character.s.hopsickness) {
-    if (character.map !== "abtesting") {
-      await join("abtesting").catch((e) => console.warn(e));
-      return travelling();
-    }
-
-    changeToNormalStrategies();
-
-    const pvpTarget = selectAbtestingTarget();
-    if (pvpTarget) {
-      abtestingLastSighting = {
-        x: pvpTarget.real_x,
-        y: pvpTarget.real_y,
-        time: Date.now(),
-      };
-      return engage(pvpTarget);
-    }
-
-    await roamAbtesting();
-    return travelling();
-  }
-
-  if (server.status.wabbit?.live) {
-    changeToPullStrategies();
-    if (character.range < 100) rangeRate = 0.1;
-    else rangeRate = 0.4;
-
-    let wabbitInstance = get_nearest_monster({ type: "wabbit" });
-    if (!wabbitInstance && server.status.wabbit?.x) {
-      await advanceSmartMove(server.status.wabbit);
-      wabbitInstance = get_nearest_monster({ type: "wabbit" });
-    }
-
-    return engage(wabbitInstance);
-  }
-
-  // Last: every live boss above outranks the kiss
-  if (await visitAnniversaryPlayer()) return travelling();
-
-  return undefined;
+  return engage(frankyInstance);
 }
 
 /**
- * A visible add from the boss's `G.monsters[].spawns`, sticking with the one already targeted.
- * @param {string} bossType
- * @returns {object|undefined}
+ * @param {Object} franky - the boss
+ * @returns {Object|undefined} the stranger holding it, when the tanker should take it back
  */
-function getBossMinion(bossType) {
-  const minionTypes = (parent.G.monsters[bossType].spawns ?? []).map(
-    ([, type]) => type,
+function getFrankyThief(franky) {
+  const holderName = franky?.target;
+  if (
+    !holderName ||
+    getMyCharacters().includes(holderName) ||
+    knownTankers.includes(holderName)
+  )
+    return;
+  return get_player(holderName) ?? undefined;
+}
+
+/**
+ * @param {Object} holder - the player holding franky
+ * @param {Object} franky - the boss
+ * @returns {boolean} whether absorb treats the holder as friendly, at its normal cost
+ */
+const isAbsorbFriendly = (holder, franky) =>
+  parent.party_list.includes(holder.name) ||
+  (character.s.coop?.id === franky.id && holder.s?.coop?.id === franky.id);
+
+/** @returns {Object|undefined} the franky thief the tanker can absorb back right now */
+function getFrankyThiefToAbsorb() {
+  if (
+    !server.status.franky?.live ||
+    !isAssignedAsTanker() ||
+    character.mp < G.skills["absorb"].mp
+  )
+    return;
+
+  const franky = get_nearest_monster({ type: "franky" });
+  const thief = franky && getFrankyThief(franky);
+  return thief &&
+    isAbsorbFriendly(thief, franky) &&
+    is_in_range(thief, "absorb")
+    ? thief
+    : undefined;
+}
+
+// --- Snowman ---
+
+/** @returns {Promise<object|undefined>} the outcome, while snowman is live */
+async function fightSnowman() {
+  if (!server.status.snowman?.live) return;
+
+  changeToPullStrategies();
+
+  let snowmanInstance = get_nearest_monster({ type: "snowman" });
+
+  if (!snowmanInstance) {
+    await advanceSmartMove(server.status.snowman);
+    snowmanInstance = get_nearest_monster({ type: "snowman" });
+  }
+
+  const currentTarget = get_target();
+  const grinchInstance = get_nearest_monster({ type: "grinch" });
+  const beeToAttack =
+    currentTarget && currentTarget.mtype === "arcticbee"
+      ? currentTarget
+      : get_nearest_monster({ type: "arcticbee" });
+
+  // The shielded snowman takes nothing, so its bees are the way in
+  return engage(
+    grinchInstance ??
+      (snowmanInstance?.s?.fullguardx ? beeToAttack : snowmanInstance),
   );
-  if (!minionTypes.length) return undefined;
+}
 
-  const current = get_targeted_monster();
-  if (minionTypes.includes(current?.mtype)) return current;
+// --- Anniversary ---
 
-  return minionTypes
-    .map((type) => get_nearest_monster({ type }))
-    .find(Boolean);
+/** @returns {Promise<object|undefined>} travelling, while the anniversary visit owns the tick */
+async function takeAnniversaryVisit() {
+  if (await visitAnniversaryPlayer()) return travelling();
+}
+
+// --- A/B Testing ---
+
+/** @returns {Promise<object|undefined>} the outcome, while abtesting is on */
+async function fightAbtesting() {
+  if (!server.status.abtesting || character.s.hopsickness) return;
+
+  if (character.map !== "abtesting") {
+    await join("abtesting").catch((e) => console.warn(e));
+    return travelling();
+  }
+
+  changeToNormalStrategies();
+
+  const pvpTarget = selectAbtestingTarget();
+  if (pvpTarget) {
+    abtestingLastSighting = {
+      x: pvpTarget.real_x,
+      y: pvpTarget.real_y,
+      time: Date.now(),
+    };
+    return engage(pvpTarget);
+  }
+
+  await roamAbtesting();
+  return travelling();
 }
 
 /** Kill-priority bonus by class: healers first, then the squishy damage dealers. */

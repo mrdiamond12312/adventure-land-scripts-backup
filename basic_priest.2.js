@@ -190,8 +190,11 @@ function getCurseTarget() {
   );
 }
 
-// A party member (not us, not the tank) in absorb range and holding aggro.
+// A stranger holding franky, else a party member (not us, not the tank) in absorb range and holding aggro.
 function getAbsorbTarget() {
+  const frankyThief = getFrankyThiefToAbsorb();
+  if (frankyThief) return frankyThief;
+
   if (character.mp < G.skills["absorb"].mp + 600) return null;
   const vulnerableMems = getMyCharacters().filter(
     (id) => id !== character.name && id !== TANKER,

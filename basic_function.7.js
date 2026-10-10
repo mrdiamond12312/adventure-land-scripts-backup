@@ -1295,6 +1295,15 @@ async function resolveKiteTarget(target) {
     ["franky", "nerfedmummy"].includes(target.mtype) &&
     isAssignedAsTanker()
   ) {
+    // Go to whoever stole it: to absorb it back, or to hit it first so absorb is friendly
+    const franky = get_nearest_monster({ type: "franky" });
+    const thief = character.ctype === "priest" && getFrankyThief(franky);
+    if (thief)
+      return withFixedSpot(
+        target,
+        isAbsorbFriendly(thief, franky) ? thief : franky,
+      );
+
     if (distance(FRANKY_PREFER_SPOT, character) > 100) {
       smartmoveDebug = true;
       try {

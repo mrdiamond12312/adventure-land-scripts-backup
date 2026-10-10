@@ -1699,6 +1699,26 @@ has a target and is not disabled, onto a random player from its `points` (anyone
 who is within 400 of it and in the same group as its current target. During the shell each hit
 adds 1 to `points`, however hard it lands.
 
+## Franky: the priest absorbs a stolen boss back to the corner (2026-10-11)
+
+The corner drag (`FRANKY_PREFER_SPOT`, `resolveKiteTarget`) only works while franky is on the
+priest; if a stranger got there first it stays wherever they hold it, and the priest used to sit
+in the empty corner. Priests have no taunt, so the take-back is `absorb` on the holder
+(`getFrankyThief`: not ours, not `knownTankers` — same exemption as crabxx).
+
+Absorb is only usable on a *friendly* target (`is_same(player, target, 1)`). On anyone else it
+costs 6× mp, needs level 75, and fails 95% of the time with the cooldown spent — never worth it.
+`is_same(..., 1)` counts a shared party **or a shared `s.coop.id`**, and every attacker of a
+`cooperative` monster (franky is) gets `s.coop = { id: monster.id }`. Strangers' `s` reaches the
+client, so `isAbsorbFriendly` checks both coop ids before casting. Hence the kite anchor while
+stolen: the **thief** once both coop ids match (absorb range is 240 to the *holder*, who may be a
+ranged class far from the boss), otherwise **franky itself**, so the priest lands the hit that
+earns his coop tag — the same deadlock crabxx hit when movement waited on the tag. A thief that
+never hit franky (aggro by proximity) can't be absorbed at all; the priest just fights at the boss.
+
+Absorb takes *every* monster on the holder, so the thief's nerfedmummies come along (240 attack,
+physical); once franky is on the priest the normal corner branch walks everything home.
+
 ## Incoming projectiles start from the server's roll (`ProjectileManagement`, 2026-09-29)
 
 `action.damage` is the attack before defense, crit and the ±10% spread, but after the skill's own
