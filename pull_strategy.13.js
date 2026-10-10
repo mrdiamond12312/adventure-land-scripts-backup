@@ -122,7 +122,8 @@ async function usePullStrategies(target) {
         !is_on_cooldown("agitate");
 
       // Mob Quantity Requirement
-      const sufficientNoTargetMobs = listOfNoTargetMonsterInRange.length >= 2;
+      const sufficientNoTargetMobs =
+        mobsLeftAfterCleave(listOfNoTargetMonsterInRange).length >= 2;
 
       // Mob Safety Check: No bad mobs in the list
       const safeToAgitateMobs = !listOfNoTargetMonsterInRange.some(

@@ -1190,6 +1190,16 @@ fresh one standing at the spawn blocks the pull — waking an unowned ent by acc
 `dragEnt` exists to do on purpose. `mobsTargetingExternalParty` also still scans every monster on
 screen rather than the ones agitate could reach.
 
+**The "at least 2 new mobs" rule counts only what cleave won't take (2026-10-11).** Any hit on an
+untargeted mob makes it target the attacker, so a cleave about to swing already pulls every
+untargeted mob in its range; agitating those too is pure mp, and mp is what cleave is gated on
+(> 1720). `mobsLeftAfterCleave` strips them, and `sufficientNoTargetMobs` is judged on the rest.
+It can't just ask "is cleave ready": cleave declining (fear, heal budget, a risky mob) leaves its
+cooldown at 0 indefinitely, which would hold agitate off for good. So the whole swing decision is
+`planCleave` — every gate `warriorCleave` and `cleaveLoop` apply, minus cooldown and locks — and
+the helper asks that. Mobs on an ally are never "covered": a hit doesn't retarget a mob that
+already has one.
+
 ## Splash safety: one scan, three thresholds (`hasUntargetedMonsterAround`)
 
 An unaggroed mob inside a blast radius is a mob you are about to *wake*. Three call sites wanted
@@ -1652,7 +1662,8 @@ The rest of the branch looks tunable, but is deliberate (confirmed 2026-09-29):
   1. **Out leg:** off center, within `CRABXX_FETCH_LEASH` (2000, about beach-center to town) and
      outside agitate range (320), `advanceSmartMove` to the boss; its `stopWatcher` ends the walk
      at `0.9 ×` agitate range, when the boss turns to us, or when it leaves sight.
-  2. **Agitate** fires in the same tick once in range, only if stolen (`isCrabxxDraggedOff`).
+  2. **Agitate** fires in the same tick once in range, only if stolen (`isCrabxxDraggedOff`) —
+     or on a scare tick (below).
   3. **Home leg:** boss on us and the tanker over `CRABXX_RETURN_DISTANCE` (300) from the center
      ⇒ `advanceSmartMove` back, stopped if the aggro drops. The boss walks 30 but charges 80, so
      it keeps up — and keeps hitting; the priest is not escorted, he follows the crabx/boss area.
@@ -1667,6 +1678,16 @@ The rest of the branch looks tunable, but is deliberate (confirmed 2026-09-29):
   attacker of a `cooperative` monster gets `s.coop = { id: monster.id }` (`add_coop_points`, 12
   min). Hence the `character.s.coop?.id === crabxx.id` gate; `crabx` is not cooperative, so
   hitting adds never moves that id.
+- **The tanker scares newborn crabx only on an agitate-ready tick, and always agitates with it**
+  (confirmed 2026-10-11). Scare is how the adds get *despawned*, not just shed: a summoned add
+  carries `spawn: true` server-side, and `stop_pursuit` removes any `spawn` monster outright
+  (`method: "disappear"`), whatever its age. But scare hits every non-`immune` monster targeting
+  us, and crabxx has no `immune` — so it drops the boss too. The agitate sent right after (scare
+  is emitted first) is what takes the boss back; scaring without it hands the boss to whoever is
+  next. Agitate is otherwise *not* spent on crabx here — the pull strategy's own agitate covers
+  that, and the ranger cleans up adds. `s.young` is only a 500ms window on *every* new monster
+  (`new_monster`), and `spawn`/`master` never reach the client (`monster_to_client`); missing an
+  older add is fine, since scare comes back off cooldown and a new one spawns every second.
 - **Stomp only while `crabxList.length <= 1`.** It is a play-maker: stun the boss once the adds
   are cleared and let the party follow up, not a panic button. This matters more than it looks:
   the server skips a disabled (stunned) boss's timed spawns entirely.

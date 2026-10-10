@@ -242,9 +242,6 @@ async function useEventStrategy() {
 
     let targetCrab;
 
-    // The shell ("1hp") is what decides the target, not whether crabx happen to
-    // be standing around: while it is up every hit on the boss lands for 1, and
-    // the moment it drops the boss is worth more than any crabx.
     if (!crabxxInstance["1hp"]) {
       targetCrab = crabxxInstance;
     } else if (character.ctype === "warrior") {
@@ -264,32 +261,16 @@ async function useEventStrategy() {
       (entity) => entity.s?.young && entity.target === character.name,
     );
 
-    // A ready cleave aggros every untargeted crabx it hits, sparing agitate's mp
-    const agitateGain = crabxList.filter(
-      (crabx) =>
-        crabx.target !== character.name && is_in_range(crabx, "agitate"),
-    );
-    const cleaveCoversGain =
-      agitateGain.length > 0 &&
-      agitateGain.every(
-        (crabx) =>
-          !crabx.target &&
-          distance(character, crabx) <
-            G.skills["cleave"].range + character.xrange,
-      ) &&
-      ms_to_next_skill("cleave") < character.ping &&
-      character.mp > 1720;
-
     if (isTanker) await fetchCrabxx(crabxxInstance);
 
     const promisesToAwait = [];
     if (hasCrabxSpawnedByCrabxx && (!isTanker || canAgitate))
       promisesToAwait.push(scareAwayMobs());
 
+    // Retakes whatever the scare shed along with the newborns
     if (
       canAgitate &&
-      ((hasCrabxSpawnedByCrabxx && !cleaveCoversGain) ||
-        isCrabxxDraggedOff(crabxxInstance))
+      (hasCrabxSpawnedByCrabxx || isCrabxxDraggedOff(crabxxInstance))
     )
       promisesToAwait.push(use_skill("agitate"));
 

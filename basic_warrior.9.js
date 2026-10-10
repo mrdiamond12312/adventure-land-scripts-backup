@@ -227,21 +227,9 @@ async function fight(target) {
 
 async function cleaveLoop() {
   try {
-    // Aggro at Dorr fails the cave entry
-    const isWaitingAtDorr = isPreparingCave && !character.cave;
-
-    if (
-      !isWaitingAtDorr &&
-      canAffordSwap(2) &&
-      character.mp > 1720 &&
-      !Object.keys(character.c).length
-    ) {
-      await withTimeout(
-        warriorCleave(
-          currentStrategy === usePullStrategies ? "pull" : "normal",
-        ),
-      );
-    }
+    await withTimeout(
+      warriorCleave(currentStrategy === usePullStrategies ? "pull" : "normal"),
+    );
   } catch (e) {
     console.log("Error while cleaving: ", e);
   } finally {

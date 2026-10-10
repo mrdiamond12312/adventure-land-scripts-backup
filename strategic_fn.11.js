@@ -1784,8 +1784,22 @@ function canAffordSwap(slots) {
   );
 }
 
-let isCleaving = false;
-async function warriorCleave(strategyName) {
+/**
+ * Every check cleave makes before it swings, its cooldown and in-flight locks aside.
+ * @param {string} strategyName - "pull" or "normal"
+ * @returns {Object|undefined} the cleave weapon, when cleave would swing now
+ */
+function planCleave(strategyName) {
+  // Aggro at Dorr fails the cave entry
+  const isWaitingAtDorr = isPreparingCave && !character.cave;
+  if (
+    isWaitingAtDorr ||
+    !canAffordSwap(2) ||
+    character.mp <= 1720 ||
+    Object.keys(character.c).length
+  )
+    return;
+
   const mobsList = Object.values(parent.entities).filter(
     (mob) =>
       mob.type === "monster" &&
@@ -1799,18 +1813,12 @@ async function warriorCleave(strategyName) {
     !cleaveWeapon ||
     character.s.penalty_cd ||
     character.mp < G.skills["cleave"].mp + 280 ||
-    is_on_cooldown("cleave") ||
     character.cc >= 100 ||
     mobsList.some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype)) ||
-    mobsList.length === 0 ||
-    isCleaving ||
-    isEquipingItems
+    mobsList.length === 0
   )
     return;
 
-  isCleaving = true;
-
-  const promises = [];
   const mobsTargetingSelf = listOfMonsterAttacking(character);
 
   const magicalMobs = [];
@@ -1870,50 +1878,76 @@ async function warriorCleave(strategyName) {
     (mob) => mob.abilities?.burn,
   );
 
-  if (
+  const isSafeToCleave =
     isSafeToAggro &&
     !hasRiskyMob &&
     !hasBurningNonAggro &&
     !isFeared &&
-    !formidableMob &&
-    !isEquipingItems
-  ) {
-    isEquipingItems = true;
-    const cleaveSet = [];
-    if (cleaveWeapon.num >= 0)
-      cleaveSet.push({ num: cleaveWeapon.num, slot: "mainhand" });
+    !formidableMob;
 
-    const mpxAmulet = findMaxLevelItem("mpxamulet");
-    if (mpxAmulet >= 0 && canAffordSwap(3))
-      cleaveSet.push({ num: mpxAmulet, slot: "amulet" });
+  return isSafeToCleave ? cleaveWeapon : undefined;
+}
 
-    const restoreItems = calculateWarriorItems();
-    promises.push(
-      Promise.all([
-        getServerSlot("offhand") ? sendUnequip("offhand") : undefined,
-        cleaveSet.length ? sendEquips(cleaveSet) : undefined,
-      ]),
-      withTimeout(use_skill("cleave"), 2500).then(() =>
-        reduce_cooldown("cleave", 0.95 * character.ping),
-      ),
-      // Cleave procs sugarcane off whatever the server sees equipped when it
-      // runs, so swap back right away instead of waiting on use_skill
-      equipBatch(restoreItems, { preventKeySnatch: false }),
-    );
-  }
+/**
+ * @param {Object[]} mobs - mobs agitate would pull onto us
+ * @returns {Object[]} the ones the cleave about to swing won't aggro anyway
+ */
+function mobsLeftAfterCleave(mobs) {
+  const isCleaveSwinging =
+    mobs.length > 0 &&
+    character.ctype === "warrior" &&
+    ms_to_next_skill("cleave") < character.ping &&
+    !!planCleave(currentStrategy === usePullStrategies ? "pull" : "normal");
+  if (!isCleaveSwinging) return mobs;
 
-  return Promise.allSettled(promises).finally(() => {
+  const cleaveRange = G.skills["cleave"].range + character.xrange;
+  return mobs.filter(
+    (mob) =>
+      mob.target ||
+      isCaveFriendly(mob) ||
+      distance(mob, character) >= cleaveRange,
+  );
+}
+
+let isCleaving = false;
+async function warriorCleave(strategyName) {
+  if (is_on_cooldown("cleave") || isCleaving || isEquipingItems) return;
+
+  const cleaveWeapon = planCleave(strategyName);
+  if (!cleaveWeapon) return;
+
+  isCleaving = true;
+  isEquipingItems = true;
+
+  const cleaveSet = [];
+  if (cleaveWeapon.num >= 0)
+    cleaveSet.push({ num: cleaveWeapon.num, slot: "mainhand" });
+
+  const mpxAmulet = findMaxLevelItem("mpxamulet");
+  if (mpxAmulet >= 0 && canAffordSwap(3))
+    cleaveSet.push({ num: mpxAmulet, slot: "amulet" });
+
+  const restoreItems = calculateWarriorItems();
+  return Promise.allSettled([
+    Promise.all([
+      getServerSlot("offhand") ? sendUnequip("offhand") : undefined,
+      cleaveSet.length ? sendEquips(cleaveSet) : undefined,
+    ]),
+    withTimeout(use_skill("cleave"), 2500).then(() =>
+      reduce_cooldown("cleave", 0.95 * character.ping),
+    ),
+    // Cleave procs sugarcane off whatever the server sees equipped when it
+    // runs, so swap back right away instead of waiting on use_skill
+    equipBatch(restoreItems, { preventKeySnatch: false }),
+  ]).finally(() => {
     isCleaving = false;
-    // Only release the flag if the aggro branch above claimed it
-    if (promises.length) {
-      isEquipingItems = false;
-      // equipBatch bails while penalty_cd is up, so retry the restore at the
-      // earliest moment it can actually equip
-      setTimeout(
-        () => equipBatch(calculateWarriorItems()),
-        character.s.penalty_cd?.ms ?? 0,
-      );
-    }
+    isEquipingItems = false;
+    // equipBatch bails while penalty_cd is up, so retry the restore at the
+    // earliest moment it can actually equip
+    setTimeout(
+      () => equipBatch(calculateWarriorItems()),
+      character.s.penalty_cd?.ms ?? 0,
+    );
   });
 }
 
