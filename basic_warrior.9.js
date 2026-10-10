@@ -100,7 +100,7 @@ function maybeCandySwap(targetToAttack) {
     CANDY_MIN_HOLD_MS -
     EQUIP_PENALTY_MS * 2;
 
-  const candyEquip = equip_batch(buildEquip(candycane1, candycane2));
+  const candyEquip = sendEquips(buildEquip(candycane1, candycane2));
 
   // Hold the canes until the hit lands, then release and let currentStrategy
   // put the real weapons back on its own tick

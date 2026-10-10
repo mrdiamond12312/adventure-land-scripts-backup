@@ -104,9 +104,10 @@ async function oldAdvanceSmartMove(
     !character.c &&
     !isAdvanceSmartMoving &&
     ["mage", "merchant"].includes(character.ctype) &&
-    character.slots.mainhand?.name !== "broom"
+    getServerSlot("mainhand")?.name !== "broom" &&
+    findMaxLevelItem("broom") >= 0
   ) {
-    equip(findMaxLevelItem("broom"));
+    sendEquips([{ num: findMaxLevelItem("broom"), slot: "mainhand" }]);
   }
 
   let scareInterval = undefined;

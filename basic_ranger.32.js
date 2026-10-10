@@ -67,7 +67,7 @@ const shouldPiercingShot = (target) =>
 const isCupidEquipped = () => character.slots.mainhand?.name === "cupid";
 
 /** @returns {boolean} whether the server holds cupid */
-const isCupidOnServer = () => getServerMainhand() === "cupid";
+const isCupidOnServer = () => getServerSlot("mainhand")?.name === "cupid";
 
 /**
  * Mobs worth shooting right now, annotated with cluster count and distance,
@@ -222,16 +222,12 @@ function getActionPlan(incomingTarget = get_targeted_monster()) {
 
 /** @returns {Promise|null} the forced swap back to the bow cupid displaced */
 function restoreAttackingBow() {
-  const { previous, num } = inFlightMainhand;
-  if (!previous || previous === RANGER_INV_ITEMS.cupid) return null;
+  const bow = inFlightSlots.mainhand?.previous?.name;
+  if (!bow || bow === RANGER_INV_ITEMS.cupid) return null;
 
   return equipBatch(
-    { mainhand: previous, booster: findInvBooster() },
-    {
-      fallback: { mainhand: num },
-      preventPenaltizeNextAttack: false,
-      preventKeySnatch: false,
-    },
+    { mainhand: bow, booster: findInvBooster() },
+    { preventPenaltizeNextAttack: false, preventKeySnatch: false },
   );
 }
 
@@ -248,7 +244,7 @@ async function firePlan(plan) {
   // Cupid heals whatever it hits, so shooting mobs with it feeds them. Swap
   // concurrently with the shot instead of waiting for the gear loop's gap.
   if (plan.mode === "shot" && isCupidOnServer()) {
-    const swap = inFlightMainhand
+    const swap = inFlightSlots.mainhand
       ? restoreAttackingBow()
       : currentStrategy(plan.gearTargets);
     if (!swap) return;

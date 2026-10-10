@@ -774,7 +774,7 @@ function calculateRangerItems(target) {
     .filter((entity) => entity.type === "monster")
     .every((mob) => isSafeToShoot(mob, prospectiveSplashRadius));
 
-  let mainhand = character.slots.mainhand?.name;
+  let mainhand = getServerSlot("mainhand")?.name;
 
   // Cupid outranks every bow: the strategy hands it over whenever someone wants
   // a heal, and the ranger keeps shooting mobs until it is actually in hand.
@@ -1192,7 +1192,10 @@ function calculateBestItems(characterClass = character.ctype) {
 // Equipping Items
 function findMaxLevelItem(id, offset = 0) {
   const matches = character.items
-    .map((item, slot) => (item?.name === id ? { ...item, slot } : null))
+    .map((_, slot) => {
+      const item = getServerItem(slot);
+      return item?.name === id ? { ...item, slot } : null;
+    })
     .filter(Boolean)
     .sort(
       (lhs, rhs) => (rhs.level ?? 0) - (lhs.level ?? 0) || rhs.slot - lhs.slot,
@@ -1231,41 +1234,95 @@ function isShotPending(target = get_target()) {
 // isEquipingItems forever and silently ends all gear changes until a restart.
 const EQUIP_TIMEOUT_MS = 1000;
 
-/** @type {{name: string, num: number, previous: (string|undefined)}|null} unanswered mainhand equip */
-var inFlightMainhand = null;
+/** @type {Object<string, {item: (Object|null), previous: (Object|null), num: number}>} unanswered equips by slot */
+const inFlightSlots = {};
 
-/** @returns {string|undefined} the mainhand as the server holds it */
-const getServerMainhand = () =>
-  inFlightMainhand?.name ?? character.slots.mainhand?.name;
+/** penalty_cd sent but not echoed back yet */
+let unansweredPenaltyMs = 0;
 
 /**
- * @param {Object} entry - the inFlightMainhand value
- * @param {Promise} promise - the equip carrying it
+ * @param {string} slot
+ * @returns {Object|null|undefined} the item the server holds there
  */
-function trackMainhandEquip(entry, promise) {
-  inFlightMainhand = entry;
+const getServerSlot = (slot) =>
+  slot in inFlightSlots ? inFlightSlots[slot].item : character.slots[slot];
+
+/**
+ * @param {number} num - inventory slot
+ * @returns {Object|null|undefined} the item the server holds there
+ */
+function getServerItem(num) {
+  if (num < 0) return undefined;
+  const landing = Object.values(inFlightSlots).find(
+    (entry) => entry.num === num,
+  );
+  return landing ? landing.previous : character.items[num];
+}
+
+/**
+ * @param {Promise} promise - the equip, unequip or shift
+ * @param {Object<string, Object>} entries - slot -> inFlightSlots entry
+ * @param {number} penaltyMs - penalty_cd it adds
+ * @returns {Promise} the same promise
+ */
+function trackInFlight(promise, entries, penaltyMs) {
+  Object.assign(inFlightSlots, entries);
+  unansweredPenaltyMs += penaltyMs;
+
+  let isCleared = false;
   const clear = () => {
-    if (inFlightMainhand === entry) inFlightMainhand = null;
+    if (isCleared) return;
+    isCleared = true;
+    unansweredPenaltyMs -= penaltyMs;
+    for (const [slot, entry] of Object.entries(entries))
+      if (inFlightSlots[slot] === entry) delete inFlightSlots[slot];
   };
   Promise.resolve(promise).then(clear, clear);
   setTimeout(clear, EQUIP_TIMEOUT_MS);
+  return promise;
+}
+
+/**
+ * @param {{num: number, slot: string}[]} itemSlots
+ * @returns {Promise} the tracked equip
+ */
+function sendEquips(itemSlots) {
+  const entries = {};
+  for (const { num, slot } of itemSlots)
+    entries[slot] = {
+      item: getServerItem(num) ?? null,
+      previous: getServerSlot(slot) ?? null,
+      num,
+    };
+
+  const promise =
+    itemSlots.length === 1
+      ? equip(itemSlots[0].num, itemSlots[0].slot)
+      : equip_batch(itemSlots);
+  return trackInFlight(promise, entries, itemSlots.length * EQUIP_PENALTY_MS);
+}
+
+/**
+ * @param {string} slot
+ * @returns {Promise} the tracked unequip
+ */
+function sendUnequip(slot) {
+  const num = character.items.findIndex((_, i) => !getServerItem(i));
+  if (num < 0) return unequip(slot);
+
+  const entry = { item: null, previous: getServerSlot(slot) ?? null, num };
+  return trackInFlight(unequip(slot), { [slot]: entry }, 0);
 }
 
 /**
  * @param {Object} suggestedItems - slot -> item name
  * @param {Object} [options]
- * @param {Object<string, number>} [options.fallback] - slot -> inventory slot when the item isn't findable
- * @param {(penaltyMs: number) => number} [options.penaltyModifier] - adjusts the assumed penalty_cd
  * @param {boolean} [options.preventPenaltizeNextAttack=true] - false skips the penalty_cd bail and slicing
  * @param {boolean} [options.preventKeySnatch=true] - false ignores the isEquipingItems latch
  */
 async function equipBatch(suggestedItems, options = {}) {
-  const {
-    fallback = {},
-    penaltyModifier = (penalty) => penalty,
-    preventPenaltizeNextAttack = true,
-    preventKeySnatch = true,
-  } = options;
+  const { preventPenaltizeNextAttack = true, preventKeySnatch = true } =
+    options;
 
   if (preventKeySnatch && isEquipingItems) return false;
 
@@ -1282,8 +1339,6 @@ async function equipBatch(suggestedItems, options = {}) {
 
   try {
     const promises = buildEquipPromises(suggestedItems, {
-      fallback,
-      penaltyModifier,
       preventPenaltizeNextAttack,
     });
     if (!promises.length) return false;
@@ -1301,7 +1356,7 @@ async function equipBatch(suggestedItems, options = {}) {
  * @returns {Promise[]} the in-flight equip promises
  */
 function buildEquipPromises(suggestedItems, options) {
-  const { fallback, penaltyModifier, preventPenaltizeNextAttack } = options;
+  const { preventPenaltizeNextAttack } = options;
   const promises = [];
   const currentBooster = findInvBooster();
 
@@ -1310,7 +1365,8 @@ function buildEquipPromises(suggestedItems, options) {
   const msToNextAttack = ms_to_next_skill("attack");
   const timeToNextAttack =
     msToNextAttack > 0 ? msToNextAttack : isShotPending() ? 0 : attackPeriod;
-  const currentPenalty = penaltyModifier(character.s.penalty_cd?.ms ?? 0);
+  const currentPenalty =
+    (character.s.penalty_cd?.ms ?? 0) + unansweredPenaltyMs;
   const equipLatency = Math.min(character.ping / 2, 100);
   let penaltyBudget = timeToNextAttack - currentPenalty - equipLatency;
 
@@ -1347,7 +1403,13 @@ function buildEquipPromises(suggestedItems, options) {
   // it when there's room in the budget, or the swap is forced or starved
   if (targetBooster) {
     if (!isBudgeted || penaltyBudget >= SHIFT_PENALTY_MS) {
-      promises.push(shift(locate_item(currentBooster), targetBooster));
+      promises.push(
+        trackInFlight(
+          shift(locate_item(currentBooster), targetBooster),
+          {},
+          SHIFT_PENALTY_MS,
+        ),
+      );
       penaltyBudget -= SHIFT_PENALTY_MS;
     } else {
       isHoldingBack = true;
@@ -1361,30 +1423,28 @@ function buildEquipPromises(suggestedItems, options) {
   if (
     suggestedItems["mainhand"] &&
     G.classes[character.ctype].doublehand[suggestedMainhandWtype] &&
-    character.slots["offhand"]
+    getServerSlot("offhand")
   ) {
-    promises.push(unequip("offhand"));
+    promises.push(sendUnequip("offhand"));
   }
 
   const usedCounts = {};
 
   const itemSlots = Object.keys(suggestedItems)
-    .filter(
-      (slot) =>
-        suggestedItems[slot] &&
-        // A fallback means the caller knows character.slots is stale (a swap it
-        // just fired hasn't come back yet), so trust it over the comparison
-        (fallback[slot] !== undefined ||
-          suggestedItems[slot] !== character.slots[slot]?.name ||
-          character.items[findMaxLevelItem(suggestedItems[slot])]?.level >
-            character.slots[slot]?.level),
-    )
+    .filter((slot) => {
+      const wanted = suggestedItems[slot];
+      const current = getServerSlot(slot);
+      return (
+        wanted &&
+        (wanted !== current?.name ||
+          getServerItem(findMaxLevelItem(wanted))?.level > current?.level)
+      );
+    })
     .map((slot) => {
       const id = suggestedItems[slot];
       const count = usedCounts[id] || 0;
-      const num = findMaxLevelItem(id, count);
       usedCounts[id] = count + 1;
-      return { slot, num: num >= 0 ? num : fallback[slot] ?? -1 };
+      return { slot, num: findMaxLevelItem(id, count) };
     })
     .filter((equipInfo) => equipInfo.num >= 0);
 
@@ -1403,22 +1463,7 @@ function buildEquipPromises(suggestedItems, options) {
     ? { set: wantedSet, since: heldSince ?? now, lastAt: now }
     : null;
 
-  if (itemSlots.length <= 1) {
-    for (const item of itemSlots) promises.push(equip(item.num, item.slot));
-  } else {
-    promises.push(equip_batch(itemSlots));
-  }
-
-  const mainhandEquip = itemSlots.find((item) => item.slot === "mainhand");
-  if (mainhandEquip)
-    trackMainhandEquip(
-      {
-        name: suggestedItems.mainhand,
-        num: mainhandEquip.num,
-        previous: getServerMainhand(),
-      },
-      promises[promises.length - 1],
-    );
+  if (itemSlots.length) promises.push(sendEquips(itemSlots));
 
   return promises;
 }
@@ -1739,35 +1784,6 @@ function canAffordSwap(slots) {
   );
 }
 
-/**
- * Fallback slots for a cleave/stomp restore fired before its swap resolves,
- * while character.slots/items still show the pre-swap gear: the displaced
- * mainhand lands where the swap weapon came from, the unequipped offhand in the
- * first free inventory slot.
- * @param {Object} restoreItems - the gear to go back to
- * @param {number} swapWeaponSlot - inventory slot the swap weapon came from
- * @returns {Object<string, number>} slot -> inventory slot
- */
-function buildWarriorRestoreFallback(restoreItems, swapWeaponSlot) {
-  const fallback = {};
-  const firstEmptySlot = character.items.findIndex((item) => !item);
-
-  if (
-    swapWeaponSlot >= 0 &&
-    restoreItems.mainhand === character.slots.mainhand?.name
-  )
-    fallback.mainhand = swapWeaponSlot;
-
-  if (
-    firstEmptySlot !== -1 &&
-    character.slots.offhand &&
-    restoreItems.offhand === character.slots.offhand.name
-  )
-    fallback.offhand = firstEmptySlot;
-
-  return fallback;
-}
-
 let isCleaving = false;
 async function warriorCleave(strategyName) {
   const mobsList = Object.values(parent.entities).filter(
@@ -1867,31 +1883,22 @@ async function warriorCleave(strategyName) {
     if (cleaveWeapon.num >= 0)
       cleaveSet.push({ num: cleaveWeapon.num, slot: "mainhand" });
 
-    if (canAffordSwap(3))
-      cleaveSet.push({ num: findMaxLevelItem("mpxamulet"), slot: "amulet" });
+    const mpxAmulet = findMaxLevelItem("mpxamulet");
+    if (mpxAmulet >= 0 && canAffordSwap(3))
+      cleaveSet.push({ num: mpxAmulet, slot: "amulet" });
 
     const restoreItems = calculateWarriorItems();
-    const restoreFallback = buildWarriorRestoreFallback(
-      restoreItems,
-      cleaveWeapon.num,
-    );
-
     promises.push(
       Promise.all([
-        unequip("offhand"),
-        cleaveSet.length ? equip_batch(cleaveSet) : undefined,
+        getServerSlot("offhand") ? sendUnequip("offhand") : undefined,
+        cleaveSet.length ? sendEquips(cleaveSet) : undefined,
       ]),
       withTimeout(use_skill("cleave"), 2500).then(() =>
         reduce_cooldown("cleave", 0.95 * character.ping),
       ),
       // Cleave procs sugarcane off whatever the server sees equipped when it
       // runs, so swap back right away instead of waiting on use_skill
-      equipBatch(restoreItems, {
-        fallback: restoreFallback,
-        penaltyModifier: (penalty) =>
-          penalty + cleaveSet.length * EQUIP_PENALTY_MS,
-        preventKeySnatch: false,
-      }),
+      equipBatch(restoreItems, { preventKeySnatch: false }),
     );
   }
 
@@ -1929,12 +1936,7 @@ async function warriorStomp() {
   isStomping = true;
 
   const promises = [];
-
   const restoreItems = calculateWarriorItems();
-  const restoreFallback = buildWarriorRestoreFallback(
-    restoreItems,
-    findMaxLevelItem("basher"),
-  );
 
   promises.push(
     equipBatch(
@@ -1946,11 +1948,7 @@ async function warriorStomp() {
     ),
     // Same trick as cleave: the basher only has to be on when the server runs
     // stomp, so restore without waiting for the swap or the skill to resolve
-    equipBatch(restoreItems, {
-      fallback: restoreFallback,
-      penaltyModifier: (penalty) => penalty + EQUIP_PENALTY_MS,
-      preventKeySnatch: false,
-    }),
+    equipBatch(restoreItems, { preventKeySnatch: false }),
   );
 
   return Promise.allSettled(promises).finally(() => {

@@ -621,17 +621,26 @@ aggro — it now ends when the merchant dies or the priest drops, but not on a s
 
 ## Equip batching vs `penalty_cd` (`equipBatch`, strategic_fn.11.js)
 
-Every equip/`shift` command adds `EQUIP_PENALTY_MS` (120ms) of server-side `penalty_cd`, which
-also delays the next attack. `equipBatch` therefore slices the suggested-items batch to whatever
-fits in the time left before the next attack, minus:
+Every equip adds `EQUIP_PENALTY_MS` (120ms) of server-side `penalty_cd`, a booster `shift`
+`SHIFT_PENALTY_MS` (240ms), `unequip` nothing. The server never refuses a skill over it:
+`consume_skill` (server_functions.js ~L3453) adds `min(penalty_cd, 10000)` to the cooldown of
+whatever skill is used, and the condition keeps ticking. What actually delays our shot is the
+*client* gate: every `isAttackReady` waits for `!character.s.penalty_cd`, kept on purpose so the
+rhythm looks clean (shooting through it would land the hit earlier at no cost to the next one).
 
-- the `penalty_cd` already running,
-- one extra `EQUIP_PENALTY_MS` when a booster `shift` was dispatched this call (`shift` is
-  penalized like an equip; `unequip` is *not*, so the doublehand offhand-unequip is deliberately
-  not counted),
-- `ping / 2` — the penalty clock starts when the *server* receives the command, so the one-way
-  trip is dead time the local calculation would otherwise miss. Capped at 100ms so a laggy
-  connection still gets to equip at least something instead of starving forever.
+The client only learns of the penalty from the echo, one full ping after the send, then counts it
+down locally (game.js ~L5435). So for an equip sent `ttna` before the next shot comes up:
+`ttna >= ping + P` costs nothing; `ping <= ttna < ping + P` makes the gate wait `ping + P - ttna`;
+`ttna < ping` fires before the echo and the server adds `P - ttna` to the next cooldown.
+
+`equipBatch` slices the batch to what fits in the time left before the next attack, minus:
+
+- the `penalty_cd` already running, plus `unansweredPenaltyMs` (sent but not echoed yet),
+- the booster `shift`'s penalty when one was dispatched this call,
+- `min(ping / 2, 100)`. The exact zero-cost reserve is a full `ping`; this is a deliberate
+  compromise — it admits swaps that delay a shot by up to `ping / 2` (or `ping - 100` on laggy
+  connections) in exchange for fewer trimmed swaps and starvation releases. Kept after the
+  2026-10-10 trace; switch to `character.ping` only if the rhythm visibly stutters after swaps.
 
 Sliced-off items aren't lost — the next `equipBatch` tick picks them up.
 
@@ -691,33 +700,50 @@ a real equipment slot — leaking it into the slot loop would try to `equip()` i
 Options (second arg, replacing the old `forced` boolean): `preventPenaltizeNextAttack` (default
 true) is the old force switch — false skips the `penalty_cd`/`cc`/`isLooting` bail, the batch
 slicing and the booster-shift budget check. `preventKeySnatch` (default true) false ignores the
-`isEquipingItems` latch. `penaltyModifier` rewrites the assumed `penalty_cd` before budgeting,
-for equips already dispatched but not yet reflected in `character.s` (e.g. `(x) => x + 120` when
-firing right after a stomp/cleave swap). `fallback` maps a slot to an inventory slot number to
-use when `findMaxLevelItem` comes up empty. Old `equipBatch(x, true)` call sites are now
+`isEquipingItems` latch. Old `equipBatch(x, true)` call sites are now
 `equipBatch(x, { preventPenaltizeNextAttack: false, preventKeySnatch: false })`.
+
+## The server view of gear (`inFlightSlots`, strategic_fn.11.js)
+
+For about one ping after an equip is *sent*, `character.slots`/`character.items` still show the
+old gear, while the server already has the new gear. Anything built from the client view in that
+window is wrong: a restore can't find the weapon it wants (it is "equipped" client-side but already
+on its way to an inventory slot), and a "do I already hold it?" check can re-send an equip whose
+source slot now holds the *displaced* item, swapping it right back.
+
+So every equip/unequip/booster `shift` goes out through `sendEquips` / `sendUnequip` /
+`trackInFlight`, which record per slot `{ item, previous, num }`: what goes in, what comes out, and
+the inventory slot `num` where `previous` lands. For an equip that is the slot the new item left;
+for `unequip` it is the first free slot (`add_item`, server.js). The record clears when the reply
+arrives — the server sends the slot update (`resend`) *before* `success_response` for `equip`,
+`equip_batch` and `unequip`, so the slots are already fresh — or after `EQUIP_TIMEOUT_MS` if no
+reply comes.
+
+Readers:
+- `getServerSlot(slot)` / `getServerItem(num)` are the server view; `findMaxLevelItem` reads
+  through `getServerItem`, so it finds a displaced weapon in the slot it is about to land in.
+  Identical to the client view when nothing is in flight.
+- `buildEquipPromises` compares against `getServerSlot`, and budgets `unansweredPenaltyMs` (120 per
+  equip, 240 per shift, not yet echoed into `character.s.penalty_cd`) on top of the echoed
+  penalty. `unequip` costs no penalty.
+
+Gaps: per-slot entries are overwritten by a newer equip to the same slot (the newest one is
+what the server ends up holding, which is what matters); the penalty counter still counts both. Stat
+reads (`item_info(character.slots.mainhand)`, `character.attack`) stay on the client view on
+purpose — they must match the stats the character actually has.
 
 ## Restoring gear before the swap resolves (`warriorCleave` / `warriorStomp`)
 
 Cleave and stomp only need their swap weapon equipped *server-side when the skill runs*, and
 cleave procs sugarcane off whatever is on at that moment — the same trick the candy-cane swap
 uses. So the restore `equipBatch` is fired synchronously right after `use_skill`, in the same
-promise array, instead of waiting for the skill (or even the swap) to resolve.
+promise array, instead of waiting for the skill (or even the swap) to resolve. It used to need a
+hand-built `fallback`/`penaltyModifier` for the pre-swap client view; the swap now goes out
+through `sendEquips`/`sendUnequip`, so the restore just reads the server view. `restoreItems` is
+still computed *before* the swap is sent, as it always was.
 
-That means `character.slots`/`character.items` still describe the *pre-swap* gear when the
-restore is built, which is what the `fallback`/`penaltyModifier` options exist for
-(`buildWarriorRestoreFallback`):
-
-- the displaced mainhand will land in the inventory slot the swap weapon came from
-  (`cleaveWeapon.num` / `findMaxLevelItem("basher")`), so that's `fallback.mainhand` whenever the
-  restore wants the weapon that's still showing as equipped;
-- `unequip("offhand")` drops the offhand into the first empty `character.items` slot, so that's
-  `fallback.offhand`;
-- `penaltyModifier` adds `EQUIP_PENALTY_MS` per equip the swap already dispatched, since the
-  server-side `penalty_cd` from them hasn't been echoed back yet. `preventPenaltizeNextAttack`
-  stays on, so if that predicted penalty leaves no budget the restore is simply skipped and the
-  existing `setTimeout(currentStrategy, penalty_cd)` backstop picks it up.
-
+`preventPenaltizeNextAttack` stays on, so if the unanswered penalty leaves no budget the restore
+is simply skipped and the existing `setTimeout(currentStrategy, penalty_cd)` backstop picks it up.
 Only `preventKeySnatch` is turned off — the restore runs inside the swap's own
 `isEquipingItems` window on purpose.
 
@@ -945,23 +971,20 @@ can never disagree because they read one object.
   danger is the ~1 ping after `equip(cupid)` is *sent*: `character.slots` still shows the bow, the
   plan is a bow-mode shot, and the server heals the mob. The equip budget doesn't prevent it — it
   only spares the next shot from `penalty_cd`, and the starvation release and supershot ignore it
-  entirely. Fix: `buildEquipPromises` records every mainhand equip in `inFlightMainhand`
-  (`{ name, num, previous }`) until its reply (the server's slot update precedes the reply, so slots
-  are fresh on settle) or `EQUIP_TIMEOUT_MS`; `getServerMainhand()` reads it first. A mob shot with
-  cupid in flight force-equips `previous` with `fallback: { mainhand: num }` — the bow is not in the
-  client's inventory yet, it lands where cupid left — in the same tick, so it arrives first. The
+  entirely. Fix: `isCupidOnServer()` reads the server view (see "The server view of gear"). A mob
+  shot with cupid in flight force-equips `inFlightSlots.mainhand.previous` (`restoreAttackingBow`)
+  in the same tick, so it arrives first; `findMaxLevelItem` finds that bow where cupid left. The
   forced restore was preferred over rerouting the tick into a cupid heal.
 - **The pull strategy forces the cupid swap too.** It used to call `equipBatch` with defaults, so
   the swap-out in `firePlan` was silently dropped (attack ready + target in range ⇒ budget 0, or
   `penalty_cd` from swapping cupid in) and the shot healed the mob. Both strategies now share
-  `equipRangerItems`, which forces the swap while `character.slots` shows cupid. It reads slots,
-  not `getServerMainhand()`, on purpose: with cupid still in flight the swap would be built against
-  stale slots and could re-equip cupid from the slot the bow is about to land in.
+  `equipRangerItems`, which forces the swap only once `character.slots` shows cupid: while cupid
+  is still in flight, the unforced call keeps respecting the latch that in-flight swap holds.
 - **Supershot doubles as an emergency heal** — it inherits cupid's heal-on-hit and outranges it, so
   with cupid equipped it targets the lowest-hp ally in *supershot* range (`getEmergencyHealee`).
   With a bow it targets mobs, and only ones **out of bow range** — anything closer is already being
   shot by the normal attack, so spending a long cooldown on it is waste.
-- **`cast` re-checks `getServerMainhand()`** before firing supershot: the gear loop can flip the
+- **`cast` re-checks `isCupidOnServer()`** before firing supershot: the gear loop can flip the
   mainhand between `canUse` and `cast` (or have it in flight), and a stale plan would heal a mob or
   shoot an ally. A skipped supershot stays off cooldown and retries on the next 100ms tick.
 - **An empty mainhand is self-locking.** No weapon → no `character.range` → nothing passes
