@@ -1,5 +1,92 @@
 // Daily events and world bosses — the fighter's highest priority strategy.
 
+const CRABXX_OFF_CENTER_DISTANCE = 100;
+const CRABXX_FETCH_LEASH = 2000;
+const CRABXX_RETURN_DISTANCE = 300;
+const CRABXX_AGITATE_SLACK = 0.9;
+
+const CRABXX_FETCH_MOVE_OPTIONS = {
+  useScare: false,
+  useBlink: false,
+  useMagiport: false,
+  useTown: false,
+};
+
+/** @returns {Object|undefined} the crabxx spawn center */
+const getCrabxxCenter = () => getMonsterSpawns("crabxx")[0];
+
+/**
+ * @param {Object} crabxx - the boss
+ * @returns {boolean} whether it is off its spawn center and not on us
+ */
+function isCrabxxOffCenter(crabxx) {
+  const center = getCrabxxCenter();
+  return (
+    !!center &&
+    crabxx.target !== character.name &&
+    simple_distance(crabxx, center) > CRABXX_OFF_CENTER_DISTANCE
+  );
+}
+
+/**
+ * @param {Object} crabxx - the boss
+ * @returns {boolean} whether agitate may take it back from whoever holds it
+ */
+const isCrabxxStolen = (crabxx) =>
+  isCrabxxOffCenter(crabxx) &&
+  !knownTankers.includes(crabxx.target) &&
+  character.s.coop?.id === crabxx.id;
+
+/**
+ * @param {Object} crabxx - the boss
+ * @returns {boolean} whether agitate can drag it back to its spawn center
+ */
+const isCrabxxDraggedOff = (crabxx) =>
+  isCrabxxStolen(crabxx) &&
+  distance(character, crabxx) < G.skills["agitate"].range;
+
+/** @param {Object} crabxx - the boss to fetch or lead home */
+async function fetchCrabxx(crabxx) {
+  const center = getCrabxxCenter();
+  if (!center) return;
+
+  const agitateRange = G.skills["agitate"].range;
+
+  if (
+    isCrabxxOffCenter(crabxx) &&
+    simple_distance(crabxx, center) <= CRABXX_FETCH_LEASH &&
+    distance(character, crabxx) >= agitateRange
+  ) {
+    await advanceSmartMove(
+      { map: character.map, x: crabxx.x, y: crabxx.y },
+      {
+        ...CRABXX_FETCH_MOVE_OPTIONS,
+        stopWatcher: () => {
+          const boss = get_entity(crabxx.id);
+          return (
+            !boss ||
+            boss.target === character.name ||
+            distance(character, boss) < agitateRange * CRABXX_AGITATE_SLACK
+          );
+        },
+      },
+    ).catch((e) => console.warn(e));
+    return;
+  }
+
+  if (
+    crabxx.target === character.name &&
+    simple_distance(character, center) > CRABXX_RETURN_DISTANCE
+  ) {
+    await advanceSmartMove(center, {
+      ...CRABXX_FETCH_MOVE_OPTIONS,
+      stopWatcher: () =>
+        get_entity(crabxx.id)?.target !== character.name ||
+        simple_distance(character, center) <= CRABXX_RETURN_DISTANCE,
+    }).catch((e) => console.warn(e));
+  }
+}
+
 /**
  * Targets whatever live event outranks farming, walking there when it is out of
  * sight. A live event owns the tick even with nothing in reach: the field is
@@ -177,15 +264,19 @@ async function useEventStrategy() {
       (entity) => entity.s?.young && entity.target === character.name,
     );
 
-    if (hasCrabxSpawnedByCrabxx && (!isTanker || canAgitate)) {
-      const promisesToAwait = [];
+    if (isTanker) await fetchCrabxx(crabxxInstance);
+
+    const promisesToAwait = [];
+    if (hasCrabxSpawnedByCrabxx && (!isTanker || canAgitate))
       promisesToAwait.push(scareAwayMobs());
 
-      if (canAgitate) {
-        promisesToAwait.push(use_skill("agitate"));
-      }
-      await Promise.all(promisesToAwait);
-    }
+    if (
+      canAgitate &&
+      (hasCrabxSpawnedByCrabxx || isCrabxxDraggedOff(crabxxInstance))
+    )
+      promisesToAwait.push(use_skill("agitate"));
+
+    await Promise.all(promisesToAwait);
 
     changeToPullStrategies();
     return engage(targetCrab);

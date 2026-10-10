@@ -1630,6 +1630,43 @@ The rest of the branch looks tunable, but is deliberate (confirmed 2026-09-29):
   leave a spread of hp and stagger the kills.
 - **`rangeRate = 0.3` for ranged classes.** It keeps them near the center, where the crabx
   spawn, so the crabx stay inside their range. Kiting them out to full range loses targets.
+- **The ranger orbits the boss, not his target** (`resolveKiteTarget`). `hitAndRun` circles
+  `get_target()`, which at crabxx is one crabx, while his 3shot/5shot pick from every mob in range
+  — so circling the crabx let it drag him off. Crabx spawn onto players within 400 of the boss,
+  so the boss's live position (spawn center when it isn't visible) is where all of them are; the
+  tanker holds it at the center, and when it is dragged off the adds go with it. 0.3 puts him ~70px
+  out, clear of its 45 melee range should it switch to him; 0.15 would have been inside it.
+- **The tanker fetches a stolen boss back** (`isCrabxxStolen`, `fetchCrabxx`). Another player
+  holding aggro walks the boss off the spawn center, where the tanker is anchored (one was seen
+  dragging it ~2000px into town). Two predicates, deliberately separate:
+  - `isCrabxxOffCenter`: over `CRABXX_OFF_CENTER_DISTANCE` (100) from the center and not on us.
+    Drives *movement* — the out leg and the kite anchor.
+  - `isCrabxxStolen`: off center, **and** not on one of `knownTankers` (`CrownPriest` +
+    `trustedPartners`, basic_function.7.js config — trusted to tank it wherever they take it),
+    **and** our coop id matches. Drives *taking it back* — agitate and, through it, the home leg.
+
+  Gating movement on "stolen" left the warrior idle at the empty center (2026-10-10): he only
+  swings at a target already in melee range (`fight`), and off center the crabx cluster around the
+  boss. A whitelisted tank holding it elsewhere, or no coop tag yet (he can't earn one without
+  reaching the boss — a deadlock), kept him orbiting the spawn point. Then, in order:
+  1. **Out leg:** off center, within `CRABXX_FETCH_LEASH` (2000, about beach-center to town) and
+     outside agitate range (320), `advanceSmartMove` to the boss; its `stopWatcher` ends the walk
+     at `0.9 ×` agitate range, when the boss turns to us, or when it leaves sight.
+  2. **Agitate** fires in the same tick once in range, only if stolen (`isCrabxxDraggedOff`).
+  3. **Home leg:** boss on us and the tanker over `CRABXX_RETURN_DISTANCE` (300) from the center
+     ⇒ `advanceSmartMove` back, stopped if the aggro drops. The boss walks 30 but charges 80, so
+     it keeps up — and keeps hitting; the priest is not escorted, he follows the crabx/boss area.
+
+  While off center, the tanker's kite anchor (`resolveKiteTarget`) is the boss rather than the
+  center, so he reaches melee, and `hitAndRun` doesn't walk him back out of range between ticks
+  while agitate is on cooldown. Past the leash, or held by a known tanker, that same anchor means
+  "fight it where it is".
+
+  Why agitate can steal from strangers: server-side agitate (and taunt) only skips monsters
+  targeting someone not `is_same(..., 1)` with us, and that counts a shared `s.coop.id` — every
+  attacker of a `cooperative` monster gets `s.coop = { id: monster.id }` (`add_coop_points`, 12
+  min). Hence the `character.s.coop?.id === crabxx.id` gate; `crabx` is not cooperative, so
+  hitting adds never moves that id.
 - **Stomp only while `crabxList.length <= 1`.** It is a play-maker: stun the boss once the adds
   are cleared and let the party follow up, not a panic button. This matters more than it looks:
   the server skips a disabled (stunned) boss's timed spawns entirely.

@@ -27,6 +27,7 @@ const MIDAS_CHARACTER = [MAGE, "CrownPriest"];
 
 // Outsiders we team up with — their tank changes what the party can hold
 const trustedPartners = ["earthPri", "earthWar"];
+const knownTankers = ["CrownPriest", ...trustedPartners];
 
 /** Cave of Many Dreams — the one switch for the daily run, loader and all */
 var USE_CAVE_STRATEGY = true;
@@ -1287,7 +1288,7 @@ function withFixedSpot(target, spot) {
 }
 
 // Per-mtype overrides: some mobs get kited around a fixed spot instead of their own
-// (moving) position — a corner of the map for FRANKY, the spawn center for CRABXX.
+// (moving) position — a corner of the map for FRANKY, the boss or its spawn center for CRABXX.
 async function resolveKiteTarget(target) {
   if (
     target.type === "monster" &&
@@ -1312,12 +1313,16 @@ async function resolveKiteTarget(target) {
     return withFixedSpot(target, FRANKY_PREFER_SPOT);
   }
 
-  if (
-    target?.type === "monster" &&
-    target.mtype.includes("crabx") &&
-    isAssignedAsTanker()
-  ) {
-    return withFixedSpot(target, getMonsterSpawns("crabxx")[0]);
+  if (target?.type === "monster" && target.mtype.includes("crabx")) {
+    const boss = get_nearest_monster({ type: "crabxx" });
+    const center = getMonsterSpawns("crabxx")[0];
+    if (isAssignedAsTanker())
+      return withFixedSpot(
+        target,
+        boss && isCrabxxOffCenter(boss) ? boss : center,
+      );
+    if (character.ctype === "ranger")
+      return withFixedSpot(target, boss ?? center);
   }
 
   return target;
@@ -2487,7 +2492,6 @@ const DYNAMIC_PARTY_PRESETS = {
 
   default: () => {
     const globalParty = get("currentParty");
-    const knownTankers = ["CrownPriest", ...trustedPartners];
     HEALER = PRIEST;
 
     if (
