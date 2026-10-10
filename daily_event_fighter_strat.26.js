@@ -264,6 +264,22 @@ async function useEventStrategy() {
       (entity) => entity.s?.young && entity.target === character.name,
     );
 
+    // A ready cleave aggros every untargeted crabx it hits, sparing agitate's mp
+    const agitateGain = crabxList.filter(
+      (crabx) =>
+        crabx.target !== character.name && is_in_range(crabx, "agitate"),
+    );
+    const cleaveCoversGain =
+      agitateGain.length > 0 &&
+      agitateGain.every(
+        (crabx) =>
+          !crabx.target &&
+          distance(character, crabx) <
+            G.skills["cleave"].range + character.xrange,
+      ) &&
+      ms_to_next_skill("cleave") < character.ping &&
+      character.mp > 1720;
+
     if (isTanker) await fetchCrabxx(crabxxInstance);
 
     const promisesToAwait = [];
@@ -272,7 +288,8 @@ async function useEventStrategy() {
 
     if (
       canAgitate &&
-      (hasCrabxSpawnedByCrabxx || isCrabxxDraggedOff(crabxxInstance))
+      ((hasCrabxSpawnedByCrabxx && !cleaveCoversGain) ||
+        isCrabxxDraggedOff(crabxxInstance))
     )
       promisesToAwait.push(use_skill("agitate"));
 
