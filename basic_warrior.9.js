@@ -51,7 +51,7 @@ function projectileEtaMs(target) {
  * @returns {Promise|undefined} the equip promise, or undefined if not swapping
  */
 function maybeCandySwap(targetToAttack) {
-  const characterAtkCycleMs = 1000 / character.frequency;
+  const characterAtkCycleMs = 1000 / attackFrequency();
   const shouldUseCandyCanes =
     character.ping < 1000 &&
     !isCleaving &&
@@ -131,7 +131,7 @@ const isAttackReady = () =>
 async function fight(target) {
   const blastRadius = getSplashRadius();
   const attackRange = character.range + character.xrange;
-  const attackFrequencyBeforeComponsate = character.frequency;
+  const attackFrequencyBeforeComponsate = attackFrequency();
   const inRange = (entity, mult = 1) =>
     distance(entity, character) < attackRange * mult;
 

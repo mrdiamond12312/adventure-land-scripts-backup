@@ -830,6 +830,58 @@ Findings from the "warrior attacks slower than his frequency" session (2026-07-2
   The same class entry has `mp_cost: +160` per shot, which is what drains mp toward the
   magiport+blink floor; the score ignores mp, the floor check in `calculateMageItems` owns it.
 
+## Mitigation (`mitigation` / `healMitigation`)
+
+Every defense calculation goes through these two (strategic_fn.11.js). Server, upstream `2148cf2`:
+
+- Damage: `damage_multiplier(target[defense] - attacker[pierce] - info[pierce])`, and `info[pierce]`
+  already had `attacker[pierce]` added, so piercing counts **twice for both damage types**. The old
+  call sites doubled it only for physical. They also skipped a player attacker's piercing in
+  `calculateDamage` (monsters only) and used the unclamped `dps_multiplier`.
+- Heal: `damage_multiplier((target[defense] - attacker[pierce]) / 2)`, so the whole thing is halved
+  and piercing counts once. The old `calculateHeal` did `defense - pierce/2`, and only for self
+  (res 300: 0.71 instead of 0.86).
+- Monster piercing comes from `G.monsters`, since the client entity doesn't carry it.
+- `ignoreHardshell` and `defenseRate` are our padding, not server behaviour.
+
+## Burn on the server (`burnIntensityCap`)
+
+From `add_condition(target, "burned")` (server_functions.js) and the condition tick (server.js), upstream
+`2148cf2`:
+
+- Proc chance is `attr0 * G.maps[map].burn_multiplier / 100` (winterland 0.6, desertland 1.6), only on a
+  hit that doesn't kill. The target's `firesistance` is then a straight % chance to resist the proc.
+- `intensity = max(old, scale * old / divider + hit)`: `hit` is the final mitigated damage (crit and
+  rogue `stack` included), `scale = 1 - firesistance/100`, `divider` 3, or 1.5 for `unlimited` burns.
+  Repeated procs converge on `hit / (1 - scale/divider)`: 1.5x / 3x at 0 fire resistance, but
+  `(1 - fr) * 1.5` is wrong once the burned side has fire resistance (15 fr: 1.40x, not 1.28x).
+- Duration is refreshed to 5s, never extended (the extension branch needs `divider == 3`, which
+  normal burns never pass). Ticks are `ceil(intensity / 5)` every 210ms, ~0.95x intensity per second.
+- No mob has `firesistance` in `G`, so the cap only differs from 1.5x when a mob burns a player.
+  The 0.9 in the padding is the low end of the 0.9–1.1 damage roll, kept on purpose.
+
+## Frozen/poisoned don't slow a player's attacks (`attackFrequency`)
+
+Found 2026-10-11, a mage swapping to pinkie on the icegolem. In the server's
+`calculate_player_stats` (`node/server.js`, upstream `2148cf2`), `player.attack_ms` is computed
+from `frequency` (~line 1627) *before* `calculate_common_stats` applies `frozen` x0.3 and
+`poisoned` x0.9 (~line 1716). The attack cooldown is `attack_ms`, so a frozen player attacks at
+full speed while `character.frequency` reports 0.3x. Monsters are not affected the same way:
+their attack gate reads `monster.frequency`, so freezing a mob does slow it.
+
+The icegolem's `multi_freeze` (every 2s, 5s duration, hits everyone who damaged it within 480)
+keeps the whole party frozen, so every `character.frequency` read was ~0.3x. `rankMageWeapons`
+then added the wand's flat `frequency: +60` class bonus to that shrunken base: 1.035 vs 0.435
+(2.38x) instead of 2.05 vs 1.45 (1.41x), and pinkie won every time.
+
+`attackFrequency(entity)` (strategic_fn.11.js) divides a *player's* frequency by the `frequencym`
+of its conditions; monsters pass through untouched. Every read of a player's attack rate goes
+through it, including the `attackSpeedCompensate` snapshots, which would otherwise see a freeze
+land mid-tick as a frequency drop and cut the cooldown by ~1.6s. If the server is fixed, set
+`PLAYER_COOLDOWN_SKIPS_FREQUENCYM = false`: `attackFrequency` then returns the raw frequency, and
+`rankMageWeapons` scales the weapon frequency deltas by the same condition factor so the ranking
+stays consistent.
+
 ## Splitting a class into attack loop + per-skill loops (`runSkillLoop`)
 
 **The problem.** The original per-class `fight()` bundled the attack *and* every skill into one

@@ -4,7 +4,7 @@ const WEAK_COOP_MOB_ATTACK = 100;
 async function usePullStrategies(target) {
   const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
   const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
-  const healerFreq = partyHealer?.frequency || 1;
+  const healerFreq = (partyHealer && attackFrequency(partyHealer)) || 1;
   const healReceivableAmount =
     healerPower * healerFreq +
     (parent.entities["$Caroline"]?.focus &&

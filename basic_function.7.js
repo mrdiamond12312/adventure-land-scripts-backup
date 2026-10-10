@@ -701,8 +701,6 @@ const TRIVIAL_MOB_MAX_HP = 2000;
 const SHOT_DAMAGE_MARGIN = 0.9;
 // Cleave rolls 0.1 to 0.9 of the weapon's damage per hit — this is the midpoint
 const CLEAVE_ONE_HIT_MULTIPLIER = 0.5;
-// A burn tops out at 1.5x the attack that lit it (3x for the unlimited kind)
-const BURN_DAMAGE_MULTIPLIER = 1.5;
 
 // Smart move strategies
 var isAdvanceSmartMoving = false;
@@ -1116,9 +1114,9 @@ function getTarget() {
 const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
-    (breakpoint) => ((1 / character.frequency) * 1000) / breakpoint,
+    (breakpoint) => ((1 / attackFrequency()) * 1000) / breakpoint,
   ).find((loopInterval) => loopInterval > 250);
-  const frequencyInterval = (1 / character.frequency) * 1000;
+  const frequencyInterval = (1 / attackFrequency()) * 1000;
 
   return ms_to_next_skill("attack") <= dynamicInterval
     ? Math.max(ms_to_next_skill("attack"), 1)

@@ -101,13 +101,80 @@ function getRelevantPiercing(wtype) {
   return 0;
 }
 
-function getMobDefense(mob) {
-  const damageType = G.classes[character.ctype]?.damage_type;
+/** @returns {string|undefined} the entity's damage type, player or monster */
+function damageTypeOf(entity) {
+  return (
+    entity?.damage_type ??
+    (entity?.type === "monster"
+      ? G.monsters[entity.mtype]
+      : G.classes[entity?.ctype]
+    )?.damage_type
+  );
+}
 
-  if (damageType === "physical") return mob.armor ?? 0;
-  if (damageType === "magical") return mob.resistance ?? 0;
+/** @returns {string[]} the defense and piercing stats a damage type works against */
+function mitigationStats(damageType) {
+  if (damageType === "physical") return ["armor", "apiercing"];
+  if (damageType === "magical") return ["resistance", "rpiercing"];
+  return [];
+}
 
-  return 0;
+/** @returns {number} the attacker's piercing for a stat, read from G for monsters */
+function piercingOf(entity, pierce) {
+  const source = entity?.type === "monster" ? G.monsters[entity.mtype] : entity;
+  return source?.[pierce] ?? 0;
+}
+
+/**
+ * Share of a hit that gets through the target's defense, as the server
+ * mitigates it: the attacker's piercing counts twice.
+ * @param {Object} from - attacker, player or monster
+ * @param {Object} to - target
+ * @param {Object} [options]
+ * @param {string} [options.damageType] - defaults to the attacker's
+ * @param {number} [options.extraPiercing] - piercing the attacker would gain, e.g. from a weapon swap
+ * @param {number} [options.defenseRate] - scales the target's defense
+ * @param {boolean} [options.ignoreHardshell] - leave hardshell's armor out
+ * @returns {number}
+ */
+function mitigation(
+  from,
+  to,
+  {
+    damageType = damageTypeOf(from),
+    extraPiercing = 0,
+    defenseRate = 1,
+    ignoreHardshell = false,
+  } = {},
+) {
+  const [defense, pierce] = mitigationStats(damageType);
+  if (!defense) return 1;
+
+  const hardshellArmor =
+    ignoreHardshell && defense === "armor" && to.s?.hardshell
+      ? G.conditions.hardshell.armor
+      : 0;
+  const piercing = piercingOf(from, pierce) + extraPiercing;
+
+  return damage_multiplier(
+    ((to[defense] ?? 0) - hardshellArmor) * defenseRate - piercing * 2,
+  );
+}
+
+/**
+ * Share of a heal that lands: the server halves defense minus piercing, and
+ * counts the piercing once.
+ * @param {Object} from - healer
+ * @param {Object} to - healee
+ * @returns {number}
+ */
+function healMitigation(from, to) {
+  const [defense, pierce] = mitigationStats(damageTypeOf(from));
+  if (!defense) return 1;
+
+  return damage_multiplier(
+    ((to[defense] ?? 0) - piercingOf(from, pierce)) / 2,
+  );
 }
 
 function rawAttackMultiplier() {
@@ -117,6 +184,29 @@ function rawAttackMultiplier() {
     return character.str / 20 + character.int / 40;
 
   return character[mainStat] / 20;
+}
+
+/** Server sets a player's attack_ms before frozen/poisoned scale frequency; false once it no longer does */
+const PLAYER_COOLDOWN_SKIPS_FREQUENCYM = true;
+
+/** @returns {number} product of the frequencym of every condition on the entity */
+function conditionFrequencyScale(entity) {
+  return Object.keys(entity.s ?? {}).reduce(
+    (scale, name) => scale * (G.conditions[name]?.frequencym ?? 1),
+    1,
+  );
+}
+
+/**
+ * Attacks per second the entity's cooldown actually allows.
+ * @param {Object} [entity] - defaults to character
+ * @returns {number}
+ */
+function attackFrequency(entity = character) {
+  if (!PLAYER_COOLDOWN_SKIPS_FREQUENCYM || entity.type !== "character")
+    return entity.frequency;
+
+  return entity.frequency / conditionFrequencyScale(entity);
 }
 
 /**
@@ -145,30 +235,22 @@ function effectiveAttackWith(weaponInfo) {
  * @returns {boolean}
  */
 function canOneShotWithWeapon(weaponInfo, targets, multiplier) {
-  const classData = G.classes[character.ctype];
-  const damageType = classData.damage_type;
-
   const currentInfo = character.slots.mainhand
     ? item_info(character.slots.mainhand)
     : { attack: 0, name: null, wtype: null };
 
   const effectiveAttack = effectiveAttackWith(weaponInfo);
+  const extraPiercing =
+    currentInfo.name !== weaponInfo.name
+      ? getRelevantPiercing(weaponInfo.wtype)
+      : 0;
 
-  let effectivePiercing =
-    damageType === "physical" ? character.apiercing : character.rpiercing;
-
-  if (currentInfo.name !== weaponInfo.name) {
-    effectivePiercing += getRelevantPiercing(weaponInfo.wtype);
-  }
-
-  const piercingMultiplier = damageType === "physical" ? 2 : 1;
   const shotMultiplier =
     multiplier ?? (targets.length >= 4 ? 0.5 : targets.length >= 2 ? 0.7 : 1);
 
   return targets.some((mob) => {
-    const defense = getMobDefense(mob);
     const dmg =
-      dps_multiplier(defense - effectivePiercing * piercingMultiplier) *
+      mitigation(character, mob, { extraPiercing }) *
       effectiveAttack *
       0.9 *
       shotMultiplier;
@@ -317,7 +399,7 @@ function shouldWearExpGear() {
 // Ping compensation for normal attack
 function attackSpeedCompensate(
   attackFrequencyBeforeCompensate,
-  attackFrequencyAfterCompensate = character.frequency,
+  attackFrequencyAfterCompensate = attackFrequency(),
 ) {
   if (attackFrequencyBeforeCompensate > attackFrequencyAfterCompensate) {
     const compensateMs =
@@ -387,6 +469,10 @@ function rankMageWeapons(target) {
     (offhand ? item_info(offhand) : getOwnedItemInfo(MAGE_OFFHAND)) ?? {};
   const mainStat = classData.main_stat;
   const statMultiplier = rawAttackMultiplier() + 1;
+  const baseFrequency = attackFrequency();
+  const deltaScale = PLAYER_COOLDOWN_SKIPS_FREQUENCYM
+    ? 1
+    : conditionFrequencyScale(character);
 
   const clusters = new Map();
   const clusterOf = (mob, radius) => {
@@ -399,12 +485,13 @@ function rankMageWeapons(target) {
   const damagePerSecond = (info) => {
     const { modifier, doublehand } = classWeaponModifier(info);
     const frequency =
-      character.frequency +
-      ((info.frequency ?? 0) +
+      baseFrequency +
+      (((info.frequency ?? 0) +
         (modifier.frequency ?? 0) -
         (currentInfo.frequency ?? 0) -
         (currentMod.frequency ?? 0)) /
-        100;
+        100) *
+        deltaScale;
 
     const offhandSign = (doublehand ? 0 : 1) - (offhand ? 1 : 0);
     const statRatio =
@@ -627,6 +714,18 @@ function splashOf(info) {
   return info?.explosion ?? info?.blast ?? 0;
 }
 
+/**
+ * Intensity a burn settles at under repeated procs of the same hit.
+ * @param {number} hit - mitigated damage of the hit that lights it
+ * @param {number} [fireResist] - the burned target's firesistance
+ * @param {boolean} [unlimited] - the burn ability carries `unlimited`
+ * @returns {number}
+ */
+function burnIntensityCap(hit, fireResist = 0, unlimited = false) {
+  const carryOver = (1 - fireResist / 100) / (unlimited ? 1.5 : 3);
+  return hit / (1 - carryOver);
+}
+
 function explosionScore(
   itemInfo,
   targets,
@@ -639,11 +738,6 @@ function explosionScore(
     (character.explosion || character.blast || 0) +
     (itemInfo.explosion_delta ?? 0);
   const radius = explosion / BLAST_DIVISOR || BLAST_RADIUS;
-  const piercing =
-    G.classes[character.ctype].damage_type === "physical"
-      ? (character.apiercing ?? 0) * 2
-      : character.rpiercing ?? 0;
-
   // Expected damage with this bow's crit over the one we hold: a crit doubles
   // the hit, so each point of crit chance is worth one extra point of damage
   const crit = character.crit ?? 0;
@@ -651,19 +745,24 @@ function explosionScore(
     (1 + (crit + (itemInfo.crit_delta ?? 0)) / 100) / (1 + crit / 100);
 
   const burnChance =
-    itemInfo.ability === "burn" ? (itemInfo.attr0 ?? 0) / 100 : 0;
+    itemInfo.ability === "burn"
+      ? ((itemInfo.attr0 ?? 0) *
+          (G.maps[character.map]?.burn_multiplier ?? 1)) /
+        100
+      : 0;
 
   const score = targets.reduce((accumulator, mob) => {
     const cluster = clusterOf(mob, radius);
 
     // Burn lands on every mob we shoot, never on the ones the splash catches
+    const fireResist = mob.firesistance ?? 0;
     const burn = burnChance
-      ? dps_multiplier(getMobDefense(mob) - piercing) *
-        ((100 - (mob.firesistance ?? 0)) / 100) *
-        BURN_DAMAGE_MULTIPLIER *
-        attack *
-        burnChance *
-        0.9
+      ? ((100 - fireResist) / 100) *
+        burnIntensityCap(
+          mitigation(character, mob) * attack * 0.9,
+          fireResist,
+        ) *
+        burnChance
       : 0;
 
     return (
@@ -893,7 +992,7 @@ function isPriestInHealGraceWindow(target) {
     return true;
   }
 
-  const graceMs = 1000 / character.frequency;
+  const graceMs = 1000 / attackFrequency();
   return Date.now() - priestLastHealGearAt < graceMs;
 }
 
@@ -1006,11 +1105,12 @@ function calculateRogueItems(target) {
     (item_info(characterFireStars)?.attack ?? 0);
 
   const rogueBurnDmg = characterFireStars
-    ? dps_multiplier((target.armor ?? 0) - (character.apiercing ?? 0) * 2) *
-      ((100 - (target.firesistance ?? 0)) / 100) *
-      1.5 *
-      (character.attack - equipItemAttackOffset + targetStacks) *
-      0.9
+    ? burnIntensityCap(
+        mitigation(character, target) *
+          (character.attack - equipItemAttackOffset + targetStacks) *
+          0.9,
+        target.firesistance,
+      )
     : 0;
 
   const shouldEquipFireStar =
@@ -1361,7 +1461,7 @@ function buildEquipPromises(suggestedItems, options) {
   const currentBooster = findInvBooster();
 
   // Budget of penalty_cd we can spend before the next attack comes off cooldown
-  const attackPeriod = 1000 / character.frequency;
+  const attackPeriod = 1000 / attackFrequency();
   const msToNextAttack = ms_to_next_skill("attack");
   const timeToNextAttack =
     msToNextAttack > 0 ? msToNextAttack : isShotPending() ? 0 : attackPeriod;
@@ -1471,24 +1571,11 @@ function buildEquipPromises(suggestedItems, options) {
 function calculateHeal(fromEntity, toEntity) {
   if (!fromEntity) return 0;
 
-  const selfPiercing = fromEntity.name === character.name;
-
   switch (fromEntity.damage_type) {
     case "magical":
-      return (
-        fromEntity.heal *
-        damage_multiplier(
-          toEntity.resistance -
-            (selfPiercing ? (character.rpiercing ?? 0) / 2 : 0),
-        )
-      );
+      return fromEntity.heal * healMitigation(fromEntity, toEntity);
     case "physical":
-      return (
-        fromEntity.attack *
-        damage_multiplier(
-          toEntity.armor - (selfPiercing ? (character.apiercing ?? 0) / 2 : 0),
-        )
-      );
+      return fromEntity.attack * healMitigation(fromEntity, toEntity);
   }
 }
 
@@ -1498,16 +1585,9 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
 
   switch (fromEntity.damage_type) {
     case "magical": {
-      const monsterRpiercing =
-        fromEntity.type === "monster"
-          ? G.monsters[fromEntity.mtype].rpiercing ?? 0
-          : 0;
-
       const reflectionDmg =
         fromEntity.reflection && recursion && toEntity.range > 100
-          ? (toEntity.type === "monster"
-              ? G.monsters[toEntity.mtype].damage_type
-              : G.classes[toEntity.ctype].damage_type) === "magical"
+          ? damageTypeOf(toEntity) === "magical"
             ? (calculateDamage(toEntity, fromEntity, false) *
                 (fromEntity.reflection ?? 0)) /
               100
@@ -1516,26 +1596,16 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
 
       return (
         fromEntity.attack *
-          dps_multiplier(toEntity.resistance - monsterRpiercing * 2) *
-          fromEntity.frequency +
+          mitigation(fromEntity, toEntity) *
+          attackFrequency(fromEntity) +
         reflectionDmg
       );
     }
 
     case "physical": {
-      const monsterApiercing =
-        fromEntity.type === "monster"
-          ? G.monsters[fromEntity.mtype].apiercing ?? 0
-          : 0;
-      const hardshellArmor = toEntity.s["hardshell"]
-        ? G.conditions.hardshell.armor
-        : 0;
-
       const dreturnDmg =
         fromEntity.dreturn && recursion && toEntity.range < 100
-          ? (toEntity.type === "monster"
-              ? G.monsters[toEntity.mtype].damage_type
-              : G.classes[toEntity.ctype].damage_type) === "physical"
+          ? damageTypeOf(toEntity) === "physical"
             ? (calculateDamage(toEntity, fromEntity, false) *
                 (fromEntity.dreturn ?? 0)) /
               100
@@ -1544,16 +1614,14 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
 
       return (
         fromEntity.attack *
-          dps_multiplier(
-            toEntity.armor - hardshellArmor - monsterApiercing * 2,
-          ) *
-          fromEntity.frequency +
+          mitigation(fromEntity, toEntity, { ignoreHardshell: true }) *
+          attackFrequency(fromEntity) +
         dreturnDmg
       );
     }
 
     default:
-      return fromEntity.attack * fromEntity.frequency;
+      return fromEntity.attack * attackFrequency(fromEntity);
   }
 }
 
@@ -1574,7 +1642,7 @@ function healerHps(healer = get_entity(HEALER) ?? get_entity(RANGER)) {
   if (!healer) return 0;
 
   const healPerHit = healer.heal || (healer.attack ?? 0) * 0.5;
-  return healPerHit * healer.frequency;
+  return healPerHit * attackFrequency(healer);
 }
 
 function totalMobDps(mobs, toEntity = character) {
@@ -1613,18 +1681,12 @@ function avgDmgTaken(characterEntity, dmgType = null) {
     (characterEntity.slots.orb?.name === "orba" ? 15 : 0);
 
   const burnPadding = highestBurningMob
-    ? dps_multiplier(
-        highestBurningMob.damage_type === "physical"
-          ? characterEntity.armor -
-              (G.monsters[highestBurningMob.mtype].apiercing ?? 0) * 2
-          : highestBurningMob.damage_type === "magical"
-          ? characterEntity.resistance -
-            (G.monsters[highestBurningMob.mtype].rpiercing ?? 0) * 2
-          : 1,
-      ) *
-      ((100 - fireResist) / 100) *
-      (highestBurningMob.abilities.burn.unlimited ? 3 : 1.5) *
-      highestBurningMob.attack
+    ? burnIntensityCap(
+        mitigation(highestBurningMob, characterEntity) *
+          highestBurningMob.attack,
+        fireResist,
+        highestBurningMob.abilities.burn.unlimited,
+      )
     : 0;
 
   const currentBurnIntensity = highestBurningMob
@@ -1779,7 +1841,7 @@ function canAffordSwap(slots) {
 
   return (
     !isAutoAttacking ||
-    character.ping > 1000 / character.frequency ||
+    character.ping > 1000 / attackFrequency() ||
     ms_to_next_skill("attack") > slots * EQUIP_PENALTY_MS + character.ping / 2
   );
 }
@@ -2427,34 +2489,18 @@ class ProjectileManagement {
   _calculateSingleHitDamage(rawDamage, source, from, to) {
     if (to["1hp"]) return Math.min(rawDamage, 1);
 
-    const fromDef =
-      from?.type === "monster" ? G.monsters[from.mtype] : from ?? {};
-    const damageType =
-      G.skills[source]?.damage_type ??
-      fromDef.damage_type ??
-      G.classes[from?.ctype]?.damage_type;
-    const [defense, pierce] =
-      damageType === "physical"
-        ? ["armor", "apiercing"]
-        : damageType === "magical"
-        ? ["resistance", "rpiercing"]
-        : [];
-    if (!defense) return rawDamage;
-
-    const hardshellArmor =
-      defense === "armor" && to.s?.hardshell ? G.conditions.hardshell.armor : 0;
     // Half our party's defense, so hits on us err high
     const isOurs =
       to === character ||
       (to.type === "character" && partyMems.includes(to.name));
-    const defenseRate = isOurs ? 0.5 : 1;
 
     return (
       rawDamage *
-      damage_multiplier(
-        ((to[defense] ?? 0) - hardshellArmor) * defenseRate -
-          (fromDef[pierce] ?? 0) * 2,
-      )
+      mitigation(from, to, {
+        damageType: G.skills[source]?.damage_type ?? damageTypeOf(from),
+        defenseRate: isOurs ? 0.5 : 1,
+        ignoreHardshell: true,
+      })
     );
   }
 

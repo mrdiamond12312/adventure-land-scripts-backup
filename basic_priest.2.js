@@ -35,7 +35,7 @@ const inRange = (entity, mult = 1) =>
 
 async function fight(target, isMovingControlled = false) {
   // Snapshot for attackSpeedCompensate
-  const attackFrequencyBeforeCompensate = character.frequency;
+  const attackFrequencyBeforeCompensate = attackFrequency();
   const promisesToAwait = [];
 
   const isAttackReady =
@@ -70,7 +70,7 @@ async function fight(target, isMovingControlled = false) {
                 !mob.target &&
                 !canOneShotWithWeapon(heldWeaponInfo, [mob]) &&
                 partyDmgRecieved + calculateDamage(mob, character) <
-                  character.heal * 0.9 * character.frequency,
+                  character.heal * 0.9 * attackFrequency(),
             )
             .sort(
               (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
@@ -232,7 +232,7 @@ function shouldPartyHeal() {
 
 function isOutHealed() {
   return (
-    avgPartyDmgTaken(partyMems) > getHealPower() * 0.95 * character.frequency
+    avgPartyDmgTaken(partyMems) > getHealPower() * 0.95 * attackFrequency()
   );
 }
 
@@ -317,7 +317,7 @@ function getZapTarget() {
       if (!isTanker) {
         return (
           calculateDamage(entity, character) + avgPartyDmgTaken(partyMems) <
-          character.heal * character.frequency
+          character.heal * attackFrequency()
         );
       }
 

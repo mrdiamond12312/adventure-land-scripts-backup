@@ -39,7 +39,7 @@ const isAttackReady = () =>
 async function fight(target) {
   // Snapshot for attackSpeedCompensate: weapon swaps mid-tick change frequency,
   // and the attack cooldown must be timed with the frequency at fire time.
-  const attackFrequencyBeforeCompensate = character.frequency;
+  const attackFrequencyBeforeCompensate = attackFrequency();
 
   const party = getAlliedNames();
   const allAggroedByParty = Object.values(parent.entities)

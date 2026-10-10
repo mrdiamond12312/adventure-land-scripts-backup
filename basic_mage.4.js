@@ -36,7 +36,7 @@ async function fight(target) {
   // Snapshot for attackSpeedCompensate: blaster's attack speed modifier means
   // frequency can change mid-tick when weapons swap, and the attack cooldown
   // must be timed with the frequency the shot was actually fired at.
-  const attackFrequencyBeforeCompensate = character.frequency;
+  const attackFrequencyBeforeCompensate = attackFrequency();
 
   // Filter: Find all aggroed mobs within a reasonable pull distance, excluding formidable ones
   const aggroedMobs = Object.values(parent.entities).filter(

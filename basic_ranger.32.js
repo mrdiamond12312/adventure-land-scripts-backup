@@ -27,7 +27,7 @@ const tryMultiShot = async (skill, entityList) => {
   set_message(`${skill} Shooting`);
   // Snapshot at fire time: cupid<->bow swaps change frequency mid-tick, and
   // the attack cooldown must be timed with the frequency the shot went out at.
-  const attackFrequencyBeforeCompensate = character.frequency;
+  const attackFrequencyBeforeCompensate = attackFrequency();
   return use_skill(skill, entityList)
     .then(() => {
       attackSpeedCompensate(attackFrequencyBeforeCompensate);
@@ -238,7 +238,7 @@ function restoreAttackingBow() {
 async function firePlan(plan) {
   if (!isAttackReady()) return;
 
-  const attackFrequencyBeforeCompensate = character.frequency;
+  const attackFrequencyBeforeCompensate = attackFrequency();
   const promisesToAwait = [];
 
   // Cupid heals whatever it hits, so shooting mobs with it feeds them. Swap
