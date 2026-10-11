@@ -689,8 +689,19 @@ async function buyFromCaveShop(choice) {
     settleCaveShop(room);
     return caveLog("shop skipped", shop.name);
   }
+  if ((character.cave?.gold ?? 0) < shop.price) {
+    settleCaveShop(room);
+    return caveLog("shop unaffordable", {
+      name: shop.name,
+      price: shop.price,
+      gold: character.cave?.gold,
+    });
+  }
+  if ((caveRun.attempts[room] ?? 0) >= CAVE_BUY_ATTEMPTS) {
+    settleCaveShop(room);
+    return caveLog("shop gave up", shop.name);
+  }
   if (shop.nearby === false) return;
-  if ((caveRun.attempts[room] ?? 0) >= CAVE_BUY_ATTEMPTS) return;
   if (Date.now() - caveRun.buyAt < CAVE_BUY_RETRY_MS) return;
 
   caveRun.buyAt = Date.now();
@@ -701,11 +712,7 @@ async function buyFromCaveShop(choice) {
   await cave_buy(room)
     .then(() => settleCaveShop(room))
     .catch((error) => {
-      // Not an attempt
-      if (error?.reason === "gold_not_enough") {
-        caveRun.attempts[room] -= 1;
-        return;
-      }
+      if (error?.reason === "gold_not_enough") return settleCaveShop(room);
 
       console.warn("Cave shop refused us", error);
     });
@@ -750,7 +757,7 @@ function getPendingCaveObjectives() {
     (objective) =>
       !objective.done &&
       objective.floor === cave.floor &&
-      !(isCaveShopObjective(objective) && settled.includes(objective.id)),
+      !settled.includes(objective.id),
   );
 }
 

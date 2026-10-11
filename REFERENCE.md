@@ -2290,6 +2290,26 @@ Ordering within the shortlist is plain `distance`. A pathfinder-measured sort wa
 it cost a `getPath` per candidate on a loop that idles at ~2ms, and the shortlist is three objectives
 in one room-and-corridor floor, where the straight line ranks them the same way often enough.
 
+### A merchant room reports done only once it sells (checked against the server, 2026-10-11)
+
+`cave_snapshot` (`node/logic/cave_of_many_dreams.js`) sends `done: !!r.stock?.sold` for any room
+whose encounter kind is `merchant`, not the room's real `done`. Voting a shop open (`effect:
+"inspect"`) runs `cave_complete` right away, so the room is finished server-side and can unlock
+the stairs, but the objective keeps showing `done: false` until somebody buys the item. That is
+also why `0:shop` never empties out of the pending list.
+
+This becomes a stall when the merchant room is a *required* one (e46 "Is It Worth the Price?" on
+0:1). `getCaveDestination` sends the party to the closest required objective, they arrive and stand
+there, and the stairs never win. Before the fix, `gold_not_enough` didn't count as an attempt, so
+all three characters re-sent `cave_buy` every `CAVE_BUY_RETRY_MS` until the run expired. Each
+refusal also logs the client's harmless `Weird reject_deferred issue: interaction`: `cave_request`
+waits on its own `request_id` and never registers a deferred.
+
+A shop we can't afford, gave up on, skipped or bought from is now settled, and settling takes the
+room out of the pending list by id, whatever the id looks like. A merchant room is never a reason to
+stay on a floor. On floors 0–1 the authoritative "floor done" signal is the door: `locked` is
+`!run.completed[floor]`, which goes true when every required room is really done.
+
 ### The realm guard was inert, and now names its realm outright (2026-09-21)
 
 `isHomeRealm` used to read `typeof isAtHomeServer !== "function" || isAtHomeServer()`, so a client
