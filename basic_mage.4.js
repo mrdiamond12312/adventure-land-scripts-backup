@@ -174,7 +174,11 @@ function startSkillLoops() {
   runSkillLoop({
     skill: "reflection",
     canUse: () => {
-      if (is_on_cooldown("reflection") || character.mp <= 1000) return false;
+      if (
+        is_on_cooldown("reflection") ||
+        character.mp <= G.skills["reflection"].mp + surgeMpReserve()
+      )
+        return false;
       pendingReflectionBuffee = getReflectionBuffee();
       return pendingReflectionBuffee != null;
     },

@@ -3038,3 +3038,11 @@ farming something else), which would leave the boss untargeted and our side hold
 the boss has sat untargeted for `LEECH_BAIT_PATIENCE_MS` (5s), baiting switches off for
 `LEECH_BAIT_COOLDOWN_MS` (60s) and we fight it normally. Leeches leaving or dying ends the bait on
 its own: the leech check fails and `getBaitedBoss` returns nothing.
+
+## Surge mp is held back only while a surge could fire (`surgeMpReserve`, 2026-10-11)
+
+Skill gates used to add a flat 1000 for temporal surge (the ranger's `SURGE_MP_OFFSET`, the
+warrior's cleave at 1720, the priest's curse at 1600, the mage's reflection at 1000), even with no orb of temporal or with surge on its 60s cooldown. They
+now add `surgeMpReserve()`, which is 1000 only when we carry or wear the orb and surge is off
+cooldown, and 0 otherwise. So cleave fires at its own 720, the same way agitate gates on its own
+420, and the warrior uses it to pick up mobs.

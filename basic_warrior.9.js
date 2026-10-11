@@ -145,8 +145,7 @@ async function cleaveLoop() {
 
 /**
  * Defensive taunt target only: a mob to peel off an ally, or a weak current
- * target attacking a party member (needs a live healer). Strategic pull-taunt
- * stays in pull_strategy.13.js (driven by the strategy loop).
+ * target attacking a party member
  * @returns {Object|null} the mob to taunt, or null
  */
 function getTauntTarget() {

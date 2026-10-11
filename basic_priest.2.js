@@ -171,7 +171,11 @@ const CURSE_HP_THRESHOLD = 15_000;
 
 // Beefiest uncursed mob aggroing a party member, in curse range.
 function getCurseTarget() {
-  if (is_on_cooldown("curse") || character.mp <= 1600) return null;
+  if (
+    is_on_cooldown("curse") ||
+    character.mp <= G.skills["curse"].mp + surgeMpReserve()
+  )
+    return null;
   const prioritized = prioritizedNames();
 
   return (

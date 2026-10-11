@@ -288,9 +288,6 @@ async function fight(target) {
 
 // --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
 
-// Mp held back by the skill checks so a temporal surge stays affordable
-const SURGE_MP_OFFSET = 1000;
-
 // Below this hp a mob dies too fast for the mark to pay for its mp
 const MARK_HP_THRESHOLD = 15_000;
 
@@ -299,7 +296,10 @@ const MARK_HP_THRESHOLD = 15_000;
  * @returns {Object|null} the mob to mark, or null
  */
 function getHuntersMarkTarget() {
-  if (character.mp < SURGE_MP_OFFSET || is_on_cooldown("huntersmark"))
+  if (
+    character.mp < G.skills["huntersmark"].mp + surgeMpReserve() ||
+    is_on_cooldown("huntersmark")
+  )
     return null;
 
   const party = getAlliedNames();
@@ -436,7 +436,10 @@ function startSkillLoops() {
   runSkillLoop({
     skill: "supershot",
     canUse: () => {
-      if (character.mp <= 400 + SURGE_MP_OFFSET || is_on_cooldown("supershot"))
+      if (
+        character.mp <= G.skills["supershot"].mp + surgeMpReserve() ||
+        is_on_cooldown("supershot")
+      )
         return false;
       pendingSuperShotTarget = isCupidEquipped()
         ? getEmergencyHealee()

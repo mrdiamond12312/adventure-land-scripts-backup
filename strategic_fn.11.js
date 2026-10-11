@@ -1980,7 +1980,7 @@ function planCleave(strategyName) {
   if (
     isWaitingAtDorr ||
     !canAffordSwap(2) ||
-    character.mp <= 1720 ||
+    character.mp < G.skills["cleave"].mp + surgeMpReserve() ||
     Object.keys(character.c).length
   )
     return;
@@ -1997,7 +1997,6 @@ function planCleave(strategyName) {
   if (
     !cleaveWeapon ||
     character.s.penalty_cd ||
-    character.mp < G.skills["cleave"].mp + 280 ||
     character.cc >= 100 ||
     mobsList.some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype)) ||
     mobsList.length === 0
@@ -2420,6 +2419,21 @@ function awaitTemporalSurgeTimes(timeoutMs = 2000) {
 /** Serializes surges so overlapping kills can't fire several at once */
 let isSurging = false;
 
+/** @returns {boolean} whether we carry or wear the orb of temporal */
+function hasTemporalOrb() {
+  return (
+    findMaxLevelItem("orboftemporal") !== -1 ||
+    character.slots.orb?.name === "orboftemporal"
+  );
+}
+
+/** @returns {number} mp to hold back for a surge that could fire now */
+function surgeMpReserve() {
+  return hasTemporalOrb() && !is_on_cooldown("temporalsurge")
+    ? G.skills["temporalsurge"].mp
+    : 0;
+}
+
 /**
  * Hastens nearby spawns when a surge is worthwhile.
  *
@@ -2436,11 +2450,7 @@ async function useTemporalSurge() {
   )
     return false;
 
-  const hasTemporalOrb =
-    findMaxLevelItem("orboftemporal") !== -1 ||
-    character.slots.orb?.name === "orboftemporal";
-
-  if (!hasTemporalOrb) return false;
+  if (!hasTemporalOrb()) return false;
 
   const currentMap = character.map;
   const temporalsurgeRange = 160;
