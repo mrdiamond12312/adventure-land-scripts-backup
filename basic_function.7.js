@@ -1335,11 +1335,11 @@ async function resolveKiteTarget(target) {
   return target;
 }
 
-// Warrior sitting just outside melee range of its own target, with nothing else
-// aggroed on it and no other player nearby: hold still and turn to face it
-// instead of orbiting, so it doesn't wander off pulling extra aggro.
-function shouldHoldWarriorPosition(target, radiusTotal) {
-  if (character.ctype !== "warrior") return false;
+const HOLD_POSITION_CLASSES = ["warrior", "rogue"];
+
+/** Hold still facing the target while nothing aggros us and no ally can stack */
+function shouldHoldMeleePosition(target, radiusTotal) {
+  if (!HOLD_POSITION_CLASSES.includes(character.ctype)) return false;
 
   const dist = distance(character, target);
   if (dist <= character.range * 0.35 || dist >= radiusTotal) return false;
@@ -1604,7 +1604,7 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
   try {
     target = await resolveKiteTarget(target);
 
-    if (shouldHoldWarriorPosition(target, radiusTotal)) {
+    if (shouldHoldMeleePosition(target, radiusTotal)) {
       faceTarget(target);
       return;
     }
@@ -2342,7 +2342,6 @@ const shouldDeployRogue = () => {
 
 const DYNAMIC_PARTY_PRESETS = {
   mrgreen: {
-    USI: [WARRIOR, PRIEST, ROGUE],
     USIII: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
@@ -2353,23 +2352,12 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER;
       return [WARRIOR, RANGER, ROGUE];
     },
-    EUI: () => {
-      RANGER = RANGER1;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, ROGUE];
-    },
     default: [WARRIOR, PRIEST, ROGUE],
   },
   mrpumpkin: {
-    USI: [MAGE, PRIEST, WARRIOR],
-    USIII: [MAGE, PRIEST, WARRIOR],
+    USIII: [MAGE, PRIEST, ROGUE],
     EUII: () => {
       RANGER = RANGER2;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, ROGUE];
-    },
-    EUI: () => {
-      RANGER = RANGER1;
       HEALER = RANGER;
       return [WARRIOR, RANGER, ROGUE];
     },
