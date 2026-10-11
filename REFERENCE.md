@@ -1151,10 +1151,17 @@ Worst offender was priest `zapperzap` (`floorMs: 50`, multi-pass scan + sort = ~
 scans/second). Order cheap guards (`mp`, `is_on_cooldown`, `isCupidEquipped`) *before* the scan so
 it is often skipped entirely rather than merely computed once.
 
-## Candy-cane swap timing (`maybeCandySwap`, basic_warrior.9.js)
+## Candy-cane swap timing (`maybeCandySwap`, strategic_fn.11.js)
 
-Swap to candy canes so they are equipped when the projectile *lands*, then swap back. Three timing
-facts, each of which broke it once:
+Swap to candy canes so they are equipped when the projectile *lands*, then swap back. It works
+because the server reads `attacker.a.sugarrush` in `complete_attack`, at impact, from whatever is
+equipped then. Only `sugarrush` and `frenzy` are read there. crit, critdamage, explosion, blast,
+lifesteal, manasteal, the piercings, and the freeze/poison/burn/weave/petrify/hex/shatter/sunder
+abilities are copied onto the projectile in `commence_attack` when it is fired, so swapping them in
+mid-flight does nothing. `attr0` sums across equipped canes and does not grow with level: 0.25% per
+cane per proc-capable hit.
+
+Three timing facts, each of which broke it once:
 
 1. **The projectile does not spawn when `attack()` is called** — it spawns when the attack reaches
    the server, one one-way trip later. The hit is at `ping/2 + eta`; sending the swap-back at `eta`
@@ -1175,6 +1182,28 @@ Contention note: `maybeCandySwap` requires `!isEquipingItems` and takes the lock
 so a free-running `strategy` loop mid-`equipBatch` silently *cancels* the swap for that shot — and
 `equipBatch`'s penalty budget is widest right after a shot, exactly the candy window. The warrior
 tolerates this (`canUse: () => true`); the rogue does not (see above).
+
+### Rogue: one two-handed cane, and his own restore
+
+`candycanesword` is `short_sword`, a `doublehand` type for the rogue (a `mainhand` type for the
+warrior). The server answers `cant_equip` to a doublehand over a held offhand, and to an offhand
+under a doublehand. So the rogue's swap is `sendUnequip("offhand")` then one cane, sent in that
+order, and it needs a free bag slot. Only one cane fits, so the proc chance is half the warrior's.
+
+- **The restore is explicit (`restoreRogueWeapons`), not left to `currentStrategy`.** The rogue's
+  strategy loop needs a live in-range target, and the swapped hit is often the kill. With no
+  restore he would keep the cane and no offhand, and `fight()` would fire the next attack with
+  them. The restore runs inside the swap's latch, with the penalty bail off, mainhand before
+  offhand (the order the server needs).
+- **The follow-up attack loop reads `getServerSlot("mainhand")`.** Quickstab needs a dagger
+  (`skill_cant_wtype` otherwise). The client's `character.slots` still shows the dagger while the
+  cane equip is in flight, so quickstab would be sent into a mainhand the server has already
+  swapped.
+- **The cost.** The rogue swap spends about 360ms of `penalty_cd` per shot (cane on, then two
+  daggers back), and no quickstab can go out while the cane is held. `penalty_cd` does not refuse
+  casts: `consume_skill` adds what is left of it to the next cooldown, so quickstabs in that window
+  come back slower. At 0.25% per hit this is close to break-even. Watch the rogue's DPS before
+  keeping it on.
 
 ## Field reports must fail closed (`entFieldReport`)
 

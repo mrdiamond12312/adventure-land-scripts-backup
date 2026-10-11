@@ -22,106 +22,6 @@ const originRangeRate = 0.9;
 rangeRate = originRangeRate;
 
 const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
-const CANDY_SWAP_FALLBACK_DELAY_MS = 150; // used when no projectile speed can be resolved
-const CANDY_MIN_HOLD_MS = 40; // dwell after the canes land, even if the ETA is spent
-
-/**
- * ETA (ms) of the character's attack projectile against the target
- * @param {Object} target - the entity the attack was fired at
- * @returns {number} delay in ms (>= 0)
- */
-function projectileEtaMs(target) {
-  const projectileKey =
-    item_info(character.slots.mainhand)?.projectile ||
-    G.classes[character.ctype].projectile;
-  const projectileSpeed = G.projectiles[projectileKey]?.speed;
-
-  if (!projectileSpeed || !target) return CANDY_SWAP_FALLBACK_DELAY_MS;
-
-  return Math.max(
-    20,
-    (simple_distance(character, target) / projectileSpeed) * 1000 + 7,
-  );
-}
-
-/**
- * Momentarily swaps to candy cane(s) for the landing hit, then swaps back to
- * the warrior's real weapon after the projectile connects.
- * @param {Object} targetToAttack - the entity being attacked
- * @returns {Promise|undefined} the equip promise, or undefined if not swapping
- */
-function maybeCandySwap(targetToAttack) {
-  const characterAtkCycleMs = 1000 / attackFrequency();
-  const shouldUseCandyCanes =
-    character.ping < 1000 &&
-    !isCleaving &&
-    !isEquipingItems &&
-    characterAtkCycleMs > 250 + character.ping &&
-    !character.s.sugarrush &&
-    (CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.offhand?.name) ||
-      CANDY_SWAP_WEAPON_ALLOW_LIST.includes(character.slots.mainhand?.name)) &&
-    character.slots.offhand?.name !== "mshield" &&
-    character.cc < 100;
-
-  if (!shouldUseCandyCanes) return;
-
-  const candycane1 = findMaxLevelItem("candycanesword");
-  const candycane2 = findMaxLevelItem("candycanesword", 1);
-  const isFastAttacker = characterAtkCycleMs < 600;
-
-  // To avoid penalty_cd, fast attackers only swap the mainhand; slower
-  // attackers dual-wield candy canes when a second one is available.
-  const buildEquip = (mainhand, offhand) =>
-    isFastAttacker
-      ? [{ num: mainhand, slot: "mainhand" }]
-      : [
-          { num: mainhand, slot: "mainhand" },
-          { num: offhand, slot: "offhand" },
-        ];
-
-  const canCandySwap =
-    candycane1 !== -1 && (isFastAttacker || candycane2 !== -1);
-  if (!canCandySwap) return;
-
-  // One-way trip for an equip to take effect server-side
-  const equipLatencyMs = character.ping / 2;
-  const etaMs = projectileEtaMs(targetToAttack);
-
-  if (etaMs <= equipLatencyMs) return;
-
-  isEquipingItems = true;
-
-  const swapBackAt = Date.now() + etaMs;
-
-  const swapBackDeadline =
-    Date.now() +
-    characterAtkCycleMs -
-    equipLatencyMs -
-    CANDY_MIN_HOLD_MS -
-    EQUIP_PENALTY_MS * 2;
-
-  const candyEquip = sendEquips(buildEquip(candycane1, candycane2));
-
-  // Hold the canes until the hit lands, then release and let currentStrategy
-  // put the real weapons back on its own tick
-  const holdUntilSwapBack = () =>
-    new Promise((resolve) =>
-      setTimeout(
-        resolve,
-        Math.min(
-          Math.max(CANDY_MIN_HOLD_MS, swapBackAt - Date.now()),
-          Math.max(0, swapBackDeadline - Date.now()),
-        ),
-      ),
-    );
-
-  return Promise.allSettled([
-    candyEquip,
-    candyEquip.then(holdUntilSwapBack),
-  ]).finally(() => {
-    isEquipingItems = false;
-  });
-}
 
 /** @returns {boolean} whether the attack cooldown is up */
 const isAttackReady = () =>
@@ -203,7 +103,10 @@ async function fight(target) {
         .catch((e) => attackErrorHandler(e, targetToAttack)),
     );
 
-    const candySwap = maybeCandySwap(targetToAttack);
+    // Left to currentStrategy to put the real weapons back on its own tick
+    const candySwap = maybeCandySwap(targetToAttack, {
+      swapFrom: CANDY_SWAP_WEAPON_ALLOW_LIST,
+    });
     if (candySwap) promisesToAwait.push(candySwap);
   }
 

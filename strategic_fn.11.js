@@ -1568,6 +1568,121 @@ function buildEquipPromises(suggestedItems, options) {
   return promises;
 }
 
+const CANDY_SWAP_FALLBACK_DELAY_MS = 150; // used when no projectile speed can be resolved
+const CANDY_MIN_HOLD_MS = 40; // dwell after the canes land, even if the ETA is spent
+
+/**
+ * ETA (ms) of the character's attack projectile against the target
+ * @param {Object} target - the entity the attack was fired at
+ * @returns {number} delay in ms (>= 0)
+ */
+function projectileEtaMs(target) {
+  const projectileKey =
+    item_info(character.slots.mainhand)?.projectile ||
+    G.classes[character.ctype].projectile;
+  const projectileSpeed = G.projectiles[projectileKey]?.speed;
+
+  if (!projectileSpeed || !target) return CANDY_SWAP_FALLBACK_DELAY_MS;
+
+  return Math.max(
+    20,
+    (simple_distance(character, target) / projectileSpeed) * 1000 + 7,
+  );
+}
+
+/**
+ * Momentarily swaps to candy cane(s) so the landing hit rolls sugarrush off
+ * them. A class that wields canes two-handed holds one and frees the offhand.
+ * @param {Object} targetToAttack - the entity being attacked
+ * @param {Object} [options]
+ * @param {string[]} [options.swapFrom] - weapons worth swapping off; any if omitted
+ * @param {Function} [options.restore] - re-equips the real weapons after the hold; omitted leaves it to currentStrategy
+ * @returns {Promise|undefined} the swap promise, or undefined if not swapping
+ */
+function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
+  const characterAtkCycleMs = 1000 / attackFrequency();
+  const mainhand = getServerSlot("mainhand");
+  const offhand = getServerSlot("offhand");
+  const shouldUseCandyCanes =
+    character.ping < 1000 &&
+    !isCleaving &&
+    !isEquipingItems &&
+    characterAtkCycleMs > 250 + character.ping &&
+    !character.s.sugarrush &&
+    (!swapFrom ||
+      swapFrom.includes(offhand?.name) ||
+      swapFrom.includes(mainhand?.name)) &&
+    offhand?.name !== "mshield" &&
+    character.cc < 100;
+
+  if (!shouldUseCandyCanes) return;
+
+  const isTwoHanded =
+    !!G.classes[character.ctype].doublehand[G.items.candycanesword.wtype];
+  const candycane1 = findMaxLevelItem("candycanesword");
+  const candycane2 = findMaxLevelItem("candycanesword", 1);
+  const isFastAttacker = characterAtkCycleMs < 600;
+  const isMainhandOnly = isTwoHanded || isFastAttacker;
+
+  // To avoid penalty_cd, fast attackers only swap the mainhand; slower
+  // attackers dual-wield candy canes when a second one is available.
+  const buildEquip = (firstCane, secondCane) =>
+    isMainhandOnly
+      ? [{ num: firstCane, slot: "mainhand" }]
+      : [
+          { num: firstCane, slot: "mainhand" },
+          { num: secondCane, slot: "offhand" },
+        ];
+
+  const canCandySwap =
+    candycane1 !== -1 && (isMainhandOnly || candycane2 !== -1);
+  if (!canCandySwap) return;
+
+  // The server refuses a two-handed cane over a held offhand
+  const mustFreeOffhand = isTwoHanded && !!offhand;
+  if (mustFreeOffhand && !character.items.some((_, num) => !getServerItem(num)))
+    return;
+
+  // One-way trip for an equip to take effect server-side
+  const equipLatencyMs = character.ping / 2;
+  const etaMs = projectileEtaMs(targetToAttack);
+
+  if (etaMs <= equipLatencyMs) return;
+
+  isEquipingItems = true;
+
+  const swapBackAt = Date.now() + etaMs;
+
+  const swapBackDeadline =
+    Date.now() +
+    characterAtkCycleMs -
+    equipLatencyMs -
+    CANDY_MIN_HOLD_MS -
+    EQUIP_PENALTY_MS * 2;
+
+  if (mustFreeOffhand) sendUnequip("offhand");
+  const candyEquip = sendEquips(buildEquip(candycane1, candycane2));
+
+  // Hold the canes until the hit lands, then release
+  const holdUntilSwapBack = () =>
+    new Promise((resolve) =>
+      setTimeout(
+        resolve,
+        Math.min(
+          Math.max(CANDY_MIN_HOLD_MS, swapBackAt - Date.now()),
+          Math.max(0, swapBackDeadline - Date.now()),
+        ),
+      ),
+    );
+
+  return Promise.allSettled([
+    candyEquip,
+    candyEquip.then(holdUntilSwapBack, () => undefined).then(restore),
+  ]).finally(() => {
+    isEquipingItems = false;
+  });
+}
+
 function calculateHeal(fromEntity, toEntity) {
   if (!fromEntity) return 0;
 

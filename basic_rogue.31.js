@@ -36,6 +36,19 @@ const inRange = (entity, mult = 1) =>
 const isAttackReady = () =>
   ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
+/**
+ * Puts the daggers back after a candy swap; the strategy loop would skip it
+ * once the swapped hit kills the target.
+ * @returns {Promise}
+ */
+function restoreRogueWeapons() {
+  const { mainhand, offhand } = calculateRogueItems(get_target());
+  return equipBatch(
+    { mainhand, offhand },
+    { preventKeySnatch: false, preventPenaltizeNextAttack: false },
+  );
+}
+
 async function fight(target) {
   // Snapshot for attackSpeedCompensate: weapon swaps mid-tick change frequency,
   // and the attack cooldown must be timed with the frequency at fire time.
@@ -100,6 +113,11 @@ async function fight(target) {
         }),
     );
 
+    const candySwap = maybeCandySwap(attackTarget, {
+      restore: restoreRogueWeapons,
+    });
+    if (candySwap) promisesToAwait.push(candySwap);
+
     set_message("Attacking");
   }
 
@@ -134,12 +152,12 @@ function getRspeedBuffee() {
 }
 
 /**
- * Follow-up attack the current mainhand supports; both share the "quickstab"
- * cooldown key.
+ * Follow-up attack the mainhand the server holds supports; both share the
+ * "quickstab" cooldown key.
  * @returns {string|undefined} "quickstab", "quickpunch", or undefined
  */
 function getFollowUpAttackSkill() {
-  const currentMainhand = item_info(character.slots.mainhand);
+  const currentMainhand = item_info(getServerSlot("mainhand"));
   if (currentMainhand?.wtype === "dagger") return "quickstab";
   if (currentMainhand?.wtype === "fist") return "quickpunch";
   return undefined;
