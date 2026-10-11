@@ -172,9 +172,7 @@ function healMitigation(from, to) {
   const [defense, pierce] = mitigationStats(damageTypeOf(from));
   if (!defense) return 1;
 
-  return damage_multiplier(
-    ((to[defense] ?? 0) - piercingOf(from, pierce)) / 2,
-  );
+  return damage_multiplier(((to[defense] ?? 0) - piercingOf(from, pierce)) / 2);
 }
 
 function rawAttackMultiplier() {
@@ -1979,7 +1977,7 @@ function planCleave(strategyName) {
   if (
     isWaitingAtDorr ||
     !canAffordSwap(2) ||
-    character.mp < G.skills["cleave"].mp + surgeMpReserve() ||
+    character.mp < G.skills["cleave"].mp + 200 + surgeMpReserve() ||
     Object.keys(character.c).length
   )
     return;
@@ -2299,7 +2297,8 @@ function getBaitedBoss() {
     return undefined;
 
   const isLeeched = Object.values(parent.entities).some(
-    (entity) => isBossLeech(entity) && distance(entity, boss) <= LEECH_BAIT_RANGE,
+    (entity) =>
+      isBossLeech(entity) && distance(entity, boss) <= LEECH_BAIT_RANGE,
   );
   if (!isLeeched) return undefined;
 
