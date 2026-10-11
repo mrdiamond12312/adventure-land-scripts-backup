@@ -3032,3 +3032,9 @@ What the server allows:
   member, so in a warrior comp it does the same job. The rogue has neither, and invis does not drop
   aggro.
 - Leeches come off the priest's heal list while baiting.
+
+The hold has a patience timer. A leech can stand within range without ever hitting (parked, or
+farming something else), which would leave the boss untargeted and our side holding forever. Once
+the boss has sat untargeted for `LEECH_BAIT_PATIENCE_MS` (5s), baiting switches off for
+`LEECH_BAIT_COOLDOWN_MS` (60s) and we fight it normally. Leeches leaving or dying ends the bait on
+its own: the leech check fails and `getBaitedBoss` returns nothing.

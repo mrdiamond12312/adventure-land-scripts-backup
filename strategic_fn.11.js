@@ -2255,6 +2255,15 @@ const LEECH_BAIT_BOSSES = ["mrpumpkin", "mrgreen"];
 /** How close to the boss an outsider counts as on it */
 const LEECH_BAIT_RANGE = 600;
 
+/** How long the boss may sit untargeted before we take it back */
+const LEECH_BAIT_PATIENCE_MS = 5000;
+
+/** How long baiting stays off once the leeches ignored the boss */
+const LEECH_BAIT_COOLDOWN_MS = 60000;
+
+/** When the baited boss went untargeted, and until when baiting is off */
+const leechBait = { untargetedSince: 0, offUntil: 0 };
+
 /**
  * An outsider fighting without a priest: solo (lone wolf) or a priestless party.
  * @param {Object} [player]
@@ -2280,6 +2289,8 @@ function isBossLeech(player) {
  * @returns {Object|undefined}
  */
 function getBaitedBoss() {
+  if (Date.now() < leechBait.offUntil) return undefined;
+
   const boss = LEECH_BAIT_BOSSES.map((type) =>
     get_nearest_monster({ type }),
   ).find(Boolean);
@@ -2291,7 +2302,17 @@ function getBaitedBoss() {
   const isLeeched = Object.values(parent.entities).some(
     (entity) => isBossLeech(entity) && distance(entity, boss) <= LEECH_BAIT_RANGE,
   );
-  return isLeeched ? boss : undefined;
+  if (!isLeeched) return undefined;
+
+  if (boss.target) leechBait.untargetedSince = 0;
+  else if (!leechBait.untargetedSince) leechBait.untargetedSince = Date.now();
+  else if (Date.now() - leechBait.untargetedSince > LEECH_BAIT_PATIENCE_MS) {
+    leechBait.untargetedSince = 0;
+    leechBait.offUntil = Date.now() + LEECH_BAIT_COOLDOWN_MS;
+    return undefined;
+  }
+
+  return boss;
 }
 
 /**
