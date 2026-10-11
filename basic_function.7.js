@@ -732,6 +732,17 @@ var activeStrategyRank;
 /** Chain rank of the strategy that started the trip under way, -1 outside the chain */
 var tripRank = -1;
 
+/** The strategy that claimed the last tick */
+var tickOwnerStrategy;
+
+/** @returns {boolean} whether the miniboss hunt owns the fight */
+function isHuntingSpecialMob() {
+  return (
+    typeof useSpecialMobStrategy === "function" &&
+    tickOwnerStrategy === useSpecialMobStrategy
+  );
+}
+
 /** @returns {boolean} whether a controlled move is under way */
 function isOnTrip() {
   return (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
@@ -985,9 +996,13 @@ function pickRestoreSkill() {
   const isChanneling =
     character.c.town || character.c.fishing || character.c.mining;
 
+  const isSavingForSurge =
+    character.mp < surgeMpReserve() && character.hp > character.max_hp * 0.6;
+
   const shouldRestoreHp =
-    character.hp / character.max_hp < character.mp / character.max_mp ||
-    (character.hp < character.max_hp * 0.6 && character.mp > 1000);
+    !isSavingForSurge &&
+    (character.hp / character.max_hp < character.mp / character.max_mp ||
+      (character.hp < character.max_hp * 0.6 && character.mp > 1000));
 
   const stat = shouldRestoreHp ? "hp" : "mp";
   const missing = character[`max_${stat}`] - character[stat];
@@ -2762,12 +2777,14 @@ async function selectFightTarget() {
       // Claimed without a trip of its own, so the lower one is stale
       if (isOnTrip() && rank < tripRank) await abandonTrip();
 
+      tickOwnerStrategy = strategy;
       return outcome.target;
     }
   } finally {
     activeStrategyRank = undefined;
   }
 
+  tickOwnerStrategy = undefined;
   return undefined;
 }
 

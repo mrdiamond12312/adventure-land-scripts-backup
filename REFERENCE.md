@@ -3043,6 +3043,19 @@ its own: the leech check fails and `getBaitedBoss` returns nothing.
 
 Skill gates used to add a flat 1000 for temporal surge (the ranger's `SURGE_MP_OFFSET`, the
 warrior's cleave at 1720, the priest's curse at 1600, the mage's reflection at 1000), even with no orb of temporal or with surge on its 60s cooldown. They
-now add `surgeMpReserve()`, which is 1000 only when we carry or wear the orb and surge is off
-cooldown, and 0 otherwise. So cleave fires at its own 720, the same way agitate gates on its own
+now add `surgeMpReserve()`, which is `surgeMpNeeded()` (the surge's 1000 cost, which is also its own gate) only when a dead mob
+is queued in `pendingSurgeSpots` or the miniboss hunt owns the fight (`isHuntingSpecialMob`,
+from the `tickOwnerStrategy` that `selectFightTarget` records), we carry or wear the orb, and
+surge is off cooldown. The hunt holds the mp from the walk onward, so the pool is already there
+at the kill. Otherwise
+it is 0. Short mp no longer counts as one of a spot's `MAX_ATTEMPTS`: `drainPendingSurges` waits
+while the reserve lets mp climb back, and drops the spot only once its respawn ETA has passed. The reserve and the surge's gate are the same number, so the skills never stop short of what the
+surge needs.
+
+The wait has to be short, because the strategy chain may walk him off (or town him out) past
+`KITE_RANGE`, which drops the spot. So `pickRestoreSkill` drinks mp while `mp < surgeMpReserve()`
+and hp is above 60%. The drain also passes `whileMoving: true`, so a queued surge still fires
+while he walks away within 160 of the spawn. The old blanket smart-move refusal (`347ade8`)
+predates the kill queue, back when any spawn in range was surged in passing. The merchant's
+scout still gets that refusal by default. So cleave fires at its own 720, the same way agitate gates on its own
 420, and the warrior uses it to pick up mobs.

@@ -1648,7 +1648,6 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
   const restorePenaltyMs =
     (caneEquips.length + (mustFreeOffhand ? 1 : 0)) * EQUIP_PENALTY_MS;
 
-  // The client sees the restore's penalty_cd a ping after sending it
   const penaltyClearsInMs =
     Math.max(canePenaltyMs, character.ping + CANDY_MIN_HOLD_MS) +
     character.ping +
@@ -2257,17 +2256,13 @@ const LEECH_BAIT_RANGE = 600;
 /** How long the boss may sit untargeted before we take it back */
 const LEECH_BAIT_PATIENCE_MS = 5000;
 
-/** How long baiting stays off once the leeches ignored the boss */
+/** How long baiting stays off after that */
 const LEECH_BAIT_COOLDOWN_MS = 60000;
 
-/** When the baited boss went untargeted, and until when baiting is off */
+/** Bait timers */
 const leechBait = { untargetedSince: 0, offUntil: 0 };
 
-/**
- * An outsider fighting without a priest: solo (lone wolf) or a priestless party.
- * @param {Object} [player]
- * @returns {boolean}
- */
+/** @returns {boolean} whether this outsider fights without a priest */
 function isBossLeech(player) {
   if (player?.type !== "character" || player.npc || player.rip) return false;
   if (["priest", "merchant"].includes(player.ctype)) return false;
@@ -2283,10 +2278,7 @@ function isBossLeech(player) {
   );
 }
 
-/**
- * The bait boss in view while a leech is on it and no trusted priest is around.
- * @returns {Object|undefined}
- */
+/** @returns {Object|undefined} the bait boss while a leech is on it */
 function getBaitedBoss() {
   if (Date.now() < leechBait.offUntil) return undefined;
 
@@ -2314,17 +2306,12 @@ function getBaitedBoss() {
   return boss;
 }
 
-/**
- * Whether hitting this would take the baited boss off the leeches.
- * @param {Object} [target]
- * @param {Object} [boss] - getBaitedBoss(), when the caller already has it
- * @returns {boolean}
- */
+/** @returns {boolean} whether hitting this would take the baited boss */
 function isBaitHeld(target, boss = getBaitedBoss()) {
   return !!boss && target?.id === boss.id && !boss.target;
 }
 
-/** @returns {boolean} whether we hold the baited boss and should scare it off */
+/** @returns {boolean} whether we hold the baited boss */
 function isHoldingBait() {
   return getBaitedBoss()?.target === character.name;
 }
@@ -2427,10 +2414,18 @@ function hasTemporalOrb() {
   );
 }
 
-/** @returns {number} mp to hold back for a surge that could fire now */
+/** @returns {number} mp a surge needs on hand */
+function surgeMpNeeded() {
+  return G.skills["temporalsurge"].mp;
+}
+
+/** @returns {number} mp held back for the surge */
 function surgeMpReserve() {
-  return hasTemporalOrb() && !is_on_cooldown("temporalsurge")
-    ? G.skills["temporalsurge"].mp
+  const isWanted =
+    Object.keys(pendingSurgeSpots).length > 0 || isHuntingSpecialMob();
+
+  return isWanted && hasTemporalOrb() && !is_on_cooldown("temporalsurge")
+    ? surgeMpNeeded()
     : 0;
 }
 
@@ -2439,13 +2434,13 @@ function surgeMpReserve() {
  *
  * @returns {Promise<number[] | false>} remaining respawn times in ms, or false when skipped
  */
-async function useTemporalSurge() {
+async function useTemporalSurge({ whileMoving = false } = {}) {
   if (isSurging) return false;
-  if (isAdvanceSmartMoving || smart.moving) return false;
+  if (!whileMoving && (isAdvanceSmartMoving || smart.moving)) return false;
 
   if (
     is_on_cooldown("temporalsurge") ||
-    character.mp < G.skills["temporalsurge"].mp + 400 ||
+    character.mp < surgeMpNeeded() ||
     (isAssignedAsTanker() && character.s.burned)
   )
     return false;
@@ -2615,9 +2610,15 @@ async function drainPendingSurges() {
     // Out of surge range but still close means we are kiting, so keep it queued
     if (!inRange.length) return;
 
-    const times = await useTemporalSurge();
+    if (hasTemporalOrb() && character.mp < surgeMpNeeded()) {
+      for (const [id] of inRange)
+        if (pendingSurgeEta[id] <= Date.now()) dropPendingSurge(id);
+      return;
+    }
 
-    // Refused for mp, movement or a latched surge: let it go after a few tries
+    const times = await useTemporalSurge({ whileMoving: true });
+
+    // Let it go after a few refusals
     if (times === false) {
       for (const [id] of inRange) {
         pendingSurgeAttempts[id] = (pendingSurgeAttempts[id] ?? 0) + 1;

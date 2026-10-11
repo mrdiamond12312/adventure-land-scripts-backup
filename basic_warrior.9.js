@@ -151,7 +151,6 @@ async function cleaveLoop() {
 function getTauntTarget() {
   if (character.mp <= G.skills["taunt"].mp) return null;
 
-  // Taunt redirects off a party member: takes the boss back so scare can hand it on
   const baitedBoss = getBaitedBoss();
   if (
     baitedBoss?.target !== character.name &&
