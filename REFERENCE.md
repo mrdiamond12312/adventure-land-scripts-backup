@@ -3013,14 +3013,12 @@ it is worth chasing at home, not abroad.
 ## Handing a seasonal boss to leeches (`getBaitedBoss`, strategic_fn.11.js, 2026-10-11)
 
 Tanking earns contribution: every hit the boss lands adds `attack * B.dps_tank_mult` to the
-target's `monster.points` (server.js `add_coop_points`). On mrpumpkin and mrgreen, outsiders
-without a priest were riding our tank. A "leech" is a visible non-priest, non-merchant character
-that isn't on our account (`isOwnedCharacter`, all of `CODE_SLOTS`), in our party, or in
-`knownTankers`, and has no priest in its party. The first version only excluded
-`getMyCharacters()`, the current roster. So our own characters outside the event preset (a
-member still logged in after a roster swap, MoohThatCow, CupidCow) counted as leeches, and the
-priest kept scaring off the boss with no outsider around. That includes every Lone Wolf
-(`encouragement_lonewolf` means a solo character). Baiting only runs while one is within 600 of the
+target's `monster.points` (server.js `add_coop_points`). On mrpumpkin and mrgreen, Lone Wolf players were riding our tank. A "leech" is an outsider
+(`isBossOutsider`: not on our account, not in our party, not in `knownTankers` or partied with
+one) who has `s.encouragement_lonewolf`. Every player's `s` reaches every client
+(`player_to_client`), and the server sets that condition while the Lone Wolf buff is active. An
+earlier version used "no priest in their party" instead, which also caught ordinary priestless
+parties, and still caught our own characters while it only excluded the current roster. Baiting only runs while one is within 600 of the
 boss and no trusted priest (`knownTankers`) is in view.
 
 What the server allows:
@@ -3037,7 +3035,7 @@ What the server allows:
   fails 95% of the time. The rogue has neither skill, and invis does not drop aggro.
 - Leeches come off the priest's heal list while baiting.
 
-A rival is an outsider who is not a leech, typically a party with a priest. When a rival holds
+A rival is an outsider without Lone Wolf. When a rival holds
 the boss, the assigned tank takes it back (`getBossToTakeBack`): the priest absorbs, the warrior
 taunts. If leeches are near, the bait then scares it off again, and this repeats until a leech
 holds it. With no leech near, the tank just keeps it. Taking it back only works once our tank has

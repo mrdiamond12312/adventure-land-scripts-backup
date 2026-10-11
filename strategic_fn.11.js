@@ -2248,7 +2248,7 @@ function adaptStrategyToParty() {
 }
 
 /** Bosses handed to leeches instead of tanked */
-const LEECH_BAIT_BOSSES = ["mrpumpkin", "mrgreen"];
+const LEECH_BAIT_BOSSES = [];
 
 /** How close to the boss an outsider counts as on it */
 const LEECH_BAIT_RANGE = 600;
@@ -2276,17 +2276,9 @@ function isBossOutsider(player) {
   );
 }
 
-/** @returns {boolean} whether this outsider fights without a priest */
+/** @returns {boolean} whether this outsider is a Lone Wolf */
 function isBossLeech(player) {
-  if (!isBossOutsider(player) || player.ctype === "priest") return false;
-
-  return !Object.values(parent.entities).some(
-    (other) =>
-      other.type === "character" &&
-      other.ctype === "priest" &&
-      !!player.party &&
-      other.party === player.party,
-  );
+  return isBossOutsider(player) && !!player.s?.encouragement_lonewolf;
 }
 
 /** @returns {Object|undefined} the nearest bait boss in view */
