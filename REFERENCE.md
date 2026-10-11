@@ -3037,12 +3037,13 @@ What the server allows:
   fails 95% of the time. The rogue has neither skill, and invis does not drop aggro.
 - Leeches come off the priest's heal list while baiting.
 
-Baiting needs *every* outsider near the boss to be a leech (`isBossOutsider`, then
-`isBossLeech`). The first version baited whenever any leech was near. With a priested party also
-there, that party just kept the boss, and our tank held fire and scared it off instead of
-competing. Now a rival holding the boss gets it taken back (`getBossToTakeBack`): the priest
-absorbs, the warrior taunts, whichever is the assigned tank. That only works once our tank has
-coop credit on the boss, the same requirement the Franky counter has.
+A rival is an outsider who is not a leech, typically a party with a priest. When a rival holds
+the boss, the assigned tank takes it back (`getBossToTakeBack`): the priest absorbs, the warrior
+taunts. If leeches are near, the bait then scares it off again, and this repeats until a leech
+holds it. With no leech near, the tank just keeps it. Taking it back only works once our tank has
+coop credit on the boss, the same requirement the Franky counter has. Baiting only while *every*
+outsider was a leech was tried and dropped: with a rival party present, nothing ever scared the
+boss off, so it never reached the leeches.
 
 The hold has a patience timer. A leech can stand within range without ever hitting (parked, or
 farming something else), which would leave the boss untargeted and our side holding forever. Once

@@ -2306,12 +2306,10 @@ function getBaitedBoss() {
   if (knownTankers.some((name) => get_player(name)?.ctype === "priest"))
     return undefined;
 
-  // A priested party is a rival, not bait
-  const outsiders = Object.values(parent.entities).filter(
-    (entity) =>
-      isBossOutsider(entity) && distance(entity, boss) <= LEECH_BAIT_RANGE,
+  const isLeeched = Object.values(parent.entities).some(
+    (entity) => isBossLeech(entity) && distance(entity, boss) <= LEECH_BAIT_RANGE,
   );
-  if (!outsiders.length || !outsiders.every(isBossLeech)) return undefined;
+  if (!isLeeched) return undefined;
 
   if (boss.target) leechBait.untargetedSince = 0;
   else if (!leechBait.untargetedSince) leechBait.untargetedSince = Date.now();
@@ -2348,7 +2346,8 @@ function getBossToTakeBack() {
 
   const boss = getNearestBaitBoss();
   const holder = boss?.target && get_player(boss.target);
-  if (!holder || !isBossOutsider(holder) || getBaitedBoss()) return undefined;
+  if (!holder || !isBossOutsider(holder)) return undefined;
+  if (getBaitedBoss() && isBossLeech(holder)) return undefined;
 
   return isCoopFriendly(holder, boss) ? { boss, holder } : undefined;
 }
