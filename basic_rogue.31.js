@@ -209,6 +209,8 @@ function startSkillLoops() {
         !inRange(target) ||
         !shouldAttack(target) ||
         ms_to_next_skill("quickstab") !== 0 ||
+        character.s.penalty_cd ||
+        unansweredPenaltyMs > 0 ||
         character.mp <= G.skills["rspeed"].mp * 2
       )
         return false;

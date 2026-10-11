@@ -265,7 +265,7 @@ policies go through `msUntilHomeWindow`. Before this, `homeDropBossesLiveAtHome`
 `spawn` entry as "up", which pinned the whole squad at home for the entire season. Now the gap
 after a kill is hoppable until `HOME_RETURN_LEAD_MS` (32 min) before the next respawn: roughly 22
 min after a mrpumpkin kill, 62 after a mrgreen one, less whatever the kill itself ran over.
-`isEventDueSoon` in the cave strat still reads `msUntilHomeScheduledEvent` alone.
+The cave's `isEventDueSoon` reads the same `msUntilHomeWindow`, but secondhand (see below).
 
 **Which monsters actually care** — `G.drops.monsters_home_server`, read live rather than copied,
 so a patch that adds one is picked up for free. As of data version 6732 it is `crabxx`,
@@ -882,6 +882,16 @@ land mid-tick as a frequency drop and cut the cooldown by ~1.6s. If the server i
 `rankMageWeapons` scales the weapon frequency deltas by the same condition factor so the ranking
 stays consistent.
 
+## `getLoopInterval` under 250ms cycles (2026-10-11)
+
+The 250 in `getLoopInterval` is the polling step while the attack is far off. The loop sleeps
+`cycle / n` for the smallest `n` that keeps it above 250ms, then exactly `ms_to_next_skill("attack")`
+once the shot is that close. Below a 250ms cycle (sugarrush puts the rogue at 4.04/s) no `n` qualifies
+and `dynamicInterval` is `undefined`. The old `ms <= undefined` was always false, so every shot
+slept a full cycle on top of the reply wait: ping + 248ms, about 2.8/s at 100ms ping. Now it falls
+through to the exact wait. One limit is left: `fight()` awaits the attack reply, so a ping above the
+cycle caps the rate at `1 / ping`.
+
 ## Splitting a class into attack loop + per-skill loops (`runSkillLoop`)
 
 **The problem.** The original per-class `fight()` bundled the attack *and* every skill into one
@@ -1172,8 +1182,17 @@ Three timing facts, each of which broke it once:
    hand; chain it off the equip promise (`candyEquip.then(swapBackAfterHit)`).
 3. **Both ends need bounding.** Skip entirely when `etaMs <= equipLatencyMs` (the canes cannot land
    before the hit — pure loss: two equips plus a cooldown re-base). And clamp the hold with
-   `swapBackDeadline = now + characterAtkCycleMs - equipLatencyMs - CANDY_MIN_HOLD_MS`, or the
+   `swapBackDeadline = now + characterAtkCycleMs - ping - restorePenaltyMs`, or the
    minimum-dwell floor can push the restore past the next attack and fire it holding candy canes.
+
+**The restore's `penalty_cd` must clear before the next shot (2026-10-11).** `isAttackReady` waits on
+the client's `character.s.penalty_cd`, which the client only learns from the echo, a full ping after
+the restore is sent. The restore itself can't go out before the cane equip's reply, a ping after
+the swap. So the client clears at `max(canePenalty, ping + CANDY_MIN_HOLD_MS) + ping +
+restorePenalty` after the shot, and the swap is skipped when that is longer than the attack cycle.
+The old gate (`cycle > 250 + ping`) and a deadline that only subtracted `ping / 2` let a 1.74/s
+rogue swap up to ~325ms ping. Above ~150ms, every shot was then held back by about
+`2 * ping - 335` ms. Under the new gate he swaps only up to ~147ms ping.
 
 Do **not** wait for the server's `"hit"` event instead: it costs ping/2 inbound plus ping/2 for the
 swap command, leaving the canes on ~1 ping past the landing.
@@ -1201,9 +1220,9 @@ order, and it needs a free bag slot. Only one cane fits, so the proc chance is h
   swapped.
 - **The cost.** The rogue swap spends about 360ms of `penalty_cd` per shot (cane on, then two
   daggers back), and no quickstab can go out while the cane is held. `penalty_cd` does not refuse
-  casts: `consume_skill` adds what is left of it to the next cooldown, so quickstabs in that window
-  come back slower. At 0.25% per hit this is close to break-even. Watch the rogue's DPS before
-  keeping it on.
+  casts: `consume_skill` adds what is left of it to the next cooldown. So the quickstab loop waits
+  out `character.s.penalty_cd` and `unansweredPenaltyMs` instead of paying it. Quickstab is
+  mp-bound (320 mp per cast, every 250ms), so waiting loses nothing.
 
 ## Field reports must fail closed (`entFieldReport`)
 
@@ -1627,6 +1646,33 @@ rather than fought through.
 `useCryptStrategy` (crypt_fighter_strat.16.js), `useFarmingStrategy` (farming_fighter_strat.27.js) —
 and the first one to return `true` owns the tick, exactly like `merchantStrategies`. Events outrank
 the crypt: a crypt key keeps until tomorrow, a live boss does not.
+
+**The cave sits on both sides of events (2026-10-11).** `useCaveRunStrategy` ranks first. It owns
+every tick inside a run, plus the rejoin to an open run (`visit.resume`), because the run's 24-min
+clock keeps running while we are gone and an event walk can't leave a run anyway: town and magiport
+are refused, and leaving means `cave_exit`. `useCaveEntryStrategy` ranks just below events, so a
+live event wins over starting a fresh run, and it takes over (abandons) a walk to Dorr. The daily
+visit lasts until the reset, so waiting out an event costs nothing. The first strategy clears
+`isPreparingCave` each tick unless the walk under way belongs to the entry strategy. Otherwise the
+priest's zapper would wake up mid-walk to Dorr, and the flag would stay stuck on if an event took
+over.
+
+**A fresh run waits out the next home window, and always takes the `cave` preset.** No fresh run
+starts when a home window (a daily, a nightly, or a home-table boss respawn) is due within one run
+(`CAVE_EVENT_LEAD_MS` = 24 min), so the party is free when it lands. Fighters can't compute that
+window themselves. Slot 25 only loads for characters enabled in caracALconfig, and even loaded, only
+the first of them owns the realm sockets (`shouldOwnRealmSockets`). So the owner publishes
+`msUntilHomeWindow` to the `homeWindow` storage key every 15s, and fighters read it with
+`msUntilPublishedHomeWindow`. A missing or stale value (merchant down) reads as Infinity, which
+lets the run start. That fails open, the same way the guard did before.
+
+`dynamicParty` picks the `cave` preset (warrior, priest, mage) while `isCaveUnderway()`: the run's
+`caveRun` deadline, or `caveGathering`, which `approachCave` refreshes with a 60s TTL on every
+gathering tick. The flag has to live in storage because the merchant deploys and harakiris
+characters by its own `partyMems`, and it never loads the cave strat. Before this, the run took
+whatever preset was live (a mrgreen party went in as warrior, ranger, rogue), and an event going
+live mid-run could swap members out under it. `default` isn't reused for the cave because its
+rogue swap can drop the priest.
 
 **Why a boolean and not the target.** A strategy that spends its tick *travelling* has no target but
 still has to stop the ones below it from running. The old `changeToDailyEventTargets` returned

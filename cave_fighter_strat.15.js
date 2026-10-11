@@ -14,14 +14,17 @@ const CAVE_VISIT_TTL_MS = 60 * 1000;
 /** How long an entry request waits before it is sent again — past the 1.8s entry animation */
 const CAVE_ENTER_COOLDOWN_MS = 3 * 1000;
 
-/** How close a scheduled event may be before a run is skipped */
-const CAVE_EVENT_LEAD_MS = 30 * 60 * 1000;
-
 /** How long after the realm's daily reset a fresh run may start */
 const CAVE_RESET_DELAY_MS = 9 * 60 * 60 * 1000;
 
 /** Run length to assume when the state carries no deadline */
 const CAVE_RUN_MAX_MS = 24 * 60 * 1000;
+
+/** Skip a run when the next home window is this close */
+const CAVE_EVENT_LEAD_MS = CAVE_RUN_MAX_MS;
+
+/** Gathering flag lifetime */
+const CAVE_GATHERING_TTL_MS = 60 * 1000;
 
 // Dark Mage
 
@@ -201,11 +204,9 @@ function isHomeRealm() {
   return isAtHomeServer();
 }
 
-/** @returns {boolean} whether a scheduled event starts too soon for a run */
+/** @returns {boolean} whether the next home window lands inside a run */
 function isEventDueSoon() {
-  if (typeof msUntilHomeScheduledEvent !== "function") return false;
-
-  return msUntilHomeScheduledEvent() <= CAVE_EVENT_LEAD_MS;
+  return msUntilPublishedHomeWindow() <= CAVE_EVENT_LEAD_MS;
 }
 
 /**
@@ -1149,7 +1150,7 @@ async function approachCave() {
   if (!resuming) {
     if (isEventDueSoon())
       return caveLog("skipped: event soon", {
-        minutes: Math.round(msUntilHomeScheduledEvent() / 60000),
+        minutes: Math.round(msUntilPublishedHomeWindow() / 60000),
       });
 
     if (!visit?.available) return caveLog("no visit left", visit);
@@ -1162,6 +1163,8 @@ async function approachCave() {
   }
 
   isPreparingCave = true;
+
+  set(CAVE_GATHERING_LS_KEY, Date.now() + CAVE_GATHERING_TTL_MS);
 
   if (isTripHeld()) return travelling();
 
@@ -1182,12 +1185,17 @@ async function approachCave() {
   return travelling();
 }
 
+/** @returns {boolean} whether walking to Dorr for a fresh run */
+function isCaveEntryTrip() {
+  return isOnTrip() && fighterStrategies[tripRank] === useCaveEntryStrategy;
+}
+
 /**
- * Cave strategy entry point.
+ * Inside a run, or rejoining one.
  * @returns {Promise<object|undefined>} the outcome, if it owns this tick
  */
-async function useCaveStrategy() {
-  isPreparingCave = false;
+async function useCaveRunStrategy() {
+  if (!isCaveEntryTrip()) isPreparingCave = false;
 
   if (!hasCaveApi()) return undefined;
 
@@ -1195,11 +1203,24 @@ async function useCaveStrategy() {
 
   noteCaveRunEdge(inCave);
 
-  if (!inCave) return approachCave();
+  if (inCave) {
+    isPreparingCave = true;
+    return fightCaveRun();
+  }
 
-  isPreparingCave = true;
+  if (canResumeCaveRun(await getCaveVisit())) return approachCave();
 
-  return fightCaveRun();
+  return undefined;
+}
+
+/**
+ * Starts a fresh run.
+ * @returns {Promise<object|undefined>} the outcome, if it owns this tick
+ */
+async function useCaveEntryStrategy() {
+  if (!hasCaveApi() || isInCave()) return undefined;
+
+  return approachCave();
 }
 
 // Choice loop

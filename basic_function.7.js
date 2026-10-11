@@ -49,6 +49,15 @@ const HOME_SERVER = {
   serverIdentifier: "III",
 };
 
+/** Published by server_hop_utilities.25.js */
+const HOME_WINDOW_LS_KEY = "homeWindow";
+
+/** Published home window shelf life */
+const HOME_WINDOW_STALE_MS = 60 * 1000;
+
+/** Set while gathering for a cave run */
+const CAVE_GATHERING_LS_KEY = "caveGathering";
+
 /** Whether fighters harakiri on a server hop's loot-before-hopping cm */
 var HARAKIRI_ON_SERVER_HOP = false;
 
@@ -1116,11 +1125,11 @@ function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
     (breakpoint) => ((1 / attackFrequency()) * 1000) / breakpoint,
   ).find((loopInterval) => loopInterval > 250);
-  const frequencyInterval = (1 / attackFrequency()) * 1000;
+  const nextAttackMs = ms_to_next_skill("attack");
 
-  return ms_to_next_skill("attack") <= dynamicInterval
-    ? Math.max(ms_to_next_skill("attack"), 1)
-    : dynamicInterval ?? frequencyInterval;
+  return dynamicInterval === undefined || nextAttackMs <= dynamicInterval
+    ? Math.max(nextAttackMs, 1)
+    : dynamicInterval;
 }
 
 function ms_to_next_skill(skill) {
@@ -2250,6 +2259,20 @@ function isCaveRunOpen() {
   return get("caveRun") > Date.now();
 }
 
+/** @returns {boolean} whether gathering for or inside a cave run */
+function isCaveUnderway() {
+  return isCaveRunOpen() || get(CAVE_GATHERING_LS_KEY) > Date.now();
+}
+
+/** @returns {number} ms to the published home window, Infinity when unknown */
+function msUntilPublishedHomeWindow() {
+  const published = get(HOME_WINDOW_LS_KEY);
+  if (!Number.isFinite(published?.at)) return Infinity;
+  if (Date.now() - published.checkedAt > HOME_WINDOW_STALE_MS) return Infinity;
+
+  return published.at - Date.now();
+}
+
 const RSPEED_DURATION = G.conditions["rspeed"].duration;
 const RSPEED_MARGIN = 0.75 * 60 * 1000; // 45 seconds
 
@@ -2504,6 +2527,11 @@ const DYNAMIC_PARTY_PRESETS = {
 
     return [WARRIOR, PRIEST, MAGE];
   },
+
+  cave: () => {
+    HEALER = PRIEST;
+    return [WARRIOR, PRIEST, MAGE];
+  },
 };
 
 function getPresetMembers(preset, currentServer) {
@@ -2527,11 +2555,13 @@ function dynamicParty() {
   );
   const hpFraction = (name) => server.status[name].hp / G.monsters[name].hp;
   const activeEvent =
-    liveEvents
-      .filter((name) => HP_RANKED_BOSSES.includes(name))
-      .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs))[0] ??
-    liveEvents[0] ??
-    "default";
+    USE_CAVE_STRATEGY && isCaveUnderway()
+      ? "cave"
+      : (liveEvents
+          .filter((name) => HP_RANKED_BOSSES.includes(name))
+          .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs))[0] ??
+        liveEvents[0] ??
+        "default");
 
   if (!activeEvent) return;
 
@@ -2691,8 +2721,9 @@ if (character.ctype !== "merchant") {
 
   var fighterStrategies = [
     // The identifier only resolves when slot 15 was loaded above
-    ...(USE_CAVE_STRATEGY ? [useCaveStrategy] : []),
+    ...(USE_CAVE_STRATEGY ? [useCaveRunStrategy] : []),
     useEventStrategy,
+    ...(USE_CAVE_STRATEGY ? [useCaveEntryStrategy] : []),
     useCryptStrategy,
     useSpecialMobStrategy,
     useFarmingStrategy,

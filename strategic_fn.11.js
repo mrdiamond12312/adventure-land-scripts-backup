@@ -1643,6 +1643,18 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
   if (mustFreeOffhand && !character.items.some((_, num) => !getServerItem(num)))
     return;
 
+  const caneEquips = buildEquip(candycane1, candycane2);
+  const canePenaltyMs = caneEquips.length * EQUIP_PENALTY_MS;
+  const restorePenaltyMs =
+    (caneEquips.length + (mustFreeOffhand ? 1 : 0)) * EQUIP_PENALTY_MS;
+
+  // The client sees the restore's penalty_cd a ping after sending it
+  const penaltyClearsInMs =
+    Math.max(canePenaltyMs, character.ping + CANDY_MIN_HOLD_MS) +
+    character.ping +
+    restorePenaltyMs;
+  if (penaltyClearsInMs > characterAtkCycleMs) return;
+
   // One-way trip for an equip to take effect server-side
   const equipLatencyMs = character.ping / 2;
   const etaMs = projectileEtaMs(targetToAttack);
@@ -1654,14 +1666,10 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
   const swapBackAt = Date.now() + etaMs;
 
   const swapBackDeadline =
-    Date.now() +
-    characterAtkCycleMs -
-    equipLatencyMs -
-    CANDY_MIN_HOLD_MS -
-    EQUIP_PENALTY_MS * 2;
+    Date.now() + characterAtkCycleMs - character.ping - restorePenaltyMs;
 
   if (mustFreeOffhand) sendUnequip("offhand");
-  const candyEquip = sendEquips(buildEquip(candycane1, candycane2));
+  const candyEquip = sendEquips(caneEquips);
 
   // Hold the canes until the hit lands, then release
   const holdUntilSwapBack = () =>

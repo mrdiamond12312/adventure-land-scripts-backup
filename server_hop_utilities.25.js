@@ -460,6 +460,23 @@ function homeDropRank(candidate) {
   return at === getHomeServer() ? 0 : 2;
 }
 
+/** How often the next home window is published */
+const HOME_WINDOW_PUBLISH_MS = 15000;
+
+/** Shares msUntilHomeWindow with the fighters */
+function publishHomeWindow() {
+  if (!getRealmData()) return;
+
+  const untilWindow = msUntilHomeWindow();
+
+  set(HOME_WINDOW_LS_KEY, {
+    at: Number.isFinite(untilWindow) ? Date.now() + untilWindow : null,
+    checkedAt: Date.now(),
+  });
+}
+
+setInterval(publishHomeWindow, HOME_WINDOW_PUBLISH_MS);
+
 // Assigned rather than declared so basic_merchant.5.js's own handler still wins
 if (!isMerchant()) {
   on_destroy = function () {
