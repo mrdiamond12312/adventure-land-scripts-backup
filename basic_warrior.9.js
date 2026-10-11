@@ -159,6 +159,9 @@ function getTauntTarget() {
   )
     return baitedBoss;
 
+  const rivalBoss = getBossToTakeBack()?.boss;
+  if (rivalBoss && is_in_range(rivalBoss, "taunt")) return rivalBoss;
+
   if (!isAssignedAsTanker()) return null;
 
   const partyHealer = get_player(HEALER) || get_player(RANGER);

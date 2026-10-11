@@ -355,15 +355,6 @@ function getFrankyThief(franky) {
   return get_player(holderName) ?? undefined;
 }
 
-/**
- * @param {Object} holder - the player holding franky
- * @param {Object} franky - the boss
- * @returns {boolean} whether absorb treats the holder as friendly, at its normal cost
- */
-const isAbsorbFriendly = (holder, franky) =>
-  parent.party_list.includes(holder.name) ||
-  (character.s.coop?.id === franky.id && holder.s?.coop?.id === franky.id);
-
 /** @returns {Object|undefined} the franky thief the tanker can absorb back right now */
 function getFrankyThiefToAbsorb() {
   if (
@@ -376,7 +367,7 @@ function getFrankyThiefToAbsorb() {
   const franky = get_nearest_monster({ type: "franky" });
   const thief = franky && getFrankyThief(franky);
   return thief &&
-    isAbsorbFriendly(thief, franky) &&
+    isCoopFriendly(thief, franky) &&
     is_in_range(thief, "absorb")
     ? thief
     : undefined;

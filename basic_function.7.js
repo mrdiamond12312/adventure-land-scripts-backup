@@ -1323,7 +1323,7 @@ async function resolveKiteTarget(target) {
     if (thief)
       return withFixedSpot(
         target,
-        isAbsorbFriendly(thief, franky) ? thief : franky,
+        isCoopFriendly(thief, franky) ? thief : franky,
       );
 
     if (distance(FRANKY_PREFER_SPOT, character) > 100) {

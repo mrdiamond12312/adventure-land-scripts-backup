@@ -3015,7 +3015,11 @@ it is worth chasing at home, not abroad.
 Tanking earns contribution: every hit the boss lands adds `attack * B.dps_tank_mult` to the
 target's `monster.points` (server.js `add_coop_points`). On mrpumpkin and mrgreen, outsiders
 without a priest were riding our tank. A "leech" is a visible non-priest, non-merchant character
-that isn't ours or in `knownTankers`, and has no priest in its party. That includes every Lone Wolf
+that isn't on our account (`isOwnedCharacter`, all of `CODE_SLOTS`), in our party, or in
+`knownTankers`, and has no priest in its party. The first version only excluded
+`getMyCharacters()`, the current roster. So our own characters outside the event preset (a
+member still logged in after a roster swap, MoohThatCow, CupidCow) counted as leeches, and the
+priest kept scaring off the boss with no outsider around. That includes every Lone Wolf
 (`encouragement_lonewolf` means a solo character). Baiting only runs while one is within 600 of the
 boss and no trusted priest (`knownTankers`) is in view.
 
@@ -3027,11 +3031,18 @@ What the server allows:
   both warrior taunts. Agitate already refuses with an untargeted cooperative boss in range.
 - Scare (`jacko`, 5s cooldown) drops every monster targeting us, so whoever of ours holds the boss
   scares it off (`isHoldingBait` in each class's scare loop).
-- Getting it back off one of ours: absorb is reliable only within the party (on anyone else it fails
-  95% of the time at 6× mp), so the priest absorbs. The warrior's taunt redirects a mob off a party
-  member, so in a warrior comp it does the same job. The rogue has neither, and invis does not drop
-  aggro.
+- Getting it back off one of ours: the priest absorbs and the warrior taunts. Both go through
+  `is_same(..., 1)`, which counts our party and also anyone sharing our `s.coop.id`, meaning both
+  sides have already earned points on this boss (`isCoopFriendly`). Anyone else costs 6× mp and
+  fails 95% of the time. The rogue has neither skill, and invis does not drop aggro.
 - Leeches come off the priest's heal list while baiting.
+
+Baiting needs *every* outsider near the boss to be a leech (`isBossOutsider`, then
+`isBossLeech`). The first version baited whenever any leech was near. With a priested party also
+there, that party just kept the boss, and our tank held fire and scared it off instead of
+competing. Now a rival holding the boss gets it taken back (`getBossToTakeBack`): the priest
+absorbs, the warrior taunts, whichever is the assigned tank. That only works once our tank has
+coop credit on the boss, the same requirement the Franky counter has.
 
 The hold has a patience timer. A leech can stand within range without ever hitting (parked, or
 farming something else), which would leave the boss untargeted and our side holding forever. Once

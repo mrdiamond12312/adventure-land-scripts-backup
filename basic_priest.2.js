@@ -199,6 +199,9 @@ function getAbsorbTarget() {
   const frankyThief = getFrankyThiefToAbsorb();
   if (frankyThief) return frankyThief;
 
+  const rival = getBossToTakeBack()?.holder;
+  if (rival && is_in_range(rival, "absorb")) return rival;
+
   if (character.mp < G.skills["absorb"].mp + 600) return null;
 
   const baitedBoss = getBaitedBoss();

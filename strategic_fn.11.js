@@ -2262,12 +2262,23 @@ const LEECH_BAIT_COOLDOWN_MS = 60000;
 /** Bait timers */
 const leechBait = { untargetedSince: 0, offUntil: 0 };
 
+/** @returns {boolean} whether this player is a stranger on our boss */
+function isBossOutsider(player) {
+  if (player?.type !== "character" || player.npc || player.rip) return false;
+  if (player.ctype === "merchant") return false;
+  if (isOwnedCharacter(player.name) || getAlliedNames().has(player.name))
+    return false;
+
+  return !knownTankers.some(
+    (name) =>
+      name === player.name ||
+      (!!player.party && get_player(name)?.party === player.party),
+  );
+}
+
 /** @returns {boolean} whether this outsider fights without a priest */
 function isBossLeech(player) {
-  if (player?.type !== "character" || player.npc || player.rip) return false;
-  if (["priest", "merchant"].includes(player.ctype)) return false;
-  if (getMyCharacters().includes(player.name)) return false;
-  if (knownTankers.includes(player.name)) return false;
+  if (!isBossOutsider(player) || player.ctype === "priest") return false;
 
   return !Object.values(parent.entities).some(
     (other) =>
@@ -2278,22 +2289,29 @@ function isBossLeech(player) {
   );
 }
 
+/** @returns {Object|undefined} the nearest bait boss in view */
+function getNearestBaitBoss() {
+  return LEECH_BAIT_BOSSES.map((type) => get_nearest_monster({ type })).find(
+    Boolean,
+  );
+}
+
 /** @returns {Object|undefined} the bait boss while a leech is on it */
 function getBaitedBoss() {
   if (Date.now() < leechBait.offUntil) return undefined;
 
-  const boss = LEECH_BAIT_BOSSES.map((type) =>
-    get_nearest_monster({ type }),
-  ).find(Boolean);
+  const boss = getNearestBaitBoss();
   if (!boss) return undefined;
 
   if (knownTankers.some((name) => get_player(name)?.ctype === "priest"))
     return undefined;
 
-  const isLeeched = Object.values(parent.entities).some(
-    (entity) => isBossLeech(entity) && distance(entity, boss) <= LEECH_BAIT_RANGE,
+  // A priested party is a rival, not bait
+  const outsiders = Object.values(parent.entities).filter(
+    (entity) =>
+      isBossOutsider(entity) && distance(entity, boss) <= LEECH_BAIT_RANGE,
   );
-  if (!isLeeched) return undefined;
+  if (!outsiders.length || !outsiders.every(isBossLeech)) return undefined;
 
   if (boss.target) leechBait.untargetedSince = 0;
   else if (!leechBait.untargetedSince) leechBait.untargetedSince = Date.now();
@@ -2314,6 +2332,25 @@ function isBaitHeld(target, boss = getBaitedBoss()) {
 /** @returns {boolean} whether we hold the baited boss */
 function isHoldingBait() {
   return getBaitedBoss()?.target === character.name;
+}
+
+/** @returns {boolean} whether absorb and taunt treat the holder as friendly */
+function isCoopFriendly(holder, boss) {
+  return (
+    parent.party_list.includes(holder.name) ||
+    (character.s.coop?.id === boss.id && holder.s?.coop?.id === boss.id)
+  );
+}
+
+/** @returns {{boss: Object, holder: Object}|undefined} a rival holding a bait boss we can take back */
+function getBossToTakeBack() {
+  if (!isAssignedAsTanker()) return undefined;
+
+  const boss = getNearestBaitBoss();
+  const holder = boss?.target && get_player(boss.target);
+  if (!holder || !isBossOutsider(holder) || getBaitedBoss()) return undefined;
+
+  return isCoopFriendly(holder, boss) ? { boss, holder } : undefined;
 }
 
 function shouldAttack(target = get_target()) {
