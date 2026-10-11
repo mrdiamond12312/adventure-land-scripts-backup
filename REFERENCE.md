@@ -3009,3 +3009,26 @@ read the stop as "checked and gone" and treat the fresh sighting as a mob that i
 `rharpy` is also in `SPECIAL_MOB_IDS`, so fighters hunt it and the home-realm observer records it. It
 is one of the `monsters_home_server` drops (see the realm fatigue section), so the same rule applies:
 it is worth chasing at home, not abroad.
+
+## Handing a seasonal boss to leeches (`getBaitedBoss`, strategic_fn.11.js, 2026-10-11)
+
+Tanking earns contribution: every hit the boss lands adds `attack * B.dps_tank_mult` to the
+target's `monster.points` (server.js `add_coop_points`). On mrpumpkin and mrgreen, outsiders
+without a priest were riding our tank. A "leech" is a visible non-priest, non-merchant character
+that isn't ours or in `knownTankers`, and has no priest in its party. That includes every Lone Wolf
+(`encouragement_lonewolf` means a solo character). Baiting only runs while one is within 600 of the
+boss and no trusted priest (`knownTankers`) is in view.
+
+What the server allows:
+
+- An untargeted monster takes the next non-evaded hit's owner as its target (`target_player` on
+  hit). So while the boss is untargeted, nothing of ours may land a hit on it. That covers
+  attacks, quickstab, zapper and taunt. `isBaitHeld` gates `shouldAttack`, the priest's zapper, and
+  both warrior taunts. Agitate already refuses with an untargeted cooperative boss in range.
+- Scare (`jacko`, 5s cooldown) drops every monster targeting us, so whoever of ours holds the boss
+  scares it off (`isHoldingBait` in each class's scare loop).
+- Getting it back off one of ours: absorb is reliable only within the party (on anyone else it fails
+  95% of the time at 6× mp), so the priest absorbs. The warrior's taunt redirects a mob off a party
+  member, so in a warrior comp it does the same job. The rogue has neither, and invis does not drop
+  aggro.
+- Leeches come off the priest's heal list while baiting.

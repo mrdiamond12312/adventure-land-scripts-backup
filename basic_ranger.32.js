@@ -456,7 +456,7 @@ function startSkillLoops() {
 
   runSkillLoop({
     skill: "scare",
-    canUse: () => character.fear,
+    canUse: () => character.fear || isHoldingBait(),
     cast: () => scareAwayMobs(),
   });
 }

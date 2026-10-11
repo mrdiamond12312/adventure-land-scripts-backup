@@ -204,6 +204,7 @@ async function usePullStrategies(target) {
               calculateDamage(mob, character) + partyDmgRecieved <
                 healReceivableAmount &&
               is_in_range(mob, "taunt") &&
+              !isBaitHeld(mob) &&
               (!mob.target ||
                 partyMems
                   .filter((id) => id !== character.name)

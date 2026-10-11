@@ -150,7 +150,18 @@ async function cleaveLoop() {
  * @returns {Object|null} the mob to taunt, or null
  */
 function getTauntTarget() {
-  if (!isAssignedAsTanker() || character.mp <= G.skills["taunt"].mp) return null;
+  if (character.mp <= G.skills["taunt"].mp) return null;
+
+  // Taunt redirects off a party member: takes the boss back so scare can hand it on
+  const baitedBoss = getBaitedBoss();
+  if (
+    baitedBoss?.target !== character.name &&
+    partyMems.includes(baitedBoss?.target) &&
+    is_in_range(baitedBoss, "taunt")
+  )
+    return baitedBoss;
+
+  if (!isAssignedAsTanker()) return null;
 
   const partyHealer = get_player(HEALER) || get_player(RANGER);
   if (!partyHealer || partyHealer.rip) return null;
@@ -174,6 +185,7 @@ function getTauntTarget() {
   const target = get_targeted_monster();
   const shouldTauntTarget =
     target &&
+    !isBaitHeld(target) &&
     (!target.target ||
       (target.target !== character.name &&
         partyMems.includes(target.target) &&
@@ -193,7 +205,11 @@ function shouldWarriorScare() {
       (mob) => mob.target === character.name,
     ).length > 2;
   const isReadyToScare = character.mp > 100 && character.cc < 100;
-  return character.fear || (isDangerouslyLow && isOverwhelmed && isReadyToScare);
+  return (
+    character.fear ||
+    isHoldingBait() ||
+    (isDangerouslyLow && isOverwhelmed && isReadyToScare)
+  );
 }
 
 function startSkillLoops() {

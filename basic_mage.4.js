@@ -80,7 +80,7 @@ async function fight(target) {
 
   // Attack, paired with self-energize (spare mp feeds the shot). Every other
   // skill runs on its own loop (startSkillLoops).
-  if (isAttackReady && attackTarget && shouldAttack()) {
+  if (isAttackReady && attackTarget && shouldAttack(attackTarget)) {
     set_message("Attacking");
 
     const promisesToAwait = [];
@@ -189,6 +189,7 @@ function startSkillLoops() {
   runSkillLoop({
     skill: "scare",
     canUse: () => {
+      if (isHoldingBait()) return true;
       if (character.mp <= 100) return false;
       const target = get_targeted_monster();
       if (!target || target.max_hp <= 3000) return false;

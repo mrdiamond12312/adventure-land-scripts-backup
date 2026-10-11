@@ -128,7 +128,7 @@ async function fight(target, isMovingControlled = false) {
           })
           .catch((e) => attackErrorHandler(e)),
       );
-    } else if (attackTarget && shouldAttack()) {
+    } else if (attackTarget && shouldAttack(attackTarget)) {
       set_message("Attacking");
       promisesToAwait.push(
         use_skill("attack", attackTarget)
@@ -196,6 +196,14 @@ function getAbsorbTarget() {
   if (frankyThief) return frankyThief;
 
   if (character.mp < G.skills["absorb"].mp + 600) return null;
+
+  const baitedBoss = getBaitedBoss();
+  const baitHolder =
+    baitedBoss?.target !== character.name &&
+    getMyCharacters().includes(baitedBoss?.target) &&
+    get_entity(baitedBoss.target);
+  if (baitHolder && is_in_range(baitHolder, "absorb")) return baitHolder;
+
   const vulnerableMems = getMyCharacters().filter(
     (id) => id !== character.name && id !== TANKER,
   );
@@ -237,6 +245,7 @@ function isOutHealed() {
 }
 
 function shouldPriestScare() {
+  if (isHoldingBait()) return true;
   if (!isOutHealed()) return false;
 
   if (currentStrategy === usePullStrategies) {
@@ -266,12 +275,14 @@ function getZapTarget() {
   )
     return null;
 
+  const baitedBoss = getBaitedBoss();
   const targetsInRange = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
       !isCaveFriendly(entity) &&
       is_in_range(entity, "zapperzap") &&
-      !entity["1hp"],
+      !entity["1hp"] &&
+      !isBaitHeld(entity, baitedBoss),
   );
 
   const isTanker = isAssignedAsTanker();

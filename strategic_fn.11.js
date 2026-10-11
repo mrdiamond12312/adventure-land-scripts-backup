@@ -2249,11 +2249,73 @@ function adaptStrategyToParty() {
   else changeToNormalStrategies();
 }
 
+/** Bosses handed to leeches instead of tanked */
+const LEECH_BAIT_BOSSES = ["mrpumpkin", "mrgreen"];
+
+/** How close to the boss an outsider counts as on it */
+const LEECH_BAIT_RANGE = 600;
+
+/**
+ * An outsider fighting without a priest: solo (lone wolf) or a priestless party.
+ * @param {Object} [player]
+ * @returns {boolean}
+ */
+function isBossLeech(player) {
+  if (player?.type !== "character" || player.npc || player.rip) return false;
+  if (["priest", "merchant"].includes(player.ctype)) return false;
+  if (getMyCharacters().includes(player.name)) return false;
+  if (knownTankers.includes(player.name)) return false;
+
+  return !Object.values(parent.entities).some(
+    (other) =>
+      other.type === "character" &&
+      other.ctype === "priest" &&
+      !!player.party &&
+      other.party === player.party,
+  );
+}
+
+/**
+ * The bait boss in view while a leech is on it and no trusted priest is around.
+ * @returns {Object|undefined}
+ */
+function getBaitedBoss() {
+  const boss = LEECH_BAIT_BOSSES.map((type) =>
+    get_nearest_monster({ type }),
+  ).find(Boolean);
+  if (!boss) return undefined;
+
+  if (knownTankers.some((name) => get_player(name)?.ctype === "priest"))
+    return undefined;
+
+  const isLeeched = Object.values(parent.entities).some(
+    (entity) => isBossLeech(entity) && distance(entity, boss) <= LEECH_BAIT_RANGE,
+  );
+  return isLeeched ? boss : undefined;
+}
+
+/**
+ * Whether hitting this would take the baited boss off the leeches.
+ * @param {Object} [target]
+ * @param {Object} [boss] - getBaitedBoss(), when the caller already has it
+ * @returns {boolean}
+ */
+function isBaitHeld(target, boss = getBaitedBoss()) {
+  return !!boss && target?.id === boss.id && !boss.target;
+}
+
+/** @returns {boolean} whether we hold the baited boss and should scare it off */
+function isHoldingBait() {
+  return getBaitedBoss()?.target === character.name;
+}
+
 function shouldAttack(target = get_target()) {
   const partyHealer = get_entity(HEALER);
 
   // PvP: players are always worth shooting, priest or not
   if (target?.type === "character") return true;
+
+  if (isBaitHeld(target)) return false;
 
   if (character.map === "crypt") {
     return !!partyHealer && !partyHealer.rip;
