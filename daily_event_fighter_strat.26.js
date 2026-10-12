@@ -343,11 +343,11 @@ async function fightFranky() {
 }
 
 /**
- * @param {Object} franky - the boss
+ * @param {Object} boss
  * @returns {Object|undefined} the stranger holding it, when the tanker should take it back
  */
-function getFrankyThief(franky) {
-  const holderName = franky?.target;
+function getBossThief(boss) {
+  const holderName = boss?.target;
   if (
     !holderName ||
     getMyCharacters().includes(holderName) ||
@@ -357,22 +357,34 @@ function getFrankyThief(franky) {
   return get_player(holderName) ?? undefined;
 }
 
-/** @returns {Object|undefined} the franky thief the tanker can absorb back right now */
-function getFrankyThiefToAbsorb() {
-  if (
-    !server.status.franky?.live ||
-    !isAssignedAsTanker() ||
-    character.mp < G.skills["absorb"].mp
-  )
-    return;
+/** @returns {{boss: Object, thief: Object}|undefined} a live dragged boss the tanker may take back */
+function getStolenDragBoss() {
+  if (!isAssignedAsTanker()) return;
 
-  const franky = get_nearest_monster({ type: "franky" });
-  const thief = franky && getFrankyThief(franky);
-  return thief &&
-    isCoopFriendly(thief, franky) &&
-    is_in_range(thief, "absorb")
-    ? thief
-    : undefined;
+  for (const bossType of Object.keys(BOSS_DRAG_ROUTES)) {
+    if (!server.status[bossType]?.live) continue;
+
+    const boss = get_nearest_monster({ type: bossType });
+    const thief = boss && getBossThief(boss);
+    if (thief && isCoopFriendly(thief, boss)) return { boss, thief };
+  }
+}
+
+/** @returns {Object|undefined} the thief of a dragged boss the priest can absorb back right now */
+function getBossThiefToAbsorb() {
+  if (character.mp < G.skills["absorb"].mp) return;
+
+  const thief = getStolenDragBoss()?.thief;
+  return thief && is_in_range(thief, "absorb") ? thief : undefined;
+}
+
+/** @returns {boolean} whether the warrior can agitate a stolen dragged boss back right now */
+function shouldAgitateBossBack() {
+  if (is_on_cooldown("agitate") || character.mp < G.skills["agitate"].mp)
+    return false;
+
+  const boss = getStolenDragBoss()?.boss;
+  return !!boss && distance(character, boss) < G.skills["agitate"].range;
 }
 
 // --- Snowman ---

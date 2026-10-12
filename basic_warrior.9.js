@@ -273,6 +273,12 @@ function startSkillLoops() {
   });
 
   runSkillLoop({
+    skill: "agitate",
+    canUse: () => shouldAgitateBossBack(),
+    cast: () => use_skill("agitate"),
+  });
+
+  runSkillLoop({
     skill: "scare",
     canUse: () => shouldWarriorScare(),
     cast: () => scareAwayMobs(),

@@ -1828,10 +1828,10 @@ adds 1 to `points`, however hard it lands.
 
 ## Franky: the priest absorbs a stolen boss back to the corner (2026-10-11)
 
-The corner drag (`FRANKY_PREFER_SPOT`, `resolveKiteTarget`) only works while franky is on the
+The corner drag (`BOSS_DRAG_ROUTES.franky`, `dragToSpot`) only works while franky is on the
 priest; if a stranger got there first it stays wherever they hold it, and the priest used to sit
 in the empty corner. Priests have no taunt, so the take-back is `absorb` on the holder
-(`getFrankyThief`: not ours, not `knownTankers` — same exemption as crabxx).
+(`getBossThief`: not ours, not `knownTankers` — same exemption as crabxx).
 
 Absorb is only usable on a *friendly* target (`is_same(player, target, 1)`). On anyone else it
 costs 6× mp, needs level 75, and fails 95% of the time with the cooldown spent — never worth it.
@@ -3083,3 +3083,23 @@ A mob untargeted or on us only holds the attack for a priest when its dps to us,
 chugged off cooldown restores (400 hp / 2s = 200 hp/s, `hpot1Regen`), is over
 `DANGEROUS_MOB_DAMAGE`, and it is not kitable (`isKitable`: our speed beats its `charge` and our
 range beats its range). Before, any mob over 600 dps left characters standing until the priest came.
+
+## Boss drag routes (`BOSS_DRAG_ROUTES`, `dragToSpot`, 2026-10-12)
+
+The Franky corner drag is now one table entry, and every entry gets the Franky treatment. While a
+live route boss or one of its adds is targeted, `assignRoles` makes the priest the tanker. Only a
+party with a priest drags; without one the tanker fights the boss where it stands. The tanker walks to the spot with
+`smartmoveDebug` on (so it keeps fighting and whatever is on it follows), unconditionally, then
+kites around the spot. A stranger holding the boss is taken back the same way for all of them
+(`getBossThief`, `getStolenDragBoss`): a priest tanker absorbs the thief (`getBossThiefToAbsorb`), a
+warrior tanker kites at the boss and agitates it back once in agitate range
+(`shouldAgitateBossBack`). Both need `isCoopFriendly`, the same `is_same(..., 1)` rule as the crabxx
+take-back, and both anchor on the boss until then so their own hits earn the coop tag. mrpumpkin goes to halloween (-243, 680), the gap between
+the xscorpion/pumpkin box and the minimush box; mrgreen goes to the spookytown mummy spawn (255,
+-1432), inside the mummies' rage box. Straight lines from each boss spawn to its spot were checked
+clear of `G.geometry` walls.
+
+Not compatible with the leash (`getBaitedBoss`, off since `LEECH_BAIT_BOSSES = []`). Before putting
+mrpumpkin or mrgreen back on it: skip `dragToSpot` while the boss is baited, have `getBossThief`
+ignore leeches while baiting, and drop `getBossToTakeBack`. Otherwise the priest absorbs the boss off
+a leech and scares it off again in a loop, and the forced drag walks him off without the boss.

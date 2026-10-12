@@ -1841,12 +1841,9 @@ function rotateLeader(partyList, newLeaderId) {
 }
 
 function assignRoles() {
-  const currentTarget = get_targeted_monster();
+  const dragBossType = getBossDragRoute(get_targeted_monster())?.[0];
 
-  if (
-    server.status.franky?.live &&
-    ["franky", "nerfedmummy"].includes(currentTarget?.mtype)
-  ) {
+  if (server.status[dragBossType]?.live && partyMems.includes(PRIEST)) {
     TANKER = PRIEST;
     partyMems = rotateLeader(partyMems, TANKER);
     return;

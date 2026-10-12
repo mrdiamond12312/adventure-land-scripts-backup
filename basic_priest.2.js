@@ -194,10 +194,10 @@ function getCurseTarget() {
   );
 }
 
-// A stranger holding franky, else a party member (not us, not the tank) in absorb range and holding aggro.
+// A stranger holding a dragged boss, else a party member (not us, not the tank) in absorb range and holding aggro.
 function getAbsorbTarget() {
-  const frankyThief = getFrankyThiefToAbsorb();
-  if (frankyThief) return frankyThief;
+  const bossThief = getBossThiefToAbsorb();
+  if (bossThief) return bossThief;
 
   const rival = getBossToTakeBack()?.holder;
   if (rival && is_in_range(rival, "absorb")) return rival;

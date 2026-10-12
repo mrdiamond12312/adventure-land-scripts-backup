@@ -1292,11 +1292,30 @@ function extraDistanceWithinHitbox(target) {
 }
 
 var lastKitingTargetId = undefined;
-const FRANKY_PREFER_SPOT = {
-  x: 11,
-  y: 8,
-  map: "level2w",
+
+/**
+ * Bosses the priest, as tanker, drags to a spot and kites around there, keyed
+ * by boss type. `mtypes` are the targets that start the drag: the boss and its
+ * adds. Without a priest in the party the boss is fought where it stands.
+ * @type {Object<string, {spot: Object, mtypes: string[]}>}
+ */
+const BOSS_DRAG_ROUTES = {
+  franky: {
+    spot: { map: "level2w", x: 11, y: 8 },
+    mtypes: ["franky", "nerfedmummy"],
+  },
+  // Between the xscorpion and minimush spawns
+  mrpumpkin: {
+    spot: { map: "halloween", x: -243, y: 680 },
+    mtypes: ["mrpumpkin", "jr"],
+  },
+  // The mummy spawn
+  mrgreen: {
+    spot: { map: "spookytown", x: 255, y: -1432 },
+    mtypes: ["mrgreen", "greenjr"],
+  },
 };
+
 function withFixedSpot(target, spot) {
   return {
     ...target,
@@ -1309,39 +1328,61 @@ function withFixedSpot(target, spot) {
   };
 }
 
-// Per-mtype overrides: some mobs get kited around a fixed spot instead of their own
-// (moving) position — a corner of the map for FRANKY, the boss or its spawn center for CRABXX.
-async function resolveKiteTarget(target) {
-  if (
-    target.type === "monster" &&
-    ["franky", "nerfedmummy"].includes(target.mtype) &&
-    isAssignedAsTanker()
-  ) {
-    // Go to whoever stole it: to absorb it back, or to hit it first so absorb is friendly
-    const franky = get_nearest_monster({ type: "franky" });
-    const thief = character.ctype === "priest" && getFrankyThief(franky);
-    if (thief)
-      return withFixedSpot(
-        target,
-        isCoopFriendly(thief, franky) ? thief : franky,
-      );
+/**
+ * @param {Object} target
+ * @returns {[string, Object]|undefined} the boss type and drag route this target belongs to
+ */
+function getBossDragRoute(target) {
+  if (target?.type !== "monster") return undefined;
+  return Object.entries(BOSS_DRAG_ROUTES).find(([, route]) =>
+    route.mtypes.includes(target.mtype),
+  );
+}
 
-    if (distance(FRANKY_PREFER_SPOT, character) > 100) {
-      smartmoveDebug = true;
-      try {
-        await advanceSmartMove(FRANKY_PREFER_SPOT, {
-          speed: 200,
-          useScare: false,
-          useMagiport: false,
-          useBlink: false,
-          useTautPath: true,
-          smartmoveDebug: true,
-        });
-      } finally {
-        smartmoveDebug = false;
-      }
+/**
+ * Walks to the spot fighting on the way, so whatever is on us follows.
+ * @param {Object} target - the kite target
+ * @param {Object} spot - where to drag it
+ * @returns {Promise<Object>} the target anchored at the spot
+ */
+async function dragToSpot(target, spot) {
+  if (distance(spot, character) > 100) {
+    smartmoveDebug = true;
+    try {
+      await advanceSmartMove(spot, {
+        speed: 200,
+        useScare: false,
+        useMagiport: false,
+        useBlink: false,
+        useTautPath: true,
+        smartmoveDebug: true,
+      });
+    } finally {
+      smartmoveDebug = false;
     }
-    return withFixedSpot(target, FRANKY_PREFER_SPOT);
+  }
+  return withFixedSpot(target, spot);
+}
+
+// Per-mtype overrides: some mobs get kited around a fixed spot instead of their own
+// (moving) position — a BOSS_DRAG_ROUTES spot, or the boss or its spawn center for CRABXX.
+async function resolveKiteTarget(target) {
+  const dragRoute = isAssignedAsTanker() && getBossDragRoute(target);
+  if (dragRoute) {
+    const [bossType, route] = dragRoute;
+    const boss = get_nearest_monster({ type: bossType });
+
+    // Take a stolen boss back: the priest absorbs the thief, the warrior agitates
+    // at the boss; either hits the boss first so the take-back is friendly
+    const thief =
+      ["priest", "warrior"].includes(character.ctype) && getBossThief(boss);
+    if (thief) {
+      const isAbsorbReady =
+        character.ctype === "priest" && isCoopFriendly(thief, boss);
+      return withFixedSpot(target, isAbsorbReady ? thief : boss);
+    }
+
+    if (partyMems.includes(PRIEST)) return dragToSpot(target, route.spot);
   }
 
   if (target?.type === "monster" && target.mtype.includes("crabx")) {
@@ -2381,27 +2422,19 @@ const shouldDeployRogue = () => {
 };
 
 const DYNAMIC_PARTY_PRESETS = {
-  mrgreen: {
-    USIII: () => {
-      RANGER = RANGER1;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, ROGUE];
-    },
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, ROGUE];
-    },
-    default: [WARRIOR, PRIEST, ROGUE],
+  mrgreen: () => {
+    HEALER = PRIEST;
+    return [WARRIOR, PRIEST, ROGUE];
   },
   mrpumpkin: {
-    USIII: [MAGE, PRIEST, ROGUE],
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, ROGUE];
+    USIII: () => {
+      HEALER = PRIEST;
+      return [MAGE, PRIEST, ROGUE];
     },
-    default: [WARRIOR, PRIEST, ROGUE],
+    default: () => {
+      HEALER = PRIEST;
+      return [WARRIOR, PRIEST, ROGUE];
+    },
   },
   franky: {
     EUII: () => {
