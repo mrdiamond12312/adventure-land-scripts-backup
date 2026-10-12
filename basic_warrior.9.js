@@ -101,7 +101,7 @@ function getWarriorCast() {
   if (isOnTrip()) return getEnRouteCast();
 
   const { attackTarget } = planFight(fightTarget);
-  if (!attackTarget || !shouldAttack(attackTarget)) return;
+  if (!attackTarget || attackTarget.dead || !shouldAttack(attackTarget)) return;
 
   return () =>
     Promise.allSettled(

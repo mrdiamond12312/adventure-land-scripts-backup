@@ -62,6 +62,7 @@ function planFight(target) {
     .filter(
       (entity) =>
         entity.type === "monster" &&
+        !entity.dead &&
         !isCaveFriendly(entity) &&
         (party.has(entity.target) ||
           (entity.cooperative && entity.target)) &&
@@ -112,7 +113,7 @@ function getRogueCast() {
   if (isOnTrip()) return getEnRouteCast();
 
   const { attackTarget } = planFight(fightTarget);
-  if (!attackTarget || !shouldAttack(attackTarget)) return;
+  if (!attackTarget || attackTarget.dead || !shouldAttack(attackTarget)) return;
 
   return () =>
     Promise.allSettled(

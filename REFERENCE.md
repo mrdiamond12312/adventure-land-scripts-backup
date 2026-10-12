@@ -3144,11 +3144,15 @@ Two classes also used to `change_target` only sometimes (the rogue when somethin
 mage only in pull mode), which left `hitAndRun`, kiting off `get_target()`, with nothing to close
 the gap on after a long move. Their `aimAt` now always targets the pick, out of reach or not.
 
-`castOnAttackCooldown` sends a plain attack through `attack()`, not `use_skill("attack")`. Both hit the
-same server cooldown, but only `attack()` (the client's `monster_attack`) makes the target current
-(`ctarget`). With the swing on its own loop, `get_target()` is otherwise only as fresh as the last
-`aimAt`, and the rogue's candy swap restore (`restoreRogueWeapons`) and every gear loop pick weapons
-off `get_target()`: a stale one meant an extra equip and penalty between swings.
+`castOnAttackCooldown` sends a plain attack as `use_skill("attack")` and calls `change_target` itself.
+With the swing on its own loop, `get_target()` is otherwise only as fresh as the last `aimAt`, and
+the rogue's candy swap restore (`restoreRogueWeapons`) and every gear loop pick weapons off
+`get_target()`: a stale one meant an extra equip and penalty between swings. It does not use
+`attack()`, although that also sets the target: the client's `monster_attack` refuses anything
+past `range + 10` without sending it, while `inRange` (and the server) allow `range + xrange`. The
+candy swap fires alongside the swing without waiting for its answer (a melee hit lands too soon
+to wait), so a locally refused swing still swapped canes. The warrior's and rogue's casts also
+skip a `dead` mob for the same reason.
 
 ## Town fallback walks inside the trip (`walkToSpawn`, strategic_smart_move.21.js, 2026-10-12)
 

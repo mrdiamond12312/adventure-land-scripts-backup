@@ -2414,9 +2414,9 @@ function onAttackError(error, target) {
 }
 
 /**
- * Casts on the shared attack cooldown, compensating it. A plain attack goes
- * through attack(), which also makes the target current: the candy swap's
- * restore and the gear loop pick weapons off get_target().
+ * Casts on the shared attack cooldown, compensating it. A plain attack makes
+ * its target current: the candy swap's restore and the gear loop pick weapons
+ * off get_target().
  * @param {string} skill - "attack" or "heal"
  * @param {Object} target
  * @returns {Promise}
@@ -2424,7 +2424,8 @@ function onAttackError(error, target) {
 function castOnAttackCooldown(skill, target) {
   const attackFrequencyBeforeCompensate = attackFrequency();
   set_message(skill === "heal" ? `Heal ${target.name}` : "Attacking");
-  return (skill === "attack" ? attack(target) : use_skill(skill, target))
+  if (skill === "attack") change_target(target);
+  return use_skill(skill, target)
     .then(() => {
       attackSpeedCompensate(attackFrequencyBeforeCompensate);
       reduce_cooldown("attack", character.ping * 0.95);
