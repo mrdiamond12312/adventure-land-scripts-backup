@@ -3162,3 +3162,35 @@ the slow native `smart_move`. It cannot call `smartMove`: every new `smartMove` 
 session, which would end the trip that hit the town segment. The pathfinder's speed only sets how it
 weighs walking against towning; at 400 it plans no town. Native `smart_move` is kept only for when
 no walk-only path comes back.
+
+## Gear on trips, pull skills off them, nothing while towning (2026-10-13)
+
+`currentStrategy` used to be one loop per class doing both gear and the pull-only skills, and it
+was not `whileMoving`, so nobody changed gear on a trip. Gear is the same under either strategy, so
+it is now `equipClassGear` (normal_strategy.12.js) on each class's `gear` loop, which is
+`whileMoving`. The pull-only skills (the mage's cburst, the warrior's agitate and pull-taunt) are
+`usePullSkills` (pull_strategy.13.js) on a separate `pullSkills` loop that only runs under the pull
+strategy and never on a trip, since they would aggro the whole route. `currentStrategy` is now only
+the mode flag (`=== usePullStrategies`); `usePullStrategies`/`useNormalStrategy` still compose the
+two. The mage's gear loop leaves the native mover's broom on for the trip
+(`oldAdvanceSmartMove` equips it; caracAL's mover never does).
+
+Any equip cancels a town channel, the trip's own town segment included, so `equipBatch` refuses
+while `character.c.town`. That covers the gear loops and the other mid-trip equips:
+`scareAwayMobs` (jacko, on `smartMove`'s scare interval), `useTemporalSurge` (orb of temporal, from
+the `whileMoving` surge drain) and midas looting; scare and surge also skip their own skill then.
+`sendEquips`/`sendUnequip` callers (candy swap, cleave, broom) already skip any channel.
+
+## Midas loot as a trip sets off (`lootBeforeTrip`, basic_function.7.js, 2026-10-13)
+
+Standing still, the Midas user only loots once `midasLootingThreshold` chests (15) are in view, in
+Midas gear; travelling, `midasLooting` opens everything in reach at once in whatever is worn, so the
+chests are not left behind. In the crypt the count never reaches 15 and the strategy walks between
+junctions and bosses all the time, so its boss chests almost never got the Midas bonus.
+`advanceSmartMove` (both movers go through it) now calls `lootBeforeTrip` unless it is a
+`smartmoveDebug` move such as the boss drag. It forces a Midas loot (`midasLooting(true)`: Midas set
+on, then the opens) when the trip leaves the chests' reach (another map, a named place, or over
+`CHEST_OPEN_REACH`, so a strategy re-issuing its move near the spot does not trigger it), a chest is
+in reach, and no mob targets us, since the set swaps out the armour. It is not awaited, so the trip
+starts at once; the opens go out once the equip lands, while the chests are still in reach, and
+`isLooting` keeps both the travelling loot and the gear loops from cutting in.

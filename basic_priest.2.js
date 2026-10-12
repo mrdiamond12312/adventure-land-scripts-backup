@@ -370,13 +370,13 @@ function startSkillLoops() {
     return action && (() => castOnAttackCooldown(action.skill, action.target));
   });
 
-  // Strategy: gear runs on a fixed cadence via currentStrategy, so each
-  // strategy can dress the priest differently, decoupled from the attack loop.
+  // Gear, trips included, on a fixed cadence decoupled from the action loop
   runSkillLoop({
-    skill: "strategy",
+    skill: "gear",
     floorMs: 100,
+    whileMoving: true,
     canUse: () => true,
-    cast: () => currentStrategy(get_target()),
+    cast: () => equipClassGear(get_target()),
   });
 
   runSkillLoop({

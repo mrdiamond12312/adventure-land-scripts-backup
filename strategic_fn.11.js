@@ -1422,6 +1422,9 @@ async function equipBatch(suggestedItems, options = {}) {
   const { preventPenaltizeNextAttack = true, preventKeySnatch = true } =
     options;
 
+  // An equip cancels the town channel
+  if (character.c.town) return false;
+
   if (preventKeySnatch && isEquipingItems) return false;
 
   if (
@@ -2514,7 +2517,8 @@ async function scareAwayMobs() {
     hasJackoAvailable &&
     isMobTargetingMe &&
     !is_on_cooldown("scare") &&
-    character.mp > 100
+    character.mp > 100 &&
+    !character.c.town
   ) {
     return Promise.all([
       equipBatch(
@@ -2592,7 +2596,8 @@ async function useTemporalSurge({ whileMoving = false } = {}) {
   if (
     is_on_cooldown("temporalsurge") ||
     character.mp < surgeMpNeeded() ||
-    (isAssignedAsTanker() && character.s.burned)
+    (isAssignedAsTanker() && character.s.burned) ||
+    character.c.town
   )
     return false;
 

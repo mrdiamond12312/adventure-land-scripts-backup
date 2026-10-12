@@ -1,25 +1,24 @@
-async function useNormalStrategy(target) {
-  const promises = [];
+/**
+ * Puts on the class's gear for the target, the same under either strategy.
+ * Each class runs it on its own gear loop, trips included.
+ * @param {Object|Object[]} [target] - the ranger passes its plan's gear targets
+ * @returns {Promise|undefined}
+ */
+function equipClassGear(target) {
   switch (character.ctype) {
     case "mage":
-      promises.push(equipBatch(calculateMageItems(target)));
-      break;
-
+      return equipBatch(calculateMageItems(target));
     case "warrior":
-      promises.push(equipBatch(calculateWarriorItems()));
-      break;
-
+      return equipBatch(calculateWarriorItems());
     case "ranger":
-      promises.push(equipRangerItems(target));
-      break;
-
+      return equipRangerItems(target);
     case "rogue":
-      promises.push(equipBatch(calculateRogueItems(target)));
-      break;
-
+      return equipBatch(calculateRogueItems(target));
     case "priest":
-      promises.push(equipBatch(calculatePriestItems(target)));
-      break;
+      return equipBatch(calculatePriestItems(target));
   }
-  return Promise.all(promises);
+}
+
+async function useNormalStrategy(target) {
+  return equipClassGear(target);
 }

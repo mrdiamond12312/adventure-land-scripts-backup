@@ -212,13 +212,21 @@ function startSkillLoops() {
 
   runActionLoop(getWarriorCast);
 
-  // Strategy: gear + pull-strategy skills (agitate, pull-taunt) run on a fixed
-  // cadence via currentStrategy, decoupled from the attack loop.
+  // Gear, trips included, on a fixed cadence decoupled from the attack loop
   runSkillLoop({
-    skill: "strategy",
+    skill: "gear",
     floorMs: 50,
+    whileMoving: true,
     canUse: () => true,
-    cast: () => currentStrategy(get_target()),
+    cast: () => equipClassGear(get_target()),
+  });
+
+  // Pull skills (agitate, pull-taunt), never on a trip
+  runSkillLoop({
+    skill: "pullSkills",
+    floorMs: 50,
+    canUse: () => currentStrategy === usePullStrategies,
+    cast: () => usePullSkills(),
   });
 
   runSkillLoop({

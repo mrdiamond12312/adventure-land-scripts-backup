@@ -132,13 +132,22 @@ function startSkillLoops() {
 
   runActionLoop(getMageCast);
 
-  // Strategy: gear + pull-strategy skills (cburst) run on a fixed cadence via
-  // currentStrategy, decoupled from the attack loop.
+  // Gear, trips included, on a fixed cadence decoupled from the attack loop.
+  // Keeps the native mover's broom on for the trip.
   runSkillLoop({
-    skill: "strategy",
+    skill: "gear",
     floorMs: 100,
-    canUse: () => true,
-    cast: () => currentStrategy(get_target()),
+    whileMoving: true,
+    canUse: () => !(isOnTrip() && getServerSlot("mainhand")?.name === "broom"),
+    cast: () => equipClassGear(get_target()),
+  });
+
+  // Pull skills (cburst), never on a trip
+  runSkillLoop({
+    skill: "pullSkills",
+    floorMs: 100,
+    canUse: () => currentStrategy === usePullStrategies,
+    cast: () => usePullSkills(),
   });
 
   runSkillLoop({

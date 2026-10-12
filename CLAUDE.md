@@ -155,4 +155,5 @@ Standalone / auxiliary (not wired into the load graph above, used directly or ad
   *why* is non-obvious, it belongs in `REFERENCE.md`, not inline.
 - Strategy swapping uses feature-flag-style globals rather than branching call sites: e.g.
   `currentStrategy` is reassigned by `changeToPullStrategies()` / `changeToNormalStrategies()`
-  (`basic_function.7.js`), and callers just invoke `currentStrategy()`.
+  (`basic_function.7.js`), and callers check `currentStrategy === usePullStrategies`. Gear goes
+  through `equipClassGear`, the pull-only skills through `usePullSkills`.

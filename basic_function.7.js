@@ -775,6 +775,8 @@ async function abandonTrip() {
 
 // Wrapper to use which depends on client platform
 async function advanceSmartMove(props, options = { useScare: true }) {
+  if (!options.smartmoveDebug) lootBeforeTrip(props);
+
   const rank = activeStrategyRank ?? -1;
   // Mid-trip the chain only runs strategies above the trip's owner
   const isTakeover = rank >= 0 && isOnTrip();
@@ -1863,6 +1865,9 @@ const POTION_REQUEST_AT = 200;
 const LOOTING_LIMIT = 15;
 var isLooting = false;
 
+/** How far from a chest midasLooting opens it */
+const CHEST_OPEN_REACH = 800;
+
 const MIDAS_GEAR = {
   helmet: "wcap",
   chest: "wattire",
@@ -1988,7 +1993,7 @@ async function midasLooting(forced = false) {
         let breakFlag = lootingThreshold * 2;
         for (const chest of chests) {
           if (breakFlag-- <= 0) break;
-          if (distance(chest, character) <= 800) {
+          if (distance(chest, character) <= CHEST_OPEN_REACH) {
             promises.push(parent.open_chest(chest.id));
           }
         }
@@ -2006,7 +2011,9 @@ async function midasLooting(forced = false) {
           if (breakFlag-- <= 0) break;
 
           if (
-            partyMidasUsers.every((player) => distance(chest, player) > 800)
+            partyMidasUsers.every(
+              (player) => distance(chest, player) > CHEST_OPEN_REACH,
+            )
           ) {
             promises.push(parent.open_chest(chest.id));
           }
@@ -2027,6 +2034,30 @@ async function midasLooting(forced = false) {
   } finally {
     if (shouldReset) isLooting = false;
   }
+}
+
+/**
+ * As a trip sets off, a Midas user forces a Midas loot of the chests it would
+ * leave behind, without holding the trip up. Skipped with a mob on us: the
+ * set swaps out our armour.
+ * @param {string|Object} destination - what advanceSmartMove was handed
+ */
+function lootBeforeTrip(destination) {
+  if (!MIDAS_CHARACTER.includes(character.name) || character.cave) return;
+
+  const isLeavingReach =
+    typeof destination !== "object" ||
+    (!!destination.map && destination.map !== character.map) ||
+    distance(character, destination) > CHEST_OPEN_REACH;
+  const isChestInReach = Object.values(parent.chests).some(
+    (chest) => distance(chest, character) <= CHEST_OPEN_REACH,
+  );
+  const isTargeted = Object.values(parent.entities).some(
+    (mob) => mob.type === "monster" && mob.target === character.name,
+  );
+  if (!isLeavingReach || !isChestInReach || isTargeted) return;
+
+  midasLooting(true).catch((e) => console.warn(e));
 }
 
 function suicide() {

@@ -246,7 +246,7 @@ async function firePlan(plan) {
   if (plan.mode === "shot" && isCupidOnServer()) {
     const swap = inFlightSlots.mainhand
       ? restoreAttackingBow()
-      : currentStrategy(plan.gearTargets);
+      : equipClassGear(plan.gearTargets);
     if (!swap) return;
     promisesToAwait.push(swap);
   }
@@ -431,11 +431,12 @@ function startSkillLoops() {
 
   runActionLoop(getRangerCast, 1500);
 
-  // Exception: cupid left in hand with no one to heal jumps the queue, so the
-  // ranger is not shooting mobs with a heal bow.
+  // Gear, trips included. Exception: cupid left in hand with no one to heal
+  // jumps the queue, so the ranger is not shooting mobs with a heal bow.
   runSkillLoop({
-    skill: "strategy",
+    skill: "gear",
     floorMs: 100,
+    whileMoving: true,
     canUse: () => {
       // Cheap gate first: only cupid, or a bare mainhand, justifies the scan
       // mid-window.
@@ -446,7 +447,7 @@ function startSkillLoops() {
       if (!pendingPlan) return true;
       return !isAttackReady() || pendingPlan.mode === "shot";
     },
-    cast: () => currentStrategy(pendingPlan?.gearTargets),
+    cast: () => equipClassGear(pendingPlan?.gearTargets),
   });
 
   // Own loop to narrow the gap between marks (was the TODO in fight).

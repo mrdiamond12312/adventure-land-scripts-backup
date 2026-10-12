@@ -2,6 +2,15 @@
 const WEAK_COOP_MOB_ATTACK = 100;
 
 async function usePullStrategies(target) {
+  return Promise.all([equipClassGear(target), usePullSkills()]);
+}
+
+/**
+ * The pull-only skills: the mage's cburst, the warrior's agitate and pull-taunt.
+ * Never run on a trip: they would aggro the route.
+ * @returns {Promise}
+ */
+async function usePullSkills() {
   const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
   const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
   const healerFreq = (partyHealer && attackFrequency(partyHealer)) || 1;
@@ -19,8 +28,6 @@ async function usePullStrategies(target) {
 
   switch (character.ctype) {
     case "mage":
-      promises.push(equipBatch(calculateMageItems(target)));
-
       // Spend spare mp to help the priest keep the party topped off, but only
       // when the healer is close, healthy and actually a priest. Only a batch
       // worth of sleeping mobs pays for the mp — the blaster keeps the mage
@@ -47,8 +54,6 @@ async function usePullStrategies(target) {
       break;
 
     case "warrior":
-      promises.push(equipBatch(calculateWarriorItems()));
-
       // Everything agitate would reach — what the pull is judged on
       const mobsInAgitateRange = mobsList.filter((mob) =>
         is_in_range(mob, "agitate"),
@@ -224,18 +229,6 @@ async function usePullStrategies(target) {
           );
       }
 
-      break;
-
-    case "rogue":
-      promises.push(equipBatch(calculateRogueItems(target)));
-      break;
-
-    case "ranger":
-      promises.push(equipRangerItems(target));
-      break;
-
-    case "priest":
-      promises.push(equipBatch(calculatePriestItems(target)));
       break;
 
     default:
