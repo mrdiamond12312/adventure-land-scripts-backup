@@ -3069,3 +3069,17 @@ while he walks away within 160 of the spawn. The old blanket smart-move refusal 
 predates the kill queue, back when any spawn in range was surged in passing. The merchant's
 scout still gets that refusal by default. So cleave fires at its own 720, the same way agitate gates on its own
 420, and the warrior uses it to pick up mobs.
+
+## Boss minions only count while the boss is in sight (`fightSimpleBoss`, 2026-10-12)
+
+`getBossMinion` matches by `mtype` from `G.monsters[boss].spawns`, so it also matches a natural
+spawn of the same type (e.g. a wild `jr`) that has nothing to do with the boss. Hunting one of
+those kept the rogue parked on the wrong map while the boss was live elsewhere. Minions are now
+only picked while the boss itself is visible; otherwise the strategy walks to the boss.
+
+## Waiting for a priest only when potions and kiting cannot cover it (`shouldAttack`, 2026-10-12)
+
+A mob untargeted or on us only holds the attack for a priest when its dps to us, less what hpot1
+chugged off cooldown restores (400 hp / 2s = 200 hp/s, `hpot1Regen`), is over
+`DANGEROUS_MOB_DAMAGE`, and it is not kitable (`isKitable`: our speed beats its `charge` and our
+range beats its range). Before, any mob over 600 dps left characters standing until the priest came.

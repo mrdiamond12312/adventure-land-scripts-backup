@@ -70,7 +70,8 @@ const SIMPLE_BOSSES = {
 };
 
 /**
- * Minions first, then the boss, walking to its last known spot when out of sight.
+ * Minions first while the boss is in sight, then the boss, walking to its last
+ * known spot when out of sight.
  * @param {string[]} types - the bosses to pick from, lowest hp ratio first
  * @returns {Promise<object|undefined>} the outcome, while one of them is live
  */
@@ -88,10 +89,11 @@ async function fightSimpleBoss(types) {
   else changeToNormalStrategies();
   if (bossRangeRate) rangeRate = bossRangeRate();
 
-  const minion = getBossMinion(bossToFight.type);
+  let bossInstance = get_nearest_monster({ type: bossToFight.type });
+
+  const minion = bossInstance && getBossMinion(bossToFight.type);
   if (minion) return engage(minion);
 
-  let bossInstance = get_nearest_monster({ type: bossToFight.type });
   if (!bossInstance && bossToFight.x !== undefined) {
     await advanceSmartMove(bossToFight);
     bossInstance = get_nearest_monster({ type: bossToFight.type });

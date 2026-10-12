@@ -2343,6 +2343,22 @@ function getBossToTakeBack() {
   return isCoopFriendly(holder, boss) ? { boss, holder } : undefined;
 }
 
+/** @returns {number} hp per second hpot1 restores, chugged off cooldown */
+function hpot1Regen() {
+  const [, hp] = G.items.hpot1.gives.find(([stat]) => stat === "hp");
+  return hp / (G.items.hpot1.cooldown / 1000);
+}
+
+/**
+ * @param {Object} mob
+ * @returns {boolean} whether we outrun its charge and outrange it
+ */
+function isKitable(mob) {
+  return (
+    character.speed > (mob.charge ?? mob.speed) && character.range > mob.range
+  );
+}
+
 function shouldAttack(target = get_target()) {
   const partyHealer = get_entity(HEALER);
 
@@ -2365,7 +2381,9 @@ function shouldAttack(target = get_target()) {
 
   if (
     target &&
-    calculateDamage(target, character, false) > DANGEROUS_MOB_DAMAGE &&
+    !isKitable(target) &&
+    calculateDamage(target, character, false) - hpot1Regen() >
+      DANGEROUS_MOB_DAMAGE &&
     (!target.target || target.target === character.name)
   ) {
     const partyPriests = [...getAlliedNames()]
