@@ -1849,7 +1849,7 @@ function assignRoles() {
   if (
     server.status[dragRoute?.[0]]?.live &&
     partyMems.includes(PRIEST) &&
-    !dragRoute[1].formulaTanker
+    !isDragReleased(dragRoute)
   ) {
     TANKER = PRIEST;
     partyMems = rotateLeader(partyMems, TANKER);

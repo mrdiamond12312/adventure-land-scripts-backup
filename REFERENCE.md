@@ -3100,11 +3100,20 @@ the xscorpion/pumpkin box and the minimush box; mrgreen goes to the spookytown m
 -1432), inside the mummies' rage box. Straight lines from each boss spawn to its spot were checked
 clear of `G.geometry` walls.
 
-mrgreen is `formulaTanker`: `assignRoles` does not force the priest for it, so the usual
-damage-ratio pick decides from the spawn on (mrgreen, greenjr and mummies all hit physical, so it
-lands on the warrior), and that tanker drags it all the way to the mummy spawn. The warrior's regular
-taunt rules skip cooperative mobs, so `getTauntTarget` takes a drag boss off whichever ally holds it
-(`getDragBossOnAlly`) while he is the tanker.
+mrgreen is `releaseAtSpot`: the priest is forced as tanker and drags it like the others, but once
+the boss comes within `DRAG_ARRIVAL_DISTANCE` (300) of the mummy spawn the drag lets go for the rest
+of that boss's life (`isDragReleased`; `arrivedDragBossIds` is keyed by boss id, so drifting back out
+doesn't restart it). `assignRoles` then falls to its damage-ratio pick (mrgreen, greenjr and
+mummies all hit physical, so the warrior), and `resolveKiteTarget` stops anchoring on the spot. The
+warrior's regular taunt rules skip cooperative mobs, so as tanker `getTauntTarget` takes a drag boss
+off whichever ally holds it (`getDragBossOnAlly`).
+
+The drag walks in legs like the cave escort (`CAVE_ESCORT_LEASH`/`CAVE_ESCORT_CLOSE`): a
+`stopWatcher` cancels the walk once the boss trails by more than `DRAG_LEASH` (200), and the walk
+only resumes once it is back within `DRAG_CLOSE` (80) (`isDragWaiting`). The boss follows aggro, not
+a path, so while waiting the tanker kites at the boss rather than standing still: that closes the
+gap and, if the boss turned to someone else, the tanker's hits take it back. Walking off to the spot
+at once used to leave a slower or distracted boss behind.
 
 Not compatible with the leash (`getBaitedBoss`, off since `LEECH_BAIT_BOSSES = []`). Before putting
 mrpumpkin or mrgreen back on it: skip `dragToSpot` while the boss is baited, have `getBossThief`

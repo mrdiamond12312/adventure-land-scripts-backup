@@ -1301,12 +1301,13 @@ function extraDistanceWithinHitbox(target) {
 var lastKitingTargetId = undefined;
 
 /**
- * Bosses the tanker drags to a spot and kites around there, keyed by boss
- * type. `mtypes` are the targets that start the drag: the boss and its adds.
- * The priest is made the tanker, unless `formulaTanker` leaves it to the usual
- * damage-ratio pick. Without a priest in the party, or with a known tanker in
- * sight to take it back, the boss is fought where it stands.
- * @type {Object<string, {spot: Object, mtypes: string[], formulaTanker?: boolean}>}
+ * Bosses the priest, as tanker, drags to a spot and kites around there, keyed
+ * by boss type. `mtypes` are the targets that start the drag: the boss and its
+ * adds. Without a priest in the party, or with a known tanker in sight to take
+ * it back, the boss is fought where it stands. With `releaseAtSpot` the drag
+ * lets go once the boss reaches the spot: the usual damage-ratio tanker pick
+ * and kiting take over.
+ * @type {Object<string, {spot: Object, mtypes: string[], releaseAtSpot?: boolean}>}
  */
 const BOSS_DRAG_ROUTES = {
   franky: {
@@ -1322,9 +1323,30 @@ const BOSS_DRAG_ROUTES = {
   mrgreen: {
     spot: { map: "spookytown", x: 255, y: -1432 },
     mtypes: ["mrgreen", "greenjr"],
-    formulaTanker: true,
+    releaseAtSpot: true,
   },
 };
+
+/** How close to its spot a dragged boss counts as arrived */
+const DRAG_ARRIVAL_DISTANCE = 300;
+
+/** Ids of dragged bosses that reached their spot; arrival sticks once seen */
+const arrivedDragBossIds = new Set();
+
+/**
+ * @param {[string, Object]} [dragRoute] - from getBossDragRoute
+ * @returns {boolean} whether its boss reached the spot and the drag let go of it
+ */
+function isDragReleased(dragRoute) {
+  const [bossType, route] = dragRoute ?? [];
+  if (!route?.releaseAtSpot) return false;
+
+  const boss = get_nearest_monster({ type: bossType });
+  if (!boss) return false;
+  if (distance(boss, route.spot) <= DRAG_ARRIVAL_DISTANCE)
+    arrivedDragBossIds.add(boss.id);
+  return arrivedDragBossIds.has(boss.id);
+}
 
 /** @returns {Object|undefined} a dragged boss in view held by one of our allies, not us */
 function getDragBossOnAlly() {
@@ -1367,14 +1389,33 @@ function isKnownTankerAround() {
   });
 }
 
+/** How far the dragged boss may trail before the drag stops for it */
+const DRAG_LEASH = 200;
+
+/** How close a trailing boss must come before the drag walks on */
+const DRAG_CLOSE = 80;
+
+/** Set while the drag waits for its boss to catch up */
+let isDragWaiting = false;
+
 /**
- * Walks to the spot fighting on the way, so whatever is on us follows.
+ * Walks to the spot fighting on the way, so whatever is on us follows. Stops
+ * once the boss trails past DRAG_LEASH and kites at it until it is back within
+ * DRAG_CLOSE, which also wins back a boss that lost interest.
  * @param {Object} target - the kite target
  * @param {Object} spot - where to drag it
- * @returns {Promise<Object>} the target anchored at the spot
+ * @param {Object} [boss] - the dragged boss
+ * @returns {Promise<Object>} the target anchored at the spot, or at the boss while waiting
  */
-async function dragToSpot(target, spot) {
-  if (distance(spot, character) > 100) {
+async function dragToSpot(target, spot, boss) {
+  if (distance(spot, character) <= 100) return withFixedSpot(target, spot);
+
+  const isTrailing = () => !!boss && distance(character, boss) > DRAG_LEASH;
+  if (isTrailing()) isDragWaiting = true;
+  else if (!boss || distance(character, boss) <= DRAG_CLOSE)
+    isDragWaiting = false;
+
+  if (!isDragWaiting) {
     smartmoveDebug = true;
     try {
       await advanceSmartMove(spot, {
@@ -1384,19 +1425,22 @@ async function dragToSpot(target, spot) {
         useBlink: false,
         useTautPath: true,
         smartmoveDebug: true,
-      });
+        stopWatcher: isTrailing,
+      }).catch((e) => console.warn(e));
     } finally {
       smartmoveDebug = false;
     }
+    if (isTrailing()) isDragWaiting = true;
   }
-  return withFixedSpot(target, spot);
+
+  return withFixedSpot(target, isDragWaiting ? boss : spot);
 }
 
 // Per-mtype overrides: some mobs get kited around a fixed spot instead of their own
 // (moving) position — a BOSS_DRAG_ROUTES spot, or the boss or its spawn center for CRABXX.
 async function resolveKiteTarget(target) {
   const dragRoute = isAssignedAsTanker() && getBossDragRoute(target);
-  if (dragRoute) {
+  if (dragRoute && !isDragReleased(dragRoute)) {
     const [bossType, route] = dragRoute;
     const boss = get_nearest_monster({ type: bossType });
 
@@ -1411,7 +1455,7 @@ async function resolveKiteTarget(target) {
     }
 
     if (partyMems.includes(PRIEST) && !isKnownTankerAround())
-      return dragToSpot(target, route.spot);
+      return dragToSpot(target, route.spot, boss);
   }
 
   if (target?.type === "monster" && target.mtype.includes("crabx")) {
