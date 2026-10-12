@@ -49,11 +49,14 @@ function restoreRogueWeapons() {
   );
 }
 
-async function fight(target) {
-  // Snapshot for attackSpeedCompensate: weapon swaps mid-tick change frequency,
-  // and the attack cooldown must be timed with the frequency at fire time.
-  const attackFrequencyBeforeCompensate = attackFrequency();
-
+/**
+ * The selected target as the rogue fights it: in pull mode the best
+ * party-aggroed mob, and what to swing at, it when in reach, else the best
+ * party-aggroed mob that is.
+ * @param {Object} [target]
+ * @returns {{focus?: Object, attackTarget?: Object}}
+ */
+function planFight(target) {
   const party = getAlliedNames();
   const allAggroedByParty = Object.values(parent.entities)
     .filter(
@@ -86,44 +89,40 @@ async function fight(target) {
     target = allAggroedByParty[0] ?? target;
   }
 
-  if (!target) return;
+  if (!target) return {};
 
-  // The picked target can sit outside our reach; rather than skip the swing,
-  // hit the best party-aggroed mob that is actually in range.
   const attackTarget = inRange(target)
     ? target
     : allAggroedByParty.filter((mob) => mob !== target && inRange(mob))[0];
+  return { focus: target, attackTarget };
+}
 
-  if (attackTarget) change_target(attackTarget);
+/**
+ * Targets what to swing at, else the out-of-reach pick: hitAndRun closes the
+ * gap on get_target().
+ * @param {Object} [target]
+ */
+function aimAt(target) {
+  const { focus, attackTarget } = planFight(target);
+  if (focus) change_target(attackTarget ?? focus);
+}
 
-  const promisesToAwait = [];
+/** @returns {(() => Promise)|undefined} the swing to take now, if any */
+function getRogueCast() {
+  if (isOnTrip()) return getEnRouteCast();
 
-  if (isAttackReady() && attackTarget && shouldAttack()) {
-    if (!ms_to_next_skill("invis")) {
-      promisesToAwait.push(use_skill("invis").then(() => reduceCd("invis")));
-    }
-    promisesToAwait.push(
-      attack(attackTarget)
-        .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduceCd("attack", false);
-        })
-        .catch((e) => {
-          attackErrorHandler(e);
-        }),
+  const { attackTarget } = planFight(fightTarget);
+  if (!attackTarget || !shouldAttack(attackTarget)) return;
+
+  return () =>
+    Promise.allSettled(
+      [
+        !ms_to_next_skill("invis") &&
+          use_skill("invis").then(() => reduceCd("invis")),
+        castOnAttackCooldown("attack", attackTarget),
+        maybeCandySwap(attackTarget, { restore: restoreRogueWeapons }),
+      ].filter(Boolean),
     );
-
-    const candySwap = maybeCandySwap(attackTarget, {
-      restore: restoreRogueWeapons,
-    });
-    if (candySwap) promisesToAwait.push(candySwap);
-
-    set_message("Attacking");
-  }
-
-  try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 2500);
-  } catch (e) {}
 }
 
 // --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
@@ -169,7 +168,7 @@ function startSkillLoops() {
   let pendingRspeedBuffee = null;
   let pendingFollowUpSkill = undefined;
 
-  runEnRouteAttackLoop();
+  runActionLoop(getRogueCast, 2500);
 
   // Gear only while the attack is on cooldown: equipping re-bases the attack
   // cooldown, so swapping mid-window would delay the shot.
@@ -241,10 +240,11 @@ async function mainLoop() {
     }
 
     //// EVENTS, THE CRYPT, THEN THE FARMING SPOT
-    // Mid-trip it only hands back a target when a higher strategy took over
-    const target = await selectFightTarget();
+    // Mid-trip it only hands back a target when a higher strategy took over.
+    // The action loop swings.
+    fightTarget = await selectFightTarget();
 
-    if (target && !isOnTrip()) await fight(target);
+    if (fightTarget && !isOnTrip()) aimAt(fightTarget);
   } catch (e) {
     if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
   }

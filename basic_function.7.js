@@ -2808,7 +2808,7 @@ if (character.ctype !== "merchant") {
 }
 
 /**
- * This tick is mine, hit this — each class change_targets it in fight().
+ * This tick is mine, hit this — each class aims at it in mainLoop and its action loop swings.
  * @param {object} [target]
  */
 const engage = (target) => ({ target });

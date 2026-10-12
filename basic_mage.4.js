@@ -32,18 +32,19 @@ const inRange = (entity, mult = 1) =>
   !!entity &&
   distance(entity, character) <= (character.range + character.xrange) * mult;
 
-async function fight(target) {
-  // Snapshot for attackSpeedCompensate: blaster's attack speed modifier means
-  // frequency can change mid-tick when weapons swap, and the attack cooldown
-  // must be timed with the frequency the shot was actually fired at.
-  const attackFrequencyBeforeCompensate = attackFrequency();
-
-  // Filter: Find all aggroed mobs within a reasonable pull distance, excluding formidable ones
+/**
+ * The selected target as the mage fights it: in pull mode the best aggroed
+ * mob for the splash, and what to shoot, it when in reach, else the best
+ * aggroed mob that is.
+ * @param {Object} [target]
+ * @returns {{focus?: Object, attackTarget?: Object}}
+ */
+function planFight(target) {
   const aggroedMobs = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
       !isCaveFriendly(entity) &&
-      entity.target && // Must be aggroed
+      entity.target &&
       !entity.dead &&
       !entity.s?.fullguardx &&
       !haveFormidableMonsterAroundTarget(entity) &&
@@ -52,72 +53,56 @@ async function fight(target) {
 
   if (
     currentStrategy === usePullStrategies &&
-    !target?.mtype.includes("crabx")
+    !target?.mtype.includes("crabx") &&
+    aggroedMobs.length
   ) {
-    if (aggroedMobs.length) {
-      const bestTarget = sortPullTargets(
-        aggroedMobs,
-        getSplashRadius(),
-        cooperativeFirst,
-      )[0];
-
-      target = bestTarget ?? target;
-      change_target(target);
-    }
+    target =
+      sortPullTargets(aggroedMobs, getSplashRadius(), cooperativeFirst)[0] ??
+      target;
   }
 
-  // --- Early Exit ---
-  if (!target) return;
+  if (!target) return {};
 
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-
-  // The best target can sit outside our reach; rather than skip the shot, take
-  // the best aggroed mob that is actually in range instead.
   const attackTarget = inRange(target)
     ? target
     : aggroedMobs.filter((mob) => mob !== target && inRange(mob))[0];
+  return { focus: target, attackTarget };
+}
 
-  // Attack, paired with self-energize (spare mp feeds the shot). Every other
-  // skill runs on its own loop (startSkillLoops).
-  if (isAttackReady && attackTarget && shouldAttack(attackTarget)) {
-    set_message("Attacking");
+/** @param {Object} [target] - the selected target, faced as planFight picks it */
+function aimAt(target) {
+  const { focus } = planFight(target);
+  if (focus) change_target(focus);
+}
 
-    const promisesToAwait = [];
+/** @returns {(() => Promise)|undefined} the shot to take now, if any */
+function getMageCast() {
+  if (isOnTrip()) return getEnRouteCast();
 
-    if (!is_on_cooldown("energize")) {
-      promisesToAwait.push(
-        use_skill(
-          "energize",
-          character,
-          Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
-        )
-          .then(() => reduceCd("energize"))
-          .catch((e) => attackErrorHandler(e)),
-      );
-    }
+  const { attackTarget } = planFight(fightTarget);
+  if (!attackTarget || !shouldAttack(attackTarget)) return;
 
-    promisesToAwait.push(
-      attack(attackTarget)
-        .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduceCd("attack", false);
-        })
-        .catch((e) => attackErrorHandler(e)),
+  // Paired with self-energize: spare mp feeds the shot
+  return () =>
+    Promise.allSettled(
+      [
+        !is_on_cooldown("energize") &&
+          use_skill(
+            "energize",
+            character,
+            Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
+          )
+            .then(() => reduceCd("energize"))
+            .catch((e) => attackErrorHandler(e)),
+        castOnAttackCooldown("attack", attackTarget),
+      ].filter(Boolean),
     );
-
-    try {
-      await withTimeout(Promise.allSettled(promisesToAwait), 1000);
-    } catch (e) {
-      console.log(e);
-    }
-  }
 }
 
 // --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
 
 // Ally worth energizing: needs the mana, and we have spare to give.
-// (Self-energize is paired with the attack in fight, not here.)
+// (Self-energize is paired with the attack in getMageCast, not here.)
 function getEnergizeBuffee() {
   const buffee = getLowestMana();
   const shouldEnergize =
@@ -145,7 +130,7 @@ function startSkillLoops() {
   let pendingEnergizeBuffee = null;
   let pendingReflectionBuffee = null;
 
-  runEnRouteAttackLoop();
+  runActionLoop(getMageCast);
 
   // Strategy: gear + pull-strategy skills (cburst) run on a fixed cadence via
   // currentStrategy, decoupled from the attack loop.
@@ -242,11 +227,11 @@ async function mainLoop() {
     }
 
     // --- Target Selection --- events, then the crypt, then the farming spot
-    // Mid-trip it only hands back a target when a higher strategy took over
-    const target = await selectFightTarget();
+    // Mid-trip it only hands back a target when a higher strategy took over.
+    // The action loop shoots.
+    fightTarget = await selectFightTarget();
 
-    // Target found, chilling with my staff :cow2:
-    if (target && !isOnTrip()) await fight(target);
+    if (fightTarget && !isOnTrip()) aimAt(fightTarget);
   } catch (e) {
     // If the error is 'smart_move' or 'death', it was handled internally (by the throw)
     // If it's a real runtime error, log it

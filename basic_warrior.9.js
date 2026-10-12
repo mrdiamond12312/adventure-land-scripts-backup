@@ -23,25 +23,29 @@ rangeRate = originRangeRate;
 
 const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
 
-/** @returns {boolean} whether the attack cooldown is up */
-const isAttackReady = () =>
-  ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+/**
+ * @param {Object} entity
+ * @param {number} [mult] - multiplier on attack range
+ * @returns {boolean} whether the entity is within that range
+ */
+const inRange = (entity, mult = 1) =>
+  distance(entity, character) < (character.range + character.xrange) * mult;
 
-// Main fight function
-async function fight(target) {
+/** @returns {boolean} whether a blacklisted blasting mob stands around the target */
+const haveIgnoreMobAroundTarget = (targetMob) =>
+  mobsListAroundTarget(targetMob, getSplashRadius()).some((mob) =>
+    MELEE_IGNORE_LIST.includes(mob.mtype),
+  );
+
+/**
+ * The selected target as the warrior fights it: in pull mode the best mob for
+ * the AOE, and what to swing at, it when in reach, else another aggroed mob.
+ * @param {Object} [target]
+ * @returns {{focus?: Object, attackTarget?: Object}}
+ */
+function planFight(target) {
   const blastRadius = getSplashRadius();
-  const attackRange = character.range + character.xrange;
-  const attackFrequencyBeforeComponsate = attackFrequency();
-  const inRange = (entity, mult = 1) =>
-    distance(entity, character) < attackRange * mult;
 
-  const haveIgnoreMobAroundTarget = (targetMob) => {
-    return mobsListAroundTarget(targetMob, blastRadius).some((mob) =>
-      MELEE_IGNORE_LIST.includes(mob.mtype),
-    );
-  };
-
-  // --- Target Aggregation & Selection (usePullStrategies) ---
   let altTarget = undefined;
   const candidates = Object.values(parent.entities).filter(
     (entity) =>
@@ -59,73 +63,56 @@ async function fight(target) {
   if (
     typeof usePullStrategies === "function" &&
     currentStrategy === usePullStrategies &&
-    !target?.mtype.includes("crabx")
+    !target?.mtype.includes("crabx") &&
+    aggroedMobs.length
   ) {
-    if (aggroedMobs.length) {
-      const aoeMob = aggroedMobs[0]; // Get the first of list (best for AOE)
-      altTarget = aggroedMobs.filter(
-        (mob) => mob !== aoeMob && inRange(mob),
-      )[0]; // Get another mob in AttackRange to attack if the AOE mob is out of range
-
-      // Prioritize the AOE mob if it's better than the current target (or if the current is cooperative)
-      // const isAoeMobBetter =
-      //   aoeMob &&
-      //   mobsToFarm.findIndex((id) => id === aoeMob.mtype) <=
-      //     mobsToFarm.findIndex((id) => id === target?.mtype);
-
-      if (
-        !target?.cooperative
-        // && isAoeMobBetter
-      ) {
-        target = aoeMob;
-      }
-    }
+    const aoeMob = aggroedMobs[0];
+    // Another mob in reach to hit while the AOE mob is out of it
+    altTarget = aggroedMobs.filter((mob) => mob !== aoeMob && inRange(mob))[0];
+    if (!target?.cooperative) target = aoeMob;
   }
 
-  if (!target) return;
+  if (!target) return {};
+  return { focus: target, attackTarget: inRange(target) ? target : altTarget };
+}
 
-  // --- Ignore blasting mobs on blacklist ---
-  if (haveIgnoreMobAroundTarget(target)) {
-    changeToNormalStrategies();
-  }
+/**
+ * Faces the selected target, kiting wider from faster mobs, and drops the pull
+ * strategy around blasting mobs on the blacklist.
+ * @param {Object} [target]
+ */
+function aimAt(target) {
+  const { focus } = planFight(target);
+  if (!focus) return;
 
-  const promisesToAwait = [];
+  if (haveIgnoreMobAroundTarget(focus)) changeToNormalStrategies();
 
-  const targetToAttack = inRange(target) ? target : altTarget;
-  if (isAttackReady() && targetToAttack && shouldAttack()) {
-    set_message("Attacking");
-    promisesToAwait.push(
-      attack(targetToAttack)
-        .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeComponsate);
-          reduceCd("attack", false);
-        })
-        .catch((e) => attackErrorHandler(e, targetToAttack)),
-    );
-
-    // Left to currentStrategy to put the real weapons back on its own tick
-    const candySwap = maybeCandySwap(targetToAttack, {
-      swapFrom: CANDY_SWAP_WEAPON_ALLOW_LIST,
-    });
-    if (candySwap) promisesToAwait.push(candySwap);
-  }
-
-  // --- Kiting Rate Adjustment ---
   const needsKiteAdjustment =
-    target && target.range <= character.range && target.speed > character.speed;
+    focus.range <= character.range && focus.speed > character.speed;
   rangeRate = needsKiteAdjustment
-    ? target.speed / character.speed
+    ? focus.speed / character.speed
     : originRangeRate;
 
-  // --- Await and Error Handling ---
-  try {
-    await withTimeout(Promise.allSettled(promisesToAwait), 1000);
-  } catch (e) {
-    console.error("Error while attacking", e);
-  }
+  change_target(focus);
+}
 
-  // --- Change global target  ---
-  change_target(target);
+/** @returns {(() => Promise)|undefined} the swing to take now, if any */
+function getWarriorCast() {
+  if (isOnTrip()) return getEnRouteCast();
+
+  const { attackTarget } = planFight(fightTarget);
+  if (!attackTarget || !shouldAttack(attackTarget)) return;
+
+  return () =>
+    Promise.allSettled(
+      [
+        castOnAttackCooldown("attack", attackTarget),
+        // Left to currentStrategy to put the real weapons back on its own tick
+        maybeCandySwap(attackTarget, {
+          swapFrom: CANDY_SWAP_WEAPON_ALLOW_LIST,
+        }),
+      ].filter(Boolean),
+    );
 }
 
 async function cleaveLoop() {
@@ -223,7 +210,7 @@ function startSkillLoops() {
   // it approved and cast reuses it instead of recomputing the scans.
   let pendingTauntTarget = null;
 
-  runEnRouteAttackLoop();
+  runActionLoop(getWarriorCast);
 
   // Strategy: gear + pull-strategy skills (agitate, pull-taunt) run on a fixed
   // cadence via currentStrategy, decoupled from the attack loop.
@@ -321,11 +308,11 @@ async function mainLoop() {
     }
 
     // --- Target Selection --- events, then the crypt, then the farming spot
-    // Mid-trip it only hands back a target when a higher strategy took over
-    const target = await selectFightTarget();
+    // Mid-trip it only hands back a target when a higher strategy took over.
+    // The action loop swings.
+    fightTarget = await selectFightTarget();
 
-    // Target found, engage in combat
-    if (target && !isOnTrip()) await fight(target);
+    if (fightTarget && !isOnTrip()) aimAt(fightTarget);
   } catch (e) {
     // Only log unhandled errors
     if (e.cause !== "smart_move" && e.cause !== "death") {

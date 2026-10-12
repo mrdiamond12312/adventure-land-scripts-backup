@@ -44,10 +44,11 @@ const SMART_MOVE_CONFIG = Object.freeze({
   // Transport / town
   TRANSPORT_DOOR_NEAR_DISTANCE: 100, // farther than this from the door, walk up to it first
   NEW_MAP_TIMEOUT_MS: 5000, // waitForNewMap default timeout
-  TOWN_MAX_RETRIES: 5,
+  TOWN_MAX_RETRIES: 3,
   TOWN_RETRY_DELAY_MS: 300,
   TOWN_SPAWN_ARRIVAL_DISTANCE: 100, // landed within this of spawn 0 = the town worked
   TOWN_CHANNEL_TIMEOUT_MS: 5000, // how long to wait for the town channel to finish
+  TOWN_FALLBACK_SPEED: 400, // high enough that the pathfinder plans no town
 });
 
 class StrategicSmartMove {
@@ -305,14 +306,33 @@ class StrategicSmartMove {
       }
     }
 
-    if (mapData.spawns?.length && !aborted()) {
-      await smart_move({
-        map: character.map,
-        x: mapData.spawns[0][0],
-        y: mapData.spawns[0][1],
-      });
-    }
+    if (mapData.spawns?.length && !aborted())
+      await this.walkToSpawn(mapData.spawns[0], aborted);
     return false;
+  }
+
+  /**
+   * Walks to a spawn of the current map within the running session; a nested
+   * smartMove would end it. Native smart_move only when no walk path exists.
+   * @param {number[]} spawn - [x, y]
+   * @param {() => boolean} aborted - whether the town retry was cancelled
+   */
+  async walkToSpawn([x, y], aborted) {
+    const spawn = { map: character.map, x, y };
+
+    const path = this.pathfinderGetPath(
+      spawn,
+      SMART_MOVE_CONFIG.TOWN_FALLBACK_SPEED,
+    );
+    if (!Array.isArray(path) || path.some((node) => node.method !== "move")) {
+      await smart_move(spawn).catch((e) => console.warn(e));
+      return;
+    }
+
+    for (const node of path) {
+      if (aborted()) return;
+      await this.unsafeMove(node.x, node.y);
+    }
   }
 
   /** Cancel any in-flight town channel + retry loop. Does NOT disable future towns. */

@@ -3111,27 +3111,44 @@ mrpumpkin or mrgreen back on it: skip `dragToSpot` while the boss is baited, hav
 ignore leeches while baiting, and drop `getBossToTakeBack`. Otherwise the priest absorbs the boss off
 a leech and scares it off again in a loop, and the forced drag walks him off without the boss.
 
-## Fighters act on their own loop while on a trip (`runEnRouteAttackLoop`, 2026-10-12)
+## One action loop per class (`runActionLoop`, strategic_fn.11.js, 2026-10-12)
 
 Event strategies `await advanceSmartMove(...)` (walking to a simple boss, crabxx, franky, snowman,
-the cave), which holds the whole `mainLoop` until arrival, so anything in `fight()` never ran on
-those walks; only the `whileMoving` skill loops did.
+the cave), which holds the whole `mainLoop` until arrival, so anything `mainLoop` cast never ran on
+those walks. No class has a `fight()` any more. `mainLoop` selects the target into the shared
+`fightTarget` and, off a trip, aims (`aimAt`, the priest's `tendParty`: `change_target`, the
+warrior's kite rate and strategy drop, the priest's step toward a hurt ally); `move()` cancels a
+trip's path, so aiming stays off trips. Every cast on the shared attack cooldown comes from one
+`runActionLoop(getCast)` per class, which runs on a trip or off it:
 
-The priest has no `fight()` any more. One `whileMoving` loop on the shared attack cooldown
-(`getNextAction`) heals first (`getHealee`), else attacks: off a trip what `refineTarget` makes of
-the target `mainLoop` last selected (`fightTarget`: taunt or poison pick, else the beefiest aggroed
-mob in reach), on a trip only `getEnRouteTarget()` (strategic_fn.11.js), a mob in reach already on
-the party, or an untargeted, non-cooperative, non-watchout one that is harmless or dies to our shot,
-so the walk never pulls anything that matters. `mainLoop` only selects the target and, off a trip,
-runs `tendParty` (face the next target, step toward a hurt prioritized member): `move()` cancels a
-trip's path, so that part stays off trips.
+- On a trip it hits `getEnRouteCast()`: a mob in reach already on the party, or an untargeted,
+  non-cooperative, non-watchout one that is harmless or dies to our shot (`getEnRouteTarget`), so
+  the walk never pulls anything that matters.
+- Off a trip it re-plans from `fightTarget` (`planFight`, the priest's `refineTarget`, the
+  ranger's `getShotPlan`) and fires what that class's old `fight()` fired: the warrior's attack
+  with candy swap, the rogue's invis, attack and candy swap, the mage's self-energize and attack.
+- The priest heals first either way (`getNextAction`). The ranger fires a cupid heal plan first
+  whenever cupid is in hand; on a trip it never shoots a mob with cupid in hand or on the server,
+  since cupid heals whatever it hits. The cupid swap itself still waits for the gear loop, which
+  does not run on trips.
 
-Every other class keeps `fight()` off trips and gets the trip half through `runEnRouteAttackLoop`;
-the ranger's gate also skips it with cupid in hand or on the server, since cupid heals whatever it
-hits. These loops pace on `getLoopInterval` (`runSkillLoop`'s `nextDelayMs`), like `mainLoop`:
-idle checks no more often than ~250ms, but exactly on the attack cooldown when it is sooner. They
-do nothing while channeling (`character.c`), and `shouldAttack` refuses during `c.town` for every
-class, since any action cancels the town channel. Casts go through `castOnAttackCooldown`, which on
-a trip drops a `too_far` miss instead of handing it to `attackErrorHandler`: that one steps toward
-the target when we are not moving, and a step mid-trip cancels the trip's path. The drag
+The loop paces on `getLoopInterval` (`runSkillLoop`'s `nextDelayMs`), like `mainLoop`: idle checks
+no more often than ~250ms, but exactly on the attack cooldown when it is sooner. It does nothing
+while channeling (`canActOnAttackCooldown` checks `character.c`), and `shouldAttack` refuses during
+`c.town` for every class, since any action cancels the town channel. Errors go through
+`onAttackError`, which on a trip drops a `too_far` miss: `attackErrorHandler` steps toward the
+target when we are not moving, and a step mid-trip cancels the trip's path. The drag
 (`dragToSpot`) sets `smartmoveDebug`, so it is not a trip and the off-trip path runs through it.
+
+Two classes also used to `change_target` only sometimes (the rogue when something was in reach, the
+mage only in pull mode), which left `hitAndRun`, kiting off `get_target()`, with nothing to close
+the gap on after a long move. Their `aimAt` now always targets the pick, out of reach or not.
+
+## Town fallback walks inside the trip (`walkToSpawn`, strategic_smart_move.21.js, 2026-10-12)
+
+After `TOWN_MAX_RETRIES` (3) failed town channels, `useTownWithRetry` walks to the spawn the town
+would have landed on, using our pathfinder at `TOWN_FALLBACK_SPEED` (400) and `unsafeMove`, instead of
+the slow native `smart_move`. It cannot call `smartMove`: every new `smartMove` cleans up the running
+session, which would end the trip that hit the town segment. The pathfinder's speed only sets how it
+weighs walking against towning; at 400 it plans no town. Native `smart_move` is kept only for when
+no walk-only path comes back.

@@ -2390,6 +2390,9 @@ function getEnRouteTarget() {
   );
 }
 
+/** The target selectFightTarget last handed back, read by each class's action loop */
+var fightTarget;
+
 /** @returns {boolean} whether the shared attack cooldown is ready, no channel running */
 function canActOnAttackCooldown() {
   return (
@@ -2400,8 +2403,18 @@ function canActOnAttackCooldown() {
 }
 
 /**
- * Casts on the shared attack cooldown. Mid-trip a too_far miss never steps
- * toward the target, which would cancel the trip's path.
+ * attackErrorHandler, except that mid-trip a too_far miss never steps toward
+ * the target, which would cancel the trip's path.
+ * @param {Object} error
+ * @param {Object} [target]
+ */
+function onAttackError(error, target) {
+  if (isOnTrip() && error?.reason === "too_far") return;
+  attackErrorHandler(error, target);
+}
+
+/**
+ * Casts on the shared attack cooldown, compensating it.
  * @param {string} skill - "attack" or "heal"
  * @param {Object} target
  * @returns {Promise}
@@ -2414,29 +2427,35 @@ function castOnAttackCooldown(skill, target) {
       attackSpeedCompensate(attackFrequencyBeforeCompensate);
       reduce_cooldown("attack", character.ping * 0.95);
     })
-    .catch((e) => {
-      if (isOnTrip() && e?.reason === "too_far") return;
-      attackErrorHandler(e, target);
-    });
+    .catch((e) => onAttackError(e, target));
+}
+
+/** @returns {(() => Promise)|undefined} a hit on a safe mob in reach, for a trip */
+function getEnRouteCast() {
+  const mob = getEnRouteTarget();
+  return mob && (() => castOnAttackCooldown("attack", mob));
 }
 
 /**
- * Hits getEnRouteTarget() while on a trip, which can hold mainLoop until
- * arrival; fight() covers the rest. Paced like mainLoop (getLoopInterval).
- * @param {function(): boolean} [canUse] - the class's own extra gate
+ * Each class's one loop on the shared attack cooldown, on a trip or off it,
+ * so a trip holding mainLoop until arrival never stops it. Paced like
+ * mainLoop (getLoopInterval).
+ * @param {() => ((() => Promise)|undefined)} getCast - what to cast now, if anything
+ * @param {number} [timeoutMs] - how long a cast may hold the loop
  */
-function runEnRouteAttackLoop(canUse = () => true) {
-  let pendingTarget = null;
+function runActionLoop(getCast, timeoutMs = 1000) {
+  let pendingCast;
   runSkillLoop({
     skill: "attack",
     whileMoving: true,
     nextDelayMs: getLoopInterval,
+    timeoutMs,
     canUse: () => {
-      if (!isOnTrip() || !canActOnAttackCooldown() || !canUse()) return false;
-      pendingTarget = getEnRouteTarget();
-      return pendingTarget != null;
+      if (!canActOnAttackCooldown()) return false;
+      pendingCast = getCast();
+      return !!pendingCast;
     },
-    cast: () => castOnAttackCooldown("attack", pendingTarget),
+    cast: () => pendingCast(),
   });
 }
 

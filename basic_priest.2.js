@@ -33,9 +33,6 @@ const inRange = (entity, mult = 1) =>
 
 // Combat Logic
 
-/** The target selectFightTarget last handed back, read by the action loop */
-let fightTarget;
-
 /**
  * @param {Object[]} [buffees] - getPlayersToHeal(), when the caller already has it
  * @returns {Object|undefined} the first player needing a heal within heal range
@@ -367,20 +364,10 @@ function startSkillLoops() {
   let pendingCurseTarget = null;
   let pendingAbsorbTarget = null;
   let pendingZapTarget = null;
-  let pendingAction = null;
-
-  // Heal XOR attack on the shared cooldown, on a trip or off it; on its own
-  // loop so a trip holding mainLoop until arrival never stops it
-  runSkillLoop({
-    skill: "attack",
-    whileMoving: true,
-    nextDelayMs: getLoopInterval,
-    canUse: () => {
-      if (!canActOnAttackCooldown()) return false;
-      pendingAction = getNextAction();
-      return pendingAction != null;
-    },
-    cast: () => castOnAttackCooldown(pendingAction.skill, pendingAction.target),
+  // Heal XOR attack
+  runActionLoop(() => {
+    const action = getNextAction();
+    return action && (() => castOnAttackCooldown(action.skill, action.target));
   });
 
   // Strategy: gear runs on a fixed cadence via currentStrategy, so each

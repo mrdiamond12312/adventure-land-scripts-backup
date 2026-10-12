@@ -33,7 +33,7 @@ const tryMultiShot = async (skill, entityList) => {
       attackSpeedCompensate(attackFrequencyBeforeCompensate);
       reduceCd("attack", false);
     })
-    .catch((e) => attackErrorHandler(e));
+    .catch((e) => onAttackError(e));
 };
 
 const inRange = (entity) =>
@@ -265,7 +265,7 @@ async function firePlan(plan) {
           attackSpeedCompensate(attackFrequencyBeforeCompensate);
           reduceCd("attack", false);
         })
-        .catch((e) => attackErrorHandler(e)),
+        .catch((e) => onAttackError(e)),
     );
   } else {
     promisesToAwait.push(tryMultiShot(plan.skill, plan.shotTargets));
@@ -278,12 +278,41 @@ async function firePlan(plan) {
   }
 }
 
-async function fight(target) {
-  const plan = getActionPlan(target);
+/**
+ * Targets the shot plan's pick, else the selected target out of reach:
+ * hitAndRun closes the gap on get_target().
+ * @param {Object} target - the selected target
+ */
+function aimAt(target) {
+  change_target(getShotPlan(target)?.target ?? target);
+}
+
+/**
+ * Cupid heals first once currentStrategy put cupid in hand. Mid-trip a safe
+ * mob, never with cupid in hand or on the server since it heals whatever it
+ * hits; off a trip the shot plan for the selected target.
+ * @returns {(() => Promise)|undefined} the shot to take now, if any
+ */
+function getRangerCast() {
+  const cupidHealees = isCupidEquipped()
+    ? getCupidHealees(getPlayersToHeal())
+    : [];
+  if (cupidHealees.length) {
+    const plan = getCupidPlan(cupidHealees);
+    return () => firePlan(plan);
+  }
+
+  if (isOnTrip())
+    return isCupidEquipped() || isCupidOnServer() ? undefined : getEnRouteCast();
+
+  if (!fightTarget) return;
+  const plan = getShotPlan(fightTarget);
   if (!plan) return;
 
-  if (plan.target) change_target(plan.target);
-  return firePlan(plan);
+  return () => {
+    if (plan.target) change_target(plan.target);
+    return firePlan(plan);
+  };
 }
 
 // --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
@@ -400,8 +429,7 @@ function startSkillLoops() {
   let pendingMarkTarget = null;
   let pendingSuperShotTarget = null;
 
-  // Cupid heals whatever it hits
-  runEnRouteAttackLoop(() => !isCupidEquipped() && !isCupidOnServer());
+  runActionLoop(getRangerCast, 1500);
 
   // Exception: cupid left in hand with no one to heal jumps the queue, so the
   // ranger is not shooting mobs with a heal bow.
@@ -481,19 +509,12 @@ async function mainLoop() {
 
     publishEntFieldReport();
 
-    // Cupid heal, only once currentStrategy put cupid in hand
-    const cupidHealees = isCupidEquipped()
-      ? getCupidHealees(getPlayersToHeal())
-      : [];
-    const isDeterminedToBeCupid = cupidHealees.length > 0;
-    if (isDeterminedToBeCupid) await firePlan(getCupidPlan(cupidHealees));
-
     // Events, the crypt, then the farming spot — each carries its own move
-    // Mid-trip it only hands back a target when a higher strategy took over
-    const target = await selectFightTarget();
+    // Mid-trip it only hands back a target when a higher strategy took over.
+    // The action loop heals and shoots.
+    fightTarget = await selectFightTarget();
 
-    // Target found, engage in combat
-    if (target && !isDeterminedToBeCupid && !isOnTrip()) await fight(target);
+    if (fightTarget && !isOnTrip()) aimAt(fightTarget);
   } catch (e) {
     // Only log unhandled errors
     if (e.cause !== "smart_move" && e.cause !== "death") {
