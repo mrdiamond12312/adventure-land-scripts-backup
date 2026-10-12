@@ -3144,6 +3144,12 @@ Two classes also used to `change_target` only sometimes (the rogue when somethin
 mage only in pull mode), which left `hitAndRun`, kiting off `get_target()`, with nothing to close
 the gap on after a long move. Their `aimAt` now always targets the pick, out of reach or not.
 
+`castOnAttackCooldown` sends a plain attack through `attack()`, not `use_skill("attack")`. Both hit the
+same server cooldown, but only `attack()` (the client's `monster_attack`) makes the target current
+(`ctarget`). With the swing on its own loop, `get_target()` is otherwise only as fresh as the last
+`aimAt`, and the rogue's candy swap restore (`restoreRogueWeapons`) and every gear loop pick weapons
+off `get_target()`: a stale one meant an extra equip and penalty between swings.
+
 ## Town fallback walks inside the trip (`walkToSpawn`, strategic_smart_move.21.js, 2026-10-12)
 
 After `TOWN_MAX_RETRIES` (3) failed town channels, `useTownWithRetry` walks to the spawn the town
