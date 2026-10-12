@@ -164,6 +164,11 @@ function getTauntTarget() {
 
   if (!isAssignedAsTanker()) return null;
 
+  // Taunt skips cooperative mobs below, so a drag boss on an ally is taken here
+  const dragBossOnAlly = getDragBossOnAlly();
+  if (dragBossOnAlly && is_in_range(dragBossOnAlly, "taunt"))
+    return dragBossOnAlly;
+
   const partyHealer = get_player(HEALER) || get_player(RANGER);
   if (!partyHealer || partyHealer.rip) return null;
 

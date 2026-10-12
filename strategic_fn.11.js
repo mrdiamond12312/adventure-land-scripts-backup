@@ -1841,9 +1841,13 @@ function rotateLeader(partyList, newLeaderId) {
 }
 
 function assignRoles() {
-  const dragBossType = getBossDragRoute(get_targeted_monster())?.[0];
+  const dragRoute = getBossDragRoute(get_targeted_monster());
 
-  if (server.status[dragBossType]?.live && partyMems.includes(PRIEST)) {
+  if (
+    server.status[dragRoute?.[0]]?.live &&
+    partyMems.includes(PRIEST) &&
+    !dragRoute[1].formulaTanker
+  ) {
     TANKER = PRIEST;
     partyMems = rotateLeader(partyMems, TANKER);
     return;

@@ -1299,11 +1299,12 @@ function extraDistanceWithinHitbox(target) {
 var lastKitingTargetId = undefined;
 
 /**
- * Bosses the priest, as tanker, drags to a spot and kites around there, keyed
- * by boss type. `mtypes` are the targets that start the drag: the boss and its
- * adds. Without a priest in the party, or with a known tanker in sight to take
- * it back, the boss is fought where it stands.
- * @type {Object<string, {spot: Object, mtypes: string[]}>}
+ * Bosses the tanker drags to a spot and kites around there, keyed by boss
+ * type. `mtypes` are the targets that start the drag: the boss and its adds.
+ * The priest is made the tanker, unless `formulaTanker` leaves it to the usual
+ * damage-ratio pick. Without a priest in the party, or with a known tanker in
+ * sight to take it back, the boss is fought where it stands.
+ * @type {Object<string, {spot: Object, mtypes: string[], formulaTanker?: boolean}>}
  */
 const BOSS_DRAG_ROUTES = {
   franky: {
@@ -1319,8 +1320,19 @@ const BOSS_DRAG_ROUTES = {
   mrgreen: {
     spot: { map: "spookytown", x: 255, y: -1432 },
     mtypes: ["mrgreen", "greenjr"],
+    formulaTanker: true,
   },
 };
+
+/** @returns {Object|undefined} a dragged boss in view held by one of our allies, not us */
+function getDragBossOnAlly() {
+  const allies = getAlliedNames();
+  for (const bossType of Object.keys(BOSS_DRAG_ROUTES)) {
+    const boss = get_nearest_monster({ type: bossType });
+    if (boss && boss.target !== character.name && allies.has(boss.target))
+      return boss;
+  }
+}
 
 function withFixedSpot(target, spot) {
   return {

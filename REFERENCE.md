@@ -3100,6 +3100,12 @@ the xscorpion/pumpkin box and the minimush box; mrgreen goes to the spookytown m
 -1432), inside the mummies' rage box. Straight lines from each boss spawn to its spot were checked
 clear of `G.geometry` walls.
 
+mrgreen is `formulaTanker`: `assignRoles` does not force the priest for it, so the usual
+damage-ratio pick decides from the spawn on (mrgreen, greenjr and mummies all hit physical, so it
+lands on the warrior), and that tanker drags it all the way to the mummy spawn. The warrior's regular
+taunt rules skip cooperative mobs, so `getTauntTarget` takes a drag boss off whichever ally holds it
+(`getDragBossOnAlly`) while he is the tanker.
+
 Not compatible with the leash (`getBaitedBoss`, off since `LEECH_BAIT_BOSSES = []`). Before putting
 mrpumpkin or mrgreen back on it: skip `dragToSpot` while the boss is baited, have `getBossThief`
 ignore leeches while baiting, and drop `getBossToTakeBack`. Otherwise the priest absorbs the boss off
