@@ -1296,7 +1296,8 @@ var lastKitingTargetId = undefined;
 /**
  * Bosses the priest, as tanker, drags to a spot and kites around there, keyed
  * by boss type. `mtypes` are the targets that start the drag: the boss and its
- * adds. Without a priest in the party the boss is fought where it stands.
+ * adds. Without a priest in the party, or with a known tanker in sight to take
+ * it back, the boss is fought where it stands.
  * @type {Object<string, {spot: Object, mtypes: string[]}>}
  */
 const BOSS_DRAG_ROUTES = {
@@ -1337,6 +1338,14 @@ function getBossDragRoute(target) {
   return Object.entries(BOSS_DRAG_ROUTES).find(([, route]) =>
     route.mtypes.includes(target.mtype),
   );
+}
+
+/** @returns {boolean} whether a living known tanker is in sight */
+function isKnownTankerAround() {
+  return knownTankers.some((name) => {
+    const player = get_player(name);
+    return !!player && !player.rip;
+  });
 }
 
 /**
@@ -1382,7 +1391,8 @@ async function resolveKiteTarget(target) {
       return withFixedSpot(target, isAbsorbReady ? thief : boss);
     }
 
-    if (partyMems.includes(PRIEST)) return dragToSpot(target, route.spot);
+    if (partyMems.includes(PRIEST) && !isKnownTankerAround())
+      return dragToSpot(target, route.spot);
   }
 
   if (target?.type === "monster" && target.mtype.includes("crabx")) {

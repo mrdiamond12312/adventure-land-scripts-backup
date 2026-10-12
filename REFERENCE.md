@@ -3088,7 +3088,8 @@ range beats its range). Before, any mob over 600 dps left characters standing un
 
 The Franky corner drag is now one table entry, and every entry gets the Franky treatment. While a
 live route boss or one of its adds is targeted, `assignRoles` makes the priest the tanker. Only a
-party with a priest drags; without one the tanker fights the boss where it stands. The tanker walks to the spot with
+party with a priest drags, and only while no known tanker (`knownTankers`) is in sight, since one
+would just absorb or taunt it back; otherwise the tanker fights the boss where it stands. The tanker walks to the spot with
 `smartmoveDebug` on (so it keeps fighting and whatever is on it follows), unconditionally, then
 kites around the spot. A stranger holding the boss is taken back the same way for all of them
 (`getBossThief`, `getStolenDragBoss`): a priest tanker absorbs the thief (`getBossThiefToAbsorb`), a
