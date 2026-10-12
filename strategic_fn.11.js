@@ -2356,8 +2356,91 @@ function isKitable(mob) {
   );
 }
 
+/**
+ * A mob in reach that is safe to hit without stopping a trip: one already on
+ * the party first, else an untargeted one too weak to matter.
+ * @returns {Object|undefined}
+ */
+function getEnRouteTarget() {
+  if (isPreparingCave && !character.cave) return undefined;
+
+  const party = getAlliedNames();
+  const inReach = Object.values(parent.entities).filter(
+    (mob) =>
+      mob.type === "monster" &&
+      !mob.dead &&
+      !isCaveFriendly(mob) &&
+      is_in_range(mob, "attack") &&
+      shouldAttack(mob),
+  );
+
+  return (
+    inReach.find((mob) => party.has(mob.target)) ??
+    inReach.find(
+      (mob) =>
+        !mob.target &&
+        !mob.cooperative &&
+        !hasWatchoutAbility(mob) &&
+        (isHarmlessMob(mob) || isDyingToOurShot(mob)),
+    )
+  );
+}
+
+/** @returns {boolean} whether the shared attack cooldown is ready, no channel running */
+function canActOnAttackCooldown() {
+  return (
+    ms_to_next_skill("attack") === 0 &&
+    !character.s.penalty_cd &&
+    !Object.keys(character.c).length
+  );
+}
+
+/**
+ * Casts on the shared attack cooldown. Mid-trip a too_far miss never steps
+ * toward the target, which would cancel the trip's path.
+ * @param {string} skill - "attack" or "heal"
+ * @param {Object} target
+ * @returns {Promise}
+ */
+function castOnAttackCooldown(skill, target) {
+  const attackFrequencyBeforeCompensate = attackFrequency();
+  set_message(skill === "heal" ? `Heal ${target.name}` : "Attacking");
+  return use_skill(skill, target)
+    .then(() => {
+      attackSpeedCompensate(attackFrequencyBeforeCompensate);
+      reduce_cooldown("attack", character.ping * 0.95);
+    })
+    .catch((e) => {
+      if (isOnTrip() && e?.reason === "too_far") return;
+      attackErrorHandler(e, target);
+    });
+}
+
+/**
+ * Hits getEnRouteTarget() while on a trip, which can hold mainLoop until
+ * arrival; fight() covers the rest. Paced like mainLoop (getLoopInterval).
+ * @param {function(): boolean} [canUse] - the class's own extra gate
+ */
+function runEnRouteAttackLoop(canUse = () => true) {
+  let pendingTarget = null;
+  runSkillLoop({
+    skill: "attack",
+    whileMoving: true,
+    nextDelayMs: getLoopInterval,
+    canUse: () => {
+      if (!isOnTrip() || !canActOnAttackCooldown() || !canUse()) return false;
+      pendingTarget = getEnRouteTarget();
+      return pendingTarget != null;
+    },
+    cast: () => castOnAttackCooldown("attack", pendingTarget),
+  });
+}
+
 function shouldAttack(target = get_target()) {
   const partyHealer = get_entity(HEALER);
+
+  // Any action cancels the town channel
+  if (character.c.town) return false;
 
   // PvP: players are always worth shooting, priest or not
   if (target?.type === "character") return true;

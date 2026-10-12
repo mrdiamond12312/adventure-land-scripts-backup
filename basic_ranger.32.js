@@ -400,6 +400,9 @@ function startSkillLoops() {
   let pendingMarkTarget = null;
   let pendingSuperShotTarget = null;
 
+  // Cupid heals whatever it hits
+  runEnRouteAttackLoop(() => !isCupidEquipped() && !isCupidOnServer());
+
   // Exception: cupid left in hand with no one to heal jumps the queue, so the
   // ranger is not shooting mobs with a heal bow.
   runSkillLoop({

@@ -145,6 +145,8 @@ function startSkillLoops() {
   let pendingEnergizeBuffee = null;
   let pendingReflectionBuffee = null;
 
+  runEnRouteAttackLoop();
+
   // Strategy: gear + pull-strategy skills (cburst) run on a fixed cadence via
   // currentStrategy, decoupled from the attack loop.
   runSkillLoop({

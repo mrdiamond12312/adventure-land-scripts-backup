@@ -33,135 +33,132 @@ const inRange = (entity, mult = 1) =>
 
 // Combat Logic
 
-async function fight(target, isMovingControlled = false) {
-  // Snapshot for attackSpeedCompensate
-  const attackFrequencyBeforeCompensate = attackFrequency();
-  const promisesToAwait = [];
+/** The target selectFightTarget last handed back, read by the action loop */
+let fightTarget;
 
-  const isAttackReady =
-    ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
-
-  // Targetting, poisoned aggro'ed mob or taunt if assigned as tanker
-  let attackTarget;
-  if (target && !isMovingControlled) {
-    const partyDmgRecieved = avgPartyDmgTaken(partyMems);
-    const prioritizedCharacter = prioritizedNames();
-    const mobsInSearchRange = Object.values(parent.entities).filter(
-      (entity) =>
-        entity.type === "monster" &&
-        !isCaveFriendly(entity) &&
-        !entity.dead &&
-        inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
-    );
-    // Taunt and poison spread both need the mob actually reachable
-    const mobsInRange = mobsInSearchRange.filter((mob) => inRange(mob));
-    const heldWeaponInfo = character.slots.mainhand
-      ? item_info(character.slots.mainhand)
-      : {};
-
-    // A taunt that one-shots is just a wasted swing
-    const targetToTaunt =
-      isAssignedAsTanker() &&
-      typeof usePullStrategies === "function" &&
-      currentStrategy === usePullStrategies
-        ? mobsInRange
-            .filter(
-              (mob) =>
-                !mob.target &&
-                !canOneShotWithWeapon(heldWeaponInfo, [mob]) &&
-                partyDmgRecieved + calculateDamage(mob, character) <
-                  character.heal * 0.9 * attackFrequency(),
-            )
-            .sort(
-              (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
-            )
-            .shift()
-        : null;
-
-    const targetToPoison =
-      (character.slots.orb?.name === "test_orb" ||
-        character.slots.mainhand?.name === "oozingterror") &&
-      !target?.cooperative
-        ? mobsInRange
-            .filter(
-              (mob) =>
-                !mob.s.poisoned && prioritizedCharacter.includes(mob.target),
-            )
-            .sort((lhs, rhs) => {
-              if (rhs.attack === lhs.attack) {
-                return rhs.hp - lhs.hp;
-              }
-              return rhs.attack - lhs.attack;
-            })
-            .shift() ?? target
-        : target;
-
-    target = targetToTaunt ?? targetToPoison;
-
-    // The computed target can sit outside our reach; rather than skip the shot,
-    // swing at the beefiest aggroed mob that is actually in range.
-    attackTarget = inRange(target)
-      ? target
-      : mobsInRange
-          .filter((mob) => mob !== target && mob.target)
-          .sort((lhs, rhs) => rhs.hp - lhs.hp)[0];
-  }
-
-  // Decide heal vs attack
+/**
+ * @param {Object[]} [buffees] - getPlayersToHeal(), when the caller already has it
+ * @returns {Object|undefined} the first player needing a heal within heal range
+ */
+function getHealee(buffees = getPlayersToHeal()) {
   const healRange = character.range + character.xrange * 0.9;
-  const buffees = getPlayersToHeal();
-  const healee = buffees.find(
-    (buffee) => distance(buffee, character) < healRange,
+  return buffees.find((buffee) => distance(buffee, character) < healRange);
+}
+
+/**
+ * Narrows the selected target to a mob to taunt as tanker or one to poison,
+ * and to what we can actually hit: it, else the beefiest aggroed mob in reach.
+ * @param {Object} [target]
+ * @returns {{focus?: Object, attackTarget?: Object}}
+ */
+function refineTarget(target) {
+  if (!target) return {};
+
+  const partyDmgRecieved = avgPartyDmgTaken(partyMems);
+  const prioritizedCharacter = prioritizedNames();
+  const mobsInSearchRange = Object.values(parent.entities).filter(
+    (entity) =>
+      entity.type === "monster" &&
+      !isCaveFriendly(entity) &&
+      !entity.dead &&
+      inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
   );
-  const actionTarget = healee ?? target;
-  if (actionTarget) change_target(actionTarget);
+  // Taunt and poison spread both need the mob actually reachable
+  const mobsInRange = mobsInSearchRange.filter((mob) => inRange(mob));
+  const heldWeaponInfo = character.slots.mainhand
+    ? item_info(character.slots.mainhand)
+    : {};
 
-  // Once the shared attack cooldown is up: heal or attack (never both).
-  if (isAttackReady && actionTarget) {
-    if (healee) {
-      set_message(`Heal ${healee.name}`);
-      promisesToAwait.push(
-        use_skill("heal", healee)
-          .then(() => {
-            attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("attack", false);
+  // A taunt that one-shots is just a wasted swing
+  const targetToTaunt =
+    isAssignedAsTanker() &&
+    typeof usePullStrategies === "function" &&
+    currentStrategy === usePullStrategies
+      ? mobsInRange
+          .filter(
+            (mob) =>
+              !mob.target &&
+              !canOneShotWithWeapon(heldWeaponInfo, [mob]) &&
+              partyDmgRecieved + calculateDamage(mob, character) <
+                character.heal * 0.9 * attackFrequency(),
+          )
+          .sort(
+            (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
+          )
+          .shift()
+      : null;
+
+  const targetToPoison =
+    (character.slots.orb?.name === "test_orb" ||
+      character.slots.mainhand?.name === "oozingterror") &&
+    !target?.cooperative
+      ? mobsInRange
+          .filter(
+            (mob) =>
+              !mob.s.poisoned && prioritizedCharacter.includes(mob.target),
+          )
+          .sort((lhs, rhs) => {
+            if (rhs.attack === lhs.attack) {
+              return rhs.hp - lhs.hp;
+            }
+            return rhs.attack - lhs.attack;
           })
-          .catch((e) => attackErrorHandler(e)),
-      );
-    } else if (attackTarget && shouldAttack(attackTarget)) {
-      set_message("Attacking");
-      promisesToAwait.push(
-        use_skill("attack", attackTarget)
-          .then(() => {
-            attackSpeedCompensate(attackFrequencyBeforeCompensate);
-            reduceCd("attack", false);
-          })
-          .catch((e) => attackErrorHandler(e)),
-      );
-    }
-  }
+          .shift() ?? target
+      : target;
 
-  if (!healee && !smart.moving && !isAdvanceSmartMoving) {
-    const prioritizedBuffeesNames = prioritizedNames();
-    const approaching = buffees.find((buffee) =>
-      prioritizedBuffeesNames.includes(buffee.name),
-    );
-    if (approaching) {
-      const middleX = (approaching.x + character.x) / 2;
-      const middleY = (approaching.y + character.y) / 2;
-      if (can_move_to(middleX, middleY)) move(middleX, middleY);
-      else if (can_move_to(approaching.x, approaching.y))
-        move(approaching.x, approaching.y);
-      set_message(`Moving to ${approaching.name}`);
-    }
-  }
+  const focus = targetToTaunt ?? targetToPoison;
 
-  // --- Await All Actions ---
-  try {
-    await withTimeout(Promise.allSettled(promisesToAwait));
-  } catch (e) {
-    console.error(e);
-  }
+  // The computed target can sit outside our reach; rather than skip the shot,
+  // swing at the beefiest aggroed mob that is actually in range.
+  const attackTarget = inRange(focus)
+    ? focus
+    : mobsInRange
+        .filter((mob) => mob !== focus && mob.target)
+        .sort((lhs, rhs) => rhs.hp - lhs.hp)[0];
+
+  return { focus, attackTarget };
+}
+
+/**
+ * Heal first, else a hit: mid-trip only a safe getEnRouteTarget() mob, else
+ * what refineTarget makes of the selected target.
+ * @returns {{skill: string, target: Object}|undefined}
+ */
+function getNextAction() {
+  const healee = getHealee();
+  if (healee) return { skill: "heal", target: healee };
+
+  const mob = isOnTrip()
+    ? getEnRouteTarget()
+    : refineTarget(fightTarget).attackTarget;
+  if (mob && shouldAttack(mob)) return { skill: "attack", target: mob };
+}
+
+/**
+ * Faces whoever comes next, and with no one in heal range steps toward a
+ * prioritized party member who needs one.
+ * @param {Object} [target] - the selected target
+ */
+function tendParty(target) {
+  const buffees = getPlayersToHeal();
+  const healee = getHealee(buffees);
+  const focus = healee ?? refineTarget(target).focus;
+  if (focus) change_target(focus);
+
+  if (healee || smart.moving || isAdvanceSmartMoving) return;
+
+  const prioritizedBuffeesNames = prioritizedNames();
+  const approaching = buffees.find((buffee) =>
+    prioritizedBuffeesNames.includes(buffee.name),
+  );
+  if (!approaching) return;
+
+  const middleX = (approaching.x + character.x) / 2;
+  const middleY = (approaching.y + character.y) / 2;
+  if (can_move_to(middleX, middleY)) move(middleX, middleY);
+  else if (can_move_to(approaching.x, approaching.y))
+    move(approaching.x, approaching.y);
+  set_message(`Moving to ${approaching.name}`);
 }
 
 // --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
@@ -370,6 +367,21 @@ function startSkillLoops() {
   let pendingCurseTarget = null;
   let pendingAbsorbTarget = null;
   let pendingZapTarget = null;
+  let pendingAction = null;
+
+  // Heal XOR attack on the shared cooldown, on a trip or off it; on its own
+  // loop so a trip holding mainLoop until arrival never stops it
+  runSkillLoop({
+    skill: "attack",
+    whileMoving: true,
+    nextDelayMs: getLoopInterval,
+    canUse: () => {
+      if (!canActOnAttackCooldown()) return false;
+      pendingAction = getNextAction();
+      return pendingAction != null;
+    },
+    cast: () => castOnAttackCooldown(pendingAction.skill, pendingAction.target),
+  });
 
   // Strategy: gear runs on a fixed cadence via currentStrategy, so each
   // strategy can dress the priest differently, decoupled from the attack loop.
@@ -460,12 +472,10 @@ async function mainLoop() {
     }
 
     // Target Selection — mid-trip it only hands back a target when a higher
-    // strategy took over; fight() only heals while the trip goes on.
-    const target = await selectFightTarget();
+    // strategy took over. The action loop heals and attacks.
+    fightTarget = await selectFightTarget();
 
-    // Heal (always) XOR attack (when we have a target). Runs every tick so the
-    // priest keeps healing with no mob in reach or while smart-moving.
-    await fight(target, isOnTrip());
+    if (!isOnTrip()) tendParty(fightTarget);
   } catch (e) {
     if (e.cause !== "smart_move" && e.cause !== "death") console.error(e);
   }

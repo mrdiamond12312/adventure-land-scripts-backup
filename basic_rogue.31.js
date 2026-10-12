@@ -169,6 +169,8 @@ function startSkillLoops() {
   let pendingRspeedBuffee = null;
   let pendingFollowUpSkill = undefined;
 
+  runEnRouteAttackLoop();
+
   // Gear only while the attack is on cooldown: equipping re-bases the attack
   // cooldown, so swapping mid-window would delay the shot.
   runSkillLoop({

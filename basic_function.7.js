@@ -1161,6 +1161,7 @@ function ms_to_next_skill(skill) {
  * @param {string} skill - skill name to key the cooldown on
  * @param {() => boolean} canUse - whether to cast this tick
  * @param {() => Promise} cast - issues the skill; awaited to avoid double-casts
+ * @param {() => number} [nextDelayMs] - overrides the reschedule delay
  */
 // Skills used to sit in fight(), which mainLoop skipped while smart moving, so
 // loops stay silent then too. whileMoving opts back in the ones that used to
@@ -1172,6 +1173,7 @@ function runSkillLoop({
   floorMs = 100,
   timeoutMs = 1000,
   whileMoving = false,
+  nextDelayMs,
 }) {
   async function loop() {
     try {
@@ -1189,7 +1191,10 @@ function runSkillLoop({
     } catch (e) {
       console.log(`[skillLoop:${skill}]`, e);
     } finally {
-      setTimeout(loop, Math.max(ms_to_next_skill(skill), floorMs));
+      setTimeout(
+        loop,
+        nextDelayMs?.() ?? Math.max(ms_to_next_skill(skill), floorMs),
+      );
     }
   }
   loop();

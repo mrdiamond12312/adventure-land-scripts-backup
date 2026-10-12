@@ -218,6 +218,8 @@ function startSkillLoops() {
   // it approved and cast reuses it instead of recomputing the scans.
   let pendingTauntTarget = null;
 
+  runEnRouteAttackLoop();
+
   // Strategy: gear + pull-strategy skills (agitate, pull-taunt) run on a fixed
   // cadence via currentStrategy, decoupled from the attack loop.
   runSkillLoop({
