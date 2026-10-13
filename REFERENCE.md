@@ -3209,3 +3209,10 @@ on, then the opens) when the trip leaves the chests' reach (another map, a named
 in reach, and no mob targets us, since the set swaps out the armour. It is not awaited, so the trip
 starts at once; the opens go out once the equip lands, while the chests are still in reach, and
 `isLooting` keeps both the travelling loot and the gear loops from cutting in.
+
+## Agitate and cleave share one mp floor (`warriorAoeMpFloor`, 2026-10-13)
+
+The pull agitate used to need 420 + 400 = 820 mp, cleave 720 + 200 = 920 (plus `surgeMpReserve`).
+Between the two, agitate was the only one allowed, so the warrior agitated whenever mp sat there
+instead of choosing. Both now gate on `warriorAoeMpFloor()`, so above it each one's own conditions
+decide. The crabxx fetch and the drag take-back keep their own agitate gates.

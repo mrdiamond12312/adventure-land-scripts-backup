@@ -123,7 +123,7 @@ async function usePullSkills() {
         isAssignedAsTanker() &&
         !havePulledEnoughMobs &&
         !formidableMonsterAppeared &&
-        character.mp >= G.skills["agitate"].mp &&
+        character.mp >= warriorAoeMpFloor() &&
         !is_on_cooldown("agitate");
 
       // Mob Quantity Requirement

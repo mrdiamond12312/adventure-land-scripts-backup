@@ -1975,13 +1975,18 @@ function canAffordSwap(slots) {
  * @param {string} strategyName - "pull" or "normal"
  * @returns {Object|undefined} the cleave weapon, when cleave would swing now
  */
+/** @returns {number} mp the warrior needs for an AOE pull, cleave or agitate alike */
+function warriorAoeMpFloor() {
+  return G.skills["cleave"].mp + 200 + surgeMpReserve();
+}
+
 function planCleave(strategyName) {
   // Aggro at Dorr fails the cave entry
   const isWaitingAtDorr = isPreparingCave && !character.cave;
   if (
     isWaitingAtDorr ||
     !canAffordSwap(2) ||
-    character.mp < G.skills["cleave"].mp + 200 + surgeMpReserve() ||
+    character.mp < warriorAoeMpFloor() ||
     Object.keys(character.c).length
   )
     return;
