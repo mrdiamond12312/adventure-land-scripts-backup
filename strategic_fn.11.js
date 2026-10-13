@@ -580,9 +580,9 @@ function calculateMageItems() {
       ? "rabbitsfoot"
       : feelingWise
       ? "talkingskull"
-      : currentTarget && (currentTarget.resistance ?? 0) < 400
-      ? "cave_loaded_die"
-      : "jacko",
+      : // : currentTarget && (currentTarget.resistance ?? 0) < 400
+        // ? "cave_loaded_die"
+        "jacko",
     ring1: "glacierseal",
     ring2: "cring",
     amulet: feelingWise ? "spookyamulet" : "intamulet",
@@ -672,7 +672,8 @@ function calculateWarriorItems() {
       ? "rabbitsfoot"
       : feelingWise
       ? "talkingskull"
-      : "orbofstr",
+      : // : "orbofstr"
+        "cave_loaded_die",
     chest: getWarriorChest(feelingLucky, isTanker),
     // pants: isTanker ? "frankypants" : "fallen",
     pants: "fallen",
