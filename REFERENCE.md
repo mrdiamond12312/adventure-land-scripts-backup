@@ -3115,6 +3115,12 @@ a path, so while waiting the tanker kites at the boss rather than standing still
 gap and, if the boss turned to someone else, the tanker's hits take it back. Walking off to the spot
 at once used to leave a slower or distracted boss behind.
 
+franky is `takeBackFromParty`: `getBossThief` also counts one of our `partyMems` (not the tanker
+itself, not `knownTankers`) holding it, so the priest walks to them and absorbs it back like a
+stranger's. Our own party is always `isCoopFriendly` (shared party), so absorb costs its normal mp.
+Without it, a member holding franky was only covered by the generic absorb of a member with aggro,
+which waits for 600 spare mp, while the forced drag walked the priest off to the corner.
+
 Not compatible with the leash (`getBaitedBoss`, off since `LEECH_BAIT_BOSSES = []`). Before putting
 mrpumpkin or mrgreen back on it: skip `dragToSpot` while the boss is baited, have `getBossThief`
 ignore leeches while baiting, and drop `getBossToTakeBack`. Otherwise the priest absorbs the boss off

@@ -344,16 +344,23 @@ async function fightFranky() {
 
 /**
  * @param {Object} boss
- * @returns {Object|undefined} the stranger holding it, when the tanker should take it back
+ * @param {Object} [route] - its BOSS_DRAG_ROUTES entry
+ * @returns {Object|undefined} who holds it when the tanker should take it back:
+ *   a stranger, or with `takeBackFromParty` also a party member of ours
  */
-function getBossThief(boss) {
+function getBossThief(boss, route) {
   const holderName = boss?.target;
   if (
     !holderName ||
-    getMyCharacters().includes(holderName) ||
+    holderName === character.name ||
     knownTankers.includes(holderName)
   )
     return;
+
+  const isOurs = getMyCharacters().includes(holderName);
+  if (isOurs && !(route?.takeBackFromParty && partyMems.includes(holderName)))
+    return;
+
   return get_player(holderName) ?? undefined;
 }
 
@@ -365,7 +372,7 @@ function getStolenDragBoss() {
     if (!server.status[bossType]?.live) continue;
 
     const boss = get_nearest_monster({ type: bossType });
-    const thief = boss && getBossThief(boss);
+    const thief = boss && getBossThief(boss, BOSS_DRAG_ROUTES[bossType]);
     if (thief && isCoopFriendly(thief, boss)) return { boss, thief };
   }
 }

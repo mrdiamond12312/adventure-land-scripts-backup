@@ -1306,13 +1306,15 @@ var lastKitingTargetId = undefined;
  * adds. Without a priest in the party, or with a known tanker in sight to take
  * it back, the boss is fought where it stands. With `releaseAtSpot` the drag
  * lets go once the boss reaches the spot: the usual damage-ratio tanker pick
- * and kiting take over.
- * @type {Object<string, {spot: Object, mtypes: string[], releaseAtSpot?: boolean}>}
+ * and kiting take over. With `takeBackFromParty` the tanker also takes the
+ * boss back off our own party members, not just strangers.
+ * @type {Object<string, {spot: Object, mtypes: string[], releaseAtSpot?: boolean, takeBackFromParty?: boolean}>}
  */
 const BOSS_DRAG_ROUTES = {
   franky: {
     spot: { map: "level2w", x: 11, y: 8 },
     mtypes: ["franky", "nerfedmummy"],
+    takeBackFromParty: true,
   },
   // Between the xscorpion and minimush spawns
   mrpumpkin: {
@@ -1419,7 +1421,8 @@ async function dragToSpot(target, spot, boss) {
     smartmoveDebug = true;
     try {
       await advanceSmartMove(spot, {
-        speed: 200,
+        speed: 400,
+        useTown: false,
         useScare: false,
         useMagiport: false,
         useBlink: false,
@@ -1447,7 +1450,8 @@ async function resolveKiteTarget(target) {
     // Take a stolen boss back: the priest absorbs the thief, the warrior agitates
     // at the boss; either hits the boss first so the take-back is friendly
     const thief =
-      ["priest", "warrior"].includes(character.ctype) && getBossThief(boss);
+      ["priest", "warrior"].includes(character.ctype) &&
+      getBossThief(boss, route);
     if (thief) {
       const isAbsorbReady =
         character.ctype === "priest" && isCoopFriendly(thief, boss);
