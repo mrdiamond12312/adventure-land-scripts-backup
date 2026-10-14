@@ -328,19 +328,6 @@ async function getMaxScore(monsterId) {
 }
 
 //// INVENTORY functions
-function item_info(item) {
-  if (!item) return undefined;
-
-  const baseInfo = parent.G.items[item.name];
-  if (!baseInfo) return undefined;
-  const itemProperties = calculate_item_properties(item, {
-    def: baseInfo,
-    class: character.class,
-    map: character.map,
-  });
-  return { ...baseInfo, ...itemProperties };
-}
-
 function isInvFull(slots = 1) {
   return character.esize <= slots;
 }
@@ -701,15 +688,6 @@ const DISMANTLE_LIST = [
 
 var maxUpgrade = 7;
 var maxCompound = 3;
-
-// Mob weakness thresholds (damage ones are dps, like calculateDamage)
-const HARMLESS_MOB_DAMAGE = 300;
-const DANGEROUS_MOB_DAMAGE = 600;
-const FORMIDABLE_MOB_DAMAGE = 1100;
-const TRIVIAL_MOB_MAX_HP = 2000;
-const SHOT_DAMAGE_MARGIN = 0.9;
-// Cleave rolls 0.1 to 0.9 of the weapon's damage per hit — this is the midpoint
-const CLEAVE_ONE_HIT_MULTIPLIER = 0.5;
 
 // Smart move strategies
 var isAdvanceSmartMoving = false;
@@ -1788,107 +1766,6 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 }
 // Starting Positioning loop
 hitAndRun();
-
-const HEAL_IGNORE = ["Geoffriel"];
-
-function prioritizedNames() {
-  return [...getAlliedNames()];
-}
-
-// Track max heal power so the threshold stays stable across gear swaps.
-let maxHealPower = 0;
-
-function getHealPower() {
-  maxHealPower = Math.max(
-    maxHealPower,
-    character.heal || character.attack * 2.5,
-  );
-  return maxHealPower;
-}
-
-function getPlayersToHeal() {
-  const minHealMod = 0.9;
-  const healThreshold = character.ctype === "priest" ? 0.8 : 0.65;
-  const healPower = getHealPower();
-  const prioritizedNamesList = new Set(prioritizedNames());
-  const isBaiting = !!getBaitedBoss();
-
-  const shouldHeal = (entity) => {
-    const entityHp = entity.predictedHp ?? entity.hp;
-    const missing = entity.max_hp - entityHp;
-    return (
-      missing > minHealMod * healPower ||
-      entityHp < healThreshold * entity.max_hp
-    );
-  };
-
-  // Other healable entities
-  const potentialHealees = [
-    ...Object.values(parent.entities),
-    ...(character.ctype === "priest" ? [character] : []),
-  ]
-    .map((entity) => {
-      const incomingNumber =
-        projectileManager?.getIncomingNumber(entity.id) ?? 0;
-
-      const predictedHp =
-        entity.name === character.name ? entity.hp : entity.hp + incomingNumber;
-
-      return { ...entity, predictedHp };
-    })
-    .filter((entity) => {
-      if (!entity) return false;
-      if (entity.dead || entity.rip) return false;
-
-      if (character.ctype === "priest" && entity.mtype === "ghost") {
-        return !entity.s.healed && entity.hp < 7000;
-      }
-
-      if (entity.type === "monster" || entity.citizen) return false;
-      if (HEAL_IGNORE.includes(entity.name)) return false;
-      if (isBaiting && isBossLeech(entity)) return false;
-
-      if (entity.name !== character.name) {
-        if (character.team && entity.team !== character.team) return false;
-        if (is_pvp() && !prioritizedNamesList.has(entity.name)) return false;
-      }
-
-      return shouldHeal(entity);
-    })
-    .sort((lhs, rhs) => {
-      // Ghosts first if both exist
-
-      const isLhsPrioritized = prioritizedNamesList.has(lhs.name);
-      const isRhsPrioritized = prioritizedNamesList.has(rhs.name);
-
-      if (isLhsPrioritized !== isRhsPrioritized)
-        return isLhsPrioritized ? -1 : 1;
-
-      const ghostLhs = lhs.mtype === "ghost";
-      const ghostRhs = rhs.mtype === "ghost";
-      if (ghostLhs !== ghostRhs) return ghostLhs ? -1 : 1;
-
-      const lhsHp = lhs.predictedHp ?? lhs.hp;
-      const rhsHp = rhs.predictedHp ?? rhs.hp;
-      return lhsHp / lhs.max_hp - rhsHp / rhs.max_hp;
-    });
-
-  return potentialHealees;
-}
-
-function getLowestMana() {
-  const allies = parent.party_list
-    .filter((name) => name !== character.name)
-    .map((name) => get_player(name))
-    .filter(
-      (entity) =>
-        entity &&
-        partyMems.includes(entity.name) &&
-        !["mage", "priest"].includes(entity.ctype),
-    )
-    .sort((lhs, rhs) => lhs.mp / lhs.max_mp - rhs.mp / rhs.max_mp);
-  return allies.shift();
-}
 
 //// RESPAWN
 function handle_death() {

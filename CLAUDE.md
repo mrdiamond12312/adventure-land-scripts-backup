@@ -72,7 +72,8 @@ shared library pulled in transitively.
 basic_function.7.js          [SHARED — the core library]
   loaded by every fighter entry script AND merchant_upgrade.10.js;
   itself loads, based on class/config:
-    strategic_fn.11.js           combat math: damage/heal calc, gear selection, cleave/blast targeting
+    strategic_fn.11.js           combat math: damage/heal calc, heal targeting, item_info and gear
+                                 scoring/selection, cleave/blast targeting
     normal_strategy.12.js        \_ farming strategy variants, swapped via
     pull_strategy.13.js          /  changeToPullStrategies()/changeToNormalStrategies()
     server_hop_utilities.25.js   the cross-realm ServerRealmData distributor and realm-fatigue
