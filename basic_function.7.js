@@ -623,7 +623,7 @@ const STORE_ABLE = [
 ];
 
 const SALE_ABLE = [
-  "smoke",
+  // "smoke",
   "vgloves",
   "mcape",
   "santasbelt",

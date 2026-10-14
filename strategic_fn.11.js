@@ -995,19 +995,59 @@ function isPriestInHealGraceWindow(target) {
   return Date.now() - priestLastHealGearAt < graceMs;
 }
 
-function getPriestMainhand(target, currentTarget, feelingLucky) {
+/** Below this hp share the priest skips luck gear */
+const PRIEST_LUCK_MIN_HP_RATIO = 0.5;
+/** Party volleys that count as a quick kill */
+const PRIEST_EXP_KILL_VOLLEYS = 2;
+const PRIEST_DEFAULT_GEAR = {
+  gloves: "supermittens",
+  belt: "intbelt",
+  ring1: "zapper",
+  ring2: "zapper",
+  cape: "angelwings",
+  earring1: "cearring",
+  earring2: "cearring",
+};
+
+function isUnhealedGhost(target) {
+  return target?.mtype === "ghost" && !target.s?.healed;
+}
+
+function isPriestInDanger() {
+  return (
+    !!character.s.burned ||
+    character.hp < character.max_hp * PRIEST_LUCK_MIN_HP_RATIO
+  );
+}
+
+function isPartyQuickKilling(mob) {
+  if (!mob) return false;
+
+  const volley = partyMems
+    .map((name) => get_player(name))
+    .filter(Boolean)
+    .reduce((sum, member) => sum + member.attack * mitigation(member, mob), 0);
+  return mob.max_hp <= volley * PRIEST_EXP_KILL_VOLLEYS;
+}
+
+function getPriestMainhand(target, currentTarget, statGear) {
+  if (isUnhealedGhost(target)) return "pinkie";
   if (isPriestInHealGraceWindow(target)) return "lmace";
 
   if (character.map === "crypt") {
     return currentTarget?.s?.frozen ? "lmace" : "froststaff";
   }
 
-  return feelingLucky ? "lmace" : "firestaff";
+  return statGear.mainhand ?? "firestaff";
 }
 
-function getPriestOffhand(isTanking, feelingLucky) {
+function getPriestOffhand(mainhand, tankGear, statGear) {
+  const wtype = G.items[mainhand]?.wtype;
+  if (G.classes[character.ctype].doublehand?.[wtype]) return undefined;
   if (character.map === "crypt") return "exoarm";
-  if (feelingLucky) return "mshield";
+  if (statGear.offhand) return statGear.offhand;
+  if (character.fear) return "wbookhs";
+  if (tankGear.offhand) return tankGear.offhand;
 
   const facingMagicalMob = Object.values(parent.entities).some(
     (mob) =>
@@ -1016,20 +1056,17 @@ function getPriestOffhand(isTanking, feelingLucky) {
       mob.damage_type === "magical",
   );
 
-  if (isTanking || facingMagicalMob || character.fear) return "wbookhs";
-  return "exoarm";
+  return facingMagicalMob ? "wbookhs" : "exoarm";
 }
 
-function getPriestOrb(target, isTanking, feelingLucky, feelingWise) {
-  if (isTanking && character.s.burned) return "orba";
-  if (feelingLucky) return "rabbitsfoot";
-  if (feelingWise) return "talkingskull";
+function getPriestOrb(target, tankGear, statGear) {
+  if (statGear.orb) return statGear.orb;
   if (isPriestInHealGraceWindow(target)) return "jacko";
-  return "test_orb";
+  return tankGear.orb ?? "test_orb";
 }
 
-function getPriestAmulet(isTanking, feelingLucky, feelingWise) {
-  if (feelingLucky || (feelingWise && !isTanking)) return "spookyamulet";
+function getPriestAmulet(tankGear, statGear) {
+  if (statGear.amulet) return statGear.amulet;
 
   // Re-equip sanguine to (re)apply its aura
   const haveSanguine =
@@ -1042,27 +1079,39 @@ function getPriestAmulet(isTanking, feelingLucky, feelingWise) {
     return "sanguine";
   }
 
-  return isTanking ? "t2stramulet" : "intamulet";
+  return tankGear.amulet ?? "intamulet";
 }
 
 function calculatePriestItems(target) {
   const currentTarget = get_targeted_monster();
   const isTanking = isAssignedAsTanker();
-  const feelingLucky = shouldWearLuckGear();
-  const feelingWise = shouldWearExpGear();
+  const fireball = getImminentFireball();
+  const tankGear = fireball
+    ? pickFireballGear(fireball)
+    : isTanking
+    ? pickTankGear()
+    : {};
+  const feelingLucky =
+    !fireball && shouldWearLuckGear() && !isPriestInDanger();
+  const feelingWise =
+    !fireball &&
+    !isTanking &&
+    (shouldWearExpGear() || isPartyQuickKilling(currentTarget));
+  const statGear = feelingLucky
+    ? pickStatGear("luck")
+    : feelingWise
+    ? pickStatGear("xp")
+    : {};
 
+  const mainhand = getPriestMainhand(target, currentTarget, statGear);
   return {
-    mainhand: getPriestMainhand(target, currentTarget, feelingLucky),
-    offhand: getPriestOffhand(isTanking, feelingLucky),
-    orb: getPriestOrb(target, isTanking, feelingLucky, feelingWise),
-    gloves: "supermittens",
-    belt: "intbelt",
-    amulet: getPriestAmulet(isTanking, feelingLucky, feelingWise),
-    ring1: feelingLucky ? "ringhs" : "zapper",
-    ring2: feelingLucky ? "ringhs" : "zapper",
-    cape: "angelwings",
-    earring1: feelingLucky ? "cloverstud" : "cearring",
-    earring2: feelingLucky ? "cloverstud" : "cearring",
+    ...PRIEST_DEFAULT_GEAR,
+    ...tankGear,
+    ...statGear,
+    mainhand,
+    offhand: getPriestOffhand(mainhand, tankGear, statGear),
+    orb: getPriestOrb(target, tankGear, statGear),
+    amulet: getPriestAmulet(tankGear, statGear),
   };
 }
 
@@ -1835,6 +1884,312 @@ function avgPartyDmgTaken(partyList = partyMems, dmgType = null) {
   );
 }
 
+/** @returns {Object[]} mobs on the party or idle */
+function getFightMobs() {
+  return Object.values(parent.entities).filter(
+    (mob) =>
+      mob.type === "monster" &&
+      (!mob.target || partyMems.includes(mob.target)),
+  );
+}
+
+/** @returns {number} physical share of raw fight dps */
+function rawPhysicalDmgShare() {
+  let physicalDps = 0;
+  let totalDps = 0;
+  for (const mob of getFightMobs()) {
+    const dps = mob.attack * attackFrequency(mob);
+    totalDps += dps;
+    if (mob.damage_type === "physical") physicalDps += dps;
+  }
+  return totalDps ? physicalDps / totalDps : 1;
+}
+
+/** Server stat caps */
+const STR_ARMOR_CAP = 160;
+const INT_RESISTANCE_CAP = 180;
+const OVER_CAP_DEFENSE_RATE = 0.25;
+const DEX_FREQUENCY_CAP = 160;
+const OFFHAND_ATTACK_SHARE = 0.7;
+const PRIEST_ATTACK_MULTIPLIER = 1.6;
+const PROJECTED_STATS = [
+  "str",
+  "int",
+  "dex",
+  "armor",
+  "resistance",
+  "apiercing",
+  "rpiercing",
+  "frequency",
+  "attack",
+  "firesistance",
+];
+const BURN_DPS_PER_INTENSITY = 1000 / 210 / 5;
+const BURN_SECONDS = 5;
+const MULTI_BURN_RANGE = 480;
+const FIREBALL_GEAR_LEAD_MS = 1500;
+const TANK_GEAR_SWAP_MIN_GAIN = 0.05;
+const NON_GEAR_SLOT = /^(elixir|trade)/;
+const TANK_GEAR_SKIPPED_SLOT = /^mainhand$/;
+
+function statDefense(stat, cap) {
+  return Math.min(stat, cap) + Math.max(0, stat - cap) * OVER_CAP_DEFENSE_RATE;
+}
+
+function dexFrequency(dex) {
+  return (
+    Math.min(dex, DEX_FREQUENCY_CAP) / 640 +
+    Math.max(0, dex - DEX_FREQUENCY_CAP) / 925
+  );
+}
+
+function fitsSlot(info, slot) {
+  if (info.class && !info.class.includes(character.ctype)) return false;
+
+  const classData = G.classes[character.ctype];
+  if (slot === "mainhand")
+    return info.type === "weapon" && info.wtype in (classData.mainhand ?? {});
+  if (slot === "offhand") return info.type in (classData.offhand ?? {});
+  return info.type === slot.replace(/\d+$/, "");
+}
+
+function getGearSlots(skipped) {
+  return Object.keys(character.slots).filter(
+    (slot) => !NON_GEAR_SLOT.test(slot) && !skipped?.test(slot),
+  );
+}
+
+/** @returns {Object<string, Object[]>} item_info per owned copy, best first */
+function getGearCopies(slots) {
+  const copies = {};
+  const addCopy = (item) => {
+    const info = item && item_info(item);
+    if (info) (copies[item.name] ??= []).push(info);
+  };
+  character.items.forEach(addCopy);
+  for (const slot of slots) addCopy(character.slots[slot]);
+  for (const list of Object.values(copies))
+    list.sort((lhs, rhs) => (rhs.level ?? 0) - (lhs.level ?? 0));
+  return copies;
+}
+
+/** @returns {Object<string, string>} slot → item with the most `stat` */
+function pickStatGear(stat) {
+  const slots = getGearSlots();
+  const copies = getGearCopies(slots);
+  const gear = {};
+  for (const slot of slots) {
+    const [best] = Object.keys(copies)
+      .filter(
+        (name) =>
+          copies[name].length &&
+          (copies[name][0][stat] ?? 0) > 0 &&
+          fitsSlot(copies[name][0], slot),
+      )
+      .sort((lhs, rhs) => copies[rhs][0][stat] - copies[lhs][0][stat]);
+    if (!best) continue;
+
+    gear[slot] = best;
+    copies[best].shift();
+  }
+  return gear;
+}
+
+function itemAttackOf(slot, info) {
+  return (info?.attack ?? 0) * (slot === "offhand" ? OFFHAND_ATTACK_SHARE : 1);
+}
+
+function getWornGear() {
+  return Object.entries(character.slots).filter(
+    ([slot, item]) => item && !slot.startsWith("trade"),
+  );
+}
+
+function gearStatDelta(picks) {
+  const stats = Object.fromEntries(PROJECTED_STATS.map((stat) => [stat, 0]));
+  let itemAttack = 0;
+  const setsBefore = {};
+  for (const [, item] of getWornGear()) {
+    const set = item_info(item)?.set;
+    if (set) setsBefore[set] = (setsBefore[set] ?? 0) + 1;
+  }
+  const setsAfter = { ...setsBefore };
+
+  for (const [slot, info] of Object.entries(picks)) {
+    const worn = character.slots[slot] && item_info(character.slots[slot]);
+    for (const stat of PROJECTED_STATS)
+      stats[stat] += (info[stat] ?? 0) - (worn?.[stat] ?? 0);
+    itemAttack += itemAttackOf(slot, info) - itemAttackOf(slot, worn);
+    if (worn?.set) setsAfter[worn.set]--;
+    if (info.set) setsAfter[info.set] = (setsAfter[info.set] ?? 0) + 1;
+  }
+
+  for (const set of Object.keys(setsAfter)) {
+    const before = G.sets[set]?.[setsBefore[set] ?? 0] ?? {};
+    const after = G.sets[set]?.[setsAfter[set]] ?? {};
+    for (const stat of PROJECTED_STATS)
+      stats[stat] += (after[stat] ?? 0) - (before[stat] ?? 0);
+  }
+  return { stats, itemAttack };
+}
+
+/** Our stats with `picks` worn */
+function projectStatsWith(picks) {
+  const { stats, itemAttack } = gearStatDelta(picks);
+  const str = character.str + stats.str;
+  const int = character.int + stats.int;
+  const dex = character.dex + stats.dex;
+
+  const mainStat = G.classes[character.ctype].main_stat;
+  const currentItemAttack = Math.max(
+    5,
+    getWornGear().reduce(
+      (sum, [slot, item]) => sum + itemAttackOf(slot, item_info(item)),
+      0,
+    ),
+  );
+  const projectedItemAttack = Math.max(5, currentItemAttack + itemAttack);
+  const attackScale =
+    character.ctype === "priest" ? PRIEST_ATTACK_MULTIPLIER : 1;
+  const attackGain =
+    ((projectedItemAttack * (character[mainStat] + (stats[mainStat] ?? 0))) /
+      20 -
+      (currentItemAttack * character[mainStat]) / 20 +
+      stats.attack) *
+    attackScale;
+
+  return {
+    armor:
+      character.armor +
+      stats.armor +
+      statDefense(str, STR_ARMOR_CAP) -
+      statDefense(character.str, STR_ARMOR_CAP),
+    resistance:
+      character.resistance +
+      stats.resistance +
+      statDefense(int, INT_RESISTANCE_CAP) -
+      statDefense(character.int, INT_RESISTANCE_CAP),
+    apiercing: (character.apiercing ?? 0) + stats.apiercing,
+    rpiercing: (character.rpiercing ?? 0) + stats.rpiercing,
+    frequency:
+      character.frequency +
+      stats.frequency / 100 +
+      dexFrequency(dex) -
+      dexFrequency(character.dex) +
+      stats.int / 1575,
+    attack: character.attack + attackGain,
+    heal: character.heal ? character.heal + attackGain : 0,
+    firesistance: wornStat("firesistance") + stats.firesistance,
+  };
+}
+
+function wornStat(stat) {
+  return (
+    character[stat] ??
+    getWornGear().reduce((sum, [, item]) => sum + (item_info(item)?.[stat] ?? 0), 0)
+  );
+}
+
+/** @returns {number} worst burn dps from the fight mobs */
+function fightBurnDps(mobs, target) {
+  return mobs.reduce((worst, mob) => {
+    const burn = G.monsters[mob.mtype]?.abilities?.burn;
+    if (!burn) return worst;
+
+    const hit = mob.attack * mitigation(mob, target);
+    const intensity = burnIntensityCap(hit, target.firesistance, burn.unlimited);
+    return Math.max(worst, intensity * BURN_DPS_PER_INTENSITY);
+  }, 0);
+}
+
+/** @returns {Object<string, string>} slot → item with the lowest `score` */
+function pickGearByScore(slots, score, minGain) {
+  const copies = getGearCopies(slots);
+  const picks = {};
+  const scoreWith = (slot, info) =>
+    score({ ...character, ...projectStatsWith({ ...picks, [slot]: info }) });
+
+  const gear = {};
+  for (const slot of slots) {
+    const ranked = Object.keys(copies)
+      .filter((name) => copies[name].length && fitsSlot(copies[name][0], slot))
+      .map((name) => ({ name, score: scoreWith(slot, copies[name][0]) }))
+      .sort((lhs, rhs) => lhs.score - rhs.score);
+    if (!ranked.length) continue;
+
+    const worn = ranked.find(
+      ({ name }) => name === character.slots[slot]?.name,
+    );
+    const choice =
+      worn && ranked[0].score >= worn.score * (1 - minGain) ? worn : ranked[0];
+
+    gear[slot] = choice.name;
+    picks[slot] = copies[choice.name].shift();
+  }
+  return gear;
+}
+
+/** @returns {Object<string, string>} slot → tank item */
+function pickTankGear() {
+  const slots = getGearSlots(TANK_GEAR_SKIPPED_SLOT);
+  const mobs = getFightMobs();
+  if (!mobs.length) {
+    return Object.fromEntries(
+      slots
+        .filter((slot) => character.slots[slot])
+        .map((slot) => [slot, character.slots[slot].name]),
+    );
+  }
+
+  const isHealer = character.ctype === "priest";
+  const score = (projected) => {
+    const damage =
+      mobs.reduce((sum, mob) => sum + calculateDamage(mob, projected), 0) +
+      fightBurnDps(mobs, projected);
+    if (!isHealer) return damage;
+
+    const heal =
+      (projected.heal || projected.attack) *
+      attackFrequency(projected) *
+      healMitigation(projected, projected);
+    return heal > 0 ? damage / heal : Infinity;
+  };
+  return pickGearByScore(slots, score, TANK_GEAR_SWAP_MIN_GAIN);
+}
+
+/** @returns {Object|undefined} a mob about to fireball us */
+function getImminentFireball() {
+  return Object.values(parent.entities).find(
+    (mob) =>
+      mob.type === "monster" &&
+      mob.s?.multi_burn &&
+      mob.s.multi_burn.ms <= FIREBALL_GEAR_LEAD_MS &&
+      distance(mob, character) < MULTI_BURN_RANGE,
+  );
+}
+
+/** @returns {number} one fireball's hit plus burn */
+function fireballDamage(mob, target) {
+  const hit =
+    G.skills.fireball.damage *
+    mitigation(mob, target, { damageType: G.skills.fireball.damage_type });
+  const fireResist = (target.firesistance ?? 0) / 100;
+  const current = character.s.burned?.intensity ?? 0;
+  const intensity = Math.max(current, ((1 - fireResist) * current) / 3 + hit);
+  return (
+    hit + (1 - fireResist) * intensity * BURN_DPS_PER_INTENSITY * BURN_SECONDS
+  );
+}
+
+/** @returns {Object<string, string>} slot → item taking the least fireball damage */
+function pickFireballGear(mob) {
+  return pickGearByScore(
+    getGearSlots(TANK_GEAR_SKIPPED_SLOT),
+    (projected) => fireballDamage(mob, projected),
+    0,
+  );
+}
+
 function rotateLeader(partyList, newLeaderId) {
   const newLeaderIndex = partyList.indexOf(newLeaderId);
   if (newLeaderIndex === -1) return partyList;
@@ -1858,11 +2213,7 @@ function assignRoles() {
   }
 
   if (partyMems.includes(WARRIOR) && partyMems.includes(PRIEST)) {
-    const partyDmgTaken = avgPartyDmgTaken(partyMems);
-    const partyPhysicalDmgTaken = avgPartyDmgTaken(partyMems, "physical");
-    const physicalDmgRatio = partyPhysicalDmgTaken / partyDmgTaken;
-
-    TANKER = physicalDmgRatio <= 0.5 ? PRIEST : WARRIOR;
+    TANKER = rawPhysicalDmgShare() <= 0.5 ? PRIEST : WARRIOR;
     partyMems = rotateLeader(partyMems, TANKER);
     return;
   }

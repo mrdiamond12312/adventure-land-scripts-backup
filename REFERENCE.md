@@ -3216,3 +3216,101 @@ The pull agitate used to need 420 + 400 = 820 mp, cleave 720 + 200 = 920 (plus `
 Between the two, agitate was the only one allowed, so the warrior agitated whenever mp sat there
 instead of choosing. Both now gate on `warriorAoeMpFloor()`, so above it each one's own conditions
 decide. The crabxx fetch and the drag take-back keep their own agitate gates.
+
+## A tanking priest scores its gear by heal time (`pickTankGear`, 2026-10-15)
+
+As tanker the priest used to wear wbookhs and t2stramulet whatever hit it. Now every gear slot
+but the mainhand (`TANK_GEAR_SKIPPED_SLOT`) takes the owned item, at its
+highest level, with the lowest score. No item names are listed: any item of the slot's type the
+class can wear is a candidate, the offhand taking any type in `G.classes[ctype].offhand`.
+
+**The score is damage taken ÷ heal landing on us**: the share of the priest's attacks it spends
+healing the fight back. Damage is `calculateDamage` from the fight mobs (`getFightMobs`, the same
+set the tank pick reads); heal is attack × `attackFrequency` × `healMitigation` on ourselves.
+Damage minus heal was tried first and is wrong: a priest heals about ten times what a bat pack
+deals, so the difference only tracked attack and every pick went to heal gear. Overheal is worth
+nothing; the ratio rewards a heal only by how much faster it covers the damage. A class that does
+not heal scores plain damage.
+
+**Stats are projected the way the server's `calculate_player_stats` derives them**
+(`projectStatsWith`, from the item's `item_info` at its level, so upgrades and stat scrolls count):
+
+- armour and resistance from the item, plus str → armour 1:1 up to 160 and int → resistance 1:1
+  up to 180, a quarter past that;
+- attack = (item attack × main stat / 20 + flat attack) × 1.6 for a priest, the offhand's attack
+  counting at 0.7, the item attack floored at 5;
+- frequency from the item's `frequency` / 100, dex (1/640 up to 160, 1/925 past) and int / 1575;
+- apiercing and rpiercing; rpiercing raises the heal through `healMitigation`;
+- set bonuses (`G.sets[set][count]`, the bonus for exactly that many pieces worn), so swapping a
+  piece out of a set also drops its bonus.
+
+Only the swapped slots are diffed; everything else (rings, earrings, the mainhand, conditions,
+monster-hunt stats) comes in through the server's totals on `character`, and the non-linear parts
+(the main stat scaling item attack, the str/int caps, the dex frequency steps) are evaluated on
+those full totals. The heal is projected from `character.heal`, not `character.attack`: the
+server copies attack into heal before scaling attack by `output` and adding the
+`damage_received` bonus. Trade slots are left out of the worn gear (`getWornGear`), as the server
+only counts `character_slots`.
+
+Checked in a dry run against the real item data (bats are physical 50 attack, the mvampire
+magical 245): bats alone pick exoarm and t2intamulet, the mvampire alone keeps wbookhs, and the
+mix picks exoarm, whose int and str lift the heal more than its lost resistance costs.
+
+- **One slot at a time:** each slot is scored with the earlier slots' picks in place. The pool is
+  the bag plus what the picked slots wear, one entry per copy, highest level first: a candidate is
+  scored at the copy `equipBatch` would put on, and a pick uses that copy up, so a second slot of
+  the same type gets the next one (two rings, two earrings). The mainhand is left to the class
+  rules (`TANK_GEAR_SKIPPED_SLOT`), and items listed in trade slots are not in the pool.
+- **What is worn stays unless a swap cuts the score by 5%** (`TANK_GEAR_SWAP_MIN_GAIN`), so bats
+  dying around an mvampire do not swap gear every few kills. With no fight mobs, what is worn stays.
+- **The existing overrides still win:** crypt exoarm, luck and exp gear, fear's wbookhs, sanguine
+  re-application and jacko in the heal grace window. The pick only replaces the defaults
+  (`PRIEST_DEFAULT_GEAR`). Off tank nothing changed.
+
+### Luck, exp and the ghost heal (`calculatePriestItems`, 2026-10-15)
+
+Priority, highest first: the situational rules (pinkie, heal grace, crypt, fear, sanguine), then
+luck or xp gear, then the fireball or tank pick, then `PRIEST_DEFAULT_GEAR`. Luck and xp
+gear are picked the same way for every slot, rings and earrings included (`pickStatGear`): the
+owned copy with the most of the stat, a copy per slot of a pair, the mainhand only one-handed.
+
+- **Luck** is worn whenever `shouldWearLuckGear` holds (our target near death, or one we kill in
+  two hits), tanker or not, unless we are in danger (`isPriestInDanger`): burned, or under 50% hp
+  (`PRIEST_LUCK_MIN_HP_RATIO`). Then the tank or heal gear stays on so the priest heals up first.
+  Note: luck gear goes on once the threshold is reached, so a tank in luck gear takes the last
+  15% of the mob's life with less defence; accepted, since danger still pulls it back.
+- **Exp** gear is worn only off tank, in the old ≤10% window or whenever the party in sight kills
+  the target from full hp within two volleys (`isPartyQuickKilling`, `PRIEST_EXP_KILL_VOLLEYS`),
+  where the priest has nothing to heal.
+- **Ghosts:** the first heal on a ghost without `s.healed` drops essenceoflife on the server. The
+  priest heals it with pinkie, a wand with no attack, so the heal is the server's floor (item
+  attack 5) and barely refills the ghost. Pinkie is two-handed, so the offhand is left empty.
+- **Not modelled:** crit, `output`, mp, stresistance, and the class offhand modifiers (speed
+  only). The heal is scored on ourselves, so our own resistance weighs on it; heals on the rest of
+  the party would not lose that.
+
+### Burn, poison and the fireball (2026-10-15)
+
+- **Burn from a mob's `burn` ability** is scored as always on (`fightBurnDps`): we AoE packs, so
+  procs land faster than the 5s burn wears off and the resist chance stops mattering. Only the
+  carry-over firesistance cuts (`burnIntensityCap`) is left, and only the worst burner counts,
+  since one burn holds at a time. This replaced the hardcoded "orba while tanking and burned".
+- **Poison is not scored.** Held on the same way, it cuts every heal to 25% whatever is worn, which
+  divides every candidate's score alike and cannot change a pick; pnresistance only buys resist
+  chance and duration.
+- **The multi_burn fireball** (Dragold and co.) is a charged hit: `mob.s.multi_burn.ms` counts
+  down, then a 4000 magical fireball hits every player within 480 and tries to burn. So its gear
+  goes on only for that hit: within `FIREBALL_GEAR_LEAD_MS` (1.5s) of it firing, every slot but
+  the mainhand takes the least `fireballDamage` (hit through resistance, plus the burn unless
+  firesistance resists it), ahead of the tank pick and with luck and xp gear held off.
+
+## The tank pick reads raw damage in view (`rawPhysicalDmgShare`, 2026-10-15)
+
+With both a warrior and a priest, `assignRoles` gives the warrior the tank once physical is over
+half the damage. It used to read the party's mitigated damage taken (`avgPartyDmgTaken`), and on
+bats + mvampire the warrior and priest kept trading the tank. That number moves with the tank's
+gear (armour cuts the physical side, wbookhs the magical side), and with every bat that dies or
+picks up aggro, since only mobs already on us counted. Now it is attack × frequency of every
+monster in view that targets a party member or no one, with no mitigation, so gear and aggro
+cannot move it. It holds no state, so every character still works out the same tanker. With
+nothing around the share is 1, so the warrior tanks, as before.
