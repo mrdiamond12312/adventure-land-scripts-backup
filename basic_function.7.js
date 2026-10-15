@@ -277,9 +277,13 @@ const SPECIAL_MOB_IDS = [
 // var mapX = -172;
 // var mapY = 708;
 
+// var map = "mforest";
+// var mapX = 403;
+// var mapY = -347;
+
 var map = "mforest";
-var mapX = 403;
-var mapY = -347;
+var mapX = -160;
+var mapY = 770;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
@@ -303,9 +307,9 @@ var mapY = -347;
 // var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 // var mobsToFarm = ["prat"];
 // var mobsToFarm = ["mummy"];
-var mobsToFarm = ["dryad", "mechagnome"];
+// var mobsToFarm = ["dryad", "mechagnome"];
 // var mobsToFarm = ["jr", "booboo"];
-// var mobsToFarm = ["odino"];
+var mobsToFarm = ["odino", "paledino"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
