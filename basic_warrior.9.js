@@ -62,7 +62,7 @@ function planFight(target) {
   if (
     typeof usePullStrategies === "function" &&
     currentStrategy === usePullStrategies &&
-    !target?.mtype.includes("crabx") &&
+    !isPinnedTarget(target) &&
     aggroedMobs.length
   ) {
     if (!target?.cooperative) target = aggroedMobs[0];

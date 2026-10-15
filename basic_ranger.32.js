@@ -77,6 +77,9 @@ const isCupidEquipped = () => character.slots.mainhand?.name === "cupid";
 /** @returns {boolean} whether the server holds cupid */
 const isCupidOnServer = () => getServerSlot("mainhand")?.name === "cupid";
 
+/** A cooperative boss behind its shell: every hit lands for 1 */
+const isShelledBoss = (mob) => !!mob["1hp"] && !!mob.cooperative;
+
 /**
  * Mobs worth shooting right now, annotated with cluster count and distance,
  * best first.
@@ -92,6 +95,7 @@ function getPotentialTargets() {
         !entity.rip &&
         inRange(entity) &&
         !entity.s?.fullguardx &&
+        !isShelledBoss(entity) &&
         (isHarmlessMob(entity) ||
           (entity.cooperative && !partyMems.includes(entity.target)) ||
           entity.target),
@@ -153,11 +157,9 @@ function getShotPlan(incomingTarget = get_targeted_monster()) {
   const isCupid = isCupidEquipped();
 
   let target = incomingTarget;
-  const isHeldCrabx =
-    !!target?.mtype?.includes("crabx") &&
-    inRange(target) &&
-    isSafeToShoot(target);
-  if (potentialTargets.length && !isHeldCrabx) {
+  const isHeldPin =
+    isPinnedTarget(target) && inRange(target) && isSafeToShoot(target);
+  if (potentialTargets.length && !isHeldPin) {
     target =
       potentialTargets.find((mob) => mob.safe_to_shoot) ?? potentialTargets[0];
   }

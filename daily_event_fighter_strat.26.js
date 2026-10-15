@@ -103,14 +103,19 @@ async function fightSimpleBoss(types) {
 }
 
 /**
+ * @param {string} bossType
+ * @returns {string[]} the mtypes the boss spawns, from `G.monsters[].spawns`
+ */
+const getMinionTypes = (bossType) =>
+  (parent.G.monsters[bossType]?.spawns ?? []).map(([, type]) => type);
+
+/**
  * A visible add from the boss's `G.monsters[].spawns`, sticking with the one already targeted.
  * @param {string} bossType
  * @returns {object|undefined}
  */
 function getBossMinion(bossType) {
-  const minionTypes = (parent.G.monsters[bossType].spawns ?? []).map(
-    ([, type]) => type,
-  );
+  const minionTypes = getMinionTypes(bossType);
   if (!minionTypes.length) return undefined;
 
   const current = get_targeted_monster();
@@ -132,6 +137,15 @@ const CRABXX_FETCH_MOVE_OPTIONS = {
   useMagiport: false,
   useTown: false,
 };
+
+/**
+ * @param {Object} [entity]
+ * @returns {boolean} whether it is crabxx or one of its adds
+ */
+const isCrabxxMob = (entity) =>
+  entity?.type === "monster" &&
+  (entity.mtype === "crabxx" ||
+    getMinionTypes("crabxx").includes(entity.mtype));
 
 /** @returns {Object|undefined} the crabxx spawn center */
 const getCrabxxCenter = () => getMonsterSpawns("crabxx")[0];
@@ -237,7 +251,7 @@ async function fightCrabxx() {
   await holdCrabxxAggro(crabxxInstance, crabxList);
 
   changeToPullStrategies();
-  return engage(targetCrab);
+  return engage(targetCrab, { isPinned: true });
 }
 
 /**

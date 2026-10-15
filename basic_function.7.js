@@ -1451,7 +1451,7 @@ async function resolveKiteTarget(target) {
       return dragToSpot(target, route.spot, boss);
   }
 
-  if (target?.type === "monster" && target.mtype.includes("crabx")) {
+  if (isCrabxxMob(target)) {
     const boss = get_nearest_monster({ type: "crabxx" });
     const center = getMonsterSpawns("crabxx")[0];
     if (isAssignedAsTanker())
@@ -2644,7 +2644,8 @@ const getCrabsForCrabxx = () => {
       entity.name === character.name ? entity.hp : entity.hp + incomingNumber;
     entity.predictedHp = predictedHp;
 
-    if (entity.mtype === "crabx") {
+    // A crabx the shots in the air already kill is gone
+    if (entity.mtype === "crabx" && predictedHp > 0) {
       crabxList.push(entity);
     }
   }
@@ -2785,8 +2786,20 @@ if (character.ctype !== "merchant") {
 /**
  * This tick is mine, hit this — each class aims at it in mainLoop and its action loop swings.
  * @param {object} [target]
+ * @param {Object} [options]
+ * @param {boolean} [options.isPinned] - hand-picked: the class's own target pick keeps it
  */
-const engage = (target) => ({ target });
+const engage = (target, { isPinned = false } = {}) => ({ target, isPinned });
+
+/** id of the target the tick's strategy pinned, if any */
+var pinnedTargetId;
+
+/**
+ * @param {Object} [target]
+ * @returns {boolean} whether the tick's strategy pinned this target
+ */
+const isPinnedTarget = (target) =>
+  !!target && target.id !== undefined && target.id === pinnedTargetId;
 
 /** This tick is mine with nothing to hit: it went into the trip. */
 const travelling = () => ({});
@@ -2803,7 +2816,10 @@ async function selectFightTarget() {
 
   try {
     for (const [rank, strategy] of fighterStrategies.entries()) {
-      if (isOnTrip() && rank >= tripRank) return undefined;
+      if (isOnTrip() && rank >= tripRank) {
+        pinnedTargetId = undefined;
+        return undefined;
+      }
 
       activeStrategyRank = rank;
       const outcome = await strategy();
@@ -2813,6 +2829,7 @@ async function selectFightTarget() {
       if (isOnTrip() && rank < tripRank) await abandonTrip();
 
       tickOwnerStrategy = strategy;
+      pinnedTargetId = outcome.isPinned ? outcome.target?.id : undefined;
       return outcome.target;
     }
   } finally {
@@ -2820,6 +2837,7 @@ async function selectFightTarget() {
   }
 
   tickOwnerStrategy = undefined;
+  pinnedTargetId = undefined;
   return undefined;
 }
 

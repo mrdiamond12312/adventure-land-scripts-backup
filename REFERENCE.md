@@ -1823,9 +1823,26 @@ The rest of the branch looks tunable, but is deliberate (confirmed 2026-09-29):
   that, and the ranger cleans up adds. `s.young` is only a 500ms window on *every* new monster
   (`new_monster`), and `spawn`/`master` never reach the client (`monster_to_client`); missing an
   older add is fine, since scare comes back off cooldown and a new one spawns every second.
-- **Stomp only while `crabxList.length <= 1`.** It is a play-maker: stun the boss once the adds
+- **Stomp only while `crabxList.length <= 1`.** Since 2026-10-16 (on trial), `getCrabsForCrabxx`
+  leaves out any crabx the shots in the air already kill (`predictedHp <= 0`), so every reader
+  counts only survivors: the stomp gate, `pickCrabxxTarget` (no wasted shots on a dying crab, and
+  everyone turns to the boss a moment before the shell drops), the ranger's spot, and the
+  newborn scare. A predicted kill that misses drops the crab out of the list only until the
+  projectile manager expires that shot (~500ms). It is a play-maker: stun the boss once the adds
   are cleared and let the party follow up, not a panic button. This matters more than it looks:
   the server skips a disabled (stunned) boss's timed spawns entirely.
+- **The ranger never picks a shelled boss himself** (`isShelledBoss`, `getPotentialTargets`,
+  2026-10-16). His candidate list sorts cooperative mobs first, and "1hp" makes the boss count as
+  harmless, so the shelled crabxx came out on top. It took an arrow out of every 3shot/5shot, and
+  became the single-shot target whenever the pinned crabx was out of reach, all for 1 damage a
+  hit. It is out of the list now; he still shoots it as the strategy's own fallback, when no crabx
+  is left and someone holds it.
+- **Stomp waits for at most one crabx, not zero** (confirmed 2026-10-16). While the boss is free
+  it summons one a second, so "0 in view" is a short gap that a summon often fills before the
+  stomp lands. Stomp is on a long cooldown (~40s in practice), so a miss is costly. Stunning with
+  one left stops summons first; that crabx dies inside the 3.2s stun, and the server's 1s shell
+  check runs in parallel with the kill. Crabx that the shots already in the air will kill aren't in
+  `crabxList`, so the stomp can land a little sooner, while they are still dying.
 - **An out-of-range crabx is still the target.** `bestCrabx` prefers one in range but falls back
   to any crabx, so fighters walk toward it; the boss is only the fallback with no crabx at all.
 
@@ -3370,3 +3387,20 @@ Two ways the ranger skips shots while `penalty_cd` is clear:
   single-shot branch return null while another safe mob was in range. A parked ranger does not
   walk toward a crabx past 400 of the boss, so this stall could last. Now the crabx is only kept
   while it is in range and safe; otherwise he takes the first safe candidate.
+- **The warrior had the same gap** (`planFight`, basic_warrior.9.js). His in-reach fallback was
+  only worked out in pull mode on a non-crabx target, so a crabx out of melee left him with
+  nothing to swing at. That hurt as tanker, anchored to the crabxx center or the boss. Now the
+  fallback is worked out in every mode, as mage, rogue and priest already did: the crabx stays the
+  focus, and he swings at another aggroed mob in reach.
+
+## Pinned targets (`engage(target, { isPinned: true })`, 2026-10-16)
+
+Each class's own target pick (`planFight` for warrior and mage, `getShotPlan` for the ranger)
+swaps the strategy's target for the best pull or AOE mob. An event strategy that picks its target
+on purpose, as crabxx does with its highest-hp crabx, pins it, and those picks keep a pinned
+target (`isPinnedTarget`). `selectFightTarget` records the pin when a strategy claims the tick,
+not when the tick starts, so a target keeps its pin while a strategy awaits a smart move. This
+replaced the `!target?.mtype.includes("crabx")` checks in each class. The crabxx kite anchor in
+`resolveKiteTarget` really is crabxx-only, so it uses `isCrabxxMob`, which reads the adds from
+`G.monsters.crabxx.spawns`. The rogue and priest picks never had the check, so they still
+override a pinned target.
