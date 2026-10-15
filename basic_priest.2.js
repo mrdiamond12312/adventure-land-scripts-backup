@@ -165,11 +165,27 @@ function tendParty(target) {
 // Below this hp a mob dies too fast for the curse to pay for its mp
 const CURSE_HP_THRESHOLD = 15_000;
 
+/** Share of max mp below which the zapper stops */
+const ZAP_MIN_MP_RATIO = 0.6;
+
+/** Mp kept on top of partyheal's own cost so an emergency one can always fire */
+const PARTYHEAL_MP_MARGIN = 400;
+
+/** @returns {number} mp curse must leave behind for the zapper and an emergency partyheal */
+function curseMpFloor() {
+  return (
+    Math.max(
+      character.max_mp * ZAP_MIN_MP_RATIO,
+      G.skills["partyheal"].mp + PARTYHEAL_MP_MARGIN,
+    ) + surgeMpReserve()
+  );
+}
+
 // Beefiest uncursed mob aggroing a party member, in curse range.
 function getCurseTarget() {
   if (
     is_on_cooldown("curse") ||
-    character.mp <= G.skills["curse"].mp + surgeMpReserve()
+    character.mp - G.skills["curse"].mp < curseMpFloor()
   )
     return null;
   const prioritized = prioritizedNames();
@@ -223,7 +239,8 @@ function getAbsorbTarget() {
 }
 
 function shouldPartyHeal() {
-  if (character.mp <= G.skills["partyheal"].mp + 400) return false;
+  if (character.mp <= G.skills["partyheal"].mp + PARTYHEAL_MP_MARGIN)
+    return false;
   const allies = (parent.party_list || [])
     .map((name) => get_entity(name))
     .filter((entity) => entity && !entity.dead && !entity.rip);
@@ -271,7 +288,7 @@ function getZapTarget() {
   if (isPreparingCave && !character.cave) return null;
 
   if (
-    mpPct < 0.6 ||
+    mpPct < ZAP_MIN_MP_RATIO ||
     character.s.penalty_cd ||
     !hasZapper ||
     Object.keys(character.c).length
