@@ -65,6 +65,7 @@ function refineTarget(target) {
   const heldWeaponInfo = character.slots.mainhand
     ? item_info(character.slots.mainhand)
     : {};
+  const mobsOnMe = listOfMonsterAttacking(character);
 
   // A taunt that one-shots is just a wasted swing
   const targetToTaunt =
@@ -75,6 +76,7 @@ function refineTarget(target) {
           .filter(
             (mob) =>
               !mob.target &&
+              hasCourageFor([mob], mobsOnMe) &&
               !canOneShotWithWeapon(heldWeaponInfo, [mob]) &&
               partyDmgRecieved + calculateDamage(mob, character) <
                 character.heal * 0.9 * attackFrequency(),
@@ -288,13 +290,6 @@ function getZapTarget() {
 
   const isTanker = isAssignedAsTanker();
   const mobsOnMe = listOfMonsterAttacking(character);
-  const aggroCount = (dmgType) =>
-    mobsOnMe.filter((mob) => mob.damage_type === dmgType).length;
-  const courageMap = {
-    physical: { count: aggroCount("physical"), limit: character.courage },
-    magical: { count: aggroCount("magical"), limit: character.mcourage },
-    pure: { count: aggroCount("pure"), limit: character.pcourage },
-  };
 
   const targetToZap = targetsInRange
     .map((entity) => ({
@@ -313,11 +308,7 @@ function getZapTarget() {
       )
         return false;
 
-      const { count, limit } = courageMap[entity.damage_type] ?? {
-        count: 0,
-        limit: Infinity,
-      };
-      if (count + 1 > limit) return false;
+      if (!hasCourageFor([entity], mobsOnMe)) return false;
 
       if (
         entity.weak ||

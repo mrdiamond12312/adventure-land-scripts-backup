@@ -1308,7 +1308,7 @@ const BOSS_DRAG_ROUTES = {
 };
 
 /** How close to its spot a dragged boss counts as arrived */
-const DRAG_ARRIVAL_DISTANCE = 300;
+const DRAG_ARRIVAL_DISTANCE = 75;
 
 /** Ids of dragged bosses that reached their spot; arrival sticks once seen */
 const arrivedDragBossIds = new Set();

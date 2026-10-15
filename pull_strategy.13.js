@@ -75,45 +75,9 @@ async function usePullSkills() {
         (mob) => mob.target !== character.name,
       );
 
-      // Count mobs targeting self
-      const magicalMobsTargetingSelf = mobsList.filter(
-        (mob) => mob.damage_type === "magical" && mob.target === character.name,
+      const mobsTargetingSelf = mobsList.filter(
+        (mob) => mob.target === character.name,
       );
-      const physicalMobsTargetingSelf = mobsList.filter(
-        (mob) =>
-          mob.damage_type === "physical" && mob.target === character.name,
-      );
-      const pureMobsTargetingSelf = mobsList.filter(
-        (mob) => mob.damage_type === "pure" && mob.target === character.name,
-      );
-
-      // Initialize counters
-      let magicalMobsAfterAgitating = magicalMobsTargetingSelf.length;
-      let physicalMobsAfterAgitating = physicalMobsTargetingSelf.length;
-      let pureMobsAfterAgitating = pureMobsTargetingSelf.length;
-
-      // Add counts for mobs that *will* target self after 'agitate'
-      for (const mob of listOfNoTargetMonsterInRange) {
-        switch (mob.damage_type) {
-          case "magical":
-            magicalMobsAfterAgitating++;
-            break;
-          case "physical":
-            physicalMobsAfterAgitating++;
-            break;
-          case "pure":
-            pureMobsAfterAgitating++;
-            break;
-          default:
-            break;
-        }
-      }
-
-      // Check if the character would be feared after the new mobs are pulled (based on courage stats)
-      const isFearedAfterAgitating =
-        magicalMobsAfterAgitating > character.mcourage ||
-        physicalMobsAfterAgitating > character.courage ||
-        pureMobsAfterAgitating > character.pcourage;
 
       // Calculate average party damage taken
       const partyDmgRecieved = avgPartyDmgTaken(partyMems);
@@ -167,7 +131,10 @@ async function usePullSkills() {
       );
 
       // Fear Check
-      const willNotBeFeared = !isFearedAfterAgitating;
+      const willNotBeFeared = hasCourageFor(
+        listOfNoTargetMonsterInRange,
+        mobsTargetingSelf,
+      );
 
       // Damage Check
       const currentAggroDamage = mobsInAgitateRange
@@ -214,11 +181,7 @@ async function usePullSkills() {
                 partyMems
                   .filter((id) => id !== character.name)
                   .includes(mob.target)) &&
-              (mob.damage_type === "physical"
-                ? physicalMobsTargetingSelf.length < character.courage
-                : mob.damage_type === "magical"
-                  ? magicalMobsTargetingSelf.length < character.mcourage
-                  : pureMobsTargetingSelf.length < character.pcourage),
+              hasCourageFor([mob], mobsTargetingSelf),
           );
 
         if (mobToPull)

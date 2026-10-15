@@ -3119,7 +3119,7 @@ the xscorpion/pumpkin box and the minimush box; mrgreen goes to the spookytown m
 clear of `G.geometry` walls.
 
 mrgreen is `releaseAtSpot`: the priest is forced as tanker and drags it like the others, but once
-the boss comes within `DRAG_ARRIVAL_DISTANCE` (300) of the mummy spawn the drag lets go for the rest
+the boss comes within `DRAG_ARRIVAL_DISTANCE` (75) of the mummy spawn the drag lets go for the rest
 of that boss's life (`isDragReleased`; `arrivedDragBossIds` is keyed by boss id, so drifting back out
 doesn't restart it). `assignRoles` then falls to its damage-ratio pick (mrgreen, greenjr and
 mummies all hit physical, so the warrior), and `resolveKiteTarget` stops anchoring on the spot. The

@@ -2228,6 +2228,29 @@ function listOfMonsterAttacking(characterEntity) {
   );
 }
 
+/**
+ * @param {Object[]} incoming - mobs about to target us
+ * @param {Object[]} [mobsOnMe] - listOfMonsterAttacking(character), when the caller already has it
+ * @returns {boolean} whether taking them on keeps us within courage for each of their damage types
+ */
+function hasCourageFor(
+  incoming,
+  mobsOnMe = listOfMonsterAttacking(character),
+) {
+  const limits = {
+    physical: character.courage,
+    magical: character.mcourage,
+    pure: character.pcourage,
+  };
+  const pile = [...mobsOnMe, ...incoming];
+
+  return incoming.every(
+    ({ damage_type }) =>
+      pile.filter((mob) => mob.damage_type === damage_type).length <=
+      (limits[damage_type] ?? Infinity),
+  );
+}
+
 function mobbingMultiplier(numberOfMobs) {
   return numberOfMobs < 3 ? 1 : 1.5;
 }
@@ -2491,18 +2514,6 @@ function planCleave(strategyName) {
 
   const mobsTargetingSelf = listOfMonsterAttacking(character);
 
-  const magicalMobs = [];
-  const physicalMobs = [];
-  const pureMobs = [];
-
-  const categorizeMob = (mob) => {
-    if (mob.damage_type === "magical") magicalMobs.push(mob);
-    else if (mob.damage_type === "physical") physicalMobs.push(mob);
-    else if (mob.damage_type === "pure") pureMobs.push(mob);
-  };
-
-  for (const mob of mobsTargetingSelf) categorizeMob(mob);
-
   const listOfNoTargetMonsterInRange = mobsList.filter(
     (mob) =>
       !mob.target &&
@@ -2514,18 +2525,16 @@ function planCleave(strategyName) {
       !isHarmlessMob(mob),
   );
 
-  for (const mob of listOfNoTargetMonsterInRange) categorizeMob(mob);
-
-  const isFeared =
-    magicalMobs.length > character.mcourage ||
-    physicalMobs.length > character.courage ||
-    pureMobs.length > character.pcourage;
+  const isFeared = !hasCourageFor(
+    listOfNoTargetMonsterInRange,
+    mobsTargetingSelf,
+  );
 
   const formidableMob = listOfNoTargetMonsterInRange.some(
     (mob) => mob.attack * mob.frequency > MAX_MOB_DPS,
   );
 
-  const allMobs = [...magicalMobs, ...physicalMobs, ...pureMobs];
+  const allMobs = [...mobsTargetingSelf, ...listOfNoTargetMonsterInRange];
   const totalDpsTaken = totalMobDps(allMobs);
 
   const healThreshold = strategyName === "pull" ? healerHps() * 0.9 : 0;
