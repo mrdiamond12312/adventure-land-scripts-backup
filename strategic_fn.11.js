@@ -468,7 +468,10 @@ function getWornGear() {
 function wornStat(stat) {
   return (
     character[stat] ??
-    getWornGear().reduce((sum, [, item]) => sum + (item_info(item)?.[stat] ?? 0), 0)
+    getWornGear().reduce(
+      (sum, [, item]) => sum + (item_info(item)?.[stat] ?? 0),
+      0,
+    )
   );
 }
 
@@ -599,8 +602,7 @@ function getGearCopies(slots) {
 function getFightMobs() {
   return Object.values(parent.entities).filter(
     (mob) =>
-      mob.type === "monster" &&
-      (!mob.target || partyMems.includes(mob.target)),
+      mob.type === "monster" && (!mob.target || partyMems.includes(mob.target)),
   );
 }
 
@@ -611,7 +613,11 @@ function fightBurnDps(mobs, target) {
     if (!burn) return worst;
 
     const hit = mob.attack * mitigation(mob, target);
-    const intensity = burnIntensityCap(hit, target.firesistance, burn.unlimited);
+    const intensity = burnIntensityCap(
+      hit,
+      target.firesistance,
+      burn.unlimited,
+    );
     return Math.max(worst, intensity * BURN_DPS_PER_INTENSITY);
   }, 0);
 }
@@ -1438,8 +1444,7 @@ function calculatePriestItems(target) {
     : isTanking
     ? pickTankGear()
     : {};
-  const feelingLucky =
-    !fireball && shouldWearLuckGear() && !isPriestInDanger();
+  const feelingLucky = !fireball && shouldWearLuckGear() && !isPriestInDanger();
   const feelingWise =
     !fireball &&
     !isTanking &&
@@ -1957,9 +1962,7 @@ function buildEquipPromises(suggestedItems, options) {
     ];
   const itemSlots = wantedEquips
     .filter(({ slot }) => slot !== "offhand" || !isNextTwoHanded)
-    .sort(
-      (lhs, rhs) => (rhs.slot === "mainhand") - (lhs.slot === "mainhand"),
-    );
+    .sort((lhs, rhs) => (rhs.slot === "mainhand") - (lhs.slot === "mainhand"));
 
   // Slice items to prevent penalty_cd from affecting attack cooldown
   const maxItemsToEquip = Math.max(
@@ -2276,10 +2279,7 @@ function listOfMonsterAttacking(characterEntity) {
  * @param {Object[]} [mobsOnMe] - listOfMonsterAttacking(character), when the caller already has it
  * @returns {boolean} whether taking them on keeps us within courage for each of their damage types
  */
-function hasCourageFor(
-  incoming,
-  mobsOnMe = listOfMonsterAttacking(character),
-) {
+function hasCourageFor(incoming, mobsOnMe = listOfMonsterAttacking(character)) {
   const limits = {
     physical: character.courage,
     magical: character.mcourage,
@@ -2967,7 +2967,7 @@ function castOnAttackCooldown(skill, target) {
   if (skill === "attack") change_target(target);
   return use_skill(skill, target)
     .then(() => {
-      attackSpeedCompensate(attackFrequencyBeforeCompensate);
+      // attackSpeedCompensate(attackFrequencyBeforeCompensate);
       reduce_cooldown("attack", character.ping * 0.95);
     })
     .catch((e) => onAttackError(e, target));
@@ -2986,7 +2986,7 @@ function getEnRouteCast() {
  * @param {() => ((() => Promise)|undefined)} getCast - what to cast now, if anything
  * @param {number} [timeoutMs] - how long a cast may hold the loop
  */
-function runActionLoop(getCast, timeoutMs = 1000) {
+function runActionLoop(getCast, timeoutMs = character.ping) {
   let pendingCast;
   runSkillLoop({
     skill: "attack",
