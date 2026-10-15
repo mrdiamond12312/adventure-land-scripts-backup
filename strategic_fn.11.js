@@ -448,6 +448,7 @@ const PROJECTED_STATS = [
   "frequency",
   "attack",
   "firesistance",
+  "mp_reduction",
 ];
 
 const BURN_DPS_PER_INTENSITY = 1000 / 210 / 5;
@@ -565,6 +566,11 @@ function projectStatsWith(picks) {
     attack: character.attack + attackGain,
     heal: character.heal ? character.heal + attackGain : 0,
     firesistance: wornStat("firesistance") + stats.firesistance,
+    mp_cost:
+      character.mp_cost +
+      (character.damage_type === "physical" ? stats.apiercing : stats.rpiercing) /
+        15,
+    mp_reduction: (character.mp_reduction ?? 0) + stats.mp_reduction,
   };
 }
 
@@ -749,6 +755,37 @@ function pickTankGear() {
     lastTankPick,
   );
   return lastTankPick;
+}
+
+/** Share a heal-gear swap must cut the score by */
+const HEAL_GEAR_SWAP_MIN_GAIN = 0.01;
+
+/**
+ * Gear spending the least mp and time per hp healed on us and the allies in sight.
+ * @returns {Object<string, string>} slot → heal item
+ */
+function pickHealGear() {
+  const allies = getAlliedNames()
+    .filter((name) => name !== character.name)
+    .map((name) => get_player(name))
+    .filter(Boolean);
+  const score = (projected) => {
+    const healees = [projected, ...allies];
+    const heal =
+      healees.reduce(
+        (sum, healee) =>
+          sum + projected.heal * healMitigation(projected, healee),
+        0,
+      ) / healees.length;
+    const healPerSecond = heal * attackFrequency(projected);
+    const mpPerHeal = projected.mp_cost * (1 - projected.mp_reduction / 100);
+    return healPerSecond > 0 ? mpPerHeal / healPerSecond : Infinity;
+  };
+  return pickGearByScore(
+    getGearSlots(TANK_GEAR_SKIPPED_SLOT),
+    score,
+    HEAL_GEAR_SWAP_MIN_GAIN,
+  );
 }
 
 /** @returns {Object<string, string>} slot → item taking the least fireball damage */
@@ -1394,7 +1431,7 @@ function getPriestMainhand(target, currentTarget, statGear) {
   return statGear.mainhand ?? "firestaff";
 }
 
-function getPriestOffhand(mainhand, tankGear, statGear) {
+function getPriestOffhand(mainhand, tankGear, statGear, healGear) {
   const wtype = G.items[mainhand]?.wtype;
   if (G.classes[character.ctype].doublehand?.[wtype]) return undefined;
   if (character.map === "crypt") return "exoarm";
@@ -1409,16 +1446,17 @@ function getPriestOffhand(mainhand, tankGear, statGear) {
       mob.damage_type === "magical",
   );
 
-  return facingMagicalMob ? "wbookhs" : "exoarm";
+  if (facingMagicalMob) return "wbookhs";
+  return healGear.offhand ?? "exoarm";
 }
 
-function getPriestOrb(target, tankGear, statGear) {
+function getPriestOrb(target, tankGear, statGear, healGear) {
   if (statGear.orb) return statGear.orb;
-  if (isPriestInHealGraceWindow(target)) return "jacko";
+  if (isPriestInHealGraceWindow(target)) return healGear.orb ?? "jacko";
   return tankGear.orb ?? "test_orb";
 }
 
-function getPriestAmulet(tankGear, statGear) {
+function getPriestAmulet(tankGear, statGear, healGear) {
   if (statGear.amulet) return statGear.amulet;
 
   // Re-equip sanguine to (re)apply its aura
@@ -1432,7 +1470,7 @@ function getPriestAmulet(tankGear, statGear) {
     return "sanguine";
   }
 
-  return tankGear.amulet ?? "intamulet";
+  return tankGear.amulet ?? healGear.amulet ?? "intamulet";
 }
 
 function calculatePriestItems(target) {
@@ -1454,16 +1492,18 @@ function calculatePriestItems(target) {
     : feelingWise
     ? pickStatGear("xp")
     : {};
+  const healGear = fireball ? {} : pickHealGear();
 
   const mainhand = getPriestMainhand(target, currentTarget, statGear);
   return {
     ...PRIEST_DEFAULT_GEAR,
+    ...healGear,
     ...tankGear,
     ...statGear,
     mainhand,
-    offhand: getPriestOffhand(mainhand, tankGear, statGear),
-    orb: getPriestOrb(target, tankGear, statGear),
-    amulet: getPriestAmulet(tankGear, statGear),
+    offhand: getPriestOffhand(mainhand, tankGear, statGear, healGear),
+    orb: getPriestOrb(target, tankGear, statGear, healGear),
+    amulet: getPriestAmulet(tankGear, statGear, healGear),
   };
 }
 

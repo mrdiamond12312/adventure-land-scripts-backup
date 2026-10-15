@@ -3313,12 +3313,37 @@ mix picks exoarm, whose int and str lift the heal more than its lost resistance 
   cloverstuds all the time. `pickFireballGear` still uses the worn gear (min gain 0, ties only).
 - **The existing overrides still win:** crypt exoarm, luck and exp gear, fear's wbookhs, sanguine
   re-application and jacko in the heal grace window. The pick only replaces the defaults
-  (`PRIEST_DEFAULT_GEAR`). Off tank nothing changed.
+  (`PRIEST_DEFAULT_GEAR`). Off tank the heal pick below takes its place.
+
+### Off tank the priest scores its gear by mp and time per heal (`pickHealGear`, 2026-10-16)
+
+The amulet was a hard-coded `intamulet`, so a `heartwoodlocket` (int 10, frequency 5,
+mp_reduction 5, armor 30, hp 300) came off on the next tick although it out-heals an intamulet +5.
+Now every slot but the mainhand takes the owned item with the lowest **mp per heal ÷ heal per
+second**, through the same `pickGearByScore` and `projectStatsWith` as the tank pick. It is the
+base layer under tank, fireball, luck and xp gear and every situational rule above.
+
+- **Heal** is `heal` × `healMitigation` averaged over us and the allies in sight
+  (`getAlliedNames`), so rpiercing counts against the healees' resistance, not only ours.
+- **Mp per heal is what the server charges:** `consume_mp` takes `mp_cost × (1 − mp_reduction /
+  100)` for every attack and heal, and `calculate_player_stats` adds `rpiercing / 15` (apiercing
+  for physical classes) to `mp_cost`. Both are projected. The two factors weigh the same: 5%
+  mp_reduction is worth 5% heal.
+- **jacko loses to that.** At CowTheMooh's numbers, jacko +5's 95 rpiercing adds ~6 mp per heal
+  (+8.5%) for ~5% more heal on a 240-resistance ally, so `healGear.orb` in the grace window is
+  usually the worn orb, and the jacko/test_orb swap stops.
+- **The incumbent is the worn gear, min gain 1%** (`HEAL_GEAR_SWAP_MIN_GAIN`). Gear with no heal
+  stat ties, and a tie keeps what is on, so the stat-less orbs do not flip each heal and luck gear
+  equal for healing may stay. The 1% absorbs the drift of int's worth as the mainhand swaps
+  between lmace and firestaff, which scales item attack.
+- **Not modelled:** hp, armour and resistance for our own survival (the tank pick owns that),
+  mp_reduction's saving on skills, the zapper's zaps. The zapper keeps its rings on int and
+  rpiercing today; a better heal ring would take one and `getZapTarget` stops.
 
 ### Luck, exp and the ghost heal (`calculatePriestItems`, 2026-10-15)
 
 Priority, highest first: the situational rules (pinkie, heal grace, crypt, fear, sanguine), then
-luck or xp gear, then the fireball or tank pick, then `PRIEST_DEFAULT_GEAR`. Luck and xp
+luck or xp gear, then the fireball or tank pick, then the heal pick, then `PRIEST_DEFAULT_GEAR`. Luck and xp
 gear are picked the same way for every slot, rings and earrings included (`pickStatGear`): the
 owned copy with the most of the stat, a copy per slot of a pair, the mainhand only one-handed.
 
