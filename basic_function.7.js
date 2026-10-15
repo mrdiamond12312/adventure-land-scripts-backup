@@ -309,7 +309,7 @@ var mapY = 770;
 // var mobsToFarm = ["mummy"];
 // var mobsToFarm = ["dryad", "mechagnome"];
 // var mobsToFarm = ["jr", "booboo"];
-var mobsToFarm = ["odino", "paledino"];
+var mobsToFarm = ["paledino", "mechagnome", "odino"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";
@@ -1361,7 +1361,7 @@ function withParkSpot(target, spot) {
 
 /** Steps onto the spot, along the taut path if a wall is in the way */
 function parkAt(spot) {
-  const step = can_move_to(spot.x, spot.y) ? spot : (getTautStep(spot) ?? spot);
+  const step = can_move_to(spot.x, spot.y) ? spot : getTautStep(spot) ?? spot;
   moveTowardDestination(step);
 }
 
@@ -2613,11 +2613,11 @@ function dynamicParty() {
   const activeEvent =
     USE_CAVE_STRATEGY && isCaveUnderway()
       ? "cave"
-      : (liveEvents
+      : liveEvents
           .filter((name) => HP_RANKED_BOSSES.includes(name))
           .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs))[0] ??
         liveEvents[0] ??
-        "default");
+        "default";
 
   if (!activeEvent) return;
 
