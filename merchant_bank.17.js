@@ -358,17 +358,17 @@ function isStackMergeable(item) {
 }
 
 /**
- * Free slots and stack room on a bank floor.
+ * Free slots per pack and stack room on a bank floor, personal storage excluded.
  * @param {string} floor
- * @returns {{ empty: number, stackRoom: Object<string, number[]> }}
+ * @returns {{ empty: Object<string, number>, stackRoom: Object<string, Array<{ pack: string, room: number }>> }}
  */
 function getFloorCapacity(floor) {
-  const capacity = { empty: 0, stackRoom: {} };
+  const capacity = { empty: {}, stackRoom: {} };
 
   forEachBankSlot(
-    (item) => {
+    (item, pack) => {
       if (!item) {
-        capacity.empty++;
+        capacity.empty[pack] = (capacity.empty[pack] ?? 0) + 1;
         return;
       }
 
@@ -378,9 +378,9 @@ function getFloorCapacity(floor) {
       const room = maxStack - (item.q ?? 1);
       if (room > 0)
         (capacity.stackRoom[item.name] =
-          capacity.stackRoom[item.name] ?? []).push(room);
+          capacity.stackRoom[item.name] ?? []).push({ pack, room });
     },
-    { floor, includePersonal: true },
+    { floor },
   );
 
   return capacity;
@@ -400,10 +400,11 @@ function countSharedEmptySlots() {
 }
 
 /**
- * Splits inventory indices by whether they fit, using up the capacity.
+ * Splits inventory indices by whether they fit, using up the capacity, and
+ * names the pack each one goes to so a parallel batch doesn't pile into one.
  * @param {number[]} indices
- * @param {{ empty: number, stackRoom: Object<string, number[]> }} capacity
- * @returns {{ storable: number[], skipped: number[] }}
+ * @param {ReturnType<typeof getFloorCapacity>} capacity
+ * @returns {{ storable: Array<[number, string]>, skipped: number[] }}
  */
 function pickStorableIndices(indices, capacity) {
   const storable = [];
@@ -416,18 +417,24 @@ function pickStorableIndices(indices, capacity) {
     const rooms = isStackMergeable(item)
       ? capacity.stackRoom[item.name] ?? []
       : [];
-    const stack = rooms.findIndex((room) => room >= quantity);
+    const stack = rooms.find(({ room }) => room >= quantity);
+    const emptyPack = Object.keys(capacity.empty).find(
+      (pack) => capacity.empty[pack] > 0,
+    );
 
-    if (stack !== -1) {
-      rooms[stack] -= quantity;
-      storable.push(index);
-    } else if (capacity.empty > 0) {
-      capacity.empty--;
+    if (stack) {
+      stack.room -= quantity;
+      storable.push([index, stack.pack]);
+    } else if (emptyPack) {
+      capacity.empty[emptyPack]--;
       const maxStack = getMaxStack(item.name);
       if (maxStack > quantity && isStackMergeable(item))
         (capacity.stackRoom[item.name] =
-          capacity.stackRoom[item.name] ?? []).push(maxStack - quantity);
-      storable.push(index);
+          capacity.stackRoom[item.name] ?? []).push({
+          pack: emptyPack,
+          room: maxStack - quantity,
+        });
+      storable.push([index, emptyPack]);
     } else {
       skipped.push(index);
     }
@@ -545,7 +552,7 @@ function storeIndicesOnCurrentFloor(indices) {
       `bank full: ${skipped.length} items stay in bag on ${character.map}`,
     );
 
-  return storeAll(storable.map((index) => [index]));
+  return storeAll(storable);
 }
 
 /**

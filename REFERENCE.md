@@ -2757,8 +2757,26 @@ its `isPurgeable` branch and `purgeBank` returns before `freeSlotsForUpgrading` 
 also lived inside the `!fitsSomewhere` branch, and `getFloorCapacity` counts stack room, so one
 mergeable partial stack anywhere (an `anniversarygift q:1`) kept it from ever being evaluated.
 `countSharedEmptySlots` now counts only the packs a store or purge pass can actually use —
-`forEachBankSlot` without `includePersonal`, so `items23` is excluded, unlike `getFloorCapacity`,
-which counts personal slots no pass can reach — and `BANK_FULL_SLACK` is checked on every run.
+`forEachBankSlot` without `includePersonal`, so `items23` is excluded (as `getFloorCapacity` now
+does too) — and `BANK_FULL_SLACK` is checked on every run.
+
+**Every store names its pack.** `bank_store(index)` with no pack lets the *client* pick one: the
+first pack on the floor holding a stack it can merge into, else the first with an empty slot, read
+from `character.bank` as it stands. `storeAll` fires the whole batch at once, so every call sees
+the same bank and picks the same pack; the server then answers `storage_full` for everything past
+that pack's few empty slots. It went unnoticed while batches were small — a mixed bag rarely
+needs more than one pack's spare slots. Turning on the `pouchbow` craft made `smoke` (stack 100) a
+craft ingredient, so the bag piled up 12 full stacks; once they were freed for storing, 11 of them
+in one batch overflowed the one pack they all picked, were stranded, and latched
+`isBankTight` with 59 shared slots free. `getFloorCapacity` therefore tracks empty slots and
+stack room per pack, and `pickStorableIndices` hands back `[index, pack]` so the server spreads
+the batch exactly as the plan did. The server merges into the first stack it can in the named
+pack, so planning room per stack within a pack only has to be right in total.
+
+**A stacked craft ingredient keeps only what the craft reserves.** `isBagSupply` held every copy of
+any craft ingredient in the bag. For a flat, stacked one that is a whole bag of `smoke` against a
+recipe needing one per craft. `getCraftSurplusIndices` keeps the biggest stacks until they cover
+`getCraftReserved(name, 0)`, at least one, and frees the rest for storing.
 
 **The purge needs a bag copy before it can touch the bank.** `freeSlotsForUpgrading` skips every bank
 victim while `isInvFull(0)`, because a retrieve has nowhere to land. Victims sort bag-first, so one
