@@ -574,6 +574,40 @@ function isBagSupply(item) {
 }
 
 /**
+ * Bag indices of stacked craft ingredients beyond what pending crafts reserve.
+ * The biggest stacks stay, at least one per ingredient.
+ * @returns {Set<number>}
+ */
+function getCraftSurplusIndices() {
+  const stacks = {};
+  character.items.forEach((item, index) => {
+    if (!item || item.l || item.level || !G.items[item.name]?.s) return;
+    if (!isCraftIngredient(item.name) || isExchangeQueued(item.name)) return;
+    if (BAG_SUPPLY_TYPES.includes(G.items[item.name].type)) return;
+
+    (stacks[item.name] = stacks[item.name] ?? []).push({
+      index,
+      quantity: item.q ?? 1,
+    });
+  });
+
+  const surplus = new Set();
+  for (const [name, list] of Object.entries(stacks)) {
+    const reserved = getCraftReserved(name, 0);
+    let kept = 0;
+
+    list
+      .sort((a, b) => b.quantity - a.quantity)
+      .forEach(({ index, quantity }) => {
+        if (kept > 0 && kept >= reserved) surplus.add(index);
+        else kept += quantity;
+      });
+  }
+
+  return surplus;
+}
+
+/**
  * Whether an item is something upgradeInv/compoundInv may still work on.
  * @param {Set<number>} skip - bag indices already leaving the bag
  */
@@ -606,6 +640,7 @@ async function runBankStoreRoutine(forced) {
 
   // Indices stay valid for the whole routine: storing leaves a hole behind
   const keepIndices = getMerchantGearKeepIndices();
+  const craftSurplus = getCraftSurplusIndices();
 
   // Determine which items to store
   const toStore = character.items
@@ -631,6 +666,8 @@ async function runBankStoreRoutine(forced) {
 
       const itemKey = getItemKey(item);
       const isEquipable = info.compound || info.upgrade;
+
+      if (craftSurplus.has(index)) return true;
 
       // A supply would only be pulled straight back out, STORE_ABLE or not
       if (!isEquipable && isBagSupply(item)) return false;
