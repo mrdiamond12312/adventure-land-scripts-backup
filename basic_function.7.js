@@ -1350,6 +1350,17 @@ function withFixedSpot(target, spot) {
   };
 }
 
+/** A kite target hitAndRun stands on instead of orbiting */
+function withParkSpot(target, spot) {
+  return { ...withFixedSpot(target, spot), isParkSpot: true };
+}
+
+/** Steps onto the spot, along the taut path if a wall is in the way */
+function parkAt(spot) {
+  const step = can_move_to(spot.x, spot.y) ? spot : (getTautStep(spot) ?? spot);
+  moveTowardDestination(step);
+}
+
 /**
  * @param {Object} target
  * @returns {[string, Object]|undefined} the boss type and drag route this target belongs to
@@ -1448,8 +1459,7 @@ async function resolveKiteTarget(target) {
         target,
         boss && isCrabxxOffCenter(boss) ? boss : center,
       );
-    if (character.ctype === "ranger")
-      return withFixedSpot(target, boss ?? center);
+    if (character.ctype === "ranger") return withParkSpot(target, center);
   }
 
   return target;
@@ -1723,6 +1733,12 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 
   try {
     target = await resolveKiteTarget(target);
+
+    if (target.isParkSpot) {
+      angle = undefined;
+      parkAt(target);
+      return;
+    }
 
     if (shouldHoldMeleePosition(target, radiusTotal)) {
       faceTarget(target);

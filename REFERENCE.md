@@ -1767,12 +1767,13 @@ The rest of the branch looks tunable, but is deliberate (confirmed 2026-09-29):
   leave a spread of hp and stagger the kills.
 - **`rangeRate = 0.3` for ranged classes.** It keeps them near the center, where the crabx
   spawn, so the crabx stay inside their range. Kiting them out to full range loses targets.
-- **The ranger orbits the boss, not his target** (`resolveKiteTarget`). `hitAndRun` circles
-  `get_target()`, which at crabxx is one crabx, while his 3shot/5shot pick from every mob in range
-  — so circling the crabx let it drag him off. Crabx spawn onto players within 400 of the boss,
-  so the boss's live position (spawn center when it isn't visible) is where all of them are; the
-  tanker holds it at the center, and when it is dragged off the adds go with it. 0.3 puts him ~70px
-  out, clear of its 45 melee range should it switch to him; 0.15 would have been inside it.
+- **The ranger parks on the spawn center, not his target** (`resolveKiteTarget` →
+  `withParkSpot`, `parkAt`). `hitAndRun` circles `get_target()`, which at crabxx is one crabx,
+  while his 3shot/5shot pick from every mob in range — so circling the crabx let it drag him off.
+  He used to orbit the boss's live position at `rangeRate` 0.3 (~70px out, clear of its 45 melee);
+  since 2026-10-16 he stands still on the exact spawn center instead (user's call). Trade-offs
+  accepted: with the tanker holding the boss at the center he is inside its melee range should it
+  switch to him, and when the boss is dragged off the adds go with it while he stays put.
 - **The tanker fetches a stolen boss back** (`isCrabxxStolen`, `fetchCrabxx`). Another player
   holding aggro walks the boss off the spawn center, where the tanker is anchored (one was seen
   dragging it ~2000px into town). Two predicates, deliberately separate:
