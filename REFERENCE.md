@@ -1767,13 +1767,20 @@ The rest of the branch looks tunable, but is deliberate (confirmed 2026-09-29):
   leave a spread of hp and stagger the kills.
 - **`rangeRate = 0.3` for ranged classes.** It keeps them near the center, where the crabx
   spawn, so the crabx stay inside their range. Kiting them out to full range loses targets.
-- **The ranger parks on the spawn center, not his target** (`resolveKiteTarget` →
-  `withParkSpot`, `parkAt`). `hitAndRun` circles `get_target()`, which at crabxx is one crabx,
-  while his 3shot/5shot pick from every mob in range — so circling the crabx let it drag him off.
-  He used to orbit the boss's live position at `rangeRate` 0.3 (~70px out, clear of its 45 melee);
-  since 2026-10-16 he stands still on the exact spawn center instead (user's call). Trade-offs
-  accepted: with the tanker holding the boss at the center he is inside its melee range should it
-  switch to him, and when the boss is dragged off the adds go with it while he stays put.
+- **The ranger parks, he doesn't orbit** (`resolveKiteTarget` → `getRangerCrabxxSpot`,
+  `withParkSpot`, `parkAt`, 2026-10-16). `hitAndRun` circles `get_target()`, which at crabxx is
+  one crabx, while his 3shot/5shot pick from every mob in range — so circling the crabx let it
+  drag him off. He used to orbit the boss at `rangeRate` 0.3 (~70px out). Now he stands still, on
+  the first of these that keeps every crab of the fight (the boss, plus crabx within 400 of it)
+  `CRABXX_RANGER_REACH_MARGIN` (25) inside his range:
+  1. the exact spawn center (the user's pick);
+  2. where he already stands, so he does not wander back and forth;
+  3. the crabs' centroid, as a best effort.
+
+  The margin is there because a multishot whose targets all fail the server range check still
+  costs the cooldown (see "Ranger stalls with no penalty_cd"). Standing on the boss is safe:
+  monsters only hit their own target. Once the boss is on *him* he goes back to orbiting it, which
+  keeps him out of its melee.
 - **The tanker fetches a stolen boss back** (`isCrabxxStolen`, `fetchCrabxx`). Another player
   holding aggro walks the boss off the spawn center, where the tanker is anchored (one was seen
   dragging it ~2000px into town). Two predicates, deliberately separate:
@@ -3344,3 +3351,22 @@ picks up aggro, since only mobs already on us counted. Now it is attack × frequ
 monster in view that targets a party member or no one, with no mitigation, so gear and aggro
 cannot move it. It holds no state, so every character still works out the same tanker. With
 nothing around the share is 1, so the warrior tanks, as before.
+
+## Ranger stalls with no penalty_cd (`getShotPlan`, 2026-10-16)
+
+Two ways the ranger skips shots while `penalty_cd` is clear:
+
+- **A multishot that hits nothing still costs the full cooldown.** Server side (`server.js`, skill
+  handler), the 3shot/5shot branch skips every id that is gone, dead or out of range on arrival,
+  then rejects with `no_target` and the "no hits" floating text. It never sets `cool = false`, so
+  `consume_skill` still charges the mp and the attack cooldown, and the client gets a normal
+  `skill_timeout`. A single attack does not have this problem: a missing target gets `disappear`,
+  and a far one gets `too_far` with no cooldown taken. The server range check is
+  `range + player.xrange`, and a shot that reaches into xrange spends some of it, so mobs right
+  at the edge of the client's `inRange` can drop out by the time the shot lands. Open: no margin
+  added yet. Look for "no hits" over the ranger to confirm this one.
+- **No plan while the attack is up.** `getShotPlan` kept a crabx `fightTarget` even when it was
+  out of range, and took `potentialTargets[0]` even when it was unsafe. Either one made the
+  single-shot branch return null while another safe mob was in range. A parked ranger does not
+  walk toward a crabx past 400 of the boss, so this stall could last. Now the crabx is only kept
+  while it is in range and safe; otherwise he takes the first safe candidate.

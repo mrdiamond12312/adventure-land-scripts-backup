@@ -153,8 +153,13 @@ function getShotPlan(incomingTarget = get_targeted_monster()) {
   const isCupid = isCupidEquipped();
 
   let target = incomingTarget;
-  if (potentialTargets.length && !target?.mtype.includes("crabx")) {
-    target = potentialTargets[0];
+  const isHeldCrabx =
+    !!target?.mtype?.includes("crabx") &&
+    inRange(target) &&
+    isSafeToShoot(target);
+  if (potentialTargets.length && !isHeldCrabx) {
+    target =
+      potentialTargets.find((mob) => mob.safe_to_shoot) ?? potentialTargets[0];
   }
 
   // Reacquire target if feared (the scare itself runs on its own loop)

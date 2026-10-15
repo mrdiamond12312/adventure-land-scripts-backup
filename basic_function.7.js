@@ -1459,7 +1459,10 @@ async function resolveKiteTarget(target) {
         target,
         boss && isCrabxxOffCenter(boss) ? boss : center,
       );
-    if (character.ctype === "ranger") return withParkSpot(target, center);
+    if (character.ctype === "ranger")
+      return boss?.target === character.name
+        ? withFixedSpot(target, boss)
+        : withParkSpot(target, getRangerCrabxxSpot(boss) ?? center);
   }
 
   return target;

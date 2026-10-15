@@ -166,6 +166,44 @@ const isCrabxxDraggedOff = (crabxx) =>
   isCrabxxStolen(crabxx) &&
   distance(character, crabxx) < G.skills["agitate"].range;
 
+/** How far inside his range the ranger keeps every crab */
+const CRABXX_RANGER_REACH_MARGIN = 25;
+
+/** Crabx spawn onto players within this of the boss; past it they chase someone away */
+const CRABX_SPAWN_RADIUS = 400;
+
+/**
+ * Where the ranger stands at crabxx: the spawn center while it reaches every
+ * crab of the fight, else where he stands if that does, else their centroid.
+ * @param {Object} [crabxx] - the boss
+ * @returns {{x: number, y: number}|undefined} the spot to park on
+ */
+function getRangerCrabxxSpot(crabxx) {
+  const center = getCrabxxCenter();
+  const anchor = crabxx ?? center;
+  if (!anchor) return undefined;
+
+  const fight = [
+    ...getCrabsForCrabxx().crabxList.filter(
+      (crabx) => simple_distance(crabx, anchor) <= CRABX_SPAWN_RADIUS,
+    ),
+    crabxx,
+  ].filter(Boolean);
+  if (!fight.length) return center;
+
+  const reach = character.range - CRABXX_RANGER_REACH_MARGIN;
+  const covers = (spot) =>
+    !!spot && fight.every((mob) => simple_distance(spot, mob) <= reach);
+  const here = { x: character.real_x, y: character.real_y };
+
+  if (covers(center)) return center;
+  if (covers(here)) return here;
+  return {
+    x: fight.reduce((sum, mob) => sum + mob.real_x, 0) / fight.length,
+    y: fight.reduce((sum, mob) => sum + mob.real_y, 0) / fight.length,
+  };
+}
+
 /** @returns {Promise<object|undefined>} the outcome, while crabxx is live */
 async function fightCrabxx() {
   if (!server.status.crabxx?.live) return;
