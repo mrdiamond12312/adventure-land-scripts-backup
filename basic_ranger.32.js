@@ -43,6 +43,15 @@ const inRange = (entity) =>
 const isAttackReady = () =>
   ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
 
+const MARK_MP_BUFFER = 100;
+
+const huntersMarkMpThreshold = () =>
+  G.skills["huntersmark"].mp + MARK_MP_BUFFER;
+
+const multiShotMpThreshold = () =>
+  Math.max(G.skills["3shot"].mp, G.skills["5shot"].mp) +
+  huntersMarkMpThreshold();
+
 /** armor above which piercingshot out-damages a plain attack */
 const PIERCING_SHOT_MIN_ARMOR = 700;
 
@@ -56,8 +65,7 @@ const shouldPiercingShot = (target) =>
   target.armor > PIERCING_SHOT_MIN_ARMOR &&
   character.level >= G.skills["piercingshot"].level &&
   !is_on_cooldown("piercingshot") &&
-  character.mp >
-    G.skills["piercingshot"].mp + G.skills["huntersmark"].mp + 400;
+  character.mp > G.skills["piercingshot"].mp + huntersMarkMpThreshold();
 
 // --- Decide: one plan drives both the gear loop and the shot ---
 
@@ -108,15 +116,14 @@ function getPotentialTargets() {
  * @returns {{mode: string, skill: string, gearTargets: Object[], shotTargets: Object[]|Object}}
  */
 function getCupidPlan(healees) {
-  const preservedMP = G.skills["huntersmark"].mp;
   const is5ShotReady =
     character.level >= G.skills["5shot"].level &&
     healees.length >= 4 &&
-    character.mp > G.skills["5shot"].mp + preservedMP;
+    character.mp > multiShotMpThreshold();
   const is3ShotReady =
     character.level >= G.skills["3shot"].level &&
     healees.length >= 2 &&
-    character.mp > G.skills["3shot"].mp + preservedMP;
+    character.mp > multiShotMpThreshold();
 
   const skill = is5ShotReady ? "5shot" : is3ShotReady ? "3shot" : "attack";
   const sliceAmount = is5ShotReady ? 5 : is3ShotReady ? 3 : 1;
@@ -165,7 +172,7 @@ function getShotPlan(incomingTarget = get_targeted_monster()) {
     character.level >= G.skills["5shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["5shot"].mp + G.skills["huntersmark"].mp + 400 &&
+    character.mp > multiShotMpThreshold() &&
     mobsTo5Shot.length >= 4;
 
   const mobsTo3Shot = potentialTargets
@@ -175,7 +182,7 @@ function getShotPlan(incomingTarget = get_targeted_monster()) {
     character.level >= G.skills["3shot"].level &&
     canMultiShot &&
     hpOk &&
-    character.mp > G.skills["3shot"].mp + G.skills["huntersmark"].mp + 400 &&
+    character.mp > multiShotMpThreshold() &&
     mobsTo3Shot.length >= 2;
 
   const shotPlan = (skill, target, gearTargets, shotTargets) => ({
@@ -256,8 +263,8 @@ async function firePlan(plan) {
       plan.mode === "cupid"
         ? "Single Cupid"
         : plan.skill === "piercingshot"
-          ? "Piercing"
-          : "Shooting",
+        ? "Piercing"
+        : "Shooting",
     );
     promisesToAwait.push(
       use_skill(plan.skill, plan.shotTargets)
@@ -303,7 +310,9 @@ function getRangerCast() {
   }
 
   if (isOnTrip())
-    return isCupidEquipped() || isCupidOnServer() ? undefined : getEnRouteCast();
+    return isCupidEquipped() || isCupidOnServer()
+      ? undefined
+      : getEnRouteCast();
 
   if (!fightTarget) return;
   const plan = getShotPlan(fightTarget);
@@ -326,7 +335,7 @@ const MARK_HP_THRESHOLD = 15_000;
  */
 function getHuntersMarkTarget() {
   if (
-    character.mp < G.skills["huntersmark"].mp + surgeMpReserve() ||
+    character.mp < huntersMarkMpThreshold() + surgeMpReserve() ||
     is_on_cooldown("huntersmark")
   )
     return null;
@@ -468,12 +477,14 @@ function startSkillLoops() {
   runSkillLoop({
     skill: "supershot",
     canUse: () => {
-      if (
-        character.mp <= G.skills["supershot"].mp + surgeMpReserve() ||
-        is_on_cooldown("supershot")
-      )
-        return false;
-      pendingSuperShotTarget = isCupidEquipped()
+      const isEmergencyHeal = isCupidEquipped();
+      const mpNeeded = isEmergencyHeal
+        ? G.skills["supershot"].mp
+        : G.skills["supershot"].mp +
+          huntersMarkMpThreshold() +
+          surgeMpReserve();
+      if (character.mp <= mpNeeded || is_on_cooldown("supershot")) return false;
+      pendingSuperShotTarget = isEmergencyHeal
         ? getEmergencyHealee()
         : getSuperShotTarget();
       return pendingSuperShotTarget != null;
