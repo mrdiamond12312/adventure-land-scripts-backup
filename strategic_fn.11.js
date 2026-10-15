@@ -1900,7 +1900,7 @@ function buildEquipPromises(suggestedItems, options) {
 
   const usedCounts = {};
 
-  const itemSlots = Object.keys(suggestedItems)
+  const wantedEquips = Object.keys(suggestedItems)
     .filter((slot) => {
       const wanted = suggestedItems[slot];
       const current = getServerSlot(slot);
@@ -1917,6 +1917,21 @@ function buildEquipPromises(suggestedItems, options) {
       return { slot, num: findMaxLevelItem(id, count) };
     })
     .filter((equipInfo) => equipInfo.num >= 0);
+
+  // The server refuses an offhand under a two-handed mainhand
+  const mainhandEquip = wantedEquips.find(({ slot }) => slot === "mainhand");
+  const nextMainhand = mainhandEquip
+    ? getServerItem(mainhandEquip.num)
+    : getServerSlot("mainhand");
+  const isNextTwoHanded =
+    !!G.classes[character.ctype].doublehand?.[
+      G.items[nextMainhand?.name]?.wtype
+    ];
+  const itemSlots = wantedEquips
+    .filter(({ slot }) => slot !== "offhand" || !isNextTwoHanded)
+    .sort(
+      (lhs, rhs) => (rhs.slot === "mainhand") - (lhs.slot === "mainhand"),
+    );
 
   // Slice items to prevent penalty_cd from affecting attack cooldown
   const maxItemsToEquip = Math.max(

@@ -3303,6 +3303,12 @@ owned copy with the most of the stat, a copy per slot of a pair, the mainhand on
 - **Ghosts:** the first heal on a ghost without `s.healed` drops essenceoflife on the server. The
   priest heals it with pinkie, a wand with no attack, so the heal is the server's floor (item
   attack 5) and barely refills the ghost. Pinkie is two-handed, so the offhand is left empty.
+- **Leaving pinkie: mainhand first** (`buildEquipPromises`, 2026-10-16). The tank pick skips the
+  mainhand but still picks an offhand, so in the merged suggestion `offhand` came before
+  `mainhand` and was sent first, under pinkie: `cant_equip`. When the penalty budget only let one
+  equip through, that was always the offhand, and the priest stayed on pinkie. Equips now go
+  mainhand first, and an offhand is dropped while the mainhand it would sit under (the incoming
+  one, or the held one if none is sent) is still two-handed.
 - **Not modelled:** crit, `output`, mp, stresistance, and the class offhand modifiers (speed
   only). The heal is scored on ourselves, so our own resistance weighs on it; heals on the rest of
   the party would not lose that.
