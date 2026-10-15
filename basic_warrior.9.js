@@ -39,14 +39,13 @@ const haveIgnoreMobAroundTarget = (targetMob) =>
 
 /**
  * The selected target as the warrior fights it: in pull mode the best mob for
- * the AOE, and what to swing at, it when in reach, else another aggroed mob.
+ * the AOE, and what to swing at: it when in reach, else another aggroed mob.
  * @param {Object} [target]
  * @returns {{focus?: Object, attackTarget?: Object}}
  */
 function planFight(target) {
   const blastRadius = getSplashRadius();
 
-  let altTarget = undefined;
   const candidates = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
@@ -66,14 +65,16 @@ function planFight(target) {
     !target?.mtype.includes("crabx") &&
     aggroedMobs.length
   ) {
-    const aoeMob = aggroedMobs[0];
-    // Another mob in reach to hit while the AOE mob is out of it
-    altTarget = aggroedMobs.filter((mob) => mob !== aoeMob && inRange(mob))[0];
-    if (!target?.cooperative) target = aoeMob;
+    if (!target?.cooperative) target = aggroedMobs[0];
   }
 
   if (!target) return {};
-  return { focus: target, attackTarget: inRange(target) ? target : altTarget };
+
+  // Another mob in reach to hit while the focus is out of it
+  const attackTarget = inRange(target)
+    ? target
+    : aggroedMobs.find((mob) => mob !== target && inRange(mob));
+  return { focus: target, attackTarget };
 }
 
 /**
