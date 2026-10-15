@@ -3279,8 +3279,13 @@ mix picks exoarm, whose int and str lift the heal more than its lost resistance 
   scored at the copy `equipBatch` would put on, and a pick uses that copy up, so a second slot of
   the same type gets the next one (two rings, two earrings). The mainhand is left to the class
   rules (`TANK_GEAR_SKIPPED_SLOT`), and items listed in trade slots are not in the pool.
-- **What is worn stays unless a swap cuts the score by 5%** (`TANK_GEAR_SWAP_MIN_GAIN`), so bats
-  dying around an mvampire do not swap gear every few kills. With no fight mobs, what is worn stays.
+- **The last tank pick stays unless a swap cuts the score by 5%** (`TANK_GEAR_SWAP_MIN_GAIN`), so
+  bats dying around an mvampire do not swap gear every few kills. With no fight mobs, the last
+  tank pick stays (the slots whose item is still owned).
+- **The incumbent is `lastTankPick`, not the worn gear** (2026-10-16). Against the worn gear, luck
+  gear put on for a kill never came off: `cloverstud` (luck, vit) scores the same as nothing, and
+  `cearring`'s int is worth ~1% of heal, under the 5% bar. A tanking priest on fireroamers wore
+  cloverstuds all the time. `pickFireballGear` still uses the worn gear (min gain 0, ties only).
 - **The existing overrides still win:** crypt exoarm, luck and exp gear, fear's wbookhs, sanguine
   re-application and jacko in the heal grace window. The pick only replaces the defaults
   (`PRIEST_DEFAULT_GEAR`). Off tank nothing changed.

@@ -640,8 +640,21 @@ function fireballDamage(mob, target) {
   );
 }
 
-/** @returns {Object<string, string>} slot → item with the lowest `score` */
-function pickGearByScore(slots, score, minGain) {
+/**
+ * @param {string[]} slots
+ * @param {(projected: Object) => number} score - lower is better
+ * @param {number} minGain - share a challenger must beat the incumbent by
+ * @param {Object<string, string>} [incumbents] - slot → item, the worn gear by default
+ * @returns {Object<string, string>} slot → item with the lowest `score`
+ */
+function pickGearByScore(
+  slots,
+  score,
+  minGain,
+  incumbents = Object.fromEntries(
+    slots.map((slot) => [slot, character.slots[slot]?.name]),
+  ),
+) {
   const copies = getGearCopies(slots);
   const picks = {};
   const scoreWith = (slot, info) =>
@@ -655,11 +668,11 @@ function pickGearByScore(slots, score, minGain) {
       .sort((lhs, rhs) => lhs.score - rhs.score);
     if (!ranked.length) continue;
 
-    const worn = ranked.find(
-      ({ name }) => name === character.slots[slot]?.name,
-    );
+    const incumbent = ranked.find(({ name }) => name === incumbents[slot]);
     const choice =
-      worn && ranked[0].score >= worn.score * (1 - minGain) ? worn : ranked[0];
+      incumbent && ranked[0].score >= incumbent.score * (1 - minGain)
+        ? incumbent
+        : ranked[0];
 
     gear[slot] = choice.name;
     picks[slot] = copies[choice.name].shift();
@@ -689,6 +702,9 @@ function pickStatGear(stat) {
   return gear;
 }
 
+/** Slot → item the last tank pick chose, the incumbent of the next one */
+let lastTankPick = {};
+
 /** @returns {Object<string, string>} slot → tank item */
 function pickTankGear() {
   const slots = getGearSlots(TANK_GEAR_SKIPPED_SLOT);
@@ -696,8 +712,14 @@ function pickTankGear() {
   if (!mobs.length) {
     return Object.fromEntries(
       slots
-        .filter((slot) => character.slots[slot])
-        .map((slot) => [slot, character.slots[slot].name]),
+        .filter((slot) => {
+          const name = lastTankPick[slot];
+          return (
+            name &&
+            (character.slots[slot]?.name === name || locate_item(name) !== -1)
+          );
+        })
+        .map((slot) => [slot, lastTankPick[slot]]),
     );
   }
 
@@ -714,7 +736,13 @@ function pickTankGear() {
       healMitigation(projected, projected);
     return heal > 0 ? damage / heal : Infinity;
   };
-  return pickGearByScore(slots, score, TANK_GEAR_SWAP_MIN_GAIN);
+  lastTankPick = pickGearByScore(
+    slots,
+    score,
+    TANK_GEAR_SWAP_MIN_GAIN,
+    lastTankPick,
+  );
+  return lastTankPick;
 }
 
 /** @returns {Object<string, string>} slot → item taking the least fireball damage */
