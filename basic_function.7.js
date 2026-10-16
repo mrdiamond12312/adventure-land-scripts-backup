@@ -282,8 +282,8 @@ const SPECIAL_MOB_IDS = [
 // var mapY = -347;
 
 var map = "mforest";
-var mapX = -160;
-var mapY = 770;
+var mapX = -25;
+var mapY = 700;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
