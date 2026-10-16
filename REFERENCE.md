@@ -1224,6 +1224,24 @@ order, and it needs a free bag slot. Only one cane fits, so the proc chance is h
   out `character.s.penalty_cd` and `unansweredPenaltyMs` instead of paying it. Quickstab is
   mp-bound (320 mp per cast, every 250ms), so waiting loses nothing.
 
+**Quickstab rides the swap (2026-10-17).** `G.skills.quickstab.procs` is true, so its hit rolls
+sugarrush in `complete_attack` like the attack's (quickpunch has no `procs`). The dagger check is at
+cast, the roll at impact. So `getRogueCast` sends `invis → attack → quickstab → cane`. Both go out
+on the dagger and both land under the cane: two rolls for one swap's penalty. A second swap per stab
+was ruled out because the attack's swap already uses most of the cycle's penalty budget.
+
+- **Attack before stab.** `commence_attack` reads `attacker.attack`, which includes invis's 1.25×,
+  before `step_out_of_invis`. Whichever is sent first gets the sneak bonus, so the 0.36× stab goes second.
+- **No hold change.** The quickstab projectile (speed 420) is faster than the rogue's `momentum`
+  (320). Sent after the attack, it lands first, inside the hold already sized to the attack.
+- **The stab loop saves the stab.** When the stab can ride a swap (`ridesCandySwap`: procs, canes in
+  the bag, no sugarrush yet), the loop holds it while the attack is within one quickstab cooldown of
+  ready, on either side (`isAttackNear`, signed off `next_skill.attack`). That way it is off cooldown
+  when the attack fires. The "recently ready" side stops a stalled action loop from holding it forever.
+  The bundled stab goes out whether or not `maybeCandySwap` then swaps, so it is aligned, never lost.
+- `isFollowUpInFlight` stops the two loops from double-sending while the first stab's cooldown is
+  still unanswered.
+
 ## Field reports must fail closed (`entFieldReport`)
 
 **The bug.** The merchant's ent-lure gate read the mage's report with the freshness test *inside*

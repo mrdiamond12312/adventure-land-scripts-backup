@@ -109,12 +109,16 @@ function getRogueCast() {
   const { attackTarget } = planFight(fightTarget);
   if (!attackTarget || attackTarget.dead || !shouldAttack(attackTarget)) return;
 
+  const followUp = getFollowUp(attackTarget);
+
+  // The follow-up goes after the attack, which takes invis's bonus, and lands under the cane
   return () =>
     Promise.allSettled(
       [
         !ms_to_next_skill("invis") &&
           use_skill("invis"),
         castOnAttackCooldown("attack", attackTarget),
+        ridesCandySwap(followUp) && castFollowUp(followUp, attackTarget),
         maybeCandySwap(attackTarget, { restore: restoreRogueWeapons }),
       ].filter(Boolean),
     );
@@ -157,6 +161,59 @@ function getFollowUpAttackSkill() {
   return undefined;
 }
 
+/** A follow-up attack is sent and unanswered; both the action and skill loop cast it */
+let isFollowUpInFlight = false;
+
+/**
+ * @param {Object} [target]
+ * @returns {string|undefined} the follow-up attack to cast at the target now, if any
+ */
+function getFollowUp(target) {
+  if (
+    !target ||
+    isFollowUpInFlight ||
+    !inRange(target) ||
+    !shouldAttack(target) ||
+    ms_to_next_skill("quickstab") !== 0 ||
+    character.s.penalty_cd ||
+    unansweredPenaltyMs > 0 ||
+    character.mp <= G.skills["rspeed"].mp * 2
+  )
+    return undefined;
+  return getFollowUpAttackSkill();
+}
+
+/**
+ * @param {string} skill - from getFollowUp
+ * @param {Object} target
+ * @returns {Promise}
+ */
+function castFollowUp(skill, target) {
+  isFollowUpInFlight = true;
+  return Promise.resolve(use_skill(skill, target)).finally(() => {
+    isFollowUpInFlight = false;
+  });
+}
+
+/**
+ * @param {string} [skill] - a follow-up attack
+ * @returns {boolean} whether it can roll sugarrush off the attack's candy swap
+ */
+const ridesCandySwap = (skill) =>
+  !!skill &&
+  !!G.skills[skill].procs &&
+  !character.s.sugarrush &&
+  findMaxLevelItem("candycanesword") !== -1;
+
+/**
+ * @param {string} skill - a follow-up attack
+ * @returns {boolean} whether the attack is ready within one of its cooldowns, or was that recently
+ */
+function isAttackNear(skill) {
+  const msToAttack = (parent.next_skill.attack?.getTime() ?? 0) - Date.now();
+  return Math.abs(msToAttack) < G.skills[skill].cooldown;
+}
+
 function startSkillLoops() {
   // runSkillLoop always calls canUse right before cast, so canUse stashes what
   // it approved and cast reuses it instead of recomputing the scans.
@@ -197,24 +254,20 @@ function startSkillLoops() {
   });
 
   // Keyed on quickstab so the loop paces off that cooldown for either weapon.
+  // Held near the attack so getRogueCast sends it under the candy swap.
   runSkillLoop({
     skill: "quickstab",
     canUse: () => {
-      const target = get_target();
-      if (!target) return false;
-      if (
-        !inRange(target) ||
-        !shouldAttack(target) ||
-        ms_to_next_skill("quickstab") !== 0 ||
-        character.s.penalty_cd ||
-        unansweredPenaltyMs > 0 ||
-        character.mp <= G.skills["rspeed"].mp * 2
-      )
-        return false;
-      pendingFollowUpSkill = getFollowUpAttackSkill();
-      return pendingFollowUpSkill != null;
+      pendingFollowUpSkill = getFollowUp(get_target());
+      return (
+        pendingFollowUpSkill != null &&
+        !(
+          ridesCandySwap(pendingFollowUpSkill) &&
+          isAttackNear(pendingFollowUpSkill)
+        )
+      );
     },
-    cast: () => use_skill(pendingFollowUpSkill, get_target()),
+    cast: () => castFollowUp(pendingFollowUpSkill, get_target()),
   });
 }
 
