@@ -1455,7 +1455,7 @@ async function resolveKiteTarget(target) {
       return dragToSpot(target, route.spot, boss);
   }
 
-  if (isCrabxxMob(target)) {
+  if (character.ctype !== "merchant" && isCrabxxMob(target)) {
     const boss = get_nearest_monster({ type: "crabxx" });
     const center = getMonsterSpawns("crabxx")[0];
     if (isAssignedAsTanker())

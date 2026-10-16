@@ -3015,7 +3015,7 @@ function castOnAttackCooldown(skill, target) {
   return use_skill(skill, target)
     .then(() => {
       // attackSpeedCompensate(attackFrequencyBeforeCompensate);
-      reduce_cooldown("attack", character.ping * 0.95);
+      reduce_cooldown("attack", Math.min(...parent.pings));
     })
     .catch((e) => onAttackError(e, target));
 }
