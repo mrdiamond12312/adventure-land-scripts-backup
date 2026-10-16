@@ -557,9 +557,7 @@ function startSkillLoops() {
     },
     cast: () => {
       mluckAimedAt[pendingMluckTarget.name] = Date.now();
-      return use_skill("mluck", pendingMluckTarget).then(() =>
-        reduceCd("mluck"),
-      );
+      return use_skill("mluck", pendingMluckTarget);
     },
   });
 }

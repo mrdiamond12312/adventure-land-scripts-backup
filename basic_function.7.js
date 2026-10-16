@@ -959,6 +959,18 @@ async function withTimeout(
   ]);
 }
 
+/**
+ * Leads every server-sent skill cooldown by the fastest ping
+ * @param {{name: string, ms: number}} data
+ */
+function leadSkillTimeout(data) {
+  if (data?.name) reduce_cooldown(data.name, Math.min(...parent.pings));
+}
+if (parent.leadSkillTimeout)
+  parent.socket.off("skill_timeout", parent.leadSkillTimeout);
+parent.leadSkillTimeout = leadSkillTimeout;
+parent.socket.on("skill_timeout", leadSkillTimeout);
+
 async function waitUntil(fn, timeout = 10_000, interval = 100) {
   const start = Date.now();
 
@@ -2854,7 +2866,7 @@ function on_magiport(name) {
 function attackErrorHandler(error, target = get_target()) {
   if (error.failed) {
     if (error.response === "cooldown" && error.place) {
-      reduce_cooldown(error.place, -error.ms + Math.min(...parent.pings) / 2);
+      parent.skill_timeout(error.place, error.ms - Math.min(...parent.pings));
     } else if (error.reason === "too_far") {
       if (character.cc < 125 && target && !character.moving) {
         const currentX = character.x;

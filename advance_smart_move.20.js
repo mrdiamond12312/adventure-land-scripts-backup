@@ -64,9 +64,7 @@ async function mageBlink(
       minDistanceToBlink
   ) {
     log("Blink to " + coordinates);
-    return await use_skill("blink", coordinates).then(() =>
-      reduce_cooldown("blink", character.ping * 0.7),
-    );
+    return await use_skill("blink", coordinates);
   }
 
   if (useCoordinates) {

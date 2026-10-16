@@ -16,11 +16,6 @@ rangeRate = originRangeRate;
 // Utils
 const isCooperative = (monster) => monster.cooperative;
 const isMob = (entity) => entity.type === "monster";
-const reduceCd = (skillName, isPingBased = true) =>
-  reduce_cooldown(
-    skillName,
-    isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
-  );
 
 const tryMultiShot = async (skill, entityList) => {
   if (entityList.length === 0) return false;
@@ -29,10 +24,7 @@ const tryMultiShot = async (skill, entityList) => {
   // the attack cooldown must be timed with the frequency the shot went out at.
   const attackFrequencyBeforeCompensate = attackFrequency();
   return use_skill(skill, entityList)
-    .then(() => {
-      attackSpeedCompensate(attackFrequencyBeforeCompensate);
-      reduceCd("attack", false);
-    })
+    .then(() => attackSpeedCompensate(attackFrequencyBeforeCompensate))
     .catch((e) => onAttackError(e));
 };
 
@@ -275,10 +267,7 @@ async function firePlan(plan) {
     );
     promisesToAwait.push(
       use_skill(plan.skill, plan.shotTargets)
-        .then(() => {
-          attackSpeedCompensate(attackFrequencyBeforeCompensate);
-          reduceCd("attack", false);
-        })
+        .then(() => attackSpeedCompensate(attackFrequencyBeforeCompensate))
         .catch((e) => onAttackError(e)),
     );
   } else {
@@ -474,10 +463,7 @@ function startSkillLoops() {
       pendingMarkTarget = getHuntersMarkTarget();
       return pendingMarkTarget != null;
     },
-    cast: () =>
-      use_skill("huntersmark", pendingMarkTarget).then(() =>
-        reduceCd("huntersmark"),
-      ),
+    cast: () => use_skill("huntersmark", pendingMarkTarget),
   });
 
   // Cupid in hand turns supershot into the emergency heal; a bow shoots mobs.
@@ -501,9 +487,7 @@ function startSkillLoops() {
       const isHealee = pendingSuperShotTarget.type === "character";
       if (isHealee !== isCupidOnServer()) return Promise.resolve();
 
-      return use_skill("supershot", pendingSuperShotTarget).then(() =>
-        reduceCd("supershot"),
-      );
+      return use_skill("supershot", pendingSuperShotTarget);
     },
   });
 

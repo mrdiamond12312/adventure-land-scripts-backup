@@ -50,9 +50,7 @@ character.on("cm", async function ({ name, message }) {
         break;
 
       log(`Remotely heal ${name}!`);
-      use_skill("partyheal").then(() =>
-        reduce_cooldown("partyheal", character.ping * 0.95),
-      );
+      use_skill("partyheal");
       break;
 
     case "magiport":

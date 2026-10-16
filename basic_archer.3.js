@@ -95,9 +95,7 @@ async function fight(target) {
     ) {
       currentAction = "multishot";
       set_message("Five Shooting");
-      use_skill("5shot", weakMobs.slice(0, 5)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
-      );
+      use_skill("5shot", weakMobs.slice(0, 5));
     } else if (
       character.level >= G.skills["3shot"].level &&
       character.mp > G.skills["3shot"].mp &&
@@ -108,18 +106,14 @@ async function fight(target) {
     ) {
       currentAction = "multishot";
       set_message("Three Shooting");
-      use_skill("3shot", potentialTargets.slice(0, 3)).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
-      );
+      use_skill("3shot", potentialTargets.slice(0, 3));
     } else if (
       distance(target, character) < character.range + character.xrange &&
       character.slots.mainhand?.name !== "cupid"
     ) {
       currentAction = "singleshot";
       set_message("Shooting");
-      attack(target).then(() =>
-        reduce_cooldown("attack", Math.min(...parent.pings)),
-      );
+      attack(target);
     }
 
     if (character.fear) {

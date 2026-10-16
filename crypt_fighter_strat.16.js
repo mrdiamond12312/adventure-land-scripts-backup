@@ -266,9 +266,7 @@ async function useCryptStrategy() {
         mobTargetingAlly &&
         character.hp > character.max_hp * 0.4
       )
-        use_skill("taunt", mobTargetingAlly).then(() =>
-          reduce_cooldown("taunt", character.ping * 0.95),
-        );
+        use_skill("taunt", mobTargetingAlly);
 
       break;
 

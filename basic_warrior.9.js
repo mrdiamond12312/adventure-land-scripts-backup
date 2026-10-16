@@ -1,11 +1,3 @@
-// Function to reduce cooldown based on the lowest current ping in the party
-const reduceCd = (skillName, isPingBased = true) => {
-  const cooldownTime = isPingBased
-    ? Math.min(...parent.pings)
-    : character.ping * 0.95;
-  reduce_cooldown(skillName, cooldownTime);
-};
-
 // Load basic functions (unchanged)
 if (parent.caracAL) {
   parent.caracAL.load_scripts([
@@ -236,7 +228,7 @@ function startSkillLoops() {
       character.mp > G.skills["warcry"].mp &&
       !character.s["warcry"] &&
       !!get_targeted_monster(),
-    cast: () => use_skill("warcry").then(() => reduceCd("warcry", false)),
+    cast: () => use_skill("warcry"),
   });
 
   runSkillLoop({
@@ -269,10 +261,7 @@ function startSkillLoops() {
       pendingTauntTarget = getTauntTarget();
       return pendingTauntTarget != null;
     },
-    cast: () =>
-      use_skill("taunt", pendingTauntTarget).then(() =>
-        reduceCd("taunt", false),
-      ),
+    cast: () => use_skill("taunt", pendingTauntTarget),
   });
 
   runSkillLoop({

@@ -365,11 +365,7 @@ function snipeNearbyWeakMob(promisesToAwait) {
   if (!is_in_range(target, "attack")) return false;
 
   change_target(target);
-  promisesToAwait.push(
-    attack(target)
-      .then(() => reduce_cooldown("attack", character.ping * 0.95))
-      .catch((e) => console.warn(e)),
-  );
+  promisesToAwait.push(attack(target).catch((e) => console.warn(e)));
 
   return true;
 }
@@ -480,11 +476,7 @@ async function fightCurrentEvent(promisesToAwait) {
 
   if (ms_to_next_skill("attack") > 0 || character.s.penalty_cd) return false;
 
-  promisesToAwait.push(
-    attack(target)
-      .then(() => reduce_cooldown("attack", character.ping * 0.95))
-      .catch((e) => console.warn(e)),
-  );
+  promisesToAwait.push(attack(target).catch((e) => console.warn(e)));
 
   return true;
 }

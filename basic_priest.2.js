@@ -13,12 +13,6 @@ if (parent.caracAL) {
 var originRangeRate = 0.5;
 var rangeRate = originRangeRate;
 
-const reduceCd = (skillName, isPingBased = true) =>
-  reduce_cooldown(
-    skillName,
-    isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
-  );
-
 // How far past attack range target selection is allowed to search
 const TARGET_SEARCH_RANGE_MULTIPLIER = 1.5;
 
@@ -393,8 +387,7 @@ function startSkillLoops() {
       pendingCurseTarget = getCurseTarget();
       return pendingCurseTarget != null;
     },
-    cast: () =>
-      use_skill("curse", pendingCurseTarget).then(() => reduceCd("curse")),
+    cast: () => use_skill("curse", pendingCurseTarget),
   });
 
   runSkillLoop({
@@ -403,14 +396,14 @@ function startSkillLoops() {
       character.mp > G.skills["darkblessing"].mp &&
       shouldAttack() &&
       !character.s?.darkblessing,
-    cast: () => use_skill("darkblessing").then(() => reduceCd("darkblessing")),
+    cast: () => use_skill("darkblessing"),
   });
 
   runSkillLoop({
     skill: "partyheal",
     whileMoving: true,
     canUse: () => shouldPartyHeal(),
-    cast: () => use_skill("partyheal").then(() => reduceCd("partyheal")),
+    cast: () => use_skill("partyheal"),
   });
 
   runSkillLoop({
@@ -437,10 +430,7 @@ function startSkillLoops() {
       pendingZapTarget = getZapTarget();
       return pendingZapTarget != null;
     },
-    cast: () =>
-      use_skill("zapperzap", pendingZapTarget).then(() =>
-        reduceCd("zapperzap"),
-      ),
+    cast: () => use_skill("zapperzap", pendingZapTarget),
   });
 }
 

@@ -14,12 +14,6 @@ if (parent.caracAL) {
 var originRangeRate = 0.4;
 rangeRate = originRangeRate;
 
-const reduceCd = (skillName, isPingBased = true) =>
-  reduce_cooldown(
-    skillName,
-    isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
-  );
-
 // How far past attack range target selection is allowed to search
 const TARGET_SEARCH_RANGE_MULTIPLIER = 1.5;
 
@@ -91,9 +85,7 @@ function getMageCast() {
             "energize",
             character,
             Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
-          )
-            .then(() => reduceCd("energize"))
-            .catch((e) => attackErrorHandler(e)),
+          ).catch((e) => attackErrorHandler(e)),
         castOnAttackCooldown("attack", attackTarget),
       ].filter(Boolean),
     );
@@ -162,9 +154,7 @@ function startSkillLoops() {
         "energize",
         pendingEnergizeBuffee,
         Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
-      )
-        .then(() => reduceCd("energize"))
-        .catch((e) => attackErrorHandler(e)),
+      ).catch((e) => attackErrorHandler(e)),
   });
 
   runSkillLoop({
@@ -178,10 +168,7 @@ function startSkillLoops() {
       pendingReflectionBuffee = getReflectionBuffee();
       return pendingReflectionBuffee != null;
     },
-    cast: () =>
-      use_skill("reflection", pendingReflectionBuffee).then(() =>
-        reduceCd("reflection"),
-      ),
+    cast: () => use_skill("reflection", pendingReflectionBuffee),
   });
 
   // scare: shake off mobs on a tanky target. Pull mode additionally requires

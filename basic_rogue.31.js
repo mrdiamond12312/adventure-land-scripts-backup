@@ -14,12 +14,6 @@ if (parent.caracAL) {
 var originRangeRate = 0.95;
 rangeRate = originRangeRate;
 
-const reduceCd = (skillName, isPingBased = true) =>
-  reduce_cooldown(
-    skillName,
-    isPingBased ? Math.min(...parent.pings) : character.ping * 0.95,
-  );
-
 // How far past attack range target selection is allowed to search
 const TARGET_SEARCH_RANGE_MULTIPLIER = 5;
 
@@ -119,7 +113,7 @@ function getRogueCast() {
     Promise.allSettled(
       [
         !ms_to_next_skill("invis") &&
-          use_skill("invis").then(() => reduceCd("invis")),
+          use_skill("invis"),
         castOnAttackCooldown("attack", attackTarget),
         maybeCandySwap(attackTarget, { restore: restoreRogueWeapons }),
       ].filter(Boolean),
@@ -220,10 +214,7 @@ function startSkillLoops() {
       pendingFollowUpSkill = getFollowUpAttackSkill();
       return pendingFollowUpSkill != null;
     },
-    cast: () =>
-      use_skill(pendingFollowUpSkill, get_target()).then(() =>
-        reduceCd(pendingFollowUpSkill),
-      ),
+    cast: () => use_skill(pendingFollowUpSkill, get_target()),
   });
 }
 

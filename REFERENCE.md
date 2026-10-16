@@ -3429,3 +3429,25 @@ replaced the `!target?.mtype.includes("crabx")` checks in each class. The crabxx
 `resolveKiteTarget` really is crabxx-only, so it uses `isCrabxxMob`, which reads the adds from
 `G.monsters.crabxx.spawns`. The rogue and priest picks never had the check, so they still
 override a pinned target.
+
+## One cooldown lead for every skill (`leadSkillTimeout`, 2026-10-17)
+
+The server's `consume_skill` sends a `skill_timeout` socket event for every skill that goes
+through, the attack included, before the skill's own response. The client sets `next_skill` from
+it about half a round trip late, and the next cast needs another half to arrive, so it may go out
+one round trip early. `leadSkillTimeout` hooks that event and leads every cooldown by the
+fastest recent ping, `Math.min(...parent.pings)`, as ALClient's `PingCompensatedCharacter` does
+in its one `setNextSkill`. The per-call `reduce_cooldown(..., character.ping * 0.95)` and the
+class `reduceCd` helpers are gone, or they would lead twice. `character.ping` is the average of
+the last 40 pings, so a lead of 95% of it arrived early whenever a trip beat the average: the
+candy-swap log caught attacks rejected with `cooldown`, a few ms short, while the canes still
+went on. The handler sits on `parent`, so a CODE restart takes the old one off first, since
+`parent.socket` outlives the script.
+
+A rejected cast never fires `skill_timeout`. It comes back as a `cooldown` `game_response`, and
+the client only shows "WAIT". `attackErrorHandler` sets the next try from now:
+`skill_timeout(place, ms - minPing)`. Shifting the old `next_skill`, which was about a round
+trip in the past by then, sent the retry half a trip early, into a second rejection.
+
+Potions keep their own lead in `potionLoop`, since their cooldown comes through `pot_timeout`,
+not `skill_timeout`.

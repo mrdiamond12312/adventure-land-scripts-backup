@@ -185,11 +185,7 @@ async function usePullSkills() {
           );
 
         if (mobToPull)
-          promises.push(
-            use_skill("taunt", mobToPull).then(() =>
-              reduce_cooldown("taunt", character.ping * 0.95),
-            ),
-          );
+          promises.push(use_skill("taunt", mobToPull));
       }
 
       break;

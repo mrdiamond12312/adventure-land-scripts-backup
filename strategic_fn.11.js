@@ -2695,9 +2695,7 @@ async function warriorCleave(strategyName) {
       getServerSlot("offhand") ? sendUnequip("offhand") : undefined,
       cleaveSet.length ? sendEquips(cleaveSet) : undefined,
     ]),
-    withTimeout(use_skill("cleave"), 2500).then(() =>
-      reduce_cooldown("cleave", 0.95 * character.ping),
-    ),
+    withTimeout(use_skill("cleave"), 2500),
     // Cleave procs sugarcane off whatever the server sees equipped when it
     // runs, so swap back right away instead of waiting on use_skill
     equipBatch(restoreItems, { preventKeySnatch: false }),
@@ -2739,9 +2737,7 @@ async function warriorStomp() {
       { mainhand: "basher", offhand: undefined },
       { preventPenaltizeNextAttack: false, preventKeySnatch: false },
     ),
-    use_skill("stomp").then(() =>
-      reduce_cooldown("stomp", 0.95 * character.ping),
-    ),
+    use_skill("stomp"),
     // Same trick as cleave: the basher only has to be on when the server runs
     // stomp, so restore without waiting for the swap or the skill to resolve
     equipBatch(restoreItems, { preventKeySnatch: false }),
@@ -3015,7 +3011,6 @@ function castOnAttackCooldown(skill, target) {
   return use_skill(skill, target)
     .then(() => {
       // attackSpeedCompensate(attackFrequencyBeforeCompensate);
-      reduce_cooldown("attack", Math.min(...parent.pings));
     })
     .catch((e) => onAttackError(e, target));
 }
@@ -3109,9 +3104,7 @@ async function scareAwayMobs() {
         { orb: "jacko" },
         { preventPenaltizeNextAttack: false, preventKeySnatch: false },
       ),
-      use_skill("scare").then(() =>
-        reduce_cooldown("scare", 0.95 * character.ping),
-      ),
+      use_skill("scare"),
     ]).catch((e) => console.warn("useScare errors:", e));
   }
 }
@@ -3241,9 +3234,7 @@ async function useTemporalSurge({ whileMoving = false } = {}) {
     const times = awaitTemporalSurgeTimes();
     promises.push(use_skill("temporalsurge"));
 
-    await withTimeout(Promise.allSettled(promises)).finally(() => {
-      reduce_cooldown("temporalsurge", 0.95 * character.ping);
-    });
+    await withTimeout(Promise.allSettled(promises));
 
     return await times;
   } finally {
