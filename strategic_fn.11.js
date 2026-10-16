@@ -2989,6 +2989,13 @@ function canActOnAttackCooldown() {
  * @param {Object} [target]
  */
 function onAttackError(error, target) {
+  if (isEquipingItems)
+    console.warn(
+      `[candySwap] ${character.name} attack rejected:`,
+      error?.response ?? error?.reason,
+      error?.ms != null ? `${error.ms}ms left` : "",
+      error,
+    );
   if (isOnTrip() && error?.reason === "too_far") return;
   attackErrorHandler(error, target);
 }
