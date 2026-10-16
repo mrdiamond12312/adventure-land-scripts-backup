@@ -169,7 +169,7 @@ function startSkillLoops() {
   let pendingRspeedBuffee = null;
   let pendingFollowUpSkill = undefined;
 
-  runActionLoop(getRogueCast, 2500);
+  runActionLoop(getRogueCast);
 
   // Gear only while the attack is on cooldown: equipping re-bases the attack
   // cooldown, so swapping mid-window would delay the shot. Trips included.

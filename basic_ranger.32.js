@@ -445,7 +445,7 @@ function startSkillLoops() {
   let pendingMarkTarget = null;
   let pendingSuperShotTarget = null;
 
-  runActionLoop(getRangerCast, 1500);
+  runActionLoop(getRangerCast);
 
   // Gear, trips included. Exception: cupid left in hand with no one to heal
   // jumps the queue, so the ranger is not shooting mobs with a heal bow.
