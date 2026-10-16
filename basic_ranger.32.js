@@ -20,12 +20,7 @@ const isMob = (entity) => entity.type === "monster";
 const tryMultiShot = async (skill, entityList) => {
   if (entityList.length === 0) return false;
   set_message(`${skill} Shooting`);
-  // Snapshot at fire time: cupid<->bow swaps change frequency mid-tick, and
-  // the attack cooldown must be timed with the frequency the shot went out at.
-  const attackFrequencyBeforeCompensate = attackFrequency();
-  return use_skill(skill, entityList)
-    .then(() => attackSpeedCompensate(attackFrequencyBeforeCompensate))
-    .catch((e) => onAttackError(e));
+  return use_skill(skill, entityList).catch((e) => onAttackError(e));
 };
 
 const inRange = (entity) =>
@@ -244,7 +239,6 @@ function restoreAttackingBow() {
 async function firePlan(plan) {
   if (!isAttackReady()) return;
 
-  const attackFrequencyBeforeCompensate = attackFrequency();
   const promisesToAwait = [];
 
   // Cupid heals whatever it hits, so shooting mobs with it feeds them. Swap
@@ -266,9 +260,7 @@ async function firePlan(plan) {
         : "Shooting",
     );
     promisesToAwait.push(
-      use_skill(plan.skill, plan.shotTargets)
-        .then(() => attackSpeedCompensate(attackFrequencyBeforeCompensate))
-        .catch((e) => onAttackError(e)),
+      use_skill(plan.skill, plan.shotTargets).catch((e) => onAttackError(e)),
     );
   } else {
     promisesToAwait.push(tryMultiShot(plan.skill, plan.shotTargets));

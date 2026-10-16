@@ -3451,3 +3451,12 @@ trip in the past by then, sent the retry half a trip early, into a second reject
 
 Potions keep their own lead in `potionLoop`, since their cooldown comes through `pot_timeout`,
 not `skill_timeout`.
+
+`attackSpeedCompensate` is gone too. The server never keeps the cooldown from the time a shot went
+out. It checks the next attack against the current `attack_ms`, measured from the last attack,
+and every change to `attack_ms` (a weapon swap, cupid and bow, frozen, poisoned) sends its own
+`skill_timeout {name: "attack", reason: "attack_ms"}` correction, which `leadSkillTimeout` leads
+like any other. The ranger's snapshot-and-shave after each shot either got overwritten by that
+correction or, when the correction came first, cut an already correct cooldown and drew a
+`cooldown` rejection. The same correction is what used to wipe the ping shave after a candy
+swap-back, and the listener now leads it with no extra call.

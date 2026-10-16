@@ -403,19 +403,6 @@ function shouldWearExpGear() {
   );
 }
 
-// Ping compensation for normal attack
-function attackSpeedCompensate(
-  attackFrequencyBeforeCompensate,
-  attackFrequencyAfterCompensate = attackFrequency(),
-) {
-  if (attackFrequencyBeforeCompensate > attackFrequencyAfterCompensate) {
-    const compensateMs =
-      1000 / attackFrequencyAfterCompensate -
-      1000 / attackFrequencyBeforeCompensate;
-    reduce_cooldown("attack", compensateMs);
-  }
-}
-
 // Gear scoring
 function item_info(item) {
   if (!item) return undefined;
@@ -2997,22 +2984,17 @@ function onAttackError(error, target) {
 }
 
 /**
- * Casts on the shared attack cooldown, compensating it. A plain attack makes
- * its target current: the candy swap's restore and the gear loop pick weapons
- * off get_target().
+ * Casts on the shared attack cooldown. A plain attack makes its target
+ * current: the candy swap's restore and the gear loop pick weapons off
+ * get_target().
  * @param {string} skill - "attack" or "heal"
  * @param {Object} target
  * @returns {Promise}
  */
 function castOnAttackCooldown(skill, target) {
-  const attackFrequencyBeforeCompensate = attackFrequency();
   set_message(skill === "heal" ? `Heal ${target.name}` : "Attacking");
   if (skill === "attack") change_target(target);
-  return use_skill(skill, target)
-    .then(() => {
-      // attackSpeedCompensate(attackFrequencyBeforeCompensate);
-    })
-    .catch((e) => onAttackError(e, target));
+  return use_skill(skill, target).catch((e) => onAttackError(e, target));
 }
 
 /** @returns {(() => Promise)|undefined} a hit on a safe mob in reach, for a trip */
