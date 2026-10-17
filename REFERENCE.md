@@ -3349,11 +3349,19 @@ mix picks exoarm, whose int and str lift the heal more than its lost resistance 
   the redfairy (magical, 4000 attack × frequency 100, aggro 0) idles in view: it made the priest
   the tanker, as intended, but it was also over 99% of the gear score, so the priest wore wbookhs
   against a mob that never attacks, instead of exoarm against the odinos.
+- **No hard-coded wbookhs** (2026-10-17). It went on whenever `character.fear` was set, ahead of
+  the tank pick, and off tank whenever a magical mob targeted us. Priest physical courage is 2,
+  so a tanking priest with three odinos on him was feared and wore wbookhs, whose resistance does
+  nothing against physical hits. The offhand is now the tank pick, else the heal pick, else exoarm,
+  in the crypt too.
+- **The orb follows the action loop:** the heal pick's orb in the heal grace window, else the tank
+  (or fireball) pick's orb, else `test_orb` for the attack. The tank pick has to keep the orb: on
+  fireroamers its burn scoring puts on orba, the only orb with firesistance.
 - **The incumbent is `lastTankPick`, not the worn gear** (2026-10-16). Against the worn gear, luck
   gear put on for a kill never came off: `cloverstud` (luck, vit) scores the same as nothing, and
   `cearring`'s int is worth ~1% of heal, under the 5% bar. A tanking priest on fireroamers wore
   cloverstuds all the time. `pickFireballGear` still uses the worn gear (min gain 0, ties only).
-- **The existing overrides still win:** crypt exoarm, luck and exp gear, fear's wbookhs, sanguine
+- **The existing overrides still win:** luck and exp gear, sanguine
   re-application and jacko in the heal grace window. The pick only replaces the defaults
   (`PRIEST_DEFAULT_GEAR`). Off tank the heal pick below takes its place.
 
@@ -3384,7 +3392,7 @@ base layer under tank, fireball, luck and xp gear and every situational rule abo
 
 ### Luck, exp and the ghost heal (`calculatePriestItems`, 2026-10-15)
 
-Priority, highest first: the situational rules (pinkie, heal grace, crypt, fear, sanguine), then
+Priority, highest first: the situational rules (pinkie, heal grace, crypt, sanguine), then
 luck or xp gear, then the fireball or tank pick, then the heal pick, then `PRIEST_DEFAULT_GEAR`. Luck and xp
 gear are picked the same way for every slot, rings and earrings included (`pickStatGear`): the
 owned copy with the most of the stat, a copy per slot of a pair, the mainhand only one-handed.

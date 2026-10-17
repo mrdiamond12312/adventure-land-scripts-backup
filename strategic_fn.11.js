@@ -1425,20 +1425,8 @@ function getPriestMainhand(target, currentTarget, statGear) {
 function getPriestOffhand(mainhand, tankGear, statGear, healGear) {
   const wtype = G.items[mainhand]?.wtype;
   if (G.classes[character.ctype].doublehand?.[wtype]) return undefined;
-  if (character.map === "crypt") return "exoarm";
   if (statGear.offhand) return statGear.offhand;
-  if (character.fear) return "wbookhs";
-  if (tankGear.offhand) return tankGear.offhand;
-
-  const facingMagicalMob = Object.values(parent.entities).some(
-    (mob) =>
-      mob.type === "monster" &&
-      mob.target === character.name &&
-      mob.damage_type === "magical",
-  );
-
-  if (facingMagicalMob) return "wbookhs";
-  return healGear.offhand ?? "exoarm";
+  return tankGear.offhand ?? healGear.offhand ?? "exoarm";
 }
 
 function getPriestOrb(target, tankGear, statGear, healGear) {
