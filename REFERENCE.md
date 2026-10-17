@@ -979,6 +979,17 @@ the smart-move guard, so the priest keeps healing with no mob in reach and while
 the farm spot — target selection, attack, and farm-movement stay gated on `!isMovingControlled`,
 but heal does not.
 
+**Superseded (2026-10-17): gear now follows `getHealee() ?? get_target()`.** With `fight()` gone,
+heals come from `runActionLoop` (trips included) and only `tendParty` retargets to the healee, off
+trips only. The heal never retargets (`castOnAttackCooldown` only `change_target`s an attack). So
+the gear loop raced the heal off a trip and never saw the healee on one, and pinkie never came out
+for a ghost: the first heal of any weapon sets `s.healed` for 960 hours (`server.js`), so
+`isUnhealedGhost` never holds again. Before `24d0104` the heal pre-equipped for the buffee
+(`currentStrategy(buffee)`) during the cooldown; the gear loop now takes the same `getHealee()` the
+action loop heals. `getNextAction` also holds a ghost heal while a pinkie we own is not yet in hand
+(`isAwaitingPinkie`), since the heal is often off cooldown before the swap lands. The server drops
+`essenceoflife` on that first heal whatever the weapon.
+
 ### Warrior: reactive skills as loops, strategic skills stay in `currentStrategy`
 
 The split is deliberately *by intent*, not by "is it a cooldown skill":

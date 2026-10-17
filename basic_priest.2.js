@@ -113,12 +113,25 @@ function refineTarget(target) {
 }
 
 /**
+ * @param {Object} [healee]
+ * @returns {boolean} whether a ghost heal waits for the pinkie we own to be in hand
+ */
+function isAwaitingPinkie(healee) {
+  return (
+    isUnhealedGhost(healee) &&
+    character.slots.mainhand?.name !== "pinkie" &&
+    locate_item("pinkie") !== -1
+  );
+}
+
+/**
  * Heal first, else a hit: mid-trip only a safe getEnRouteTarget() mob, else
  * what refineTarget makes of the selected target.
  * @returns {{skill: string, target: Object}|undefined}
  */
 function getNextAction() {
   const healee = getHealee();
+  if (isAwaitingPinkie(healee)) return undefined;
   if (healee) return { skill: "heal", target: healee };
 
   const mob = isOnTrip()
@@ -375,7 +388,7 @@ function startSkillLoops() {
     floorMs: 100,
     whileMoving: true,
     canUse: () => true,
-    cast: () => equipClassGear(get_target()),
+    cast: () => equipClassGear(getHealee() ?? get_target()),
   });
 
   runSkillLoop({

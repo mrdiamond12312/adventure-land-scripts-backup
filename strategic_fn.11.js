@@ -754,10 +754,9 @@ const HEAL_GEAR_SWAP_MIN_GAIN = 0.01;
  * @returns {Object<string, string>} slot → heal item
  */
 function pickHealGear() {
-  const allies = getAlliedNames()
-    .filter((name) => name !== character.name)
-    .map((name) => get_player(name))
-    .filter(Boolean);
+  const allies = Array.from(getAlliedNames(), get_player).filter(
+    (player) => player && player !== character,
+  );
   const score = (projected) => {
     const healees = [projected, ...allies];
     const heal =
