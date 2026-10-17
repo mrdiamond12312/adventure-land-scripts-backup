@@ -12,6 +12,17 @@ const EQUIP_STARVE_ATTACK_PERIODS = 6;
 const BOOSTERS = ["goldbooster", "xpbooster", "luckbooster"];
 const WATCHOUT_ABILITIES = ["burn", "stone"];
 const IGNORE_ABILITIES = ["stone"];
+// Abilities that freeze, tangle, stun, stone or slow whoever wakes the mob
+const SLOWING_ABILITIES = [
+  "multi_freeze",
+  "deepfreeze",
+  "mtangle",
+  "tangle",
+  "warpstomp",
+  "stone",
+  "weakness_aura",
+  "curse_aura",
+];
 
 function getMaxBlastRadius() {
   const classData = G.classes[character.ctype];
@@ -354,6 +365,14 @@ function isDyingToOurShot(mob, multiplier = 1) {
  */
 function hasWatchoutAbility(mob) {
   return WATCHOUT_ABILITIES.some((skill) => !!mob?.abilities?.[skill]);
+}
+
+/**
+ * @param {Object} mob
+ * @returns {boolean} whether hitting `mob` can leave us slowed or held
+ */
+function hasSlowingAbility(mob) {
+  return SLOWING_ABILITIES.some((skill) => !!mob?.abilities?.[skill]);
 }
 
 function isHarmlessMob(mob) {
@@ -2928,7 +2947,8 @@ function isKitable(mob) {
 
 /**
  * A mob in reach that is safe to hit without stopping a trip: one already on
- * the party first, else an untargeted one too weak to matter.
+ * the party first, else an untargeted one too weak to matter that keeps us
+ * within courage and has no ability that slows the walk.
  * @returns {Object|undefined}
  */
 function getEnRouteTarget() {
@@ -2943,6 +2963,7 @@ function getEnRouteTarget() {
       is_in_range(mob, "attack") &&
       shouldAttack(mob),
   );
+  const mobsOnMe = listOfMonsterAttacking(character);
 
   return (
     inReach.find((mob) => party.has(mob.target)) ??
@@ -2951,7 +2972,9 @@ function getEnRouteTarget() {
         !mob.target &&
         !mob.cooperative &&
         !hasWatchoutAbility(mob) &&
-        (isHarmlessMob(mob) || isDyingToOurShot(mob)),
+        !hasSlowingAbility(mob) &&
+        (isHarmlessMob(mob) || isDyingToOurShot(mob)) &&
+        (isDyingToOurShot(mob) || hasCourageFor([mob], mobsOnMe)),
     )
   );
 }

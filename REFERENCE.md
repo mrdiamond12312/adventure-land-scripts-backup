@@ -3219,6 +3219,16 @@ trip's path, so aiming stays off trips. Every cast on the shared attack cooldown
 - On a trip it hits `getEnRouteCast()`: a mob in reach already on the party, or an untargeted,
   non-cooperative, non-watchout one that is harmless or dies to our shot (`getEnRouteTarget`), so
   the walk never pulls anything that matters.
+- Waking nothing on a trip may slow it (2026-10-18). An untargeted pick is skipped if it has a
+  `SLOWING_ABILITIES` entry: `multi_freeze` freezes everyone who hits it, `deepfreeze` and
+  `warpstomp` hold you in place, `mtangle`/`tangle` cap speed at 24, `stone` blocks, and the
+  weakness/curse auras (-30/-20 speed) follow a woken mob. It must also pass `hasCourageFor`,
+  because going over courage sets `fear`, which cuts speed by 20/40/70. A one-shot kill is exempt
+  from courage, since it is dead before it targets us. These lists come from `G`
+  (`G.monsters[*].abilities`, and `G.conditions` with `speed < 0`, `set_speed` or `blocked`).
+- A mob already on the party skips both checks: it is already counted against courage, and the
+  crypt/cave mobs (a6, a8, xmagen, xmagex) carry these abilities, so filtering them would stop
+  smart moves inside the cave from hitting what is on us.
 - Off a trip it re-plans from `fightTarget` (`planFight`, the priest's `refineTarget`, the
   ranger's `getShotPlan`) and fires what that class's old `fight()` fired: the warrior's attack
   with candy swap, the rogue's invis, attack and candy swap, the mage's self-energize and attack.
