@@ -15,7 +15,7 @@ const SPECIAL_MOB_ARRIVAL_SLACK = 200;
 /** The fighter ticks far faster than the store needs rewriting */
 const SPECIAL_MOB_REPORT_INTERVAL_MS = 1000;
 
-const CONTESTED_SPECIAL_MOB_IDS = ["paledino"];
+const CONTESTED_SPECIAL_MOB_IDS = [];
 
 var lastSpecialMobReportAt = 0;
 
