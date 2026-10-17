@@ -1862,8 +1862,7 @@ function handle_death() {
 
 function respawnOnceDead(checksLeft = RESPAWN_DEATH_CHECKS) {
   if (character.rip) return respawnWhenReady();
-  if (checksLeft > 1)
-    setTimeout(() => respawnOnceDead(checksLeft - 1), 1000);
+  if (checksLeft > 1) setTimeout(() => respawnOnceDead(checksLeft - 1), 1000);
 }
 
 function commitHarakiri() {
@@ -2509,7 +2508,7 @@ const DYNAMIC_PARTY_PRESETS = {
   mrpumpkin: {
     USIV: () => {
       HEALER = PRIEST;
-      return [MAGE, PRIEST, ROGUE];
+      return [MAGE, PRIEST, WARRIOR];
     },
     default: () => {
       HEALER = PRIEST;
