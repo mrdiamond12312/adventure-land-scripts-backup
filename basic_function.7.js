@@ -2471,7 +2471,7 @@ const DYNAMIC_PARTY_PRESETS = {
     return [WARRIOR, PRIEST, ROGUE];
   },
   mrpumpkin: {
-    USIII: () => {
+    USIV: () => {
       HEALER = PRIEST;
       return [MAGE, PRIEST, ROGUE];
     },
@@ -2503,7 +2503,7 @@ const DYNAMIC_PARTY_PRESETS = {
       return [RANGER, ROGUE, MAGE];
     },
     USI: [WARRIOR, PRIEST, MAGE],
-    USIII: [WARRIOR, PRIEST, MAGE],
+    USIV: [WARRIOR, PRIEST, MAGE],
     default: () => {
       HEALER = PRIEST;
       return [PRIEST, ROGUE, MAGE];
@@ -2525,7 +2525,7 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = PRIEST;
       return [WARRIOR, MAGE, PRIEST];
     },
-    USIII: () => {
+    USIV: () => {
       HEALER = PRIEST;
       return [WARRIOR, MAGE, PRIEST];
     },
@@ -2544,7 +2544,7 @@ const DYNAMIC_PARTY_PRESETS = {
   pinkgoo: {
     USII: [MAGE, PRIEST, ROGUE],
     USI: [WARRIOR, MAGE, PRIEST],
-    USIII: [WARRIOR, MAGE, PRIEST],
+    USIV: [WARRIOR, MAGE, PRIEST],
     EUI: () => {
       RANGER = RANGER1;
       HEALER = RANGER;
@@ -2567,7 +2567,7 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER;
       return [ROGUE, RANGER, MAGE];
     },
-    USIII: [MAGE, RANGER, PRIEST],
+    USIV: [MAGE, RANGER, PRIEST],
     EUII: () => {
       RANGER = RANGER2;
       HEALER = RANGER;
@@ -2590,7 +2590,7 @@ const DYNAMIC_PARTY_PRESETS = {
       HEALER = RANGER;
       return [WARRIOR, RANGER, ROGUE];
     },
-    USIII: () => {
+    USIV: () => {
       RANGER = RANGER1;
       HEALER = PRIEST;
       return [WARRIOR, RANGER, PRIEST];
