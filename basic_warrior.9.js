@@ -23,21 +23,27 @@ const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
 const inRange = (entity, mult = 1) =>
   distance(entity, character) < (character.range + character.xrange) * mult;
 
+/** A held mob is only taken this close to the farm spot, so a drag ends there first */
+const WARRIOR_HOLD_RANGE = 150;
+
 /**
- * `warriorHeldMobs` on the farm spot that are ours or the party's, nearest first.
+ * `warriorHeldMobs` on us anywhere, or the party's once brought to the farm spot, nearest first.
  * @returns {Object[]}
  */
 function getWarriorHeldMobs() {
-  if (!warriorHeldMobs?.length || !isOnPartyFarmSpot()) return [];
+  if (!warriorHeldMobs?.length) return [];
 
   const allies = getAlliedNames();
+  const farmSpot = { map, x: mapX, y: mapY };
   return Object.values(parent.entities)
     .filter(
       (entity) =>
         entity.type === "monster" &&
         !entity.dead &&
         warriorHeldMobs.includes(entity.mtype) &&
-        (!entity.target || allies.has(entity.target)),
+        (entity.target === character.name ||
+          ((!entity.target || allies.has(entity.target)) &&
+            distance(entity, farmSpot) < WARRIOR_HOLD_RANGE)),
     )
     .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs));
 }

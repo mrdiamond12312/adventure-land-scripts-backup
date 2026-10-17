@@ -1580,7 +1580,9 @@ function trackStuckMovement() {
 // lead distance that widens the faster the mob outpaces the tanker's own speed.
 function getFarmMobOrbit(target) {
   const isTankerHoldingFarmMob =
-    isAssignedAsTanker() &&
+    (isAssignedAsTanker() ||
+      (character.ctype === "warrior" &&
+        !!warriorHeldMobs?.includes(target.mtype))) &&
     target.type === "monster" &&
     target.target === character.name &&
     mobsToFarm.includes(target.mtype);

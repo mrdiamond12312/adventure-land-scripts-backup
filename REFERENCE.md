@@ -3471,8 +3471,12 @@ was tried and dropped because it leaked into every other farm and event; off the
 damage-share pick above still decides. Set it to undefined when a farm has no preference.
 
 `warriorHeldMobs` (ent at the plantoid farm) splits the tank: on the farm spot the warrior
-taunts those mobs off anyone in the party, the merchant's drag included, and focuses them
-(`getWarriorHeldMobs`), whether or not he is TANKER, while the priest tanks the rest. The held-mob
+taunts those mobs off anyone in the party, the merchant's drag included, once they are within
+`WARRIOR_HOLD_RANGE` (150) of the spot, so the drag ends there first, and focuses them; mobs
+already on him stay his anywhere. All of it (`getWarriorHeldMobs`) holds whether or not he is
+TANKER, while the priest tanks the rest. `getFarmMobOrbit` counts him as the tanker of a held mob,
+so the kite walks it back to the anchor and orbits there, as the TANKER does with a farm mob;
+without that he orbited the ent wherever he met the drag. The held-mob
 taunt comes before the tanker gate and the 3000-damage cap of the ally peel, which an ent (3600
 physical) would fail.
 
