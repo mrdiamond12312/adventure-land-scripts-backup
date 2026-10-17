@@ -1463,7 +1463,8 @@ async function resolveKiteTarget(target) {
       return withFixedSpot(target, isAbsorbReady ? thief : boss);
     }
 
-    if (partyMems.includes(PRIEST) && !isKnownTankerAround())
+    const isBaited = !!boss && getBaitedBoss()?.id === boss.id;
+    if (partyMems.includes(PRIEST) && !isKnownTankerAround() && !isBaited)
       return dragToSpot(target, route.spot, boss);
   }
 

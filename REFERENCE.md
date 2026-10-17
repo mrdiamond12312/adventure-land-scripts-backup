@@ -3097,9 +3097,10 @@ What the server allows:
 - Leeches come off the priest's heal list while baiting.
 
 A rival is an outsider without Lone Wolf. When a rival holds
-the boss, the assigned tank takes it back (`getBossToTakeBack`): the priest absorbs, the warrior
-taunts. If leeches are near, the bait then scares it off again, and this repeats until a leech
-holds it. With no leech near, the tank just keeps it. Taking it back only works once our tank has
+the boss, the assigned tank takes it back through the drag take-back (`getBossThief`,
+`getStolenDragBoss`): the priest absorbs, the warrior agitates. That only covers bosses in
+`BOSS_DRAG_ROUTES`, so a bait boss without a route gets no take-back. If leeches are near, the
+bait then scares it off again, and this repeats until a leech holds it. With no leech near, the tank just keeps it. Taking it back only works once our tank has
 coop credit on the boss, the same requirement the Franky counter has. Baiting only while *every*
 outsider was a leech was tried and dropped: with a rival party present, nothing ever scared the
 boss off, so it never reached the leeches.
@@ -3182,10 +3183,11 @@ stranger's. Our own party is always `isCoopFriendly` (shared party), so absorb c
 Without it, a member holding franky was only covered by the generic absorb of a member with aggro,
 which waits for 600 spare mp, while the forced drag walked the priest off to the corner.
 
-Not compatible with the leash (`getBaitedBoss`, off since `LEECH_BAIT_BOSSES = []`). Before putting
-mrpumpkin or mrgreen back on it: skip `dragToSpot` while the boss is baited, have `getBossThief`
-ignore leeches while baiting, and drop `getBossToTakeBack`. Otherwise the priest absorbs the boss off
-a leech and scares it off again in a loop, and the forced drag walks him off without the boss.
+With the leash (`getBaitedBoss`), a leech holding the baited boss is no thief (`getBossThief`), and
+`resolveKiteTarget` skips `dragToSpot` while the boss is baited. Without both, the priest absorbed
+the boss off a leech and scared it off again in a loop, and the forced drag walked him off without
+the boss. The leash's own rival take-back (`getBossToTakeBack`) is gone: it ran after the drag
+take-back in `getAbsorbTarget`, and the drag take-back already covers rivals.
 
 ## One action loop per class (`runActionLoop`, strategic_fn.11.js, 2026-10-12)
 

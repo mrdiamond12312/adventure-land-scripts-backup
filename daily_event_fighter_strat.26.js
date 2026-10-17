@@ -398,7 +398,8 @@ async function fightFranky() {
  * @param {Object} boss
  * @param {Object} [route] - its BOSS_DRAG_ROUTES entry
  * @returns {Object|undefined} who holds it when the tanker should take it back:
- *   a stranger, or with `takeBackFromParty` also a party member of ours
+ *   a stranger other than a leech on our bait, or with `takeBackFromParty` also
+ *   a party member of ours
  */
 function getBossThief(boss, route) {
   const holderName = boss?.target;
@@ -413,7 +414,10 @@ function getBossThief(boss, route) {
   if (isOurs && !(route?.takeBackFromParty && partyMems.includes(holderName)))
     return;
 
-  return get_player(holderName) ?? undefined;
+  const holder = get_player(holderName);
+  if (isBossLeech(holder) && getBaitedBoss()?.id === boss.id) return;
+
+  return holder ?? undefined;
 }
 
 /** @returns {{boss: Object, thief: Object}|undefined} a live dragged boss the tanker may take back */

@@ -2895,18 +2895,6 @@ function isCoopFriendly(holder, boss) {
   );
 }
 
-/** @returns {{boss: Object, holder: Object}|undefined} a rival holding a bait boss we can take back */
-function getBossToTakeBack() {
-  if (!isAssignedAsTanker()) return undefined;
-
-  const boss = getNearestBaitBoss();
-  const holder = boss?.target && get_player(boss.target);
-  if (!holder || !isBossOutsider(holder)) return undefined;
-  if (getBaitedBoss() && isBossLeech(holder)) return undefined;
-
-  return isCoopFriendly(holder, boss) ? { boss, holder } : undefined;
-}
-
 /** @returns {number} hp per second hpot1 restores, chugged off cooldown */
 function hpot1Regen() {
   const [, hp] = G.items.hpot1.gives.find(([stat]) => stat === "hp");
