@@ -37,6 +37,16 @@ function getHealee(buffees = getPlayersToHeal()) {
 }
 
 /**
+ * Fear only cuts our attack and speed while the server leaves heal alone.
+ * @param {Object} mob - the mob a pull would bring on us
+ * @param {Object[]} mobsOnMe - listOfMonsterAttacking(character)
+ * @returns {boolean} whether the pull is within what we will take on
+ */
+function isPullBrave(mob, mobsOnMe) {
+  return !FEAR_AFFECTS_HEAL || hasCourageFor([mob], mobsOnMe);
+}
+
+/**
  * Narrows the selected target to a mob to taunt as tanker or one to poison,
  * and to what we can actually hit: it, else the beefiest aggroed mob in reach.
  * @param {Object} [target]
@@ -70,7 +80,7 @@ function refineTarget(target) {
           .filter(
             (mob) =>
               !mob.target &&
-              hasCourageFor([mob], mobsOnMe) &&
+              isPullBrave(mob, mobsOnMe) &&
               !canOneShotWithWeapon(heldWeaponInfo, [mob]) &&
               partyDmgRecieved + calculateDamage(mob, character) <
                 character.heal * 0.9 * attackFrequency(),
@@ -330,7 +340,7 @@ function getZapTarget() {
       )
         return false;
 
-      if (!hasCourageFor([entity], mobsOnMe)) return false;
+      if (!isPullBrave(entity, mobsOnMe)) return false;
 
       if (
         entity.weak ||

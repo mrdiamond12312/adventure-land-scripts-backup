@@ -3444,6 +3444,24 @@ monster in view that targets a party member or no one, with no mitigation, so ge
 cannot move it. It holds no state, so every character still works out the same tanker. With
 nothing around the share is 1, so the warrior tanks, as before.
 
+### The priest pulls past its courage (`FEAR_AFFECTS_HEAL`, 2026-10-17)
+
+The server's `calculate_player_stats` sets `fear` to how far each damage type's count of mobs on
+us exceeds its courage. Fear cuts speed (20, 40, 70… per level) and attack (to 60/40/20%), and cuts
+heal the same way only under `mode.fear_affects_heal`, which is off. A priest's job is the heal,
+so its taunt and zapper pulls (`isPullBrave`) skip the courage check while `FEAR_AFFECTS_HEAL` is
+false; the heal-capacity checks still bound them. Flip it to true if the server turns that mode
+on. Warrior pulls and cleave keep their courage checks.
+
+### dreturn only answers a direct melee hit (2026-10-17)
+
+The server's `commit_damage` returns `dreturn` only for an attack's main target (`first`), from an
+attacker with range under 75, on physical damage. Splash targets come after the main one in the
+same loop, so they never trigger it, and a mage never does. So the warrior no longer skips targets
+with a porcupine in splash radius, nor drops the pull strategy near one; `MELEE_IGNORE_LIST` still
+keeps melee off hitting it directly, and agitate and cleave off it. cburst skips it too, by
+request: it is about not pulling the porcupine, not about dreturn.
+
 ### A farm can pin its tanker (`farmTanker`, 2026-10-17)
 
 `farmTanker`, set beside `mobsToFarm`, takes the tank on the configured farm spot (within
@@ -3451,6 +3469,12 @@ nothing around the share is 1, so the warrior tanks, as before.
 spot, not a character's `ownMap`, so every character settles on the same tanker. A global pin
 was tried and dropped because it leaked into every other farm and event; off the spot the
 damage-share pick above still decides. Set it to undefined when a farm has no preference.
+
+`warriorHeldMobs` (ent at the plantoid farm) splits the tank: on the farm spot the warrior
+taunts those mobs off anyone in the party, the merchant's drag included, and focuses them
+(`getWarriorHeldMobs`), whether or not he is TANKER, while the priest tanks the rest. The held-mob
+taunt comes before the tanker gate and the 3000-damage cap of the ally peel, which an ent (3600
+physical) would fail.
 
 ## Ranger stalls with no penalty_cd (`getShotPlan`, 2026-10-16)
 

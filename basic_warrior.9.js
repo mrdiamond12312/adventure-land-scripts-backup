@@ -23,15 +23,29 @@ const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
 const inRange = (entity, mult = 1) =>
   distance(entity, character) < (character.range + character.xrange) * mult;
 
-/** @returns {boolean} whether a blacklisted blasting mob stands around the target */
-const haveIgnoreMobAroundTarget = (targetMob) =>
-  mobsListAroundTarget(targetMob, getSplashRadius()).some((mob) =>
-    MELEE_IGNORE_LIST.includes(mob.mtype),
-  );
+/**
+ * `warriorHeldMobs` on the farm spot that are ours or the party's, nearest first.
+ * @returns {Object[]}
+ */
+function getWarriorHeldMobs() {
+  if (!warriorHeldMobs?.length || !isOnPartyFarmSpot()) return [];
+
+  const allies = getAlliedNames();
+  return Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity.type === "monster" &&
+        !entity.dead &&
+        warriorHeldMobs.includes(entity.mtype) &&
+        (!entity.target || allies.has(entity.target)),
+    )
+    .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs));
+}
 
 /**
- * The selected target as the warrior fights it: in pull mode the best mob for
- * the AOE, and what to swing at: it when in reach, else another aggroed mob.
+ * The selected target as the warrior fights it: a held mob first, else in pull
+ * mode the best mob for the AOE, and what to swing at: it when in reach, else
+ * another aggroed mob.
  * @param {Object} [target]
  * @returns {{focus?: Object, attackTarget?: Object}}
  */
@@ -46,12 +60,14 @@ function planFight(target) {
       !MELEE_IGNORE_LIST.includes(entity.mtype) &&
       entity.target &&
       !haveFormidableMonsterAroundTarget(entity) &&
-      inRange(entity, 5) &&
-      !haveIgnoreMobAroundTarget(entity),
+      inRange(entity, 5),
   );
   const aggroedMobs = sortPullTargets(candidates, blastRadius);
+  const [heldMob] = getWarriorHeldMobs();
 
-  if (
+  if (heldMob) {
+    target = heldMob;
+  } else if (
     typeof usePullStrategies === "function" &&
     currentStrategy === usePullStrategies &&
     !isPinnedTarget(target) &&
@@ -70,15 +86,12 @@ function planFight(target) {
 }
 
 /**
- * Faces the selected target, kiting wider from faster mobs, and drops the pull
- * strategy around blasting mobs on the blacklist.
+ * Faces the selected target, kiting wider from faster mobs.
  * @param {Object} [target]
  */
 function aimAt(target) {
   const { focus } = planFight(target);
   if (!focus) return;
-
-  if (haveIgnoreMobAroundTarget(focus)) changeToNormalStrategies();
 
   const needsKiteAdjustment =
     focus.range <= character.range && focus.speed > character.speed;
@@ -138,6 +151,11 @@ function getTauntTarget() {
     is_in_range(baitedBoss, "taunt")
   )
     return baitedBoss;
+
+  const heldMobToTake = getWarriorHeldMobs().find(
+    (mob) => mob.target !== character.name && is_in_range(mob, "taunt"),
+  );
+  if (heldMobToTake) return heldMobToTake;
 
   if (!isAssignedAsTanker()) return null;
 

@@ -61,6 +61,9 @@ const CAVE_GATHERING_LS_KEY = "caveGathering";
 /** Whether fighters harakiri on a server hop's loot-before-hopping cm */
 var HARAKIRI_ON_SERVER_HOP = false;
 
+/** Mirrors the server's `mode.fear_affects_heal`; while false the priest pulls past its courage */
+const FEAR_AFFECTS_HEAL = false;
+
 /** @returns {string} the realm we are on right now, e.g. "USII" */
 function getCurrentServer() {
   return `${server.region}${server.id}`;
@@ -314,6 +317,8 @@ var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 
 /** Who tanks on the farm spot above, undefined to let assignRoles pick */
 var farmTanker = PRIEST;
+/** Mobs the warrior takes off anyone and holds himself on the farm spot, beside farmTanker */
+var warriorHeldMobs = ["ent"];
 
 // desired elixir named
 var desiredElixir = "elixirluck";

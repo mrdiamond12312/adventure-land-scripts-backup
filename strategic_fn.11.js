@@ -2483,6 +2483,7 @@ function getMonstersToCBurst() {
       (mob) =>
         mob.type === "monster" &&
         is_in_range(mob, "cburst") &&
+        !MELEE_IGNORE_LIST.includes(mob.mtype) &&
         calculateDamage(mob, partyTanker) < MAX_MOB_DPS &&
         mob.range < character.range - 20 &&
         !WATCHOUT_ABILITIES.some((skill) =>
