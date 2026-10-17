@@ -45,7 +45,7 @@ character.on("cm", async function ({ name, message }) {
     case "party_heal":
       if (
         is_on_cooldown("partyheal") ||
-        character.mp <= G.skills["partyheal"].mp
+        character.mp <= partyHealMpFloor()
       )
         break;
 

@@ -23,13 +23,9 @@ const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
 const inRange = (entity, mult = 1) =>
   distance(entity, character) < (character.range + character.xrange) * mult;
 
-/** A held mob is only taken this close to the farm spot, so a drag ends there first */
 const WARRIOR_HOLD_RANGE = 150;
 
-/**
- * `warriorHeldMobs` on us anywhere, or the party's once brought to the farm spot, nearest first.
- * @returns {Object[]}
- */
+/** @returns {Object[]} held mobs on us or at the farm spot, nearest first */
 function getWarriorHeldMobs() {
   if (!warriorHeldMobs?.length) return [];
 
@@ -48,10 +44,54 @@ function getWarriorHeldMobs() {
     .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs));
 }
 
+const OFF_TANK_MAX_MOB_DPS = 3000;
+const OFF_TANK_EMERGENCY_HP_RATIO = 0.4;
+const OFF_TANK_EMERGENCY_HEAL_SHARE = 0.9;
+
 /**
- * The selected target as the warrior fights it: a held mob first, else in pull
- * mode the best mob for the AOE, and what to swing at: it when in reach, else
- * another aggroed mob.
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isAllyInEmergency(name) {
+  const ally = get_player(name);
+  if (!ally || ally.rip) return false;
+
+  return (
+    ally.hp < ally.max_hp * OFF_TANK_EMERGENCY_HP_RATIO ||
+    avgDmgTaken(ally) > healerHps() * OFF_TANK_EMERGENCY_HEAL_SHARE
+  );
+}
+
+/** @returns {Object|undefined} a physical mob to take off an ally in trouble */
+function getOffTankTauntTarget() {
+  if (!farmTanker || isAssignedAsTanker() || !isOnPartyFarmSpot())
+    return undefined;
+
+  const allies = partyMems.filter(
+    (name) => name !== character.name && isAllyInEmergency(name),
+  );
+  if (!allies.length) return undefined;
+
+  const mobsOnMe = listOfMonsterAttacking(character);
+  return Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity.type === "monster" &&
+        !isCaveFriendly(entity) &&
+        !entity.cooperative &&
+        entity.damage_type === "physical" &&
+        allies.includes(entity.target) &&
+        !MELEE_IGNORE_LIST.includes(entity.mtype) &&
+        is_in_range(entity, "taunt") &&
+        calculateDamage(entity, character) < OFF_TANK_MAX_MOB_DPS &&
+        hasCourageFor([entity], mobsOnMe),
+    )
+    .sort((lhs, rhs) => rhs.attack - lhs.attack)[0];
+}
+
+/**
+ * The selected target as the warrior fights it: in pull mode the best mob for
+ * the AOE, and what to swing at: it when in reach, else another aggroed mob.
  * @param {Object} [target]
  * @returns {{focus?: Object, attackTarget?: Object}}
  */
@@ -65,6 +105,7 @@ function planFight(target) {
       !entity.s?.fullguardx &&
       !MELEE_IGNORE_LIST.includes(entity.mtype) &&
       entity.target &&
+      !isInMerchantDrag(entity) &&
       !haveFormidableMonsterAroundTarget(entity) &&
       inRange(entity, 5),
   );
@@ -162,6 +203,9 @@ function getTauntTarget() {
     (mob) => mob.target !== character.name && is_in_range(mob, "taunt"),
   );
   if (heldMobToTake) return heldMobToTake;
+
+  const offTankMob = getOffTankTauntTarget();
+  if (offTankMob) return offTankMob;
 
   if (!isAssignedAsTanker()) return null;
 

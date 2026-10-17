@@ -37,10 +37,9 @@ function getHealee(buffees = getPlayersToHeal()) {
 }
 
 /**
- * Fear only cuts our attack and speed while the server leaves heal alone.
- * @param {Object} mob - the mob a pull would bring on us
- * @param {Object[]} mobsOnMe - listOfMonsterAttacking(character)
- * @returns {boolean} whether the pull is within what we will take on
+ * @param {Object} mob
+ * @param {Object[]} mobsOnMe
+ * @returns {boolean}
  */
 function isPullBrave(mob, mobsOnMe) {
   return !FEAR_AFFECTS_HEAL || hasCourageFor([mob], mobsOnMe);
@@ -188,6 +187,16 @@ const ZAP_MIN_MP_RATIO = 0.6;
 
 /** Mp kept on top of partyheal's own cost so an emergency one can always fire */
 const PARTYHEAL_MP_MARGIN = 400;
+const PARTYHEAL_RESERVED_HEALS = 20;
+
+function partyHealMpFloor() {
+  const mpPerHeal =
+    character.mp_cost * (1 - (character.mp_reduction ?? 0) / 100);
+  return (
+    G.skills["partyheal"].mp +
+    Math.max(PARTYHEAL_MP_MARGIN, PARTYHEAL_RESERVED_HEALS * mpPerHeal)
+  );
+}
 
 /** @returns {number} mp curse must leave behind for the zapper and an emergency partyheal */
 function curseMpFloor() {
@@ -254,8 +263,7 @@ function getAbsorbTarget() {
 }
 
 function shouldPartyHeal() {
-  if (character.mp <= G.skills["partyheal"].mp + PARTYHEAL_MP_MARGIN)
-    return false;
+  if (character.mp <= partyHealMpFloor()) return false;
   const allies = (parent.party_list || [])
     .map((name) => get_entity(name))
     .filter((entity) => entity && !entity.dead && !entity.rip);

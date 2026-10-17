@@ -15,7 +15,6 @@ const SPECIAL_MOB_ARRIVAL_SLACK = 200;
 /** The fighter ticks far faster than the store needs rewriting */
 const SPECIAL_MOB_REPORT_INTERVAL_MS = 1000;
 
-/** Special mobs we go for even while someone outside our crew holds them */
 const CONTESTED_SPECIAL_MOB_IDS = ["paledino"];
 
 var lastSpecialMobReportAt = 0;
@@ -41,7 +40,7 @@ function isTakenBySomeoneElse(target) {
 /**
  * @param {string} mtype
  * @param {string} [target]
- * @returns {boolean} whether to leave it to whoever outside our crew holds it
+ * @returns {boolean}
  */
 function isLeftToOthers(mtype, target) {
   return (

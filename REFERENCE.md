@@ -3444,6 +3444,15 @@ monster in view that targets a party member or no one, with no mitigation, so ge
 cannot move it. It holds no state, so every character still works out the same tanker. With
 nothing around the share is 1, so the warrior tanks, as before.
 
+### Partyheal leaves mp for normal heals (`partyHealMpFloor`, 2026-10-17)
+
+`partyheal` costs 400 mp on a 200 ms cooldown, and was gated only at its cost plus 400. Whenever a
+trigger held (an injured ally out of heal range, say) it fired about five times a second down to
+800 mp and left the priest no mp to heal with. It now needs its cost plus
+`PARTYHEAL_RESERVED_HEALS` (20) normal heals at the current `mp_cost` after `mp_reduction`, or
+`PARTYHEAL_MP_MARGIN` if that is more. The merchant's `party_heal` request is held to the same
+floor.
+
 ### Splash is read with `||`, not `??` (`splashOf`, 2026-10-17)
 
 `calculate_item_properties` starts every stat at 0, `explosion` and `blast` included, so on an
@@ -3488,6 +3497,12 @@ so the kite walks it back to the anchor and orbits there, as the TANKER does wit
 without that he orbited the ent wherever he met the drag. The held-mob
 taunt comes before the tanker gate and the 3000-damage cap of the ally peel, which an ent (3600
 physical) would fail.
+
+Beyond the held mobs the warrior off-tanks while `farmTanker` is someone else and he is on the
+spot (`getOffTankTauntTarget`): he taunts physical mobs off the fighters (`partyMems`, so never a
+merchant drag), hardest hitter first, for as long as `hasCourageFor` holds, so his physical
+courage (5) is the amount he takes. Mobs over `OFF_TANK_MAX_MOB_DPS` on him, cooperative mobs and
+`MELEE_IGNORE_LIST` stay with the tanker.
 
 ## Ranger stalls with no penalty_cd (`getShotPlan`, 2026-10-16)
 

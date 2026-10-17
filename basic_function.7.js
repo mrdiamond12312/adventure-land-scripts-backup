@@ -61,7 +61,7 @@ const CAVE_GATHERING_LS_KEY = "caveGathering";
 /** Whether fighters harakiri on a server hop's loot-before-hopping cm */
 var HARAKIRI_ON_SERVER_HOP = false;
 
-/** Mirrors the server's `mode.fear_affects_heal`; while false the priest pulls past its courage */
+/** Server's `mode.fear_affects_heal` */
 const FEAR_AFFECTS_HEAL = false;
 
 /** @returns {string} the realm we are on right now, e.g. "USII" */
@@ -315,9 +315,7 @@ var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 // var mobsToFarm = ["jr", "booboo"];
 // var mobsToFarm = ["paledino", "mechagnome", "odino"];
 
-/** Who tanks on the farm spot above, undefined to let assignRoles pick */
 var farmTanker = PRIEST;
-/** Mobs the warrior takes off anyone and holds himself on the farm spot, beside farmTanker */
 var warriorHeldMobs = ["ent"];
 
 // desired elixir named
@@ -1047,6 +1045,18 @@ function isMelee() {
   return character.range < 75;
 }
 
+/**
+ * @param {Object} [mob]
+ * @returns {boolean}
+ */
+function isInMerchantDrag(mob) {
+  return (
+    !!mob?.target &&
+    mob.mtype === get("luringMobType") &&
+    get_player(mob.target)?.ctype === "merchant"
+  );
+}
+
 function getTarget() {
   const leader = get_entity(TANKER) ?? get_entity(partyMems[0]);
   const declared = getMonstersOnDeclares();
@@ -1054,7 +1064,8 @@ function getTarget() {
 
   let target =
     declared && declared.cooperative ? declared : get_targeted_monster();
-  if (target && !get_entity(target.id)) target = undefined;
+  if (target && (!get_entity(target.id) || isInMerchantDrag(target)))
+    target = undefined;
 
   if (!target) {
     const isLeader = character.name === (leader?.name ?? partyMems[0]);
@@ -1070,6 +1081,7 @@ function getTarget() {
             entity.target &&
             party.has(entity.target) &&
             entity.target !== character.name &&
+            !isInMerchantDrag(entity) &&
             (!isMelee() || !MELEE_IGNORE_LIST.includes(entity.mtype)),
         )
         .sort(
@@ -1090,6 +1102,7 @@ function getTarget() {
             !isCaveFriendly(entity) &&
             entity.target &&
             party.has(entity.target) &&
+            !isInMerchantDrag(entity) &&
             distance(entity, character) < character.range + character.xrange,
         )
         .sort(
@@ -1099,7 +1112,10 @@ function getTarget() {
       if (leader) {
         let leaderTarget =
           get_target_of(leader) ?? get_nearest_monster({ target: leader.name });
-        if (leaderTarget && party.has(leaderTarget.name))
+        if (
+          leaderTarget &&
+          (party.has(leaderTarget.name) || isInMerchantDrag(leaderTarget))
+        )
           leaderTarget = undefined;
 
         target =
@@ -1817,7 +1833,6 @@ hitAndRun();
 //// RESPAWN
 /** Ms past the server's cant_respawn wait before the retry */
 const RESPAWN_RETRY_PAD_MS = 300;
-/** Seconds `respawnOnceDead` looks for a death that fires no `death` event */
 const RESPAWN_DEATH_CHECKS = 5;
 
 /** A respawn in flight or waiting out the cooldown */
@@ -1842,14 +1857,12 @@ function handle_death() {
   respawnWhenReady();
 }
 
-/** Looks for `character.rip` once a second, and respawns once it shows */
 function respawnOnceDead(checksLeft = RESPAWN_DEATH_CHECKS) {
   if (character.rip) return respawnWhenReady();
   if (checksLeft > 1)
     setTimeout(() => respawnOnceDead(checksLeft - 1), 1000);
 }
 
-/** Harakiri never fires `death` */
 function commitHarakiri() {
   parent.socket.emit("harakiri");
   respawnOnceDead();
