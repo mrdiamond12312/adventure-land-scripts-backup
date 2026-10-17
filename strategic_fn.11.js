@@ -555,7 +555,9 @@ function projectStatsWith(picks) {
     firesistance: wornStat("firesistance") + stats.firesistance,
     mp_cost:
       character.mp_cost +
-      (character.damage_type === "physical" ? stats.apiercing : stats.rpiercing) /
+      (character.damage_type === "physical"
+        ? stats.apiercing
+        : stats.rpiercing) /
         15,
     mp_reduction: (character.mp_reduction ?? 0) + stats.mp_reduction,
   };
@@ -2810,7 +2812,7 @@ function adaptStrategyToParty() {
 }
 
 /** Bosses handed to leeches instead of tanked */
-const LEECH_BAIT_BOSSES = [];
+const LEECH_BAIT_BOSSES = ["mrpumpkin"];
 
 /** How close to the boss an outsider counts as on it */
 const LEECH_BAIT_RANGE = 600;
