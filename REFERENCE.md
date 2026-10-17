@@ -3504,6 +3504,9 @@ merchant drag), hardest hitter first, for as long as `hasCourageFor` holds, so h
 courage (5) is the amount he takes. Mobs over `OFF_TANK_MAX_MOB_DPS` on him, cooperative mobs and
 `MELEE_IGNORE_LIST` stay with the tanker.
 
+The priest's `getAbsorbTarget` skips the warrior while he off-tanks (farmTanker someone else, on
+the spot); it pulled his held ents straight back.
+
 ## Ranger stalls with no penalty_cd (`getShotPlan`, 2026-10-16)
 
 Two ways the ranger skips shots while `penalty_cd` is clear:
