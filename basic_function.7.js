@@ -1603,7 +1603,10 @@ function getFarmMobOrbit(target) {
     target.target === character.name &&
     mobsToFarm.includes(target.mtype);
   const isNearDefaultSpot =
-    isTankerHoldingFarmMob &&
+    (isTankerHoldingFarmMob ||
+      (isAssignedAsTanker() &&
+        character.ctype === "priest" &&
+        character.map === map)) &&
     distance(target, { x: mapX, y: mapY }) <=
       character.range + character.xrange;
   const orbitCenter = isNearDefaultSpot ? { x: mapX, y: mapY } : target;

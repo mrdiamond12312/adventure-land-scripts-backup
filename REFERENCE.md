@@ -3504,6 +3504,12 @@ merchant drag), hardest hitter first, for as long as `hasCourageFor` holds, so h
 courage (5) is the amount he takes. Mobs over `OFF_TANK_MAX_MOB_DPS` on him, cooperative mobs and
 `MELEE_IGNORE_LIST` stay with the tanker.
 
+A tanking priest orbits the anchor whatever he targets (pull target, healee, a mob on someone
+else) while it is within his reach of the anchor, and goes to it only beyond that
+(`getFarmMobOrbit`); orbiting each target he drifted into the porcupine spawn next to the
+plantoids. His taunt pull skips `MELEE_IGNORE_LIST` so porcupines do not block the warrior's
+cleave and agitate; the zapper still pulls them.
+
 The priest's `getAbsorbTarget` skips the warrior while he off-tanks (farmTanker someone else, on
 the spot); it pulled his held ents straight back.
 

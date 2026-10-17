@@ -79,6 +79,7 @@ function refineTarget(target) {
           .filter(
             (mob) =>
               !mob.target &&
+              !MELEE_IGNORE_LIST.includes(mob.mtype) &&
               isPullBrave(mob, mobsOnMe) &&
               !canOneShotWithWeapon(heldWeaponInfo, [mob]) &&
               partyDmgRecieved + calculateDamage(mob, character) <
