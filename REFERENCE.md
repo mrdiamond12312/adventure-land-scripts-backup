@@ -3598,3 +3598,23 @@ after dropping its 12.5s timer harakiri characters stayed dead. Every harakiri n
 `commitHarakiri`, which starts the same `respawnOnceDead` checks right after it, so the respawn
 goes out once the server's `rip` has come back. A polling `character.rip` interval was turned
 down for this.
+
+## Kill-triggered special mobs (`SPECIAL_MOB_IDS`, `MINI_BOSSES_TO_SCOUT`, 2026-10-18)
+
+Six mobs are spawned by a server-wide kill counter, not by a respawn timer (`respawn: -1`). On each
+kill, `server_functions.js` checks `stats.kills[parent] > edges.next_<mob>`, advances the edge by
+`events[<mob>] * Math.random()`, and calls `spawn_special_monster`:
+
+| mob | kills counted | where it appears | moves? |
+|---|---|---|---|
+| `goldenbat` | `bat` | any `cave` pack | roams |
+| `goldenbot` | `targetron` + `sparkbot` | a uhills targetron/sparkbot pack | roams |
+| `cutebee` | `bee` | any `main` pack | roams |
+| `paledino` | `odino` | the mforest odino pack | roams |
+| `manyeye` | `oneeye` | the level2w oneeye pack | roams |
+| `mimic` | `kobold` | one of the two ucliffs kobold packs | stays put (`roam: false`) |
+
+The last three (the "rare variants") only spawn while none is alive (`!monster_c[v[0]]`), so an
+unkilled one blocks the next. Their spawn spot is the parent pack's `boundary`, which is why the scout
+checks `getMonsterSpawns(<parent>)`. The mimic has `aggro: 0`, so it will not chase a passing scout.
+Because the mimic stays where it spawned, both kobold packs have to be checked.

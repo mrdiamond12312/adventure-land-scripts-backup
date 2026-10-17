@@ -223,6 +223,8 @@ const SPECIAL_MOB_IDS = [
   "goldenbot",
   "rharpy",
   "paledino",
+  "manyeye",
+  "mimic",
 ];
 
 // var map = "main";

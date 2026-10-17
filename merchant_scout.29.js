@@ -50,6 +50,16 @@ const MINI_BOSSES_TO_SCOUT = {
     spotsToCheck: getMonsterSpawns("stompy"),
     useTeleportation: true,
   },
+  rharpy: {
+    // Spawn box first for the surge, then a loop whose vision covers all of winter_cove
+    spotsToCheck: [
+      { map: "winter_cove", x: 135, y: -311 },
+      { map: "winter_cove", x: 432, y: -1776 },
+      { map: "winter_cove", x: -576, y: -1104 },
+      { map: "winter_cove", x: 336, y: -768 },
+    ],
+    useTeleportation: true,
+  },
   cutebee: {
     spotsToCheck: [
       ...getMonsterSpawns("crab"),
@@ -63,18 +73,16 @@ const MINI_BOSSES_TO_SCOUT = {
     spotsToCheck: [{ map: "uhills", x: 328, y: -271 }],
     useTeleportation: true,
   },
-  rharpy: {
-    // Spawn box first for the surge, then a loop whose vision covers all of winter_cove
-    spotsToCheck: [
-      { map: "winter_cove", x: 135, y: -311 },
-      { map: "winter_cove", x: 432, y: -1776 },
-      { map: "winter_cove", x: -576, y: -1104 },
-      { map: "winter_cove", x: 336, y: -768 },
-    ],
-    useTeleportation: true,
-  },
   paledino: {
     spotsToCheck: getMonsterSpawns("odino"),
+    useTeleportation: true,
+  },
+  manyeye: {
+    spotsToCheck: getMonsterSpawns("oneeye"),
+    useTeleportation: true,
+  },
+  mimic: {
+    spotsToCheck: getMonsterSpawns("kobold"),
     useTeleportation: true,
   },
 };
