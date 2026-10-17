@@ -1804,9 +1804,39 @@ async function hitAndRun(target = get_target(), rangeRateFn = rangeRate) {
 hitAndRun();
 
 //// RESPAWN
-function handle_death() {
-  setTimeout(respawn, 15000);
+/** Ms past the server's cant_respawn wait before the retry */
+const RESPAWN_RETRY_PAD_MS = 300;
+
+/** Seconds after load a death from before we connected is still looked for */
+const STARTUP_RESPAWN_CHECKS = 5;
+
+/** A respawn in flight or waiting out the cooldown */
+let isRespawnPending = false;
+
+/** Respawns, and on cant_respawn retries once its `ms` has passed */
+async function respawnWhenReady() {
+  if (isRespawnPending || !character.rip) return;
+
+  isRespawnPending = true;
+  const retryMs = await respawn().then(
+    () => 0,
+    (e) => e?.ms ?? 0,
+  );
+  if (retryMs) await sleep(retryMs + RESPAWN_RETRY_PAD_MS);
+  isRespawnPending = false;
+
+  if (retryMs) respawnWhenReady();
 }
+
+function handle_death() {
+  respawnWhenReady();
+}
+
+(function respawnIfDeadOnLoad(checksLeft = STARTUP_RESPAWN_CHECKS) {
+  if (character.rip) return respawnWhenReady();
+  if (checksLeft > 1)
+    setTimeout(() => respawnIfDeadOnLoad(checksLeft - 1), 1000);
+})();
 
 function sleep(delay) {
   return new Promise((resolve) => setTimeout(resolve, delay));
@@ -2032,10 +2062,6 @@ function suicide() {
   ) {
     parent.socket.emit("harakiri");
     game_log("Harakiri");
-
-    setTimeout(() => {
-      respawn();
-    }, 12500);
   }
 }
 

@@ -1830,6 +1830,14 @@ function sendEquips(itemSlots) {
   return trackInFlight(promise, entries, itemSlots.length * EQUIP_PENALTY_MS);
 }
 
+/** @returns {boolean} whether a two-handed mainhand can go on: no offhand, or a free slot to take it off into */
+function canWieldTwoHanded() {
+  return (
+    !getServerSlot("offhand") ||
+    character.items.findIndex((_, i) => !getServerItem(i)) >= 0
+  );
+}
+
 /**
  * @param {string} slot
  * @returns {Promise} the tracked unequip
@@ -1951,11 +1959,12 @@ function buildEquipPromises(suggestedItems, options) {
   const suggestedMainhandWtype = item_info({
     name: suggestedItems["mainhand"],
   })?.wtype;
-  if (
-    suggestedItems["mainhand"] &&
-    G.classes[character.ctype].doublehand[suggestedMainhandWtype] &&
-    getServerSlot("offhand")
-  ) {
+  const isSuggestedTwoHanded =
+    !!suggestedItems["mainhand"] &&
+    !!G.classes[character.ctype].doublehand?.[suggestedMainhandWtype];
+  if (isSuggestedTwoHanded && !canWieldTwoHanded()) {
+    delete suggestedItems.mainhand;
+  } else if (isSuggestedTwoHanded && getServerSlot("offhand")) {
     promises.push(sendUnequip("offhand"));
   }
 

@@ -332,7 +332,6 @@ async function moveHome() {
 
 setInterval(async function () {
   if (character.rip) {
-    respawn();
     return;
   }
 
@@ -565,10 +564,6 @@ function startSkillLoops() {
 function on_party_invite(name) {
   if (name === partyMems[0]) accept_party_invite(name);
 } // called by the inviter's name
-
-function handle_death() {
-  respawn().catch((e) => setTimeout(() => respawn(), e.ms + 300));
-}
 
 /**
  * Handler to buy from Ponty.

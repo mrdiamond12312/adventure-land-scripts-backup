@@ -173,7 +173,6 @@ setInterval(async function () {
   buff();
 
   if (character.rip) {
-    respawn();
     return;
   }
 

@@ -990,6 +990,12 @@ action loop heals. `getNextAction` also holds a ghost heal while a pinkie we own
 (`isAwaitingPinkie`), since the heal is often off cooldown before the swap lands. The server drops
 `essenceoflife` on that first heal whatever the weapon.
 
+Pinkie is a priest two-hander, and the server refuses one while an offhand is on, and refuses the
+offhand's unequip with `no_space` on a full inventory. `canWieldTwoHanded` (a server-view free slot,
+as `sendUnequip` picks) gates both: `buildEquipPromises` drops a two-handed mainhand it cannot put on
+instead of sending the doomed unequip and equip every gear tick, and `isAwaitingPinkie` stops
+waiting, so the ghost is healed with what is in hand rather than the action loop idling.
+
 ### Warrior: reactive skills as loops, strategic skills stay in `currentStrategy`
 
 The split is deliberately *by intent*, not by "is it a cooldown skill":
@@ -3491,3 +3497,16 @@ like any other. The ranger's snapshot-and-shave after each shot either got overw
 correction or, when the correction came first, cut an already correct cooldown and drew a
 `cooldown` rejection. The same correction is what used to wipe the ping shave after a candy
 swap-back, and the listener now leads it with no extra call.
+
+## One respawn per death (`respawnWhenReady`, basic_function.7.js, 2026-10-17)
+
+Every class loop used to call `respawn()` on each tick while `character.rip`, and the server
+answers each early one with `cant_respawn {ms}` until its `rip_time` (12s) has passed, so a death
+sent dozens of respawns and sometimes got the character disconnected. Now `handle_death`, which
+`runner_compat.js` wires to `character.on("death")` in the browser and in every caracAL character
+thread, calls `respawnWhenReady` once: it sends one respawn and, on `cant_respawn`, one more after
+that `ms` plus `RESPAWN_RETRY_PAD_MS`. `isRespawnPending` keeps a second caller from stacking
+another. A failure with no `ms` (`cave_rescuer`, `invalid`) is not retried. The loops keep their
+`character.rip` skip, without the call. Harakiri is a death too, so its own 12.5s respawn timer is
+gone. A character already dead when the script loads never fires `death`, so
+`respawnIfDeadOnLoad` looks once a second for the first `STARTUP_RESPAWN_CHECKS` seconds.

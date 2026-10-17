@@ -120,7 +120,8 @@ function isAwaitingPinkie(healee) {
   return (
     isUnhealedGhost(healee) &&
     character.slots.mainhand?.name !== "pinkie" &&
-    locate_item("pinkie") !== -1
+    locate_item("pinkie") !== -1 &&
+    canWieldTwoHanded()
   );
 }
 
@@ -451,7 +452,6 @@ async function mainLoop() {
     assignRoles();
 
     if (character.rip) {
-      respawn();
       throw new Error("Character down", { cause: "death" });
     }
 
