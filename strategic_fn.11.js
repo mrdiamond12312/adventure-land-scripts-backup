@@ -33,7 +33,7 @@ function getMaxBlastRadius() {
       return {
         item,
         type: info.wtype ?? info.type,
-        blast: info.blast ?? info.explosion ?? 0,
+        blast: splashOf(info),
         level: info.level,
       };
     })
@@ -1091,7 +1091,7 @@ function getCupidHealees(playersToHeal = getPlayersToHeal()) {
 
 /** @returns {number} the item's explosion or blast */
 function splashOf(info) {
-  return info?.explosion ?? info?.blast ?? 0;
+  return info?.explosion || info?.blast || 0;
 }
 
 /**

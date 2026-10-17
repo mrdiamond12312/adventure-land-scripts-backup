@@ -3444,6 +3444,15 @@ monster in view that targets a party member or no one, with no mitigation, so ge
 cannot move it. It holds no state, so every character still works out the same tanker. With
 nothing around the share is 1, so the warrior tanks, as before.
 
+### Splash is read with `||`, not `??` (`splashOf`, 2026-10-17)
+
+`calculate_item_properties` starts every stat at 0, `explosion` and `blast` included, so on an
+`item_info` both are always present. `explosion ?? blast` returned the 0 explosion of a magical
+`blast` weapon: the gstaff's splash scored nothing, and with 15 plantoids packed around the target
+the mage ranked firestaff (burn) 6516 over gstaff 6304 and never took the blaster.
+`getMaxBlastRadius` had the mirror bug (`blast ?? explosion`) for physical `explosion` weapons.
+Both go through `splashOf`, which uses `||`.
+
 ### The priest pulls past its courage (`FEAR_AFFECTS_HEAL`, 2026-10-17)
 
 The server's `calculate_player_stats` sets `fear` to how far each damage type's count of mobs on
