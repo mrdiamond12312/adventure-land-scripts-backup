@@ -1806,8 +1806,6 @@ hitAndRun();
 //// RESPAWN
 /** Ms past the server's cant_respawn wait before the retry */
 const RESPAWN_RETRY_PAD_MS = 300;
-
-/** Seconds after load a death from before we connected is still looked for */
 const STARTUP_RESPAWN_CHECKS = 5;
 
 /** A respawn in flight or waiting out the cooldown */
