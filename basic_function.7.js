@@ -2510,7 +2510,7 @@ const DYNAMIC_PARTY_PRESETS = {
   mrpumpkin: {
     USIV: () => {
       HEALER = PRIEST;
-      return [MAGE, PRIEST, WARRIOR];
+      return [MAGE, PRIEST, ROGUE];
     },
     default: () => {
       HEALER = PRIEST;
