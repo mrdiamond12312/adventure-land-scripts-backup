@@ -709,7 +709,10 @@ let lastTankPick = {};
 /** @returns {Object<string, string>} slot → tank item */
 function pickTankGear() {
   const slots = getGearSlots(TANK_GEAR_SKIPPED_SLOT);
-  const mobs = getFightMobs();
+  const party = getAlliedNames();
+  const mobs = Object.values(parent.entities).filter(
+    (mob) => mob.type === "monster" && party.has(mob.target),
+  );
   if (!mobs.length) {
     return Object.fromEntries(
       slots

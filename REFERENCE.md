@@ -3305,8 +3305,8 @@ highest level, with the lowest score. No item names are listed: any item of the 
 class can wear is a candidate, the offhand taking any type in `G.classes[ctype].offhand`.
 
 **The score is damage taken ÷ heal landing on us**: the share of the priest's attacks it spends
-healing the fight back. Damage is `calculateDamage` from the fight mobs (`getFightMobs`, the same
-set the tank pick reads); heal is attack × `attackFrequency` × `healMitigation` on ourselves.
+healing the fight back. Damage is `calculateDamage` from the mobs targeting anyone in the party
+(`getAlliedNames`); heal is attack × `attackFrequency` × `healMitigation` on ourselves.
 Damage minus heal was tried first and is wrong: a priest heals about ten times what a bat pack
 deals, so the difference only tracked attack and every pick went to heal gear. Overheal is worth
 nothing; the ratio rewards a heal only by how much faster it covers the damage. A class that does
@@ -3342,8 +3342,13 @@ mix picks exoarm, whose int and str lift the heal more than its lost resistance 
   the same type gets the next one (two rings, two earrings). The mainhand is left to the class
   rules (`TANK_GEAR_SKIPPED_SLOT`), and items listed in trade slots are not in the pool.
 - **The last tank pick stays unless a swap cuts the score by 5%** (`TANK_GEAR_SWAP_MIN_GAIN`), so
-  bats dying around an mvampire do not swap gear every few kills. With no fight mobs, the last
-  tank pick stays (the slots whose item is still owned).
+  bats dying around an mvampire do not swap gear every few kills. With no mob on the party, the
+  last tank pick stays (the slots whose item is still owned).
+- **Idle mobs are not scored, though the tank role reads them** (2026-10-17). `assignRoles` reads
+  the whole viewport (`getFightMobs`), but gear only answers what is hitting the party. At odino
+  the redfairy (magical, 4000 attack × frequency 100, aggro 0) idles in view: it made the priest
+  the tanker, as intended, but it was also over 99% of the gear score, so the priest wore wbookhs
+  against a mob that never attacks, instead of exoarm against the odinos.
 - **The incumbent is `lastTankPick`, not the worn gear** (2026-10-16). Against the worn gear, luck
   gear put on for a kill never came off: `cloverstud` (luck, vit) scores the same as nothing, and
   `cearring`'s int is worth ~1% of heal, under the 5% bar. A tanking priest on fireroamers wore
