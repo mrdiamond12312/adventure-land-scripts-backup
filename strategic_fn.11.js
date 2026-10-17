@@ -2421,6 +2421,11 @@ function rotateLeader(partyList, newLeaderId) {
     .concat(partyList.slice(0, newLeaderIndex));
 }
 
+/** @returns {boolean} whether we stand on the party's configured farm spot */
+function isOnPartyFarmSpot() {
+  return distance(character, { map, x: mapX, y: mapY }) <= FARM_SPOT_SLACK;
+}
+
 function assignRoles() {
   const dragRoute = getBossDragRoute(get_targeted_monster());
 
@@ -2430,6 +2435,12 @@ function assignRoles() {
     !isDragReleased(dragRoute)
   ) {
     TANKER = PRIEST;
+    partyMems = rotateLeader(partyMems, TANKER);
+    return;
+  }
+
+  if (partyMems.includes(farmTanker) && isOnPartyFarmSpot()) {
+    TANKER = farmTanker;
     partyMems = rotateLeader(partyMems, TANKER);
     return;
   }

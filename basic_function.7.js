@@ -312,6 +312,9 @@ var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 // var mobsToFarm = ["jr", "booboo"];
 // var mobsToFarm = ["paledino", "mechagnome", "odino"];
 
+/** Who tanks on the farm spot above, undefined to let assignRoles pick */
+var farmTanker = PRIEST;
+
 // desired elixir named
 var desiredElixir = "elixirluck";
 
@@ -1807,7 +1810,8 @@ hitAndRun();
 //// RESPAWN
 /** Ms past the server's cant_respawn wait before the retry */
 const RESPAWN_RETRY_PAD_MS = 300;
-const STARTUP_RESPAWN_CHECKS = 5;
+/** Seconds `respawnOnceDead` looks for a death that fires no `death` event */
+const RESPAWN_DEATH_CHECKS = 5;
 
 /** A respawn in flight or waiting out the cooldown */
 let isRespawnPending = false;
@@ -1831,11 +1835,20 @@ function handle_death() {
   respawnWhenReady();
 }
 
-(function respawnIfDeadOnLoad(checksLeft = STARTUP_RESPAWN_CHECKS) {
+/** Looks for `character.rip` once a second, and respawns once it shows */
+function respawnOnceDead(checksLeft = RESPAWN_DEATH_CHECKS) {
   if (character.rip) return respawnWhenReady();
   if (checksLeft > 1)
-    setTimeout(() => respawnIfDeadOnLoad(checksLeft - 1), 1000);
-})();
+    setTimeout(() => respawnOnceDead(checksLeft - 1), 1000);
+}
+
+/** Harakiri never fires `death` */
+function commitHarakiri() {
+  parent.socket.emit("harakiri");
+  respawnOnceDead();
+}
+
+respawnOnceDead();
 
 function sleep(delay) {
   return new Promise((resolve) => setTimeout(resolve, delay));
@@ -2059,7 +2072,7 @@ function suicide() {
       character.ping > 600 ||
       character.s.burned)
   ) {
-    parent.socket.emit("harakiri");
+    commitHarakiri();
     game_log("Harakiri");
   }
 }

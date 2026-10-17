@@ -3444,6 +3444,14 @@ monster in view that targets a party member or no one, with no mitigation, so ge
 cannot move it. It holds no state, so every character still works out the same tanker. With
 nothing around the share is 1, so the warrior tanks, as before.
 
+### A farm can pin its tanker (`farmTanker`, 2026-10-17)
+
+`farmTanker`, set beside `mobsToFarm`, takes the tank on the configured farm spot (within
+`FARM_SPOT_SLACK` of `map`/`mapX`/`mapY`), right after the boss-drag rule. It reads the shared
+spot, not a character's `ownMap`, so every character settles on the same tanker. A global pin
+was tried and dropped because it leaked into every other farm and event; off the spot the
+damage-share pick above still decides. Set it to undefined when a farm has no preference.
+
 ## Ranger stalls with no penalty_cd (`getShotPlan`, 2026-10-16)
 
 Two ways the ranger skips shots while `penalty_cd` is clear:
@@ -3520,6 +3528,12 @@ sent dozens of respawns and sometimes got the character disconnected. Now `handl
 thread, calls `respawnWhenReady` once: it sends one respawn and, on `cant_respawn`, one more after
 that `ms` plus `RESPAWN_RETRY_PAD_MS`. `isRespawnPending` keeps a second caller from stacking
 another. A failure with no `ms` (`cave_rescuer`, `invalid`) is not retried. The loops keep their
-`character.rip` skip, without the call. Harakiri is a death too, so its own 12.5s respawn timer is
-gone. A character already dead when the script loads never fires `death`, so
-`respawnIfDeadOnLoad` looks once a second for the first `STARTUP_RESPAWN_CHECKS` seconds.
+`character.rip` skip, without the call. A character already dead when the script loads never
+fires `death`, so `respawnOnceDead` looks for `character.rip` once a second for the first
+`RESPAWN_DEATH_CHECKS` seconds.
+
+**Harakiri does not fire `death` either** (the event comes from the client's `rip_logic`), so
+after dropping its 12.5s timer harakiri characters stayed dead. Every harakiri now goes through
+`commitHarakiri`, which starts the same `respawnOnceDead` checks right after it, so the respawn
+goes out once the server's `rip` has come back. A polling `character.rip` interval was turned
+down for this.

@@ -66,7 +66,7 @@ character.on("cm", async function ({ name, message }) {
 
     case "loot-before-hopping":
       midasLooting(true);
-      if (HARAKIRI_ON_SERVER_HOP) parent.socket.emit("harakiri");
+      if (HARAKIRI_ON_SERVER_HOP) commitHarakiri();
       break;
 
     default:
