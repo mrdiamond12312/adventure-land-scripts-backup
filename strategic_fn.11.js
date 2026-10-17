@@ -2167,7 +2167,7 @@ function getPlayersToHeal() {
   const healThreshold = character.ctype === "priest" ? 0.8 : 0.65;
   const healPower = getHealPower();
   const prioritizedNamesList = new Set(prioritizedNames());
-  const isBaiting = !!getBaitedBoss();
+  const isSkippingLeeches = !HEAL_LEECHES_WHILE_BAITING && !!getBaitedBoss();
 
   const shouldHeal = (entity) => {
     const entityHp = entity.predictedHp ?? entity.hp;
@@ -2202,7 +2202,7 @@ function getPlayersToHeal() {
 
       if (entity.type === "monster" || entity.citizen) return false;
       if (HEAL_IGNORE.includes(entity.name)) return false;
-      if (isBaiting && isBossLeech(entity)) return false;
+      if (isSkippingLeeches && isBossLeech(entity)) return false;
 
       if (entity.name !== character.name) {
         if (character.team && entity.team !== character.team) return false;
@@ -2820,6 +2820,9 @@ const LEECH_BAIT_PATIENCE_MS = 5000;
 
 /** How long baiting stays off after that */
 const LEECH_BAIT_COOLDOWN_MS = 60000;
+
+/** Whether leeches stay on the heal list while baiting */
+const HEAL_LEECHES_WHILE_BAITING = true;
 
 /** Bait timers */
 const leechBait = { untargetedSince: 0, offUntil: 0 };

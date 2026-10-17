@@ -3094,7 +3094,7 @@ What the server allows:
   `is_same(..., 1)`, which counts our party and also anyone sharing our `s.coop.id`, meaning both
   sides have already earned points on this boss (`isCoopFriendly`). Anyone else costs 6× mp and
   fails 95% of the time. The rogue has neither skill, and invis does not drop aggro.
-- Leeches come off the priest's heal list while baiting.
+- Leeches come off the priest's heal list while baiting, unless `HEAL_LEECHES_WHILE_BAITING`.
 
 A rival is an outsider without Lone Wolf. When a rival holds
 the boss, the assigned tank takes it back through the drag take-back (`getBossThief`,
