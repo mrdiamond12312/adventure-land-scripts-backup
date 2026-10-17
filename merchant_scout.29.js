@@ -73,6 +73,10 @@ const MINI_BOSSES_TO_SCOUT = {
     ],
     useTeleportation: true,
   },
+  paledino: {
+    spotsToCheck: getMonsterSpawns("odino"),
+    useTeleportation: true,
+  },
 };
 
 const SCOUT_CONFIG = {

@@ -15,6 +15,9 @@ const SPECIAL_MOB_ARRIVAL_SLACK = 200;
 /** The fighter ticks far faster than the store needs rewriting */
 const SPECIAL_MOB_REPORT_INTERVAL_MS = 1000;
 
+/** Special mobs we go for even while someone outside our crew holds them */
+const CONTESTED_SPECIAL_MOB_IDS = ["paledino"];
+
 var lastSpecialMobReportAt = 0;
 
 /**
@@ -36,6 +39,17 @@ function isTakenBySomeoneElse(target) {
 }
 
 /**
+ * @param {string} mtype
+ * @param {string} [target]
+ * @returns {boolean} whether to leave it to whoever outside our crew holds it
+ */
+function isLeftToOthers(mtype, target) {
+  return (
+    isTakenBySomeoneElse(target) && !CONTESTED_SPECIAL_MOB_IDS.includes(mtype)
+  );
+}
+
+/**
  * Nearest huntable mob already in sight, so a walk is never started for one we
  * could be hitting right now.
  * @returns {object|undefined}
@@ -47,7 +61,7 @@ function getSpecialMobInVision() {
         entity.type === "monster" &&
         !entity.dead &&
         SPECIAL_MOB_IDS.includes(entity.mtype) &&
-        !isTakenBySomeoneElse(entity.target),
+        !isLeftToOthers(entity.mtype, entity.target),
     )
     .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
 }
@@ -65,7 +79,7 @@ function getSpecialMobSighting() {
 
     if (!report?.seenAt || !report.seenSpot) continue;
     if (Date.now() - report.seenAt > SPECIAL_MOB_SIGHTING_TTL_MS) continue;
-    if (isTakenBySomeoneElse(report.target)) continue;
+    if (isLeftToOthers(mtype, report.target)) continue;
 
     const isDownUntil =
       G.monsters[mtype]?.respawn > 0 &&

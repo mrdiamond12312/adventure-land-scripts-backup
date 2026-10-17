@@ -411,7 +411,7 @@ function item_info(item) {
   if (!baseInfo) return undefined;
   const itemProperties = calculate_item_properties(item, {
     def: baseInfo,
-    class: character.class,
+    class: character.ctype,
     map: character.map,
   });
   return { ...baseInfo, ...itemProperties };
