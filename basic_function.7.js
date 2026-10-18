@@ -321,7 +321,7 @@ var farmTanker = PRIEST;
 var warriorHeldMobs = ["ent"];
 
 /** Steer kills and damage by grow-group spawn rules (growth_tracker.34.js) */
-var USE_GROWTH_TARGETING = false;
+var USE_GROWTH_TARGETING = true;
 
 // desired elixir named
 var desiredElixir = "elixirluck";

@@ -2202,6 +2202,16 @@ left) is the shared estimate the growth tracker uses too. earthiverse's `prevent
 a target from the other bots' views when one bot can one-shot it; here every bot already sees the
 others' projectiles through `action`, which covers the same ground a ping later.
 
+## The mage's weapon pays for its own shots (`rankMageWeapons`, strategic_fn.11.js, 2026-10-18)
+
+The mage spends mp on his basic attack, and `great_staff` (gstaff, sparkstaff) adds +160
+`mp_cost` per attack on top of the class's 5. Each weapon's dps is scaled by the share of its shots
+the mp budget covers: `min(1, budget / (mp per shot × frequency))`, the budget being potion income
+(best of mpot1/mpot0 per `use_mp` cooldown, else `regen_mp`) plus the mp above the magiport + blink
+reserve spread over 10 s. With mpot1 in the bag the income alone is 250 mp/s, which covers a
+blaster at ordinary attack speed, so it only bites when potions run out or speed buffs push the
+drain past it.
+
 ## Curse what the party is hitting (`getCurseTarget`, basic_priest.2.js, 2026-10-18)
 
 Curse is +20% damage taken and −20% damage dealt, so it is worth the party dps on the mob plus the

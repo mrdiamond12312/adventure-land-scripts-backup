@@ -895,6 +895,29 @@ function classWeaponModifier(info) {
   };
 }
 
+const MP_POTIONS = ["mpot1", "mpot0"];
+const MAGE_MP_HORIZON_S = 10;
+
+/** @returns {number} mp per second our potions, or regen without one, restore */
+function getMpIncome() {
+  const potion = MP_POTIONS.find((name) => locate_item(name) !== -1);
+  const mp = potion
+    ? G.items[potion].gives.find(([stat]) => stat === "mp")?.[1] ?? 0
+    : G.skills.regen_mp.output;
+  const cooldownMs =
+    G.skills.use_mp.cooldown *
+    (potion ? 1 : G.skills.regen_mp.cooldown_multiplier);
+
+  return mp / (cooldownMs / 1000);
+}
+
+/** @returns {number} mp per second the mage can spend on attacks */
+function getMageAttackMpBudget() {
+  const reserve = G.skills["magiport"].mp + G.skills["blink"].mp;
+  const spare = Math.max(0, character.mp - reserve);
+  return getMpIncome() + spare / MAGE_MP_HORIZON_S;
+}
+
 /** @returns {Object[]} owned mage weapons, best first */
 function rankMageWeapons(target) {
   if (!target) return [];
@@ -912,6 +935,7 @@ function rankMageWeapons(target) {
   const deltaScale = PLAYER_COOLDOWN_SKIPS_FREQUENCYM
     ? 1
     : conditionFrequencyScale(character);
+  const mpBudget = getMageAttackMpBudget();
 
   const clusters = new Map();
   const clusterOf = (mob, radius) => {
@@ -937,7 +961,18 @@ function rankMageWeapons(target) {
       (statMultiplier + (offhandSign * (offhandInfo[mainStat] ?? 0)) / 20) /
       statMultiplier;
 
+    const mpPerShot = Math.max(
+      1,
+      character.mp_cost +
+        (info.mp_cost ?? 0) +
+        (modifier.mp_cost ?? 0) -
+        (currentInfo.mp_cost ?? 0) -
+        (currentMod.mp_cost ?? 0),
+    );
+    const affordable = Math.min(1, mpBudget / (mpPerShot * frequency));
+
     return (
+      affordable *
       frequency *
       statRatio *
       explosionScore(
