@@ -2178,6 +2178,7 @@ setInterval(async function () {
             "luckbooster",
             "suckerpunch",
             desiredElixir,
+            "elixirluck"
           ].includes(item.name)
         )
           return;
