@@ -1749,7 +1749,7 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
     orb: feelingLucky ? "rabbitsfoot" : "jacko",
     chest: "tshirt4",
     pants: "pants",
-    ring1: "solitaire",
+    ring1: "canopener",
     ring2: isBusy ? "armorring" : "dexring",
     shoes: "eslippers",
     gloves: "gloves1",
