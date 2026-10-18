@@ -107,30 +107,6 @@ const bossConfigs = {
       return snowmanInstance;
     },
   },
-  franky: {
-    shouldJoin: () => isEventTanked("franky"),
-    shouldAttack: isSafeToHit,
-    strategy: async () => {
-      let frankyInstance = get_nearest_monster({ type: "franky" });
-      if (!frankyInstance) {
-        await advanceSmartMove(server.status.franky);
-        frankyInstance = get_nearest_monster({ type: "franky" });
-      }
-      return frankyInstance;
-    },
-  },
-  icegolem: {
-    shouldJoin: () => isEventTanked("icegolem"),
-    shouldAttack: isSafeToHit,
-    strategy: async () => {
-      let icegolemInstance = get_nearest_monster({ type: "icegolem" });
-      if (!icegolemInstance) {
-        await advanceSmartMove(server.status.icegolem);
-        icegolemInstance = get_nearest_monster({ type: "icegolem" });
-      }
-      return icegolemInstance;
-    },
-  },
   dragold: {
     shouldJoin: () => isEventTanked("dragold"),
     shouldAttack: isSafeToHit,
@@ -167,6 +143,30 @@ const bossConfigs = {
       return greenInstance;
     },
   },
+  franky: {
+    shouldJoin: () => isEventTanked("franky"),
+    shouldAttack: isSafeToHit,
+    strategy: async () => {
+      let frankyInstance = get_nearest_monster({ type: "franky" });
+      if (!frankyInstance) {
+        await advanceSmartMove(server.status.franky);
+        frankyInstance = get_nearest_monster({ type: "franky" });
+      }
+      return frankyInstance;
+    },
+  },
+  icegolem: {
+    shouldJoin: () => isEventTanked("icegolem"),
+    shouldAttack: isSafeToHit,
+    strategy: async () => {
+      let icegolemInstance = get_nearest_monster({ type: "icegolem" });
+      if (!icegolemInstance) {
+        await advanceSmartMove(server.status.icegolem);
+        icegolemInstance = get_nearest_monster({ type: "icegolem" });
+      }
+      return icegolemInstance;
+    },
+  },
   wabbit: {
     shouldJoin: () => !!server.status.wabbit?.live && !!server.status.wabbit?.x,
     shouldAttack: (target) => !!target,
@@ -180,7 +180,8 @@ const bossConfigs = {
     },
   },
   pinkgoo: {
-    shouldJoin: () => !!server.status.pinkgoo?.live && !!server.status.pinkgoo?.x,
+    shouldJoin: () =>
+      !!server.status.pinkgoo?.live && !!server.status.pinkgoo?.x,
     shouldAttack: (target) => !!target,
     strategy: async () => {
       let pinkgooInstance = get_nearest_monster({ type: "pinkgoo" });
@@ -212,7 +213,10 @@ function getEventHpRatio(eventName) {
 
 /** @returns {boolean} whether the event is still running */
 function isEventStillLive(eventName) {
-  return !!server.status[eventName]?.live || !!get_nearest_monster({ type: eventName });
+  return (
+    !!server.status[eventName]?.live ||
+    !!get_nearest_monster({ type: eventName })
+  );
 }
 
 /**
