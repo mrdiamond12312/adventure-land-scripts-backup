@@ -119,7 +119,7 @@ function onGrowthKill(entity) {
     });
 
   if (growthDebug)
-    console.log(
+    console.warn(
       `[growth] ${entity.mtype} #${group.index} ${member.kind ?? "?"} died at ` +
         `${live.min}-${live.max}/${group.def.count}`,
     );
@@ -167,7 +167,7 @@ function classifyBurst(burst) {
   }
 
   if (growthDebug)
-    console.log(
+    console.warn(
       `[growth] ${burst[0].mtype} #${group?.index ?? "?"} spawned ` +
         `${permanentIds.size}P+${burst.length - permanentIds.size}T`,
     );
