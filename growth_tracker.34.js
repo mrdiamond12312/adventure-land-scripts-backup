@@ -7,6 +7,7 @@ const GROWTH_SCAN_MS = 100;
 const GROWTH_LETHAL_MARGIN = 1.35;
 const GROWTH_SURE_MARGIN = 0.9;
 const GROWTH_SPAWN_TOLERANCE = 10;
+const GROWTH_SPLASH_SLACK = 10;
 
 var growthDebug = true;
 
@@ -14,8 +15,16 @@ var growthDebug = true;
  * @typedef {Object} GrowthGroup
  * @property {number} index
  * @property {Object} def - G.maps spawn definition
- * @property {{from: number, to: number}[]} expected - respawns due
+ * @property {{windows: {from: number, to: number}[]}[]} expected - one per respawn due
  */
+
+/**
+ * @param {{windows: {from: number, to: number}[]}} expectation
+ * @param {number} now
+ * @returns {boolean}
+ */
+const isDue = ({ windows }, now) =>
+  windows.some(({ from, to }) => from <= now && now <= to);
 
 /** @type {{map?: string, groups: GrowthGroup[], members: Object<string, {group?: number, kind?: string}>}} */
 const growthTracker = { map: undefined, groups: [], members: {} };
@@ -141,19 +150,41 @@ function onGrowthKill(entity, data) {
       ? [respawnS * 720, respawnS * 1200]
       : [respawnS * 1000, respawnS * 1000 + GROWTH_TIMER_JITTER_MS];
 
-  if (live.max <= cap)
-    group.expected.push({ from: now, to: now + GROWTH_INSTANT_WINDOW_MS });
-  if (live.min > cap)
-    group.expected.push({
+  const windows = [];
+  if (live.min <= cap)
+    windows.push({ from: now, to: now + GROWTH_INSTANT_WINDOW_MS });
+  if (live.max > cap)
+    windows.push({
       from: now + timerFrom,
       to: now + timerTo + GROWTH_TIMER_SLACK_MS,
     });
+  group.expected.push({ windows });
 
   if (isLogged)
     console.warn(
       `[growth] ${entity.mtype} #${group.index} ${member.kind ?? "?"} died at ` +
         `${live.min}-${live.max}/${group.def.count} ${killer}`,
     );
+}
+
+/**
+ * @param {GrowthGroup} group
+ * @returns {number} its permanents alive in view or due to respawn
+ */
+function getAccountedPermanents(group) {
+  let alive = 0;
+  for (const [id, member] of Object.entries(growthTracker.members)) {
+    const entity = parent.entities[id];
+    if (
+      entity &&
+      !entity.dead &&
+      member.group === group.index &&
+      member.kind === "permanent"
+    )
+      alive++;
+  }
+
+  return alive + group.expected.length;
 }
 
 /**
@@ -169,8 +200,13 @@ function placeBurst(burst) {
   );
   if (candidates.length <= 1) return candidates[0];
 
-  const due = candidates.filter((group) =>
-    group.expected.some(({ from, to }) => from <= now && now <= to),
+  const open = candidates.filter(
+    (group) => getAccountedPermanents(group) < group.def.count,
+  );
+  if (open.length === 1) return open[0];
+
+  const due = (open.length ? open : candidates).filter((group) =>
+    group.expected.some((expectation) => isDue(expectation, now)),
   );
   return due.length === 1 ? due[0] : undefined;
 }
@@ -190,8 +226,8 @@ function classifyBurst(burst) {
   if (group) {
     const now = Date.now();
     for (let i = 0; i < permanentIds.size; i++) {
-      const dueIndex = group.expected.findIndex(
-        ({ from, to }) => from <= now && now <= to,
+      const dueIndex = group.expected.findIndex((expectation) =>
+        isDue(expectation, now),
       );
       if (dueIndex !== -1) group.expected.splice(dueIndex, 1);
     }
@@ -227,7 +263,9 @@ function scanGrowthSpawns() {
 
   const now = Date.now();
   for (const group of groups)
-    group.expected = group.expected.filter(({ to }) => to >= now);
+    group.expected = group.expected.filter(({ windows }) =>
+      windows.some(({ to }) => to >= now),
+    );
 
   fresh.sort((lhs, rhs) => Number(lhs.id) - Number(rhs.id));
   let burst = [];
@@ -248,9 +286,10 @@ function scanGrowthSpawns() {
 /**
  * @param {Object} target
  * @param {number} margin - on our hit
+ * @param {number} radiusSlack - on our splash radius
  * @returns {Object[]} mobs our next swing at the target kills, in server order
  */
-function getSwingKills(target, margin) {
+function getSwingKills(target, margin, radiusSlack) {
   const hit = character.attack * mitigation(character, target);
   const kills = getHpAfterPending(target) <= hit * margin ? [target] : [];
 
@@ -265,7 +304,8 @@ function getSwingKills(target, margin) {
         mob !== target &&
         mob.type === "monster" &&
         !mob.dead &&
-        distance(target, mob) < splash.intensity / BLAST_DIVISOR &&
+        distance(target, mob) <
+          splash.intensity / BLAST_DIVISOR + radiusSlack &&
         getHpAfterPending(mob) <=
           ((hit * damage_multiplier(mob[splash.defense] ?? 0) *
             splash.intensity) /
@@ -331,10 +371,11 @@ function playOutKills(kills, bound) {
  * @returns {number} 1 when our swing at it may waste a kill, else minus the temps it surely spawns
  */
 function growthKillRank(mob) {
-  if (playOutKills(getSwingKills(mob, GROWTH_LETHAL_MARGIN), "min").wasted)
-    return 1;
+  const mayKill = getSwingKills(mob, GROWTH_LETHAL_MARGIN, GROWTH_SPLASH_SLACK);
+  if (playOutKills(mayKill, "min").wasted) return 1;
 
-  return -playOutKills(getSwingKills(mob, GROWTH_SURE_MARGIN), "max").temps;
+  const sureKill = getSwingKills(mob, GROWTH_SURE_MARGIN, 0);
+  return -playOutKills(sureKill, "max").temps;
 }
 
 /** @param {{id: string, hid?: string, source?: string, splash?: boolean, kill?: boolean}} data */

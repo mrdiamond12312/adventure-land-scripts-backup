@@ -2133,8 +2133,11 @@ What the tracker has to infer, because the server does not send it:
   consecutive ids is one permanent up front plus temps; temps come in pairs, so an even burst holds a
   second permanent at the back (a later 25 ms respawn that no longer tops up).
 - **Which group.** Desertland's two plantoid boxes overlap, and the farm spot sits in the overlap.
-  A burst goes to the only boundary that holds it, else to the only candidate group with a respawn
-  due (booked at each kill from the group's L at the time), else stays ungrouped.
+  A burst goes to the only boundary that holds it, else to the only candidate still missing a
+  permanent (each group has exactly `count` of them, alive in view or due to respawn), else to the
+  only candidate with a respawn due, else stays ungrouped. Each permanent's death books one
+  expected respawn holding every window its L range allows (25 ms and/or timer), so the missing
+  count stays exact when L is uncertain.
 - Mobs already on screen when the script starts, or that walk into view, are ungrouped. Ungrouped
   mobs widen a group's L into a range, and an ungrouped mob is never ranked as a waste.
 
@@ -2145,7 +2148,9 @@ through the recursive top-up (`spawnInto`). Rank 1 if any permanent would go on 
 minus the temps spawned; `sortPullTargets` orders by it ahead of the cluster order, so a pair kill
 (-4 at plantoid) beats a single growth kill (-2) beats a neutral swing (0) beats a waste (1).
 Waste is checked against what may die (`hit × 1.35`) from the low end of L's range, growth against
-what surely dies (`hit × 0.9`) from the high end, so uncertainty errs toward neither. "Dies" is
+what surely dies (`hit × 0.9`) from the high end, so uncertainty errs toward neither. The waste
+check also widens the splash radius by 10 px: it is `blast / 3.6`, 10–20 px, and mobs shift that
+much while the projectile flies. Crit is left out on purpose. "Dies" is
 hp, minus in-flight damage, minus the burn left on it, read off `s.burned` (`ceil(intensity / 5)`
 per tick × `floor(ms / G.conditions.burned.interval)` ticks, 210 ms); a burn our hit may light is
 not predicted. Mobs doomed by hits in the air or by their burn are left out of L. The priest's
