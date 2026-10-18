@@ -2958,9 +2958,10 @@ function isKitable(mob) {
  * A mob in reach that is safe to hit without stopping a trip: one already on
  * the party first, else an untargeted one too weak to matter that keeps us
  * within courage and has no ability that slows the walk.
+ * @param {string} [skill] - whose range counts as reach
  * @returns {Object|undefined}
  */
-function getEnRouteTarget() {
+function getEnRouteTarget(skill = "attack") {
   if (isPreparingCave && !character.cave) return undefined;
 
   const party = getAlliedNames();
@@ -2969,7 +2970,7 @@ function getEnRouteTarget() {
       mob.type === "monster" &&
       !mob.dead &&
       !isCaveFriendly(mob) &&
-      is_in_range(mob, "attack") &&
+      is_in_range(mob, skill) &&
       shouldAttack(mob),
   );
   const mobsOnMe = listOfMonsterAttacking(character);

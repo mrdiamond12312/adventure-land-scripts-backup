@@ -2179,6 +2179,11 @@ party's average damage taken stays under the priest's heal × frequency. Before 
 priest refused every non-trivial unaggroed mob, so plantoids (`aggro` 0.2, they rarely walk in on
 their own) were never pulled. Other unaggroed mobs keep the old rules.
 
+Mid-trip the zapper takes `getEnRouteTarget("zapperzap")`, the attack's own trip rule: a mob
+already on the party, else an untargeted one that is harmless or dying, keeps us within courage
+and has no slowing or watchout ability. A hit only retargets a mob that has no target (server
+`target_player` behind `!target.target`), so zapping one already on the party pulls nothing.
+
 ## Curse what the party is hitting (`getCurseTarget`, basic_priest.2.js, 2026-10-18)
 
 Curse is +20% damage taken and −20% damage dealt, so it is worth the party dps on the mob plus the

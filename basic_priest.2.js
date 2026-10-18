@@ -344,6 +344,9 @@ function getZapTarget() {
   )
     return null;
 
+  // Mid-trip only what the attack would hit: no pull that fears or slows us
+  if (isOnTrip()) return getEnRouteTarget("zapperzap") ?? null;
+
   const baitedBoss = getBaitedBoss();
   const targetsInRange = Object.values(parent.entities).filter(
     (entity) =>

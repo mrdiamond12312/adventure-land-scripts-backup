@@ -1455,7 +1455,7 @@ async function dragToSpot(target, spot, boss) {
     smartmoveDebug = true;
     try {
       await advanceSmartMove(spot, {
-        speed: 400,
+        speed: 1000,
         useTown: false,
         useScare: false,
         useMagiport: false,
