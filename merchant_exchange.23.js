@@ -38,7 +38,7 @@ const EXCHANGE_QUEUE = [
   { name: "sixcake", quantity: 1, keep: 1 },
   { name: "seashell", quantity: 20, npc: "fisherman" },
   { name: "leather", quantity: 40, npc: "leathermerchant" },
-  { name: "gemfragment", quantity: 50, npc: "gemmerchant" },
+  // { name: "gemfragment", quantity: 50, npc: "gemmerchant" },
 ];
 
 /** @returns {boolean} whether bag and bank together hold enough of an entry to exchange */
