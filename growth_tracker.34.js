@@ -95,14 +95,20 @@ function getGroupLive(group, subject) {
 /** @returns {number} live count at or below which a kill respawns at once */
 const instantRespawnCap = (group) => (group.def.count * 2) / 3;
 
-/** @param {Object} entity - the mob that just died */
-function onGrowthKill(entity) {
+/**
+ * @param {Object} entity - the mob that just died
+ * @param {Object} data - the killing hit
+ */
+function onGrowthKill(entity, data) {
   const member = growthTracker.members[entity.id];
   const group = getGrowthGroupOf(entity);
+  const killer = `by ${data.hid} ${data.source}${data.splash ? " splash" : ""}`;
+  const isLogged = growthDebug && mobsToFarm.includes(entity.mtype);
+
   if (!group || member.kind === "temp") {
-    if (growthDebug && member)
+    if (isLogged && member)
       console.warn(
-        `[growth] ${entity.mtype} #${group?.index ?? "?"} ${member.kind ?? "?"} died`,
+        `[growth] ${entity.mtype} #${group?.index ?? "?"} ${member.kind ?? "?"} died ${killer}`,
       );
     return;
   }
@@ -124,10 +130,10 @@ function onGrowthKill(entity) {
       to: now + timerTo + GROWTH_TIMER_SLACK_MS,
     });
 
-  if (growthDebug)
+  if (isLogged)
     console.warn(
       `[growth] ${entity.mtype} #${group.index} ${member.kind ?? "?"} died at ` +
-        `${live.min}-${live.max}/${group.def.count}`,
+        `${live.min}-${live.max}/${group.def.count} ${killer}`,
     );
 }
 
@@ -172,7 +178,7 @@ function classifyBurst(burst) {
     }
   }
 
-  if (growthDebug)
+  if (growthDebug && mobsToFarm.includes(burst[0].mtype))
     console.warn(
       `[growth] ${burst[0].mtype} #${group?.index ?? "?"} spawned ` +
         `${permanentIds.size}P+${burst.length - permanentIds.size}T`,
@@ -253,12 +259,12 @@ function growthKillRank(mob) {
   return isWastedGrowthKill(mob) && mayDieToOurHit(mob) ? 1 : 0;
 }
 
-/** @param {{id: string, kill?: boolean}} data */
+/** @param {{id: string, hid?: string, source?: string, splash?: boolean, kill?: boolean}} data */
 function onGrowthHit(data) {
   if (!data?.kill) return;
 
   const entity = parent.entities[data.id];
-  if (entity) onGrowthKill(entity);
+  if (entity) onGrowthKill(entity, data);
 }
 if (parent.onGrowthHit) parent.socket.off("hit", parent.onGrowthHit);
 parent.onGrowthHit = onGrowthHit;
