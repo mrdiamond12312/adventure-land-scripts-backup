@@ -1063,7 +1063,7 @@ function calculateMageItems() {
     ring2: "cring",
     amulet: feelingWise ? "spookyamulet" : "intamulet",
     earring1: feelingLucky ? "cloverstud" : "cearring",
-    earring2: feelingLucky ? "cloverstud" : "cearring",
+    earring2: feelingLucky ? "cloverstud" : "mummyhex",
   };
 
   return wantsMidasGear() ? { ...items, ...MIDAS_GEAR } : items;
@@ -1594,7 +1594,7 @@ function calculateRogueItems(target) {
     amulet: feelingLucky ? "spookyamulet" : "dexamulet",
     orb: feelingLucky ? "rabbitsfoot" : "orbofdex",
     chest: "wattire",
-    pants: "wbreeches",
+    pants: feelingLucky ? "wbreeches" : "fallen",
     belt: "dexbelt",
     earring1: feelingLucky ? "cloverstud" : "molesteeth",
     earring2: feelingLucky ? "cloverstud" : "dexearring",
@@ -3555,7 +3555,8 @@ class ProjectileManagement {
         : ["mainhand", "offhand"].reduce(
             (total, slot) =>
               total +
-              ((from.slots?.[slot] && item_info(from.slots[slot])?.[stat]) || 0),
+              ((from.slots?.[slot] && item_info(from.slots[slot])?.[stat]) ||
+                0),
             0,
           );
 

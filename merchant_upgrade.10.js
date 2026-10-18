@@ -8,20 +8,20 @@ if (parent.caracAL) {
 
 const KEEP_THRESHOLD = {
   firestars: 12,
-  harbringer: 16,
+  harbringer: 12,
   oozingterror: 12,
-  pouchbow: 16,
+  pouchbow: 12,
   daggerofthedead: 16,
   bowofthedead: 16,
   froststaff: 8,
-  frankypants: 8,
+  frankypants: 6,
   gphelmet: 12,
   ololipop: 12,
   glolipop: 12,
   fallen: 16,
 
   // new stuffs!
-  cloverstud: 16,
+  cloverstud: 12,
 
   // lifted later
   fury: 32,
