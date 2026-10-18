@@ -241,7 +241,7 @@ function startSkillLoops() {
     canUse: () => {
       if (
         ms_to_next_skill("rspeed") !== 0 ||
-        character.mp <= G.skills["rspeed"].mp ||
+        character.mp <= G.skills["rspeed"].mp * 1.5 ||
         !shouldAttack()
       )
         return false;
