@@ -306,16 +306,47 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
 }
 
 /**
- * @param {Object[]} mobs - sorted in place, tagged with cluster_count, growth_rank, growth_damage
+ * @param {Object} mob
+ * @param {number} [roll] - on hits in the air
+ * @returns {number} hp left once hits in the air and its burn land
+ */
+function getHpAfterPending(mob, roll = 1) {
+  const incoming =
+    typeof projectileManager === "undefined"
+      ? 0
+      : projectileManager.getIncomingNumber(mob.id);
+  const burn = mob.s?.burned;
+  const burnLeft = burn
+    ? Math.ceil(burn.intensity / 5) *
+      Math.floor((burn.ms ?? 0) / G.conditions.burned.interval)
+    : 0;
+
+  return mob.hp + incoming * roll - burnLeft;
+}
+
+const MAX_DAMAGE_ROLL = 1.1;
+
+/**
+ * @param {Object} mob
+ * @returns {number} 2 when hits in the air or its burn finish it, 1 when they may, else 0
+ */
+function overkillRank(mob) {
+  if (getHpAfterPending(mob) <= 0) return 2;
+  return getHpAfterPending(mob, MAX_DAMAGE_ROLL) <= 0 ? 1 : 0;
+}
+
+/**
+ * @param {Object[]} mobs - sorted in place, tagged with cluster_count, growth_rank, overkill_rank, growth_damage
  * @param {number} blastRadius
  * @param {(lhs: Object, rhs: Object) => number} [first] - outranks the cluster order
- * @returns {Object[]} by growth rank, clumpiest, growth damage, highest hp, nearest
+ * @returns {Object[]} by growth rank, overkill, clumpiest, growth damage, highest hp, nearest
  */
 function sortPullTargets(mobs, blastRadius, first = () => 0) {
   const isTrackingGrowth = typeof growthKillRank === "function";
   for (const mob of mobs) {
     mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
     mob.growth_rank = isTrackingGrowth ? growthKillRank(mob) : 0;
+    mob.overkill_rank = overkillRank(mob);
     mob.growth_damage = isTrackingGrowth ? growthDamageRank(mob) : 0;
   }
 
@@ -323,6 +354,7 @@ function sortPullTargets(mobs, blastRadius, first = () => 0) {
     (lhs, rhs) =>
       first(lhs, rhs) ||
       lhs.growth_rank - rhs.growth_rank ||
+      lhs.overkill_rank - rhs.overkill_rank ||
       rhs.cluster_count - lhs.cluster_count ||
       lhs.growth_damage - rhs.growth_damage ||
       rhs.hp - lhs.hp ||

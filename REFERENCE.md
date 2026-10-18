@@ -2184,6 +2184,24 @@ already on the party, else an untargeted one that is harmless or dying, keeps us
 and has no slowing or watchout ability. A hit only retargets a mob that has no target (server
 `target_player` behind `!target.target`), so zapping one already on the party pulls nothing.
 
+### Growth only pays when spawns are the bottleneck (`USE_GROWTH_TARGETING`, 2026-10-18)
+
+earthiverse/adventureland-bots (`sortPriority`, source/base/sort.ts) models none of this: its
+edge is not wasting swings (overkill below). Growth adds xp only while the party waits for mobs;
+at plantoids (120k hp, 12 on aggro at once) the party is kill-limited, so a wasted permanent
+costs nothing. `USE_GROWTH_TARGETING` (basic_function.7.js config) zeroes both growth ranks so an
+hour off can be compared with an hour on; the tracker keeps logging either way, tagging wasted
+kills `growth off`.
+
+## Overkill: don't swing at what is already dead (`overkillRank`, strategic_fn.11.js, 2026-10-18)
+
+From earthiverse's `sortPriority`: a mob that hits in the air or its burn will finish ranks last
+(2), one they may finish at the top ±10% roll next (1), ahead of the cluster order in
+`sortPullTargets` and as the priest's second key. `getHpAfterPending` (hp + in-flight damage − burn
+left) is the shared estimate the growth tracker uses too. earthiverse's `preventOverkill` deletes
+a target from the other bots' views when one bot can one-shot it; here every bot already sees the
+others' projectiles through `action`, which covers the same ground a ping later.
+
 ## Curse what the party is hitting (`getCurseTarget`, basic_priest.2.js, 2026-10-18)
 
 Curse is +20% damage taken and −20% damage dealt, so it is worth the party dps on the mob plus the

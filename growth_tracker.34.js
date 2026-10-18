@@ -75,24 +75,6 @@ function isInSpawnBoundary(def, entity) {
 
 /**
  * @param {Object} mob
- * @returns {number} hp left once hits in the air and its burn land
- */
-function getHpAfterPending(mob) {
-  const incoming =
-    typeof projectileManager === "undefined"
-      ? 0
-      : projectileManager.getIncomingNumber(mob.id);
-  const burn = mob.s?.burned;
-  const burnLeft = burn
-    ? Math.ceil(burn.intensity / 5) *
-      Math.floor((burn.ms ?? 0) / G.conditions.burned.interval)
-    : 0;
-
-  return mob.hp + incoming - burnLeft;
-}
-
-/**
- * @param {Object} mob
  * @returns {boolean} whether hits in the air or its burn finish it
  */
 function isDoomedByIncoming(mob) {
@@ -179,6 +161,7 @@ function onGrowthKill(entity, data) {
  */
 function getWasteCause(data) {
   if (data.hid !== character.name) return "other bot";
+  if (!USE_GROWTH_TARGETING) return "growth off";
   if (data.source === "cleave") return "cleave";
   if (currentStrategy !== usePullStrategies) return "normal strategy";
 
@@ -396,6 +379,8 @@ function playOutKills(kills, bound) {
  * @returns {number} 1 when our swing at it may waste a kill, else minus the temps it surely spawns
  */
 function growthKillRank(mob) {
+  if (!USE_GROWTH_TARGETING) return 0;
+
   const mayKill = getSwingKills(mob, GROWTH_LETHAL_MARGIN, GROWTH_SPLASH_SLACK);
   if (playOutKills(mayKill, "min").wasted) return 1;
 
@@ -408,6 +393,8 @@ function growthKillRank(mob) {
  * @returns {number} -1 to wear it down now, 1 to spare it, else 0
  */
 function growthDamageRank(mob) {
+  if (!USE_GROWTH_TARGETING) return 0;
+
   const group = getGrowthGroupOf(mob);
   const kind = growthTracker.members[mob.id]?.kind;
   if (!group || !kind) return 0;
