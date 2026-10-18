@@ -5,6 +5,7 @@ const GROWTH_TIMER_JITTER_MS = 900;
 const GROWTH_TIMER_SLACK_MS = 1500;
 const GROWTH_SCAN_MS = 100;
 const GROWTH_LETHAL_MARGIN = 1.35;
+const GROWTH_SURE_MARGIN = 0.9;
 const GROWTH_SPAWN_TOLERANCE = 10;
 
 var growthDebug = true;
@@ -86,10 +87,10 @@ function isDoomedByIncoming(mob) {
 
 /**
  * @param {GrowthGroup} group
- * @param {Object} [subject] - counted even if doomed
+ * @param {Object[]} [subjects] - counted even if doomed
  * @returns {{min: number, max: number}} live count, doomed mobs excluded
  */
-function getGroupLive(group, subject) {
+function getGroupLive(group, subjects = []) {
   let known = 0;
   let unknown = 0;
 
@@ -97,7 +98,8 @@ function getGroupLive(group, subject) {
     if (
       entity.type !== "monster" ||
       entity.mtype !== group.def.type ||
-      (entity !== subject && (entity.dead || isDoomedByIncoming(entity)))
+      (!subjects.includes(entity) &&
+        (entity.dead || isDoomedByIncoming(entity)))
     )
       continue;
 
@@ -130,7 +132,7 @@ function onGrowthKill(entity, data) {
     return;
   }
 
-  const live = getGroupLive(group, entity);
+  const live = getGroupLive(group, [entity]);
   const cap = instantRespawnCap(group);
   const now = Date.now();
   const respawnS = G.monsters[group.def.type].respawn;
@@ -244,61 +246,95 @@ function scanGrowthSpawns() {
 }
 
 /**
- * @param {Object} mob
- * @returns {boolean} whether killing it sends a permanent spawn to its timer
- */
-function isWastedGrowthKill(mob) {
-  const group = getGrowthGroupOf(mob);
-  if (!group || growthTracker.members[mob.id].kind === "temp") return false;
-
-  return getGroupLive(group, mob).min > instantRespawnCap(group);
-}
-
-/**
- * @param {Object} mob
- * @param {number} hit - damage it takes from us
- * @returns {boolean} whether that hit may kill it
- */
-function mayDieTo(mob, hit) {
-  return getHpAfterPending(mob) <= hit * GROWTH_LETHAL_MARGIN;
-}
-
-/**
  * @param {Object} target
- * @param {number} hit - our hit on the target
- * @returns {boolean} whether our splash off it lands a wasted kill
+ * @param {number} margin - on our hit
+ * @returns {Object[]} mobs our next swing at the target kills, in server order
  */
-function isSplashWastingGrowth(target, hit) {
+function getSwingKills(target, margin) {
+  const hit = character.attack * mitigation(character, target);
+  const kills = getHpAfterPending(target) <= hit * margin ? [target] : [];
+
   const splash =
     typeof projectileManager !== "undefined" &&
     projectileManager.getSplash("attack", character);
-  if (!splash) return false;
+  if (!splash) return kills;
 
-  return Object.values(parent.entities).some(
-    (mob) =>
-      mob !== target &&
-      mob.type === "monster" &&
-      !mob.dead &&
-      distance(target, mob) < splash.intensity / BLAST_DIVISOR &&
-      isWastedGrowthKill(mob) &&
-      mayDieTo(
-        mob,
-        (hit * damage_multiplier(mob[splash.defense] ?? 0) * splash.intensity) /
-          100,
-      ),
-  );
+  const splashKills = Object.values(parent.entities)
+    .filter(
+      (mob) =>
+        mob !== target &&
+        mob.type === "monster" &&
+        !mob.dead &&
+        distance(target, mob) < splash.intensity / BLAST_DIVISOR &&
+        getHpAfterPending(mob) <=
+          ((hit * damage_multiplier(mob[splash.defense] ?? 0) *
+            splash.intensity) /
+            100) *
+            margin,
+    )
+    .sort((lhs, rhs) => Number(lhs.id) - Number(rhs.id));
+
+  return [...kills, ...splashKills];
+}
+
+/**
+ * @param {number} live
+ * @param {number} count - the group's count
+ * @param {{temps: number}} tally
+ * @returns {number} live count after one spawn and its temps
+ */
+function spawnInto(live, count, tally) {
+  live++;
+  if (live <= count / 2)
+    for (let i = 0; i < 2; i++) {
+      tally.temps++;
+      live = spawnInto(live, count, tally);
+    }
+
+  return live;
+}
+
+/**
+ * @param {Object[]} kills - in server order
+ * @param {"min"|"max"} bound - end of each group's live range to start from
+ * @returns {{wasted: number, temps: number}} permanents sent to timers, temps spawned
+ */
+function playOutKills(kills, bound) {
+  let wasted = 0;
+  const tally = { temps: 0 };
+
+  for (const group of growthTracker.groups) {
+    const dying = kills.filter(
+      (mob) => growthTracker.members[mob.id]?.group === group.index,
+    );
+    if (!dying.length) continue;
+
+    let live = getGroupLive(group, dying)[bound];
+    let instants = 0;
+    for (const mob of dying) {
+      if (growthTracker.members[mob.id].kind !== "temp") {
+        if (live <= instantRespawnCap(group)) instants++;
+        else wasted++;
+      }
+      live--;
+    }
+
+    for (let i = 0; i < instants; i++)
+      live = spawnInto(live, group.def.count, tally);
+  }
+
+  return { wasted, temps: tally.temps };
 }
 
 /**
  * @param {Object} mob
- * @returns {number} 1 when our next hit on it, or its splash, wastes a kill
+ * @returns {number} 1 when our swing at it may waste a kill, else minus the temps it surely spawns
  */
 function growthKillRank(mob) {
-  const hit = character.attack * mitigation(character, mob);
-  return (isWastedGrowthKill(mob) && mayDieTo(mob, hit)) ||
-    isSplashWastingGrowth(mob, hit)
-    ? 1
-    : 0;
+  if (playOutKills(getSwingKills(mob, GROWTH_LETHAL_MARGIN), "min").wasted)
+    return 1;
+
+  return -playOutKills(getSwingKills(mob, GROWTH_SURE_MARGIN), "max").temps;
 }
 
 /** @param {{id: string, hid?: string, source?: string, splash?: boolean, kill?: boolean}} data */

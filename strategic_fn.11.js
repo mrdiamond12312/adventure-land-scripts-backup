@@ -309,7 +309,7 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
  * @param {Object[]} mobs - sorted in place, each tagged with cluster_count and growth_rank
  * @param {number} blastRadius
  * @param {(lhs: Object, rhs: Object) => number} [first] - outranks the cluster order
- * @returns {Object[]} wasted grow kills last, then clumpiest, highest hp, nearest
+ * @returns {Object[]} by growth rank, then clumpiest, highest hp, nearest
  */
 function sortPullTargets(mobs, blastRadius, first = () => 0) {
   const isTrackingGrowth = typeof growthKillRank === "function";

@@ -2119,7 +2119,12 @@ packs) follow two rules in the server's `remove_monster` / `new_monster` (advent
 So the kill order decides the growth, not the damage spread: a permanent spawn killed above 2N/3 is
 spent on its timer and grows nothing, a temp is free to kill, and a permanent killed at or below
 2N/3 comes straight back with temps. For N = 4 the loop is temp, temp, permanent, and the group never
-shrinks. Several deaths inside one 25 ms window (one AoE) push L past N; that is a later phase.
+shrinks. Several permanents dying inside one 25 ms window (one AoE swing) drop L several steps
+before any respawn lands, so the top-up recurses further: two at L = 2 of a plantoid group end at
+L = 6 (4 temps) instead of 4. Same spawns per kill at N = 4, a bigger pack at once; for N ≥ 5 groups
+(goo, porcupine, mummy) it is the only way they keep growing, since a single kill from their 2N/3
+floor never reaches N/2. Two bots' projectiles almost never land in the same window, so only one
+swing's main hit plus its splash counts.
 Holding damage back to sync kills was ruled out: it costs dps (see the reverted adds-first sort above).
 
 What the tracker has to infer, because the server does not send it:
@@ -2133,15 +2138,21 @@ What the tracker has to infer, because the server does not send it:
 - Mobs already on screen when the script starts, or that walk into view, are ungrouped. Ungrouped
   mobs widen a group's L into a range, and an ungrouped mob is never ranked as a waste.
 
-`sortPullTargets` ranks a mob last (`growthKillRank`) when our next hit on it may land a wasted
-kill, either on the mob itself or, through our splash, on a wasted mob within `intensity / 3.6` of
-it; everything else keeps the cluster order. "May kill" is hp, minus in-flight damage, minus the
-burn left on it, read off `s.burned` (`ceil(intensity / 5)` per tick ×
-`floor(ms / G.conditions.burned.interval)` ticks, 210 ms), against
-`hit × 1.35`. A burn our hit may light is not predicted. Mobs doomed by hits in the air or by
-their burn are left out of
-L. The priest's attack target takes the first mob in its order with rank 0. Cleave and poison
-deaths are not steered. Set `growthDebug = true` to log every farm-mob kill (with `hid`/`source`/
+`growthKillRank` plays one swing out against those rules: the mobs it kills (the target, then its
+splash victims within `intensity / 3.6`, ascending id, the order the server's monster loop
+visits them), each group's deaths decrementing L before any respawn, then each instant respawn
+through the recursive top-up (`spawnInto`). Rank 1 if any permanent would go on its timer, else
+minus the temps spawned; `sortPullTargets` orders by it ahead of the cluster order, so a pair kill
+(-4 at plantoid) beats a single growth kill (-2) beats a neutral swing (0) beats a waste (1).
+Waste is checked against what may die (`hit × 1.35`) from the low end of L's range, growth against
+what surely dies (`hit × 0.9`) from the high end, so uncertainty errs toward neither. "Dies" is
+hp, minus in-flight damage, minus the burn left on it, read off `s.burned` (`ceil(intensity / 5)`
+per tick × `floor(ms / G.conditions.burned.interval)` ticks, 210 ms); a burn our hit may light is
+not predicted. Mobs doomed by hits in the air or by their burn are left out of L. The priest's
+attack target is the lowest rank in its own order. A warrior-held mob (ent) bypasses the sort, so
+when a swing at it ranks 1 (its splash would waste a plantoid) the warrior swings at the first
+non-wasting aggroed mob in reach instead, still facing and holding the ent; with none, he keeps
+hitting the ent. Cleave and poison deaths are not steered. Set `growthDebug = true` to log every farm-mob kill (with `hid`/`source`/
 `splash` of the killing hit) and spawn burst.
 
 ## Curse what the party is hitting (`getCurseTarget`, basic_priest.2.js, 2026-10-18)

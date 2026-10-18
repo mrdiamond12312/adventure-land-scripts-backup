@@ -111,13 +111,14 @@ function refineTarget(target) {
 
   const focus = targetToTaunt ?? targetToPoison;
 
-  // Focus when in reach, else the beefiest aggroed mob; wasted grow kills last
+  // Focus when in reach, else the beefiest aggroed mob; growth kills first
   const fallbacks = mobsInRange
     .filter((mob) => mob !== focus && mob.target)
     .sort((lhs, rhs) => rhs.hp - lhs.hp);
   const reachable = inRange(focus) ? [focus, ...fallbacks] : fallbacks;
-  const attackTarget =
-    reachable.find((mob) => !growthKillRank(mob)) ?? reachable[0];
+  const attackTarget = reachable
+    .map((mob) => ({ mob, rank: growthKillRank(mob) }))
+    .sort((lhs, rhs) => lhs.rank - rhs.rank)[0]?.mob;
 
   return { focus, attackTarget };
 }

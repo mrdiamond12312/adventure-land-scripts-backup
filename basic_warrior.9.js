@@ -125,10 +125,15 @@ function planFight(target) {
 
   if (!target) return {};
 
+  const inReach = aggroedMobs.filter((mob) => mob !== target && inRange(mob));
+
   // Another mob in reach to hit while the focus is out of it
-  const attackTarget = inRange(target)
-    ? target
-    : aggroedMobs.find((mob) => mob !== target && inRange(mob));
+  let attackTarget = inRange(target) ? target : inReach[0];
+
+  // Off a held mob while swinging at it wastes a grow kill
+  if (heldMob && attackTarget === heldMob && growthKillRank(heldMob) > 0)
+    attackTarget = inReach.find((mob) => mob.growth_rank < 1) ?? heldMob;
+
   return { focus: target, attackTarget };
 }
 
