@@ -111,13 +111,13 @@ function refineTarget(target) {
 
   const focus = targetToTaunt ?? targetToPoison;
 
-  // The computed target can sit outside our reach; rather than skip the shot,
-  // swing at the beefiest aggroed mob that is actually in range.
-  const attackTarget = inRange(focus)
-    ? focus
-    : mobsInRange
-        .filter((mob) => mob !== focus && mob.target)
-        .sort((lhs, rhs) => rhs.hp - lhs.hp)[0];
+  // Focus when in reach, else the beefiest aggroed mob; wasted grow kills last
+  const fallbacks = mobsInRange
+    .filter((mob) => mob !== focus && mob.target)
+    .sort((lhs, rhs) => rhs.hp - lhs.hp);
+  const reachable = inRange(focus) ? [focus, ...fallbacks] : fallbacks;
+  const attackTarget =
+    reachable.find((mob) => !growthKillRank(mob)) ?? reachable[0];
 
   return { focus, attackTarget };
 }

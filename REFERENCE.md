@@ -2133,10 +2133,16 @@ What the tracker has to infer, because the server does not send it:
 - Mobs already on screen when the script starts, or that walk into view, are ungrouped. Ungrouped
   mobs widen a group's L into a range, and an ungrouped mob is never ranked as a waste.
 
-`sortPullTargets` ranks a mob last only when our next hit may kill it (hp plus in-flight damage
-under `attack × mitigation × 1.35`) and that kill would be a waste; everything else keeps the
-cluster order. Mobs already doomed by hits in the air are left out of L. Splash, cleave and poison
-deaths are not steered. Set `growthDebug = true` to log every classified kill and burst.
+`sortPullTargets` ranks a mob last (`growthKillRank`) when our next hit on it may land a wasted
+kill, either on the mob itself or, through our splash, on a wasted mob within `intensity / 3.6` of
+it; everything else keeps the cluster order. "May kill" is hp, minus in-flight damage, minus the
+burn left on it, read off `s.burned` (`ceil(intensity / 5)` per tick ×
+`floor(ms / G.conditions.burned.interval)` ticks, 210 ms), against
+`hit × 1.35`. A burn our hit may light is not predicted. Mobs doomed by hits in the air or by
+their burn are left out of
+L. The priest's attack target takes the first mob in its order with rank 0. Cleave and poison
+deaths are not steered. Set `growthDebug = true` to log every farm-mob kill (with `hid`/`source`/
+`splash` of the killing hit) and spawn burst.
 
 ## Curse what the party is hitting (`getCurseTarget`, basic_priest.2.js, 2026-10-18)
 

@@ -3465,7 +3465,7 @@ class ProjectileManagement {
   }
 
   /** @returns {{intensity: number, defense: string, hitsPlayers: boolean}|undefined} the hit's splash */
-  _getSplash(source, from) {
+  getSplash(source, from) {
     if (!from || (from.type === "character" && !G.skills[source]?.procs))
       return undefined;
 
@@ -3534,7 +3534,7 @@ class ProjectileManagement {
 
     const splash =
       projectile.type === "attack" &&
-      this._getSplash(data.source, projectileActor);
+      this.getSplash(data.source, projectileActor);
     if (splash) projectile.splash = splash;
 
     if (!this.projectilesByTarget.has(target)) {

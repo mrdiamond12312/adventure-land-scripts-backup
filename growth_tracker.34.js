@@ -60,11 +60,28 @@ function isInSpawnBoundary(def, entity) {
 
 /**
  * @param {Object} mob
- * @returns {boolean} whether hits in the air finish it
+ * @returns {number} hp left once hits in the air and its burn land
+ */
+function getHpAfterPending(mob) {
+  const incoming =
+    typeof projectileManager === "undefined"
+      ? 0
+      : projectileManager.getIncomingNumber(mob.id);
+  const burn = mob.s?.burned;
+  const burnLeft = burn
+    ? Math.ceil(burn.intensity / 5) *
+      Math.floor((burn.ms ?? 0) / G.conditions.burned.interval)
+    : 0;
+
+  return mob.hp + incoming - burnLeft;
+}
+
+/**
+ * @param {Object} mob
+ * @returns {boolean} whether hits in the air or its burn finish it
  */
 function isDoomedByIncoming(mob) {
-  if (typeof projectileManager === "undefined") return false;
-  return mob.hp + projectileManager.getIncomingNumber(mob.id) <= 0;
+  return getHpAfterPending(mob) <= 0;
 }
 
 /**
@@ -239,24 +256,49 @@ function isWastedGrowthKill(mob) {
 
 /**
  * @param {Object} mob
- * @returns {boolean} whether our next hit may kill it
+ * @param {number} hit - damage it takes from us
+ * @returns {boolean} whether that hit may kill it
  */
-function mayDieToOurHit(mob) {
-  const incoming =
-    typeof projectileManager === "undefined"
-      ? 0
-      : projectileManager.getIncomingNumber(mob.id);
-  const hit = character.attack * mitigation(character, mob);
+function mayDieTo(mob, hit) {
+  return getHpAfterPending(mob) <= hit * GROWTH_LETHAL_MARGIN;
+}
 
-  return mob.hp + incoming <= hit * GROWTH_LETHAL_MARGIN;
+/**
+ * @param {Object} target
+ * @param {number} hit - our hit on the target
+ * @returns {boolean} whether our splash off it lands a wasted kill
+ */
+function isSplashWastingGrowth(target, hit) {
+  const splash =
+    typeof projectileManager !== "undefined" &&
+    projectileManager.getSplash("attack", character);
+  if (!splash) return false;
+
+  return Object.values(parent.entities).some(
+    (mob) =>
+      mob !== target &&
+      mob.type === "monster" &&
+      !mob.dead &&
+      distance(target, mob) < splash.intensity / BLAST_DIVISOR &&
+      isWastedGrowthKill(mob) &&
+      mayDieTo(
+        mob,
+        (hit * damage_multiplier(mob[splash.defense] ?? 0) * splash.intensity) /
+          100,
+      ),
+  );
 }
 
 /**
  * @param {Object} mob
- * @returns {number} 1 for a wasted kill within our next hit, else 0
+ * @returns {number} 1 when our next hit on it, or its splash, wastes a kill
  */
 function growthKillRank(mob) {
-  return isWastedGrowthKill(mob) && mayDieToOurHit(mob) ? 1 : 0;
+  const hit = character.attack * mitigation(character, mob);
+  return (isWastedGrowthKill(mob) && mayDieTo(mob, hit)) ||
+    isSplashWastingGrowth(mob, hit)
+    ? 1
+    : 0;
 }
 
 /** @param {{id: string, hid?: string, source?: string, splash?: boolean, kill?: boolean}} data */
