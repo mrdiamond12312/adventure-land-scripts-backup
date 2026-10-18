@@ -306,26 +306,31 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
 }
 
 /**
- * @param {Object[]} mobs - sorted in place, each tagged with cluster_count and growth_rank
+ * @param {Object[]} mobs - sorted in place, tagged with cluster_count, growth_rank, growth_damage
  * @param {number} blastRadius
  * @param {(lhs: Object, rhs: Object) => number} [first] - outranks the cluster order
- * @returns {Object[]} by growth rank, then clumpiest, highest hp, nearest
+ * @returns {Object[]} by growth rank, clumpiest, growth damage, highest hp, nearest
  */
 function sortPullTargets(mobs, blastRadius, first = () => 0) {
   const isTrackingGrowth = typeof growthKillRank === "function";
   for (const mob of mobs) {
     mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
     mob.growth_rank = isTrackingGrowth ? growthKillRank(mob) : 0;
+    mob.growth_damage = isTrackingGrowth ? growthDamageRank(mob) : 0;
   }
 
-  return mobs.sort(
+  mobs.sort(
     (lhs, rhs) =>
       first(lhs, rhs) ||
       lhs.growth_rank - rhs.growth_rank ||
       rhs.cluster_count - lhs.cluster_count ||
+      lhs.growth_damage - rhs.growth_damage ||
       rhs.hp - lhs.hp ||
       distance(character, lhs) - distance(character, rhs),
   );
+
+  if (isTrackingGrowth && mobs.length) noteGrowthOptions(mobs[0].growth_rank);
+  return mobs;
 }
 
 function cooperativeFirst(lhs, rhs) {

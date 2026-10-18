@@ -2150,7 +2150,17 @@ minus the temps spawned; `sortPullTargets` orders by it ahead of the cluster ord
 Waste is checked against what may die (`hit × 1.35`) from the low end of L's range, growth against
 what surely dies (`hit × 0.9`) from the high end, so uncertainty errs toward neither. The waste
 check also widens the splash radius by 10 px: it is `blast / 3.6`, 10–20 px, and mobs shift that
-much while the projectile flies. Crit is left out on purpose. "Dies" is
+much while the projectile flies. Crit is left out on purpose.
+
+Ranking only the killing blow was not enough (2026-10-18 log: 7 of 8 permanent deaths wasted, all
+splash): the highest-hp tiebreak spread damage over the clump and wore fresh permanents down first,
+so every permanent sat low at L ≥ 3 and every swing's splash would waste one. `growthDamageRank`
+steers the damage: at L > 2N/3 temps -1 and permanents +1, at L ≤ 2N/3 permanents -1. It sits
+after the cluster count and replaces the hp tiebreak, so splash value still wins and the dps cost
+is only in ties (the adds-first experiment above put its key ahead of the cluster and lost dps).
+`noteGrowthOptions` stamps when the best target in reach still ranked 1, and a wasted kill by
+this bot logs its cause: `no clean swing`, `mispredicted`, `normal strategy`, `cleave` or
+`other bot`. "Dies" is
 hp, minus in-flight damage, minus the burn left on it, read off `s.burned` (`ceil(intensity / 5)`
 per tick × `floor(ms / G.conditions.burned.interval)` ticks, 210 ms); a burn our hit may light is
 not predicted. Mobs doomed by hits in the air or by their burn are left out of L. The priest's

@@ -116,11 +116,12 @@ function refineTarget(target) {
     .filter((mob) => mob !== focus && mob.target)
     .sort((lhs, rhs) => rhs.hp - lhs.hp);
   const reachable = inRange(focus) ? [focus, ...fallbacks] : fallbacks;
-  const attackTarget = reachable
+  const [best] = reachable
     .map((mob) => ({ mob, rank: growthKillRank(mob) }))
-    .sort((lhs, rhs) => lhs.rank - rhs.rank)[0]?.mob;
+    .sort((lhs, rhs) => lhs.rank - rhs.rank);
+  if (best) noteGrowthOptions(best.rank);
 
-  return { focus, attackTarget };
+  return { focus, attackTarget: best?.mob };
 }
 
 /**

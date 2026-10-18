@@ -26,8 +26,13 @@ var growthDebug = true;
 const isDue = ({ windows }, now) =>
   windows.some(({ from, to }) => from <= now && now <= to);
 
-/** @type {{map?: string, groups: GrowthGroup[], members: Object<string, {group?: number, kind?: string}>}} */
-const growthTracker = { map: undefined, groups: [], members: {} };
+/** @type {{map?: string, groups: GrowthGroup[], members: Object<string, {group?: number, kind?: string}>, noCleanSwingAt: number}} */
+const growthTracker = {
+  map: undefined,
+  groups: [],
+  members: {},
+  noCleanSwingAt: 0,
+};
 
 /** @returns {GrowthGroup[]} the current map's grow groups */
 function getGrowthGroups() {
@@ -163,8 +168,28 @@ function onGrowthKill(entity, data) {
   if (isLogged)
     console.warn(
       `[growth] ${entity.mtype} #${group.index} ${member.kind ?? "?"} died at ` +
-        `${live.min}-${live.max}/${group.def.count} ${killer}`,
+        `${live.min}-${live.max}/${group.def.count} ${killer}` +
+        (live.min > cap ? ` (${getWasteCause(data)})` : ""),
     );
+}
+
+/**
+ * @param {Object} data - the killing hit
+ * @returns {string} why a wasted kill went through
+ */
+function getWasteCause(data) {
+  if (data.hid !== character.name) return "other bot";
+  if (data.source === "cleave") return "cleave";
+  if (currentStrategy !== usePullStrategies) return "normal strategy";
+
+  return Date.now() - growthTracker.noCleanSwingAt < GROWTH_INSTANT_WINDOW_MS
+    ? "no clean swing"
+    : "mispredicted";
+}
+
+/** @param {number} bestRank - growth rank of the best target in reach */
+function noteGrowthOptions(bestRank) {
+  if (bestRank > 0) growthTracker.noCleanSwingAt = Date.now();
 }
 
 /**
@@ -376,6 +401,23 @@ function growthKillRank(mob) {
 
   const sureKill = getSwingKills(mob, GROWTH_SURE_MARGIN, 0);
   return -playOutKills(sureKill, "max").temps;
+}
+
+/**
+ * @param {Object} mob
+ * @returns {number} -1 to wear it down now, 1 to spare it, else 0
+ */
+function growthDamageRank(mob) {
+  const group = getGrowthGroupOf(mob);
+  const kind = growthTracker.members[mob.id]?.kind;
+  if (!group || !kind) return 0;
+
+  const live = getGroupLive(group);
+  const cap = instantRespawnCap(group);
+  if (live.min > cap) return kind === "temp" ? -1 : 1;
+  if (live.max <= cap && kind === "permanent") return -1;
+
+  return 0;
 }
 
 /** @param {{id: string, hid?: string, source?: string, splash?: boolean, kill?: boolean}} data */
