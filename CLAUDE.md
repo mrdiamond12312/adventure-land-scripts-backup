@@ -76,6 +76,9 @@ basic_function.7.js          [SHARED — the core library]
                                  scoring/selection, cleave/blast targeting
     normal_strategy.12.js        \_ farming strategy variants, swapped via
     pull_strategy.13.js          /  changeToPullStrategies()/changeToNormalStrategies()
+    growth_tracker.34.js         `grow` spawn groups: permanent vs temp spawns and group live counts;
+                                 sortPullTargets ranks kills that waste a grow respawn last
+                                 (fighters only, loaded with 12/13)
     server_hop_utilities.25.js   the cross-realm ServerRealmData distributor and realm-fatigue
                                  hop policy (HOME_SERVER itself is config in 7); loaded just before
                                  14, which consults it

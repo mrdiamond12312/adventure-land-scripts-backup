@@ -370,6 +370,7 @@ if (parent.caracAL) {
     parent.caracAL.load_scripts([
       "adventure-land-scripts-backup/normal_strategy.12.js",
       "adventure-land-scripts-backup/pull_strategy.13.js",
+      "adventure-land-scripts-backup/growth_tracker.34.js",
     ]);
   }
 } else {
@@ -379,6 +380,7 @@ if (parent.caracAL) {
     load_code(13);
     // Normal
     load_code(12);
+    load_code(34);
     var currentStrategy = usePullStrategies;
   }
 }

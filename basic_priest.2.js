@@ -209,7 +209,24 @@ function curseMpFloor() {
   );
 }
 
-// Beefiest uncursed mob aggroing a party member, in curse range.
+/**
+ * @param {Object} mob
+ * @returns {number} party dps on it plus its dps on whoever it reaches
+ */
+function curseValue(mob) {
+  const dealt = partyMems
+    .map((name) => (name === character.name ? character : get_player(name)))
+    .filter((member) => member && !member.rip && member.target === mob.id)
+    .reduce((total, member) => total + calculateDamage(member, mob, false), 0);
+
+  const victim = get_player(mob.target);
+  const isReachingVictim =
+    victim && distance(mob, victim) <= mob.range + mob.speed;
+
+  return dealt + (isReachingVictim ? calculateDamage(mob, victim, false) : 0);
+}
+
+/** @returns {Object|null} the uncursed mob worth the most to curse */
 function getCurseTarget() {
   if (
     is_on_cooldown("curse") ||
@@ -225,12 +242,14 @@ function getCurseTarget() {
           mob.type === "monster" &&
           !isCaveFriendly(mob) &&
           !mob.dead &&
-          !mob.s.curse &&
+          !mob.s.cursed &&
           is_in_range(mob, "curse") &&
           mob.hp > CURSE_HP_THRESHOLD &&
           prioritized.includes(mob.target),
       )
-      .sort((lhs, rhs) => rhs.hp - lhs.hp)[0] ?? null
+      .map((mob) => ({ mob, value: curseValue(mob) }))
+      .filter(({ value }) => value > 0)
+      .sort((lhs, rhs) => rhs.value - lhs.value)[0]?.mob ?? null
   );
 }
 

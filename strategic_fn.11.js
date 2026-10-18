@@ -306,18 +306,22 @@ function numberOfMonsterAroundTarget(target, blastRadius = BLAST_RADIUS) {
 }
 
 /**
- * @param {Object[]} mobs - sorted in place, each tagged with cluster_count
+ * @param {Object[]} mobs - sorted in place, each tagged with cluster_count and growth_rank
  * @param {number} blastRadius
  * @param {(lhs: Object, rhs: Object) => number} [first] - outranks the cluster order
- * @returns {Object[]} clumpiest first, then highest hp, then nearest
+ * @returns {Object[]} wasted grow kills last, then clumpiest, highest hp, nearest
  */
 function sortPullTargets(mobs, blastRadius, first = () => 0) {
-  for (const mob of mobs)
+  const isTrackingGrowth = typeof growthKillRank === "function";
+  for (const mob of mobs) {
     mob.cluster_count = numberOfMonsterAroundTarget(mob, blastRadius);
+    mob.growth_rank = isTrackingGrowth ? growthKillRank(mob) : 0;
+  }
 
   return mobs.sort(
     (lhs, rhs) =>
       first(lhs, rhs) ||
+      lhs.growth_rank - rhs.growth_rank ||
       rhs.cluster_count - lhs.cluster_count ||
       rhs.hp - lhs.hp ||
       distance(character, lhs) - distance(character, rhs),
@@ -3460,6 +3464,38 @@ class ProjectileManagement {
     );
   }
 
+  /** @returns {{intensity: number, defense: string, hitsPlayers: boolean}|undefined} the hit's splash */
+  _getSplash(source, from) {
+    if (!from || (from.type === "character" && !G.skills[source]?.procs))
+      return undefined;
+
+    const damageType = G.skills[source]?.damage_type ?? damageTypeOf(from);
+    const [defense] = mitigationStats(damageType);
+    const stat = { armor: "explosion", resistance: "blast" }[defense];
+    if (!stat) return undefined;
+
+    const intensity =
+      from === character
+        ? from[stat] ?? 0
+        : from.type === "monster"
+        ? from[stat] ?? G.monsters[from.mtype]?.[stat] ?? 0
+        : ["mainhand", "offhand"].reduce(
+            (total, slot) =>
+              total +
+              ((from.slots?.[slot] && item_info(from.slots[slot])?.[stat]) || 0),
+            0,
+          );
+
+    return intensity > 0
+      ? { intensity, defense, hitsPlayers: from.type === "monster" }
+      : undefined;
+  }
+
+  /** @returns {Object|undefined} the entity by id, ourselves included */
+  _resolve(id) {
+    return parent.entities[id] ?? (id === character.id ? character : undefined);
+  }
+
   _onIncomingProjectile = (data) => {
     if (!data?.pid || !data?.target) return;
     if (data.instant) return;
@@ -3467,10 +3503,8 @@ class ProjectileManagement {
     const rawValue = data.damage ?? data.heal;
     if (typeof rawValue !== "number") return;
 
-    const projectileActor = parent.entities[data.attacker];
-    const projectileTarget =
-      parent.entities[data.target] ??
-      (data.target === character.id ? character : undefined);
+    const projectileActor = this._resolve(data.attacker);
+    const projectileTarget = this._resolve(data.target);
 
     const projectile = {
       type: data.damage != null ? "attack" : "heal",
@@ -3497,6 +3531,11 @@ class ProjectileManagement {
     }
 
     const { target, pid } = data;
+
+    const splash =
+      projectile.type === "attack" &&
+      this._getSplash(data.source, projectileActor);
+    if (splash) projectile.splash = splash;
 
     if (!this.projectilesByTarget.has(target)) {
       this.projectilesByTarget.set(target, new Map());
@@ -3564,11 +3603,37 @@ class ProjectileManagement {
    * @returns {number} negative for damage in the air, positive for heals
    */
   getIncomingNumber(target) {
-    const map = this.projectilesByTarget.get(target);
-    if (!map) return 0;
-
     let total = 0;
-    for (const projectile of map.values()) total += projectile.value;
+    for (const projectile of this.projectilesByTarget.get(target)?.values() ??
+      [])
+      total += projectile.value;
+
+    const entity = this._resolve(target);
+    if (!entity) return total;
+
+    const isOurs =
+      entity === character ||
+      (entity.type === "character" && partyMems.includes(entity.name));
+
+    for (const [centerId, map] of this.projectilesByTarget) {
+      if (centerId === target) continue;
+
+      const center = this._resolve(centerId);
+      if (!center) continue;
+
+      for (const { value, splash } of map.values()) {
+        if (
+          !splash ||
+          splash.hitsPlayers !== (entity.type === "character") ||
+          distance(center, entity) >= splash.intensity / BLAST_DIVISOR
+        )
+          continue;
+
+        const defense = (entity[splash.defense] ?? 0) * (isOurs ? 0.5 : 1);
+        total += (value * damage_multiplier(defense) * splash.intensity) / 100;
+      }
+    }
+
     return total;
   }
 

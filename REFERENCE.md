@@ -1917,6 +1917,21 @@ on purpose, so predictions err on the high-hp side — except for hits on oursel
 member, where only half the armor/resistance is counted, so harakiri and heal targeting err
 toward danger instead.
 
+Our own hits resolve the attacker through `character` (2026-10-18): `parent.entities` never holds
+ourselves, so they used to go in unmitigated.
+
+### Splash (blast / explosion, 2026-10-18)
+
+The server picks splash victims at impact, not at fire: every mob (or, for a monster attacker,
+every player) within `intensity / 3.6` of the main target when the hit lands, `intensity` being
+`blast` on a magical hit and `explosion` on a physical one, and only for skills with `procs`
+(attack, 3shot, 5shot, supershot, piercingshot, cleave, …). Each victim takes the main target's
+final damage × `damage_multiplier(victim's armor/resistance)` × `intensity / 100`, with no piercing
+on that second mitigation. So `getIncomingNumber` adds splash lazily, from current positions, over
+every in-flight hit that carries one. `blast`/`explosion` are private player stats
+(`player_to_client` only sends them to the player itself), so another player's are read off their
+mainhand and offhand.
+
 ## A/B Testing: score the target, roam when blind (`useEventStrategy`, 2026-09-29)
 
 `abtesting` is the daily team battle: a small instanced arena, bases at x = ±832 joined by
@@ -2089,6 +2104,46 @@ so the splash would kill them together. Observed in play it cut party dps a lot 
 Two dead ends from it: a `max_hp` ratio cannot tell adds from unrelated small mobs someone else
 aggroed (porcupines at the ent spot) or from summoned minions (plantoid is 1.5% of an ent,
 nerfedmummy 0.001% of franky); a summoner's minions are listed in `G.monsters[mtype].spawns`.
+
+## Grow spawn groups: who takes the killing blow (`growth_tracker.34.js`, 2026-10-18)
+
+Spawn groups flagged `grow: true` in `G.maps[map].monsters` (plantoid, goo, bee, mummy, most farm
+packs) follow two rules in the server's `remove_monster` / `new_monster` (adventureland_mongodb
+`node/server.js`), with N the group's `count` and L its `live` counter, temps included:
+
+- A death at L ≤ 2N/3 (L still counting the dying mob) respawns in **25 ms**; above that it waits
+  the normal timer (`respawn * 1000 + 0–900 ms`).
+- Any spawn that lands L ≤ N/2 adds **2 `temp` mobs**, re-checking per temp, until L > N/2.
+  Temps never respawn and despawn when left alone long enough.
+
+So the kill order decides the growth, not the damage spread: a permanent spawn killed above 2N/3 is
+spent on its timer and grows nothing, a temp is free to kill, and a permanent killed at or below
+2N/3 comes straight back with temps. For N = 4 the loop is temp, temp, permanent, and the group never
+shrinks. Several deaths inside one 25 ms window (one AoE) push L past N; that is a later phase.
+Holding damage back to sync kills was ruled out: it costs dps (see the reverted adds-first sort above).
+
+What the tracker has to infer, because the server does not send it:
+- **Temp vs permanent.** `monster_to_client` drops `temp`. Ids come from one global counter and a
+  respawn's temps are created synchronously right behind it, so a burst of `s.young` spawns with
+  consecutive ids is one permanent up front plus temps; temps come in pairs, so an even burst holds a
+  second permanent at the back (a later 25 ms respawn that no longer tops up).
+- **Which group.** Desertland's two plantoid boxes overlap, and the farm spot sits in the overlap.
+  A burst goes to the only boundary that holds it, else to the only candidate group with a respawn
+  due (booked at each kill from the group's L at the time), else stays ungrouped.
+- Mobs already on screen when the script starts, or that walk into view, are ungrouped. Ungrouped
+  mobs widen a group's L into a range, and an ungrouped mob is never ranked as a waste.
+
+`sortPullTargets` ranks a mob last only when our next hit may kill it (hp plus in-flight damage
+under `attack × mitigation × 1.35`) and that kill would be a waste; everything else keeps the
+cluster order. Mobs already doomed by hits in the air are left out of L. Splash, cleave and poison
+deaths are not steered. Set `growthDebug = true` to log every classified kill and burst.
+
+## Curse what the party is hitting (`getCurseTarget`, basic_priest.2.js, 2026-10-18)
+
+Curse is +20% damage taken and −20% damage dealt, so it is worth the party dps on the mob plus the
+mob's dps on whoever it is actually reaching (within `range + speed`). The old highest-hp sort
+picked the mob nobody was damaging, often a straggler chasing someone at the edge of curse range.
+The condition is `cursed`, not `curse`: the old `!mob.s.curse` filter never skipped a cursed mob.
 
 ## The exchange queue (`EXCHANGE_QUEUE`, merchant_exchange.23.js, 2026-09-28)
 
