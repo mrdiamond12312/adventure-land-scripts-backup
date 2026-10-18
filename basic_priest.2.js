@@ -382,6 +382,14 @@ function getZapTarget() {
       )
         return true;
 
+      // A pulled farm mob ends up on the tank, us included
+      if (isFarmMob(entity))
+        return (
+          calculateDamage(entity, get_player(TANKER) ?? character) +
+            avgPartyDmgTaken(partyMems) <
+          character.heal * attackFrequency()
+        );
+
       if (!isTanker) {
         return (
           calculateDamage(entity, character) + avgPartyDmgTaken(partyMems) <

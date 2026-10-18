@@ -2155,6 +2155,15 @@ non-wasting aggroed mob in reach instead, still facing and holding the ent; with
 hitting the ent. Cleave and poison deaths are not steered. Set `growthDebug = true` to log every farm-mob kill (with `hid`/`source`/
 `splash` of the killing hit) and spawn burst.
 
+## The zapper pulls farm mobs (`getZapTarget`, basic_priest.2.js, 2026-10-18)
+
+Farm mobs (`isFarmMob`) sort first, so a pullable plantoid beats a damage zap on a mob already
+fighting us. An unaggroed farm mob is pullable when its dps on `TANKER` (the priest himself when
+`assignRoles` makes him the farm tank, else the warrior, whose taunt peels it off) plus the
+party's average damage taken stays under the priest's heal × frequency. Before this a tanking
+priest refused every non-trivial unaggroed mob, so plantoids (`aggro` 0.2, they rarely walk in on
+their own) were never pulled. Other unaggroed mobs keep the old rules.
+
 ## Curse what the party is hitting (`getCurseTarget`, basic_priest.2.js, 2026-10-18)
 
 Curse is +20% damage taken and −20% damage dealt, so it is worth the party dps on the mob plus the
