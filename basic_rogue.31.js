@@ -28,7 +28,9 @@ const inRange = (entity, mult = 1) =>
 
 /** @returns {boolean} whether the attack cooldown is up */
 const isAttackReady = () =>
-  ms_to_next_skill("attack") === 0 && !character.s.penalty_cd;
+  ms_to_next_skill("attack") === 0 &&
+  !character.s.penalty_cd &&
+  character.mp > character.mp_cost;
 
 /**
  * Puts the daggers back after a candy swap; the strategy loop would skip it
@@ -58,8 +60,7 @@ function planFight(target) {
         entity.type === "monster" &&
         !entity.dead &&
         !isCaveFriendly(entity) &&
-        (party.has(entity.target) ||
-          (entity.cooperative && entity.target)) &&
+        (party.has(entity.target) || (entity.cooperative && entity.target)) &&
         !MELEE_IGNORE_LIST.includes(entity.mtype) &&
         inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
     )
@@ -115,8 +116,7 @@ function getRogueCast() {
   return () =>
     Promise.allSettled(
       [
-        !ms_to_next_skill("invis") &&
-          use_skill("invis"),
+        !ms_to_next_skill("invis") && use_skill("invis"),
         castOnAttackCooldown("attack", attackTarget),
         ridesCandySwap(followUp) && castFollowUp(followUp, attackTarget),
         maybeCandySwap(attackTarget, { restore: restoreRogueWeapons }),
@@ -177,7 +177,7 @@ function getFollowUp(target) {
     ms_to_next_skill("quickstab") !== 0 ||
     character.s.penalty_cd ||
     unansweredPenaltyMs > 0 ||
-    character.mp <= G.skills["rspeed"].mp * 2
+    character.mp <= G.skills["rspeed"].mp * 3
   )
     return undefined;
   return getFollowUpAttackSkill();
@@ -230,9 +230,7 @@ function startSkillLoops() {
     whileMoving: true,
     canUse: () => {
       const target = get_target();
-      return (
-        !isAttackReady() && !!target && inRange(target) && shouldAttack()
-      );
+      return !isAttackReady() && !!target && inRange(target) && shouldAttack();
     },
     cast: () => equipClassGear(get_target()),
   });
