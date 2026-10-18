@@ -391,6 +391,9 @@ function getZapTarget() {
       return false;
     })
     .sort((lhs, rhs) => {
+      const farmFirst = Number(isFarmMob(rhs)) - Number(isFarmMob(lhs));
+      if (farmFirst) return farmFirst;
+
       if (isTanker) {
         // Prioritize unaggrod mobs first
         if (!!lhs.target !== !!rhs.target) return lhs.target ? 1 : -1;
