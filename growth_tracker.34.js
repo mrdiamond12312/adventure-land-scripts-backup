@@ -9,7 +9,7 @@ const GROWTH_SURE_MARGIN = 0.9;
 const GROWTH_SPAWN_TOLERANCE = 10;
 const GROWTH_SPLASH_SLACK = 10;
 
-var growthDebug = true;
+var growthDebug = false;
 
 /**
  * @typedef {Object} GrowthGroup
