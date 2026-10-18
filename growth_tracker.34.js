@@ -7,7 +7,7 @@ const GROWTH_SCAN_MS = 100;
 const GROWTH_LETHAL_MARGIN = 1.35;
 const GROWTH_SPAWN_TOLERANCE = 10;
 
-var growthDebug = false;
+var growthDebug = true;
 
 /**
  * @typedef {Object} GrowthGroup
@@ -99,7 +99,13 @@ const instantRespawnCap = (group) => (group.def.count * 2) / 3;
 function onGrowthKill(entity) {
   const member = growthTracker.members[entity.id];
   const group = getGrowthGroupOf(entity);
-  if (!group || member.kind === "temp") return;
+  if (!group || member.kind === "temp") {
+    if (growthDebug && member)
+      console.warn(
+        `[growth] ${entity.mtype} #${group?.index ?? "?"} ${member.kind ?? "?"} died`,
+      );
+    return;
+  }
 
   const live = getGroupLive(group, entity);
   const cap = instantRespawnCap(group);
