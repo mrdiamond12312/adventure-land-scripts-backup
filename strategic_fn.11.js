@@ -2247,7 +2247,7 @@ function prioritizedNames() {
   return [...getAlliedNames()];
 }
 
-// Track max heal power so the threshold stays stable across gear swaps.
+/** Our peak heal per hit, stable across gear swaps; per second is healerHps */
 let maxHealPower = 0;
 
 function getHealPower() {
@@ -2360,7 +2360,8 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
       return (
         fromEntity.attack *
           mitigation(fromEntity, toEntity) *
-          attackFrequency(fromEntity) +
+          attackFrequency(fromEntity) *
+          monsterCritFactor(fromEntity) +
         reflectionDmg
       );
     }
@@ -2378,14 +2379,31 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
       return (
         fromEntity.attack *
           mitigation(fromEntity, toEntity, { ignoreHardshell: true }) *
-          attackFrequency(fromEntity) +
+          attackFrequency(fromEntity) *
+          monsterCritFactor(fromEntity) +
         dreturnDmg
       );
     }
 
     default:
-      return fromEntity.attack * attackFrequency(fromEntity);
+      return (
+        fromEntity.attack *
+        attackFrequency(fromEntity) *
+        monsterCritFactor(fromEntity)
+      );
   }
+}
+
+/**
+ * A monster's average hit over its plain hit: a crit deals 2x plus critdamage.
+ * Read from G, since the client entity doesn't carry crit.
+ * @param {Object} entity - attacker
+ * @returns {number} 1 for players
+ */
+function monsterCritFactor(entity) {
+  if (entity?.type !== "monster") return 1;
+  const def = G.monsters[entity.mtype];
+  return 1 + ((def?.crit ?? 0) / 100) * (1 + (def?.critdamage ?? 0) / 100);
 }
 
 function listOfMonsterAttacking(characterEntity) {
@@ -2417,23 +2435,55 @@ function hasCourageFor(incoming, mobsOnMe = listOfMonsterAttacking(character)) {
   );
 }
 
-function mobbingMultiplier(numberOfMobs) {
-  return numberOfMobs < 3 ? 1 : 1.5;
+/** Mobs a player can have on them before the server's mobbing bonus starts */
+const MOBBING_FREE_TARGETS = 3;
+
+/**
+ * Server mobbing bonus on one mob's hits, at the cap the combo climbs to:
+ * max(300 / attack, 1.2) once more than 3 mobs target the player.
+ * @param {number} numberOfMobs - mobs targeting the player
+ * @param {Object} mob - the attacker
+ * @returns {number}
+ */
+function mobbingMultiplier(numberOfMobs, mob) {
+  if (numberOfMobs <= MOBBING_FREE_TARGETS) return 1;
+  return Math.max(300 / Math.max(mob.attack ?? 0, 1), 1.2);
 }
 
+/** Peak heal-per-second seen per healer name, stable across their gear swaps */
+const maxHealerHps = {};
+
+/** Share of a healer's peak heal-per-second we count on */
+const HEALER_PEAK_SAFETY = 0.95;
+
+/**
+ * The heal-per-second this healer can be counted on for: its peak, so a
+ * tank/stat gear swap doesn't shrink it, at HEALER_PEAK_SAFETY.
+ * @param {Object} [healer]
+ * @returns {number}
+ */
 function healerHps(healer = get_entity(HEALER) ?? get_entity(RANGER)) {
   if (!healer) return 0;
 
   const healPerHit = healer.heal || (healer.attack ?? 0) * 0.5;
-  return healPerHit * attackFrequency(healer);
+  maxHealerHps[healer.name] = Math.max(
+    maxHealerHps[healer.name] ?? 0,
+    healPerHit * attackFrequency(healer),
+  );
+  return maxHealerHps[healer.name] * HEALER_PEAK_SAFETY;
 }
 
+/**
+ * @param {Object[]} mobs - every mob that would be on toEntity
+ * @param {Object} [toEntity]
+ * @returns {number} their dps on toEntity, mobbing bonus included
+ */
 function totalMobDps(mobs, toEntity = character) {
-  return (
-    mobs.reduce(
-      (accumulator, mob) => accumulator + calculateDamage(mob, toEntity),
-      0,
-    ) * mobbingMultiplier(mobs.length)
+  return mobs.reduce(
+    (accumulator, mob) =>
+      accumulator +
+      calculateDamage(mob, toEntity) * mobbingMultiplier(mobs.length, mob),
+    0,
   );
 }
 
@@ -2478,11 +2528,12 @@ function avgDmgTaken(characterEntity, dmgType = null) {
 
   return (
     listOfAttackingMobs.reduce(
-      (accumulator, mob) => accumulator + calculateDamage(mob, characterEntity),
+      (accumulator, mob) =>
+        accumulator +
+        calculateDamage(mob, characterEntity) *
+          mobbingMultiplier(numberOfAttackingMobs, mob),
       0,
-    ) *
-      mobbingMultiplier(numberOfAttackingMobs) +
-    Math.max(currentBurnIntensity, burnPadding)
+    ) + Math.max(currentBurnIntensity, burnPadding)
   );
 }
 
@@ -2588,15 +2639,15 @@ function getMonstersToCBurst() {
 
   const selectedMobs = [];
   let currentPartyDmgRecieved = avgPartyDmgTaken(partyMems);
-  let tankerCurrentAggroCount = listOfMonsterAttacking(partyTanker).length;
+  const tankerMobs = listOfMonsterAttacking(partyTanker);
 
   for (const mob of eligibleMobs) {
     if (currentPartyDmgRecieved >= MAX_SAFE_DPS) break;
 
     const projectedDmg =
-      currentPartyDmgRecieved +
-      calculateDamage(mob, partyTanker) *
-        mobbingMultiplier(tankerCurrentAggroCount + 1);
+      currentPartyDmgRecieved -
+      totalMobDps(tankerMobs, partyTanker) +
+      totalMobDps([...tankerMobs, mob], partyTanker);
 
     if (
       is_in_range(mob, "cburst") &&
@@ -2604,14 +2655,8 @@ function getMonstersToCBurst() {
       projectedDmg < NEW_MOB_DMG_LIMIT
     ) {
       selectedMobs.push(mob);
-
-      const oldAggroMult = mobbingMultiplier(tankerCurrentAggroCount);
-      tankerCurrentAggroCount++;
-      const newAggroMult = mobbingMultiplier(tankerCurrentAggroCount);
-
-      currentPartyDmgRecieved =
-        (currentPartyDmgRecieved * newAggroMult) / oldAggroMult +
-        calculateDamage(mob, partyTanker) * newAggroMult;
+      tankerMobs.push(mob);
+      currentPartyDmgRecieved = projectedDmg;
     }
   }
 

@@ -83,7 +83,7 @@ function refineTarget(target) {
               isPullBrave(mob, mobsOnMe) &&
               !canOneShotWithWeapon(heldWeaponInfo, [mob]) &&
               partyDmgRecieved + calculateDamage(mob, character) <
-                character.heal * 0.9 * attackFrequency(),
+                healerHps(character) * 0.9,
           )
           .sort(
             (lhs, rhs) => distance(rhs, character) - distance(lhs, character),
@@ -314,9 +314,7 @@ function shouldPartyHeal() {
 }
 
 function isOutHealed() {
-  return (
-    avgPartyDmgTaken(partyMems) > getHealPower() * 0.95 * attackFrequency()
-  );
+  return avgPartyDmgTaken(partyMems) > healerHps(character);
 }
 
 function shouldPriestScare() {
@@ -397,13 +395,13 @@ function getZapTarget() {
         return (
           calculateDamage(entity, get_player(TANKER) ?? character) +
             avgPartyDmgTaken(partyMems) <
-          character.heal * attackFrequency()
+          healerHps(character)
         );
 
       if (!isTanker) {
         return (
           calculateDamage(entity, character) + avgPartyDmgTaken(partyMems) <
-          character.heal * attackFrequency()
+          healerHps(character)
         );
       }
 

@@ -807,8 +807,28 @@ Findings from the "warrior attacks slower than his frequency" session (2026-07-2
   `ProjectileManagement._calculateSingleHitDamage`).
 - Healer sustain is always compared in per-second units via `healerHps()`
   (`heal || attack * 0.5`, times frequency); mob pressure via `totalMobDps()` (sum of
-  `calculateDamage` times the ≥3-mob `mobbingMultiplier`). Cleave's safety check previously
+  `calculateDamage` times each mob's `mobbingMultiplier`). Cleave's safety check previously
   compared per-hit heal against DPS, making it far more conservative than intended.
+- **`healerHps` is the healer's peak, not its current gear** (2026-10-20). The priest swaps to
+  tank/stat gear between heals, so the live `heal` dipped and the warrior's `isAllyInEmergency`
+  off-tanked a priest that was well inside its heal. The peak is kept per healer name and never
+  decays, so a frequency buff seen once (warcry) stays in it; it is counted at 95%
+  (`HEALER_PEAK_SAFETY`). Every per-second heal check, the priest's own taunt/zap pulls and
+  `isOutHealed` included, reads it. `getHealPower` is the separate per-hit peak, used only for
+  `getPlayersToHeal`'s missing-hp threshold.
+- **Mobbing, per server `complete_attack`** (2026-10-20): the bonus starts only when
+  `target.targets > 3` (4+ mobs on the player, any damage type). Each hit raises `target.combo`
+  (reset after 5s without a hit), and the multiplier is capped at `max(300 / attack, 1.2)`, with
+  `attack` the mob's pre-crit attack. Under sustained aggro the combo reaches the cap, so the cap is
+  what `mobbingMultiplier` returns: 1.2 for any mob with attack ≥ 250, while weak mobs climb toward
+  ~300 per hit. The old flat 1.5 at ≥3 mobs overestimated odino packs by ~19%.
+- **Monster crits are in `calculateDamage`** (`monsterCritFactor`, from `G.monsters` crit /
+  critdamage: a crit is `2 + critdamage/100`). Player crits are left out on purpose: one-shot
+  checks need the guaranteed hit, not the average.
+- Worked example, priest 650 armor / 4111 heal × 1.42 vs odino (550 atk, 0.9 freq, 25 apiercing,
+  5% crit; on a `grow` spawn +5% atk and +0.008 freq per level, max 12): 46.3% gets through, one
+  odino ≈ 240/s at level 1, 7 ≈ 2020/s, 14 ≈ 4040/s, against 5838 heal/s. 14 odinos outpace the
+  heal from about level 8 (≈ 6060/s).
 - `item_info()` (basic_function.7.js) returns a *fresh* object per call (spread of `G.items`
   data + computed properties, including `.id`) — safe to annotate, but nothing memoizes across
   calls, so derived fields like `explosion_delta` must be computed where the object is built

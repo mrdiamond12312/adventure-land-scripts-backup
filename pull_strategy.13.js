@@ -12,10 +12,8 @@ async function usePullStrategies(target) {
  */
 async function usePullSkills() {
   const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
-  const healerPower = partyHealer?.heal || partyHealer?.attack || 0;
-  const healerFreq = (partyHealer && attackFrequency(partyHealer)) || 1;
   const healReceivableAmount =
-    healerPower * healerFreq +
+    healerHps(partyHealer) +
     (parent.entities["$Caroline"]?.focus &&
     distance(parent.entities["$Caroline"], character) < 250
       ? 1200
