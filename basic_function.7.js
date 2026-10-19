@@ -263,9 +263,9 @@ const SPECIAL_MOB_IDS = [
 // var mapX = -1111;
 // var mapY = 132;
 
-var map = "desertland";
-var mapX = -840.75;
-var mapY = -340.75;
+// var map = "desertland";
+// var mapX = -840.75;
+// var mapY = -340.75;
 
 // var map = "level1";
 // var mapX = 50;
@@ -287,9 +287,9 @@ var mapY = -340.75;
 // var mapX = 403;
 // var mapY = -347;
 
-// var map = "mforest";
-// var mapX = -25;
-// var mapY = 700;
+var map = "mforest";
+var mapX = -25;
+var mapY = 700;
 
 // var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
 // var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
@@ -310,12 +310,12 @@ var mapY = -340.75;
 //   "turtle",
 //   "crabx",
 // ];
-var mobsToFarm = ["ent", "plantoid", "mechagnome"];
+// var mobsToFarm = ["ent", "plantoid", "mechagnome"];
 // var mobsToFarm = ["prat"];
 // var mobsToFarm = ["mummy"];
 // var mobsToFarm = ["dryad", "mechagnome"];
 // var mobsToFarm = ["jr", "booboo"];
-// var mobsToFarm = ["paledino", "mechagnome", "odino"];
+var mobsToFarm = ["paledino", "odino", "mechagnome"];
 
 var farmTanker = PRIEST;
 var warriorHeldMobs = ["ent"];
@@ -2178,7 +2178,7 @@ setInterval(async function () {
             "luckbooster",
             "suckerpunch",
             desiredElixir,
-            "elixirluck"
+            "elixirluck",
           ].includes(item.name)
         )
           return;
