@@ -83,6 +83,9 @@ async function fightSimpleBoss(types) {
     .sort((lhs, rhs) => hpRatio(lhs) - hpRatio(rhs))[0];
   if (!bossToFight) return;
 
+  const kaneOutcome = await waitOutBossAtKane(bossToFight.type);
+  if (kaneOutcome) return kaneOutcome;
+
   const { usePull = true, rangeRate: bossRangeRate } =
     SIMPLE_BOSSES[bossToFight.type];
   if (usePull) changeToPullStrategies();
@@ -122,6 +125,133 @@ function getBossMinion(bossType) {
   if (minionTypes.includes(current?.mtype)) return current;
 
   return minionTypes.map((type) => get_nearest_monster({ type })).find(Boolean);
+}
+
+// --- Kane's luck ---
+
+const KANE_LUCK_BOSSES = ["mrpumpkin"];
+const KANE_ID = "$Kane";
+const KANE_MIN_COOP_POINTS = 300_000;
+const KANE_LEAVE_MS = 60_000;
+const KANE_RETURN_MS = 120_000;
+const KANE_STALL_MS = 60_000;
+const KANE_MIN_OTHER_ATTACKERS = 3;
+const KANE_ATTACKERS_TTL_MS = 10_000;
+/** Inside Kane's 320px aura */
+const KANE_FOLLOW_RANGE = 200;
+const BOSS_HP_WINDOW_MS = 300_000;
+const BOSS_HP_SAMPLE_MS = 1000;
+
+/** Boss type -> its `[time, hp]` samples and the strangers last seen on it */
+const bossTracks = {};
+
+/** The boss we left to wait at Kane */
+let kaneWaitBoss;
+
+/** Samples the boss's hp and counts the strangers attacking it while in sight */
+function trackBoss(type) {
+  const now = Date.now();
+  const track = (bossTracks[type] ??= {
+    samples: [],
+    lastDropAt: now,
+    otherAttackers: 0,
+    attackersSeenAt: 0,
+  });
+
+  const boss = get_nearest_monster({ type });
+  const hp = boss?.hp ?? server.status[type]?.hp;
+  if (hp === undefined) return track;
+
+  const last = track.samples.at(-1);
+  if (last && hp > last[1]) track.samples = [];
+  if (!last || hp !== last[1]) track.lastDropAt = now;
+  if (!last || hp !== last[1] || now - last[0] >= BOSS_HP_SAMPLE_MS)
+    track.samples.push([now, hp]);
+  track.samples = track.samples.filter(([at]) => now - at <= BOSS_HP_WINDOW_MS);
+
+  if (boss) {
+    track.otherAttackers = Object.values(parent.entities).filter(
+      (entity) =>
+        entity.type === "character" &&
+        !entity.npc &&
+        entity.target === boss.id &&
+        !isOwnedCharacter(entity.name) &&
+        !parent.party_list?.includes(entity.name),
+    ).length;
+    track.attackersSeenAt = now;
+  }
+
+  return track;
+}
+
+/** @returns {number} ms to the boss's death at its recent damage rate */
+function getBossMsToDeath({ samples }) {
+  const first = samples[0];
+  const last = samples.at(-1);
+  if (!first || last[0] === first[0]) return Infinity;
+
+  const hpPerMs = (first[1] - last[1]) / (last[0] - first[0]);
+  return hpPerMs > 0 ? last[1] / hpPerMs : Infinity;
+}
+
+function shouldLeaveForKane(track) {
+  return (
+    (character.s.coop?.p ?? 0) >= KANE_MIN_COOP_POINTS &&
+    getBossMsToDeath(track) <= KANE_LEAVE_MS &&
+    Date.now() - track.attackersSeenAt <= KANE_ATTACKERS_TTL_MS &&
+    track.otherAttackers >= KANE_MIN_OTHER_ATTACKERS
+  );
+}
+
+function shouldReturnFromKane(track) {
+  return (
+    Date.now() - track.lastDropAt > KANE_STALL_MS ||
+    getBossMsToDeath(track) > KANE_RETURN_MS
+  );
+}
+
+/** The mage waits out a dying coop boss inside Kane's luck aura */
+async function waitOutBossAtKane(type) {
+  if (character.name !== MAGE || !KANE_LUCK_BOSSES.includes(type)) return;
+
+  const track = trackBoss(type);
+  const isStaying =
+    kaneWaitBoss === type
+      ? !shouldReturnFromKane(track)
+      : shouldLeaveForKane(track);
+  const kane = isStaying && getRoamingNpcSpot(KANE_ID);
+
+  kaneWaitBoss = kane ? type : undefined;
+  if (!kane) return;
+
+  if (distance(character, kane) > KANE_FOLLOW_RANGE) {
+    await advanceSmartMove(kane);
+    return travelling();
+  }
+
+  changeToNormalStrategies();
+  const nearbyMob = getNearestFreeMobInReach();
+  return nearbyMob ? engage(nearbyMob) : travelling();
+}
+
+/** @returns {Object|undefined} where the kite parks while waiting at Kane */
+function getKaneParkSpot() {
+  if (!server.status[kaneWaitBoss]?.live) return undefined;
+
+  const kane = getRoamingNpcSpot(KANE_ID);
+  return kane?.map === character.map ? kane : undefined;
+}
+
+function getNearestFreeMobInReach() {
+  return Object.values(parent.entities)
+    .filter(
+      (mob) =>
+        mob.type === "monster" &&
+        !mob.dead &&
+        (!mob.target || mob.target === character.name) &&
+        is_in_range(mob, "attack"),
+    )
+    .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
 }
 
 // --- Crabxx ---

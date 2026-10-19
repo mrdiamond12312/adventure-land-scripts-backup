@@ -27,10 +27,79 @@ const CAVALRY_IDLE_MS = 60_000;
 const CAVALRY_RECHECK_MS = 15 * 60 * 1000;
 /** Account-wide `Date.now()` the cavalry can be called again, shared by every character */
 const CAVALRY_LS_KEY = "cavalryNextCall";
+/** Realm -> { checkedAt, mobs: id -> { level, since } } */
+const CAVALRY_LEVELS_LS_KEY = "cavalryMobLevels";
+/** The mlevel loop's 16s tick plus last_level's +50s jitter */
+const CAVALRY_LEVEL_SLACK_MS = 66_000;
+const CAVALRY_MAX_WAIT_MS = 60 * 60 * 1000;
 
 /** @returns {number} ms until the account may call the cavalry again, 0 when ready or unknown */
 function cavalryCooldownMs() {
   return Math.max(0, (get(CAVALRY_LS_KEY) ?? 0) - Date.now());
+}
+
+/**
+ * Server mlevel loop: an untargeted mob levels once
+ * max(180s, max_hp × 30ms) × 2^((level − 1) × 0.3) has passed since its last level.
+ * @returns {number} the longest that wait can be
+ */
+function msToMobLevelUp(mtype, level) {
+  const { hp } = G.monsters[mtype];
+  const maxHp = hp + Math.floor(hp / 2) * (level - 1);
+  return (
+    Math.max(180_000, maxHp * 30) * 2 ** ((level - 1) * 0.3) +
+    CAVALRY_LEVEL_SLACK_MS
+  );
+}
+
+/** Records each cavalry mob in sight and since when it has held its level */
+function noteCavalryMobLevels() {
+  if (character.map !== CAVALRY_MAP) return;
+
+  const realm = getCurrentServer();
+  const now = Date.now();
+  const mobs = Object.values(parent.entities).filter(
+    (entity) => entity.type === "monster" && entity.mtype === CAVALRY_MOB,
+  );
+  if (!mobs.length)
+    return updateStoreEntry(CAVALRY_LEVELS_LS_KEY, realm, { checkedAt: now });
+
+  const known = readStore(CAVALRY_LEVELS_LS_KEY)[realm]?.mobs ?? {};
+  const seen = {};
+  for (const mob of mobs) {
+    const level = mob.level ?? 1;
+    const since = known[mob.id]?.level === level ? known[mob.id].since : now;
+    seen[mob.id] = { level, since };
+  }
+
+  updateStoreEntry(CAVALRY_LEVELS_LS_KEY, realm, { checkedAt: now, mobs: seen });
+}
+
+setInterval(noteCavalryMobLevels, 1000);
+
+/** @returns {number} `Date.now()` by which a mob on this realm is surely min_level, 0 when unknown */
+function getCavalryMobReadyAt() {
+  const record = readStore(CAVALRY_LEVELS_LS_KEY)[getCurrentServer()];
+  if (!record) return 0;
+
+  const readyAts = Object.values(record.mobs ?? {}).map(({ level, since }) => {
+    let at = since;
+    for (let l = level; l < CAVALRY.min_level; l++)
+      at += msToMobLevelUp(CAVALRY_MOB, l);
+    return at;
+  });
+  const readyAt = readyAts.length ? Math.min(...readyAts) : 0;
+  return Math.max(readyAt, record.checkedAt + CAVALRY_RECHECK_MS);
+}
+
+/** @returns {number} ms until both the cooldown and a ready mob allow a run */
+function msUntilCavalryRun() {
+  return Math.max(0, cavalryCooldownMs(), getCavalryMobReadyAt() - Date.now());
+}
+
+function scheduleCavalryLoop() {
+  const waitMs = Math.max(CAVALRY_IDLE_MS, msUntilCavalryRun());
+  setTimeout(cavalryOneeyeLoop, Math.min(waitMs, CAVALRY_MAX_WAIT_MS));
 }
 
 /** @returns {boolean} whether the bag holds what the server asks for */
@@ -337,11 +406,11 @@ async function runCavalryOneeye() {
   await holdCavalryFight(callSpot);
 }
 
-/** Scheduler, same shape as dragEnt: one run whenever the account cooldown is up. */
+/** Scheduler, same shape as dragEnt: one run once the cooldown is up and a mob is surely ready. */
 async function cavalryOneeyeLoop() {
   if (
     !hasCavalryTracker() ||
-    cavalryCooldownMs() > 0 ||
+    msUntilCavalryRun() > 0 ||
     isOnDuty() ||
     isAwaitingParcel() ||
     isAdvanceSmartMoving ||
@@ -350,22 +419,13 @@ async function cavalryOneeyeLoop() {
     shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
     isCaveRunOpen() ||
-    isCavalryProbeUnsafe()
-  ) {
-    setTimeout(
-      cavalryOneeyeLoop,
-      Math.max(CAVALRY_IDLE_MS, Math.min(cavalryCooldownMs(), CAVALRY_RECHECK_MS)),
-    );
-    return;
-  }
-
-  if (!(await probeCavalryCooldown())) {
-    setTimeout(cavalryOneeyeLoop, Math.max(CAVALRY_IDLE_MS, cavalryCooldownMs()));
-    return;
-  }
+    isCavalryProbeUnsafe() ||
+    !(await probeCavalryCooldown())
+  )
+    return scheduleCavalryLoop();
 
   const lock = takeDuty(DUTY.CAVALRY);
-  if (!lock) return setTimeout(cavalryOneeyeLoop, CAVALRY_IDLE_MS);
+  if (!lock) return scheduleCavalryLoop();
   const keepAlive = setInterval(() => renewDuty(lock), DUTY_WATCHDOG_INTERVAL);
 
   try {
@@ -375,9 +435,6 @@ async function cavalryOneeyeLoop() {
   } finally {
     clearInterval(keepAlive);
     releaseDuty(lock);
-    setTimeout(
-      cavalryOneeyeLoop,
-      Math.max(CAVALRY_RECHECK_MS, cavalryCooldownMs()),
-    );
+    scheduleCavalryLoop();
   }
 }

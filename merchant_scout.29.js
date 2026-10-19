@@ -134,6 +134,8 @@ async function scoutSweep() {
   }
 }
 
+setInterval(noteRoamingNpcs, 1000);
+
 async function merchantScoutingLoop() {
   if (
     !hasVisitedBank ||

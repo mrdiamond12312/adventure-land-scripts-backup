@@ -3758,6 +3758,14 @@ after dropping its 12.5s timer harakiri characters stayed dead. Every harakiri n
 goes out once the server's `rip` has come back. A polling `character.rip` interval was turned
 down for this.
 
+**A harakiri is sent once and watched for 30s** (`HARAKIRI_DEATH_CHECKS`, 2026-10-20). `suicide()`
+runs every 100ms and also fires on `character.ping > 600`, so it harakiris on a slow socket: it
+used to re-send every tick until `rip` came back (about 20 sends for a 2s delay), and the 5-check
+window gave up after ~4s. A `rip` that arrived later left the character dead for good, since
+harakiri fires no `death`. Now `commitHarakiri` holds back for 30s after a send, or until
+`respawnOnceDead` sees the `rip`, and watches for those 30s. A late harakiri after a mob kill is
+harmless: the server returns early on a dead player, and the mob kill's `death` respawns as usual.
+
 ## Kill-triggered special mobs (`SPECIAL_MOB_IDS`, `MINI_BOSSES_TO_SCOUT`, 2026-10-18)
 
 Six mobs are spawned by a server-wide kill counter, not by a respawn timer (`respawn: -1`). On each
@@ -3816,3 +3824,40 @@ Unverified: oneeye's chase speed (`G.monsters.oneeye.charge` is absent from upst
 and the cavalry's real damage. A rough estimate from their stats is ~200k/s against oneeye armor,
 about 4s per level 3 oneeye (840k hp). Those two numbers decide how much of a pack of 3 dies
 before it closes to 150px.
+
+## Kane's luck on coop bosses (`waitOutBossAtKane`, daily_event_fighter_strat.26.js, 2026-10-20)
+
+Kane (`citizen0`, `$Kane`, roams main) has `aura: {luck: 200}`. Every 2s the server gives every
+player within 320px a `citizen0aura` condition carrying that luck for 6s, and `resend` recomputes
+stats, so it lands in `xluck` and `luckm = 1 + xluck / 100` gains +2.0. A cooperative boss
+(`issue_monster_awards`) rolls `drop_something(player, monster, share)` for every contributor
+with share > 0.0025 who is online on the realm, with the same-map check commented out, and the
+item roll is `random() / (share × luckm × level × mult) < rate`. So a contributor anywhere on the
+realm rolls its share with its own luck at the moment of death: Kane's aura multiplies the chance
+by `(luckm + 2) / luckm` (2.3× at 50 luck). Coop points never decay, so leaving keeps the share.
+
+The trigger is earthiverse's `KaneEventBossMoveStrategy` (adventureland-bots): the boss's hp is
+sampled every tick (in sight, else `server.status`), time to death is hp ÷ the damage rate over
+the last 5 min, and the mage leaves once `character.s.coop.p ≥ 300k`, death is ≤ 60s out, and 3+
+strangers (not ours, not party) were on the boss within 10s, so it still dies without us. It goes
+back when the hp stalls 60s or the estimate passes 120s. Magiport only pulls another player, so
+the mage walks. Kane's spot is `$Kane` in sight, else the merchant's `noteRoamingNpcs` sighting
+for this realm (5 min fresh). The store is keyed realm → NPC id, so each realm keeps its own;
+`getRoamingNpcSpot(id, realm)` reads any of them. There the kite parks on Kane (`getKaneParkSpot` → `withParkSpot`)
+and the mage shoots whatever free mob is in reach, so it never orbits out of the 320px aura.
+
+## When a oneeye is surely level 3 (`getCavalryMobReadyAt`, merchant_cavalry.35.js, 2026-10-20)
+
+Server mlevel loop (every 16s): a monster with **no target** levels once
+`max(180s, max_hp × 30ms) × 2^((level − 1) × 0.3)` has passed since `last_level`, which every
+level-up (and the spawn) sets to now ± 50s. `max_hp` grows by `hp / 2` per level. Oneeye: 1 → 2
+in 3.5h, 2 → 3 in 6.5h, 3 → 4 in 10.6h. A targeted monster is skipped (its timer keeps running
+but it can't level while farmed), `grow` temp spawns are removed at the threshold instead of
+levelling, and a killed one respawns at half its level.
+
+The client can't read `last_level`, but a mob first seen at level L levelled no later than that
+sighting, so `since + Σ wait(l)` up to `min_level` (plus 66s for the tick and jitter) is a time
+it is surely ready by. `noteCavalryMobLevels` keeps `{level, since}` per mob id per realm
+whenever the merchant is on level2w (cavalry run or scout), and the loop waits for the
+earliest of those, never sooner than 15 min after the last visit. A first sighting has no
+history, so its bound is the full wait from then: conservative, but it only gets better.

@@ -207,6 +207,39 @@ function updateStoreEntry(key, entryId, fields) {
   set(key, store);
 }
 
+/** Realm -> NPC id -> its last sighting */
+const NPC_SIGHTINGS_LS_KEY = "npcSightings";
+const ROAMING_NPC_IDS = ["$Kane", "$Angel"];
+const NPC_SIGHTING_STALE_MS = 5 * 60 * 1000;
+
+function noteRoamingNpcs() {
+  for (const id of ROAMING_NPC_IDS) {
+    const npc = parent.entities[id];
+    if (!npc) continue;
+
+    updateStoreEntry(NPC_SIGHTINGS_LS_KEY, getCurrentServer(), {
+      [id]: {
+        map: character.map,
+        x: npc.real_x,
+        y: npc.real_y,
+        seenAt: Date.now(),
+      },
+    });
+  }
+}
+
+/** @returns {Object|undefined} the NPC in sight, else its fresh sighting on the realm */
+function getRoamingNpcSpot(id, realm = getCurrentServer()) {
+  const npc = realm === getCurrentServer() && parent.entities[id];
+  if (npc) return { map: character.map, x: npc.real_x, y: npc.real_y };
+
+  const sighting = readStore(NPC_SIGHTINGS_LS_KEY)[realm]?.[id];
+  if (!sighting || Date.now() - sighting.seenAt > NPC_SIGHTING_STALE_MS)
+    return undefined;
+
+  return { map: sighting.map, x: sighting.x, y: sighting.y };
+}
+
 /**
  * Mini-bosses every part of the chain cares about — the scout sweeps them, the
  * fighters hunt them, the realm observers watch for them. Shared so the three
@@ -1477,6 +1510,9 @@ async function dragToSpot(target, spot, boss) {
 // Per-mtype overrides: some mobs get kited around a fixed spot instead of their own
 // (moving) position — a BOSS_DRAG_ROUTES spot, or the boss or its spawn center for CRABXX.
 async function resolveKiteTarget(target) {
+  const kaneSpot = typeof getKaneParkSpot === "function" && getKaneParkSpot();
+  if (kaneSpot) return withParkSpot(target, kaneSpot);
+
   const dragRoute = isAssignedAsTanker() && getBossDragRoute(target);
   if (dragRoute && !isDragReleased(dragRoute)) {
     const [bossType, route] = dragRoute;
@@ -1842,9 +1878,13 @@ hitAndRun();
 /** Ms past the server's cant_respawn wait before the retry */
 const RESPAWN_RETRY_PAD_MS = 300;
 const RESPAWN_DEATH_CHECKS = 5;
+/** Seconds a harakiri is watched for the server's rip, and how long another one is held back */
+const HARAKIRI_DEATH_CHECKS = 30;
 
 /** A respawn in flight or waiting out the cooldown */
 let isRespawnPending = false;
+/** When the last harakiri went out, 0 once its death has arrived */
+let harakiriSentAt = 0;
 
 /** Respawns, and on cant_respawn retries once its `ms` has passed */
 async function respawnWhenReady() {
@@ -1866,13 +1906,20 @@ function handle_death() {
 }
 
 function respawnOnceDead(checksLeft = RESPAWN_DEATH_CHECKS) {
-  if (character.rip) return respawnWhenReady();
+  if (character.rip) {
+    harakiriSentAt = 0;
+    return respawnWhenReady();
+  }
   if (checksLeft > 1) setTimeout(() => respawnOnceDead(checksLeft - 1), 1000);
 }
 
+/** One harakiri until its death arrives or HARAKIRI_DEATH_CHECKS runs out */
 function commitHarakiri() {
+  if (Date.now() - harakiriSentAt < HARAKIRI_DEATH_CHECKS * 1000) return;
+
+  harakiriSentAt = Date.now();
   parent.socket.emit("harakiri");
-  respawnOnceDead();
+  respawnOnceDead(HARAKIRI_DEATH_CHECKS);
 }
 
 respawnOnceDead();
