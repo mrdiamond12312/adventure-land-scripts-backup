@@ -10,6 +10,7 @@ if (parent.caracAL) {
     "adventure-land-scripts-backup/merchant_frenzinesss.100.js",
     "adventure-land-scripts-backup/merchant_scout.29.js",
     "adventure-land-scripts-backup/merchant_lucky_slot_finder.30.js",
+    "adventure-land-scripts-backup/merchant_cavalry.35.js",
   ]);
 } else {
   load_code(10);
@@ -22,11 +23,18 @@ if (parent.caracAL) {
   load_code(100);
   load_code(29);
   load_code(30);
+  load_code(35);
 }
 
 // Global Vars
 /** Who may hold the duty lock; ERRAND covers every bounded trip */
-const DUTY = { ERRAND: "errand", EVENT: "event", LURE: "lure", DRAG: "drag" };
+const DUTY = {
+  ERRAND: "errand",
+  EVENT: "event",
+  LURE: "lure",
+  DRAG: "drag",
+  CAVALRY: "cavalry",
+};
 /** The merchant's one duty lock, `{ owner, since }`, null while free */
 var duty = null;
 // Set when an exchange fails with inventory_full; makes the emergency banking
@@ -349,7 +357,8 @@ setInterval(async function () {
     !character.stand &&
     !smart.moving &&
     !isAdvanceSmartMoving &&
-    !isOnDuty(DUTY.EVENT)
+    !isOnDuty(DUTY.EVENT) &&
+    !isOnDuty(DUTY.CAVALRY)
   )
     open_stand();
 
@@ -458,9 +467,11 @@ function isOnDuty(owner) {
   return owner === undefined || duty.owner === owner;
 }
 
-/** @returns {boolean} whether a lure or an ent drag holds the duty */
+/** @returns {boolean} whether a lure, an ent drag or a cavalry run holds the duty */
 function isLuring() {
-  return isOnDuty(DUTY.LURE) || isOnDuty(DUTY.DRAG);
+  return (
+    isOnDuty(DUTY.LURE) || isOnDuty(DUTY.DRAG) || isOnDuty(DUTY.CAVALRY)
+  );
 }
 
 /**
@@ -637,6 +648,7 @@ syncBankData();
 bankLoop();
 lureMechaGnome();
 dragEnt();
+cavalryOneeyeLoop();
 merchantAttackLoop();
 merchantScoutingLoop();
 startSkillLoops();

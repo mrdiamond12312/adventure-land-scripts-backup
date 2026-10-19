@@ -343,7 +343,8 @@ function canSnipe() {
  * @returns {boolean}
  */
 function shouldHoldAttackWeapon() {
-  if (isOnDuty(DUTY.DRAG) || isOnDuty(DUTY.EVENT)) return true;
+  if (isOnDuty(DUTY.DRAG) || isOnDuty(DUTY.EVENT) || isOnDuty(DUTY.CAVALRY))
+    return true;
 
   return canSnipe() && !!getSnipeTarget();
 }

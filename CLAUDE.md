@@ -120,6 +120,8 @@ Merchant entry script:
     merchant_frenzinesss.100.js  event/boss participation (merchantAttackLoop)
     merchant_lucky_slot_finder.30.js  hunts the hidden lucky upgrade slot from leaked rolls
                               (probeLuckySlot runs after an idle upgradeInv; exportLuckySlotTally)
+    merchant_cavalry.35.js   tags level 3+ oneeyes from range and calls the cavalry on them
+                              (cavalryOneeyeLoop; callCavalry keeps the account cooldown in set())
 
   The merchant modules do not load each other: basic_merchant.5.js pulls them all in, and every
   cross-module reference is inside a function body, so it resolves at call time. Nothing in the repo

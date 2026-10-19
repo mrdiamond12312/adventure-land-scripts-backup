@@ -47,10 +47,10 @@ if (!lock) return;
 try { ... } finally { releaseDuty(lock); }
 ```
 
-- **Owners are what someone asks about, not who holds it.** `DUTY.EVENT`, `LURE` and `DRAG` are
-  each told apart somewhere (`isOnDuty(DUTY.EVENT)` for the stand, kiting, gear and
-  `isMerchantBusy`; `isLuring()` = lure or drag, which stops `scareAwayMobs`; `DRAG` alone holds
-  the dartgun). Everything bounded — cm deliveries, `bankLoop`, the main loop's emergency bank
+- **Owners are what someone asks about, not who holds it.** `DUTY.EVENT`, `LURE`, `DRAG` and
+  `CAVALRY` are each told apart somewhere (`isOnDuty(DUTY.EVENT)` for the stand, kiting, gear and
+  `isMerchantBusy`; `isLuring()` = lure, drag or cavalry, which stops `scareAwayMobs`; `DRAG` and
+  `CAVALRY` hold the dartgun; `CAVALRY` keeps the stand shut while it stands still between stones). Everything bounded — cm deliveries, `bankLoop`, the main loop's emergency bank
   trip, scouting, crypt opening, the anniversary visit — is `DUTY.ERRAND`, because nothing ever
   asks *which* errand is running. A new routine gets its own owner only if some read needs it.
 - **The lock object is the ownership token.** Several errands share one owner name, so an owner
@@ -3777,3 +3777,42 @@ The last three (the "rare variants") only spawn while none is alive (`!monster_c
 unkilled one blocks the next. Their spawn spot is the parent pack's `boundary`, which is why the scout
 checks `getMonsterSpawns(<parent>)`. The mimic has `aggro: 0`, so it will not chase a passing scout.
 Because the mimic stays where it spawned, both kobold packs have to be checked.
+
+## Cavalry on oneeyes (`merchant_cavalry.35.js`, 2026-10-20)
+
+Server rules, upstream `node/logic/cavalry.js` and `G.items.tracker.cavalry`:
+
+- **Item:** `tracker` (Tracktrix) or `supercomputer` in the bag. The CODE call is
+  `interact("cavalry")`, which emits `interaction {type: "cavalry", request_id}`; `callCavalry`
+  sends that itself so it runs the same under caracAL.
+- **Veteran account** (highest character on the account ≥ `newcomer_level` 80): the call takes the
+  `max_targets` (3) nearest mobs within `range` (320) of where we called, for `duration` (15s).
+  Targets are fixed at call time, so the pack is tagged first and called once. A mob must target
+  the caller or a party member, be `min_level` (3)+, and not be a special/cooperative/boss spawn.
+- **Guarded:** a mob with any active player of level ≥ 80 within `veteran_range` (150) is skipped,
+  **the caller included**, and it's rechecked on every cavalry swing. The server measures this
+  centre to centre (`simple_distance`), while CODE `distance()` is the gap between hitboxes, which is
+  why a mage at ~140 `distance()` still got through on a fairy (which never closes in). An 80+
+  merchant has to keep each tagged mob over 150px away by centre, hence `cavalryCentreGap`.
+- **The call ends** when the caller dies, logs off, or goes more than 320px from the call spot.
+  A guarded mob only pauses the cavalry on it; the call itself keeps running.
+- **Cooldown:** `cooldown_base` 10 min + 1 min × level, level being the account's highest
+  character or anyone within 150px of the fight (~106 min at 96). It's per account, across every
+  server. It is written only after the mob checks pass, so "cooldown", "no_monsters" and "guarded"
+  refusals cost nothing: `probeCavalryCooldown` asks from wherever we are as long as nothing in
+  range targets us or the party. Every reply with `cooldown_ms` goes to `set("cavalryNextCall")`.
+
+Oneeye (level2w, `grow` spawn of 5): 480 atk × 3/s, range 40. Its `stone` ability stones its
+target every 6.4s for 4s, **at any range**: no moving, attacking, potions or skills. Each oneeye
+runs its own timer, so 3 on us leave ~5% of the time free. That is the limit on pack size: the
+merchant tags only while every tagged one is still `CAVALRY_TAG_GAP` (210) out, calls the moment
+the pack is full or one gets inside it, and then backs away from it within `CAVALRY_ORBIT` of the
+call spot whenever it isn't stoned. `getCavalryPackSize` also caps the pack at what we survive
+in melee for a full stone plus the scare (`totalMobDps × 5s ≤ 80% hp`). Interaction has no stun
+check, so the call still goes out while stoned. When the run ends, releasing the duty lets the
+tick's `scareAwayMobs` shed whatever is left.
+
+Unverified: oneeye's chase speed (`G.monsters.oneeye.charge` is absent from upstream design data)
+and the cavalry's real damage. A rough estimate from their stats is ~200k/s against oneeye armor,
+about 4s per level 3 oneeye (840k hp). Those two numbers decide how much of a pack of 3 dies
+before it closes to 150px.
