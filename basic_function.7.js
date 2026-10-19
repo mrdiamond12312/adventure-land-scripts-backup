@@ -435,7 +435,7 @@ const BUYABLE = [
   "claw",
   "staff",
   "bow",
-  "shield",
+  "wshield",
   "wand",
   "mace",
   "wbasher",
@@ -483,7 +483,6 @@ var IGNORE = [
   "cape",
   "carrotsword",
   "xgloves",
-  "shield",
 
   // lucky slot probe item, merchant_lucky_slot_finder.30.js
   "helmet",
@@ -637,7 +636,6 @@ const SALE_ABLE = [
   "fieldgen0",
   "snowball",
   "carrotsword",
-  "shield",
   // "wshoes",
   "wgloves",
   "wbreeches",
