@@ -755,6 +755,18 @@ branch actually claimed it. `equipBatch` itself follows the rule too: it records
 latch was free on entry and only clears it in that case, so a `preventKeySnatch: false` call
 nested inside someone else's swap can't unlock it early.
 
+## Lantern shield's shelter is a swap-in skill (`useShelter`, strategic_fn.11.js, 2026-10-21)
+
+`lanternshield` (offhand) grants `shelter`: 240 mp, 60s cooldown, any class. It sets `sheltered`
+(+480 armor, +320 resistance, speed capped at 10, 6s). The server only checks the slot when the
+skill runs, then writes the condition straight into `player.s`, in the same branch as `hardshell`,
+so taking the shield off doesn't end it. `useShelter` therefore does what cleave does: the shield
+equip, `use_skill("shelter")` and the swap back to the old offhand all go out together, under the
+`isEquipingItems` latch. An empty offhand is restored with `sendUnequip`, since `equipBatch` drops
+an `undefined` slot instead of emptying it. The priest fires it on the warrior's hardshell danger
+check (more than 500 average damage taken and under 50% hp), never on a trip. A +0 shield is on
+both fighters' keep lists, so a merchant handoff doesn't ship it back.
+
 ## Attack cooldown reduction after `attack()` (`reduceCd`, basic_warrior.9.js)
 
 Findings from the "warrior attacks slower than his frequency" session (2026-07-24):

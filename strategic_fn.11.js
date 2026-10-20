@@ -2893,6 +2893,53 @@ async function warriorStomp() {
   });
 }
 
+/** Serializes shelters so a slow swap can't send a second one */
+let isSheltering = false;
+
+/**
+ * Swaps the lantern shield into the offhand for its shelter, then puts the
+ * old offhand straight back. Any class can wear it.
+ * @returns {Promise|false} false when skipped
+ */
+async function useShelter() {
+  if (
+    isSheltering ||
+    isEquipingItems ||
+    character.s.sheltered ||
+    is_on_cooldown("shelter") ||
+    character.mp < G.skills["shelter"].mp ||
+    character.c.town
+  )
+    return false;
+
+  const previous = getServerSlot("offhand");
+  const isWorn = previous?.name === "lanternshield";
+  const shieldNum = isWorn ? -1 : findMaxLevelItem("lanternshield");
+  if (!isWorn && shieldNum < 0) return false;
+
+  const mainhandType = G.items[getServerSlot("mainhand")?.name]?.wtype;
+  if (G.classes[character.ctype].doublehand?.[mainhandType]) return false;
+
+  isSheltering = true;
+  isEquipingItems = true;
+
+  const promises = [];
+  if (!isWorn) promises.push(sendEquips([{ num: shieldNum, slot: "offhand" }]));
+  promises.push(withTimeout(use_skill("shelter"), 2500));
+
+  // The shield only has to be on when the server runs shelter
+  if (!isWorn && previous)
+    promises.push(
+      equipBatch({ offhand: previous.name }, { preventKeySnatch: false }),
+    );
+  else if (!isWorn) promises.push(sendUnequip("offhand"));
+
+  return Promise.allSettled(promises).finally(() => {
+    isSheltering = false;
+    isEquipingItems = false;
+  });
+}
+
 /**
  * Pull only while the mob lands less than this dps on current TANKER
  */

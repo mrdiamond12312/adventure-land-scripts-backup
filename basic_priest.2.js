@@ -495,6 +495,14 @@ function startSkillLoops() {
     cast: () => scareAwayMobs(),
   });
 
+  // Same danger as the warrior's hardshell
+  runSkillLoop({
+    skill: "shelter",
+    canUse: () =>
+      avgDmgTaken(character) > 500 && character.hp < character.max_hp * 0.5,
+    cast: () => useShelter(),
+  });
+
   runSkillLoop({
     skill: "zapperzap",
     floorMs: 50,
