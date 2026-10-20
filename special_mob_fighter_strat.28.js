@@ -125,6 +125,15 @@ function forgetSpecialMobSighting(mtype) {
 }
 
 /**
+ * Pins the nearest priority boss in sight, ahead of every other strategy.
+ * @returns {Promise<object|undefined>} the outcome, if it owns this tick
+ */
+async function usePriorityMobStrategy() {
+  const boss = getPriorityBossInView();
+  return boss ? engage(boss, { isPinned: true }) : undefined;
+}
+
+/**
  * Hits a special mob in sight, otherwise walks to the freshest scouted one.
  * @returns {Promise<object|undefined>} the outcome, if it owns this tick
  */

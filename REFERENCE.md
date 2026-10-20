@@ -3731,8 +3731,23 @@ target (`isPinnedTarget`). `selectFightTarget` records the pin when a strategy c
 not when the tick starts, so a target keeps its pin while a strategy awaits a smart move. This
 replaced the `!target?.mtype.includes("crabx")` checks in each class. The crabxx kite anchor in
 `resolveKiteTarget` really is crabxx-only, so it uses `isCrabxxMob`, which reads the adds from
-`G.monsters.crabxx.spawns`. The rogue and priest picks never had the check, so they still
-override a pinned target.
+`G.monsters.crabxx.spawns`.
+
+Since 2026-10-21 the rogue's pull pick and the priest's `refineTarget` keep a pin too. The
+priest's poison pick yields to the pin, but its tanker pull (`targetToTaunt`, e.g. the xscorpions
+around mrpumpkin) still beats it, so a pin like crabxx's crabx doesn't stop the priest gathering
+adds.
+
+`PRIORITY_MOB_IDS` (slenderman, grinch) don't go through the pin. The warrior's and rogue's
+`planFight` and the priest's `refineTarget` open with `getPriorityBossInView()`. While one is in
+view it's the focus, ahead of held mobs and the priest's pull, and they swing at nothing else while
+it's out of reach, so the rogue's `change_target` stays on it and `hitAndRun` closes the gap. The check
+reads the entities on every pick, so it doesn't depend on the tick's pin or `fightTarget`.
+Mid-trip the classes still take `getEnRouteCast`. `usePriorityMobStrategy`
+(special_mob_fighter_strat.28.js) still heads the chain, so the tick, and any trip in the chain,
+are taken over too. Both bosses are `cooperative`.
+`getTarget` only preferred grinch through `getMonstersOnDeclares`, and every class pick and higher
+strategy could beat that.
 
 ## One cooldown lead for every skill (`leadSkillTimeout`, 2026-10-17)
 

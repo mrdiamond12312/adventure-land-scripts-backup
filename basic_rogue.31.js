@@ -53,6 +53,14 @@ function restoreRogueWeapons() {
  * @returns {{focus?: Object, attackTarget?: Object}}
  */
 function planFight(target) {
+  // A priority boss in view is chased, never traded for a mob in reach
+  const priorityBoss = getPriorityBossInView();
+  if (priorityBoss)
+    return {
+      focus: priorityBoss,
+      attackTarget: inRange(priorityBoss) ? priorityBoss : undefined,
+    };
+
   const party = getAlliedNames();
   const allAggroedByParty = Object.values(parent.entities)
     .filter(
@@ -80,7 +88,8 @@ function planFight(target) {
 
   if (
     typeof usePullStrategies === "function" &&
-    currentStrategy === usePullStrategies
+    currentStrategy === usePullStrategies &&
+    !isPinnedTarget(target)
   ) {
     target = allAggroedByParty[0] ?? target;
   }

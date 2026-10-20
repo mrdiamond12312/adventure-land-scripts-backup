@@ -96,6 +96,14 @@ function getOffTankTauntTarget() {
  * @returns {{focus?: Object, attackTarget?: Object}}
  */
 function planFight(target) {
+  // A priority boss in view is chased, never traded for a mob in reach
+  const priorityBoss = getPriorityBossInView();
+  if (priorityBoss)
+    return {
+      focus: priorityBoss,
+      attackTarget: inRange(priorityBoss) ? priorityBoss : undefined,
+    };
+
   const blastRadius = getSplashRadius();
 
   const candidates = Object.values(parent.entities).filter(

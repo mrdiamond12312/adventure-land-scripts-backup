@@ -260,6 +260,9 @@ const SPECIAL_MOB_IDS = [
   "mimic",
 ];
 
+/** Bosses every fighter drops everything to hit while one is in sight */
+const PRIORITY_MOB_IDS = ["slenderman", "grinch"];
+
 // var map = "main";
 // var mapX = 1248;
 // var mapY = -63;
@@ -978,7 +981,7 @@ function arrayShuffle(array) {
 
 function getMonstersOnDeclares() {
   // if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
-  for (const monster of ["grinch"]) {
+  for (const monster of PRIORITY_MOB_IDS) {
     if (get_nearest_monster({ type: monster })) {
       return get_nearest_monster({ type: monster });
     }
@@ -2903,6 +2906,7 @@ if (character.ctype !== "merchant") {
   }
 
   var fighterStrategies = [
+    usePriorityMobStrategy,
     // The identifier only resolves when slot 15 was loaded above
     ...(USE_CAVE_STRATEGY ? [useCaveRunStrategy] : []),
     useEventStrategy,
@@ -2930,6 +2934,18 @@ var pinnedTargetId;
  */
 const isPinnedTarget = (target) =>
   !!target && target.id !== undefined && target.id === pinnedTargetId;
+
+/** @returns {Object|undefined} the nearest priority boss in view, hit to the exclusion of all else */
+function getPriorityBossInView() {
+  return Object.values(parent.entities)
+    .filter(
+      (entity) =>
+        entity.type === "monster" &&
+        !entity.dead &&
+        PRIORITY_MOB_IDS.includes(entity.mtype),
+    )
+    .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
+}
 
 /** This tick is mine with nothing to hit: it went into the trip. */
 const travelling = () => ({});

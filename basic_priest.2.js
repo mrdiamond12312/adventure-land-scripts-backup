@@ -52,6 +52,14 @@ function isPullBrave(mob, mobsOnMe) {
  * @returns {{focus?: Object, attackTarget?: Object}}
  */
 function refineTarget(target) {
+  // A priority boss in view is chased, never traded for a mob in reach
+  const priorityBoss = getPriorityBossInView();
+  if (priorityBoss)
+    return {
+      focus: priorityBoss,
+      attackTarget: inRange(priorityBoss) ? priorityBoss : undefined,
+    };
+
   if (!target) return {};
 
   const partyDmgRecieved = avgPartyDmgTaken(partyMems);
@@ -109,7 +117,10 @@ function refineTarget(target) {
           .shift() ?? target
       : target;
 
-  const focus = targetToTaunt ?? targetToPoison;
+  // The tanker's pull beats a pin, a priority boss beats the pull
+  // The tanker's pull still beats a pin
+  const focus =
+    targetToTaunt ?? (isPinnedTarget(target) ? target : targetToPoison);
 
   // Focus when in reach, else the beefiest aggroed mob; growth kills first
   const fallbacks = mobsInRange
