@@ -3408,14 +3408,28 @@ candy swap fires alongside the swing without waiting for its answer (a melee hit
 to wait), so a locally refused swing still swapped canes. The warrior's and rogue's casts also
 skip a `dead` mob for the same reason.
 
-## Town fallback walks inside the trip (`walkToSpawn`, strategic_smart_move.21.js, 2026-10-12)
+## Town fallback walks inside the trip (`walkOnMap`, strategic_smart_move.21.js, 2026-10-12)
 
-After `TOWN_MAX_RETRIES` (3) failed town channels, `useTownWithRetry` walks to the spawn the town
-would have landed on, using our pathfinder at `TOWN_FALLBACK_SPEED` (400) and `unsafeMove`, instead of
-the slow native `smart_move`. It cannot call `smartMove`: every new `smartMove` cleans up the running
-session, which would end the trip that hit the town segment. The pathfinder's speed only sets how it
-weighs walking against towning; at 400 it plans no town. Native `smart_move` is kept only for when
+After `TOWN_MAX_RETRIES` (3) failed town channels, the trip walks to the spawn the town would have
+landed on, planned by our pathfinder at `TOWN_FALLBACK_SPEED` (1000), instead of the slow native
+`smart_move`. It cannot call `smartMove`: every new `smartMove` cleans up the running session, which
+would end the trip that hit the town segment. A path's town segment splices that walk into the path
+right after itself (2026-10-21), so the main loop walks it with the trip's scare, blink and stop
+watcher still on; the no-path branch's town, which has no path to splice into, walks it in
+`walkOnMap`. The pathfinder's speed only sets how it weighs walking against towning. At 400 a long
+walk, such as the spookytown mummy spawn's after mummies broke all three channels, likely still
+planned a town, so the walk fell through to native `smart_move`. Native `smart_move` is kept only for when
 no walk-only path comes back.
+
+A door or transport segment does the same (2026-10-21) when we stand more than
+`TRANSPORT_DOOR_NEAR_DISTANCE` (100) from the door's centre: the walk up to it, planned at
+`DOOR_WALK_SPEED` (1000), is spliced in before the segment, once per segment so a walk that ends
+short of 100 cannot loop. `transport`'s own native `smart_move` up to the door now only runs when no
+walk-only path comes back.
+
+These same-map walks (`_walkOnlyPath`) try `getTautPath` first. It is legal wherever it answers,
+but its search window gives up on long or winding routes, and alpathfinder's walk-only path at the
+given speed covers those.
 
 ## Gear on trips, pull skills off them, nothing while towning (2026-10-13)
 

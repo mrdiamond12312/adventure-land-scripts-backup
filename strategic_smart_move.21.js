@@ -48,7 +48,8 @@ const SMART_MOVE_CONFIG = Object.freeze({
   TOWN_RETRY_DELAY_MS: 300,
   TOWN_SPAWN_ARRIVAL_DISTANCE: 100, // landed within this of spawn 0 = the town worked
   TOWN_CHANNEL_TIMEOUT_MS: 5000, // how long to wait for the town channel to finish
-  TOWN_FALLBACK_SPEED: 400, // high enough that the pathfinder plans no town
+  TOWN_FALLBACK_SPEED: 1000, // high enough that the pathfinder plans no town
+  DOOR_WALK_SPEED: 1000, // pathing speed of the walk up to a far door
 });
 
 class StrategicSmartMove {
@@ -268,10 +269,13 @@ class StrategicSmartMove {
    * @param {Object} [options={}] - Optional configuration.
    * @param {number} [options.maxRetries=SMART_MOVE_CONFIG.TOWN_MAX_RETRIES] - Maximum number of retry attempts.
    * @param {number} [options.retryDelay=SMART_MOVE_CONFIG.TOWN_RETRY_DELAY_MS] - Delay (ms) between retries.
+   * @param {boolean} [options.walkOnFail=true] - whether to walk to the spawn once every retry failed
+   * @returns {Promise<boolean>} whether the town landed
    */
   async useTownWithRetry({
     maxRetries = SMART_MOVE_CONFIG.TOWN_MAX_RETRIES,
     retryDelay = SMART_MOVE_CONFIG.TOWN_RETRY_DELAY_MS,
+    walkOnFail = true,
   } = {}) {
     const epoch = this.townEpoch;
     const session = this.smartMoveSession;
@@ -306,26 +310,77 @@ class StrategicSmartMove {
       }
     }
 
-    if (mapData.spawns?.length && !aborted())
-      await this.walkToSpawn(mapData.spawns[0], aborted);
+    if (walkOnFail && mapData.spawns?.length && !aborted())
+      await this.walkOnMap(
+        { x: mapData.spawns[0][0], y: mapData.spawns[0][1] },
+        aborted,
+        SMART_MOVE_CONFIG.TOWN_FALLBACK_SPEED,
+      );
     return false;
   }
 
   /**
-   * Walks to a spawn of the current map within the running session; a nested
-   * smartMove would end it. Native smart_move only when no walk path exists.
-   * @param {number[]} spawn - [x, y]
-   * @param {() => boolean} aborted - whether the town retry was cancelled
+   * Taut path to a point of our map, else alpathfinder's when it is walk-only.
+   * @param {Object} point - includes `x`, `y` and `map`
+   * @param {number} speed - alpathfinder's pathing speed, high enough to plan no town
+   * @param {string[]} [avoidMaps]
+   * @returns {Array<Object> | undefined} the move segments, or undefined when neither walks there
    */
-  async walkToSpawn([x, y], aborted) {
-    const spawn = { map: character.map, x, y };
-
-    const path = this.pathfinderGetPath(
-      spawn,
-      SMART_MOVE_CONFIG.TOWN_FALLBACK_SPEED,
+  _walkOnlyPath(point, speed, avoidMaps) {
+    const taut = getTautPath(
+      character.map,
+      { x: character.real_x, y: character.real_y },
+      point,
     );
-    if (!Array.isArray(path) || path.some((node) => node.method !== "move")) {
-      await smart_move(spawn).catch((e) => console.warn(e));
+    if (taut?.length)
+      return taut.map(({ x, y }) => ({
+        map: character.map,
+        x,
+        y,
+        method: "move",
+      }));
+
+    const path = this.pathfinderGetPath(point, speed, avoidMaps);
+    if (!Array.isArray(path) || path.some((node) => node.method !== "move"))
+      return;
+    return path;
+  }
+
+  /**
+   * Walk-only path up to the door to `map` when we stand too far from it to transport.
+   * @param {string} map - the map the door leads to
+   * @param {string[]} [avoidMaps]
+   * @returns {Array<Object> | undefined} the path, or undefined when near enough or not walk-only
+   */
+  _doorWalk(map, avoidMaps) {
+    const door = this._findDoorTo(map);
+    if (
+      !door ||
+      distance(character, { x: door.x, y: door.y }) <=
+        SMART_MOVE_CONFIG.TRANSPORT_DOOR_NEAR_DISTANCE
+    )
+      return;
+
+    return this._walkOnlyPath(
+      { map: character.map, x: door.x, y: door.y },
+      SMART_MOVE_CONFIG.DOOR_WALK_SPEED,
+      avoidMaps,
+    );
+  }
+
+  /**
+   * Walks to a point of the current map within the running session; a nested
+   * smartMove would end it. Native smart_move only when no walk path exists.
+   * @param {{x: number, y: number}} point
+   * @param {() => boolean} aborted - whether the walk was cancelled
+   * @param {number} speed - pathing speed, high enough to plan no town
+   */
+  async walkOnMap({ x, y }, aborted, speed) {
+    const point = { map: character.map, x, y };
+
+    const path = this._walkOnlyPath(point, speed);
+    if (!path) {
+      await smart_move(point).catch((e) => console.warn(e));
       return;
     }
 
@@ -640,7 +695,6 @@ class StrategicSmartMove {
             distToDoor,
           )} units). Moving...`,
         );
-        // Using the global smart_move or your local pathfinder
         await smart_move({ x: door.x, y: door.y });
       }
     }
@@ -911,6 +965,7 @@ class StrategicSmartMove {
 
       let moveError;
       let blinkAttempts = 0;
+      const walkedDoorSegments = new Set();
 
       while (progress.segmentIndex < pathFindingResult.length) {
         if (!this.isSmartMoving || session !== this.smartMoveSession) break;
@@ -942,13 +997,40 @@ class StrategicSmartMove {
         }
 
         if (segment.method === "door" || segment.method === "transport") {
+          // Walk up to a far door as part of this trip, once per door segment
+          if (!walkedDoorSegments.has(segment)) {
+            walkedDoorSegments.add(segment);
+            const walk = this._doorWalk(segment.map, options.avoidMaps);
+            if (walk) {
+              pathFindingResult.splice(idx, 0, ...walk);
+              continue;
+            }
+          }
+
           await this.transport(segment.map, segment.spawn);
           advance();
           continue;
         }
 
         if (segment.method === "town") {
-          await this.useTownWithRetry();
+          const landed = await this.useTownWithRetry({ walkOnFail: false });
+          const spawn = parent.G.maps[character.map]?.spawns?.[0];
+          if (
+            !landed &&
+            spawn &&
+            this.isSmartMoving &&
+            session === this.smartMoveSession
+          ) {
+            const spawnPoint = { map: character.map, x: spawn[0], y: spawn[1] };
+            // Walk to where the town would have landed, as part of this trip
+            const walk = this._walkOnlyPath(
+              spawnPoint,
+              SMART_MOVE_CONFIG.TOWN_FALLBACK_SPEED,
+              options.avoidMaps,
+            );
+            if (walk) pathFindingResult.splice(idx + 1, 0, ...walk);
+            else await smart_move(spawnPoint).catch((e) => console.warn(e));
+          }
           advance();
           continue;
         }

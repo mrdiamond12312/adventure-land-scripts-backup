@@ -111,6 +111,9 @@ const CAVE_MOVE_RETRY_MS = 3 * 1000;
 /** Pathing speed that rules out town warps */
 const CAVE_PATHING_SPEED = 1_000_000;
 
+/** Pathing speed of the second try before the native fallback */
+const CAVE_RETRY_PATHING_SPEED = 1_000;
+
 // Leaving
 
 /** The deepest floor */
@@ -944,30 +947,44 @@ async function walkToCaveDestination(
       : undefined;
 
     // No town, magiport or blink in a run
-    await advanceSmartMove(to, {
+    const walkOptions = {
       useScare: true,
       useTown: false,
       useMagiport: false,
       useBlink: false,
       speed: CAVE_PATHING_SPEED,
       stopWatcher,
-    }).catch(async (error) => {
-      caveLog("walk refused", {
-        to: destination.name ?? destination.id,
-        why: caveWhy(error),
+    };
+
+    await advanceSmartMove(to, walkOptions)
+      .catch((error) => {
+        caveLog("walk refused", {
+          to: destination.name ?? destination.id,
+          why: caveWhy(error),
+        });
+
+        return advanceSmartMove(to, {
+          ...walkOptions,
+          speed: CAVE_RETRY_PATHING_SPEED,
+        });
+      })
+      .catch(async (error) => {
+        caveLog("slow walk refused", {
+          to: destination.name ?? destination.id,
+          why: caveWhy(error),
+        });
+
+        // Native fallback
+        const watcher =
+          stopWatcher &&
+          setInterval(() => {
+            if (stopWatcher()) stop("move");
+          }, 250);
+
+        await smart_move(to)
+          .catch(() => undefined)
+          .finally(() => clearInterval(watcher));
       });
-
-      // Native fallback
-      const watcher =
-        stopWatcher &&
-        setInterval(() => {
-          if (stopWatcher()) stop("move");
-        }, 250);
-
-      await smart_move(to)
-        .catch(() => undefined)
-        .finally(() => clearInterval(watcher));
-    });
     return;
   }
 
