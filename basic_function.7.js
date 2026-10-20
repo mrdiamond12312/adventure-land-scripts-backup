@@ -210,7 +210,7 @@ function updateStoreEntry(key, entryId, fields) {
 /** Realm -> NPC id -> its last sighting */
 const NPC_SIGHTINGS_LS_KEY = "npcSightings";
 const ROAMING_NPC_IDS = ["$Kane", "$Angel"];
-const NPC_SIGHTING_STALE_MS = 5 * 60 * 1000;
+const NPC_SIGHTING_STALE_MS = 60 * 60 * 1000;
 
 function noteRoamingNpcs() {
   for (const id of ROAMING_NPC_IDS) {
