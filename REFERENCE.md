@@ -4038,3 +4038,11 @@ marks the round finished.
   A live home Horseman (with at least `EXEMPT_HOP_MIN_HP_RATIO` of his hp left) keeps the party
   home, and pulls it home even off another realm's Horseman. Only with none at home does the
   party stay on, or hop to, another realm's.
+
+`pickWitchMix` fallback (2026-10-22): when no affordable mix could still be the answer (or after
+the day's crack), it brews the affordable *untried* mix with the most expected right places,
+since a ruled-out mix still pays per right place. It only does so above `WITCH_MIN_MIX_PARCELS`
+(5/20 = 0.25), the Parcel value of 5 ingredients at the Witch's 20-for-1 recipe. Before taking the
+duty, `brewWitchCipher` runs the same pick on bank + bag stock beyond the reserve
+(`countWitchStock`). With nothing worth brewing it marks the round done without walking to the
+Witch, which also releases the hop loop's hold on home.

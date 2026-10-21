@@ -5,11 +5,9 @@ const WITCH_STOCK_PUBLISH_MS = 30_000;
 /** Distance he keeps to a gathering fighter */
 const WITCH_ATTEND_DISTANCE = 200;
 
-/** Shares bank and bag ingredient counts with the fighters */
-function publishWitchStock() {
-  if (!hasVisitedBank) return;
-
-  const stock = Object.fromEntries(
+/** @returns {Object<string, number>} ingredient counts over bank and bag */
+const countWitchStock = () =>
+  Object.fromEntries(
     WITCH_INGREDIENTS.map((kind) => [
       kind,
       [...character.items, ...getItemBankSlots(kind, true, true)].reduce(
@@ -18,7 +16,10 @@ function publishWitchStock() {
       ),
     ]),
   );
-  set("witchStock", stock);
+
+/** Shares bank and bag ingredient counts with the fighters */
+function publishWitchStock() {
+  if (hasVisitedBank) set("witchStock", countWitchStock());
 }
 
 setInterval(publishWitchStock, WITCH_STOCK_PUBLISH_MS);
@@ -95,44 +96,73 @@ function canAffordMix(mix, counts) {
   return Object.entries(needed).every(([name, n]) => counts[name] >= n);
 }
 
+/** Expected Parcels a mix that can't crack must beat: 20 ingredients make one */
+const WITCH_MIN_MIX_PARCELS = WITCH_SLOTS / 20;
+
+/**
+ * @param {string[]} mix
+ * @param {string[][]} candidates
+ * @returns {{spread: number, right: number}} the Σ n² of its clue groups, and its expected right places
+ */
+function scoreWitchMix(mix, candidates) {
+  const groups = new Array(WITCH_SLOTS + 1).fill(0);
+  for (const recipe of candidates) groups[countRightPlaces(recipe, mix)]++;
+  return {
+    spread: groups.reduce((sum, n) => sum + n * n, 0),
+    right: groups.reduce((sum, n, k) => sum + n * k, 0) / candidates.length,
+  };
+}
+
 /**
  * @param {Object} cipher - server.status.witchcipher
  * @param {Object<string, number>} counts - ingredients we may spend
  * @param {boolean} hasCracked - whether the account took today's crack bonus
- * @returns {string[]|undefined} before the crack, the candidate narrowing most; after, the mix paying most
+ * @returns {string[]|undefined} before the crack, the candidate narrowing most; else the untried mix paying most
  */
 function pickWitchMix(cipher, counts, hasCracked) {
   const candidates = getWitchCandidates(cipher);
+  if (!candidates.length) return;
+
+  if (!hasCracked) {
+    let best;
+    let bestScore;
+    for (const mix of candidates) {
+      if (!canAffordMix(mix, counts)) continue;
+
+      const score = scoreWitchMix(mix, candidates);
+      if (
+        !bestScore ||
+        score.spread < bestScore.spread ||
+        (score.spread === bestScore.spread && score.right > bestScore.right)
+      ) {
+        best = mix;
+        bestScore = score;
+      }
+    }
+    if (best) return best;
+  }
+
   const tried = new Set((cipher.board ?? []).map(({ mix }) => mix.join()));
-  const pool = hasCracked
-    ? WITCH_RECIPES.filter((recipe) => !tried.has(recipe.join()))
-    : candidates;
-
   let best;
-  let bestSpread = Infinity;
-  let bestRight = -1;
-  for (const mix of pool) {
-    if (!canAffordMix(mix, counts)) continue;
+  let bestRight = WITCH_MIN_MIX_PARCELS;
+  for (const mix of WITCH_RECIPES) {
+    if (tried.has(mix.join()) || !canAffordMix(mix, counts)) continue;
 
-    const groups = new Array(WITCH_SLOTS + 1).fill(0);
-    for (const recipe of candidates) groups[countRightPlaces(recipe, mix)]++;
-    const spread = hasCracked ? 0 : groups.reduce((sum, n) => sum + n * n, 0);
-    const right = groups.reduce((sum, n, k) => sum + n * k, 0);
-    if (spread < bestSpread || (spread === bestSpread && right > bestRight)) {
+    const { right } = scoreWitchMix(mix, candidates);
+    if (right > bestRight) {
       best = mix;
-      bestSpread = spread;
       bestRight = right;
     }
   }
   return best;
 }
 
-/** @returns {Object<string, number>} bag ingredients above the elixir reserve */
-const getBrewableCounts = () =>
+/** @returns {Object<string, number>} counts above the elixir reserve */
+const spareWitchIngredients = (counts) =>
   Object.fromEntries(
     WITCH_INGREDIENTS.map((kind) => [
       kind,
-      Math.max(0, getTotalQuantityOf(kind) - WITCH_ELIXIR_RESERVE),
+      Math.max(0, (counts[kind] ?? 0) - WITCH_ELIXIR_RESERVE),
     ]),
   );
 
@@ -140,9 +170,21 @@ const getBrewableCounts = () =>
 async function brewWitchCipher() {
   const isFree = !isOnDuty() || isOnDuty(DUTY.WITCH);
   if (!canBrewWitchCipher() || mustAbandonFight() || !isFree) return false;
-  if (!isOnDuty(DUTY.WITCH) && !takeDuty(DUTY.WITCH)) return false;
+  if (!hasVisitedBank) return false;
 
   const key = getWitchRoundKey();
+  const isWorthBrewing = pickWitchMix(
+    server.status.witchcipher,
+    spareWitchIngredients(countWitchStock()),
+    get("witchCrackedDay") === getUtcDay(),
+  );
+  if (!isWorthBrewing) {
+    set("witchBrewDone", key);
+    return false;
+  }
+
+  if (!isOnDuty(DUTY.WITCH) && !takeDuty(DUTY.WITCH)) return false;
+
   try {
     const slots = WITCH_INGREDIENTS.flatMap((kind) =>
       getItemBankSlots(kind, true, true),
@@ -155,7 +197,7 @@ async function brewWitchCipher() {
       const hasCracked = get("witchCrackedDay") === getUtcDay();
       const mix = pickWitchMix(
         server.status.witchcipher,
-        getBrewableCounts(),
+        spareWitchIngredients(countBagWitchIngredients()),
         hasCracked,
       );
       if (!mix) break;
