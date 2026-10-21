@@ -4020,7 +4020,8 @@ marks the round finished.
 
 ## Horseman party, ASIA, and leaving a foreign gathering (2026-10-22)
 
-- `DYNAMIC_PARTY_PRESETS.horseman`: warrior + priest with ranger2 on EUII, ranger1 on EUI, and
+- `DYNAMIC_PARTY_PRESETS.horseman`: warrior + priest with ranger2 on EUII, ranger1 on EUI/USI/USII,
+  rogue + mage on ASIAI/ASIAII (`horsemanAsiaParty`), and
   the mage anywhere else. `PRESET_FIRST_BOSSES` puts his preset ahead of the HP-ranked
   Mr. Pumpkin/Mr. Green pick, which would otherwise win all season.
 - The Horseman hop (`getExemptHopTarget`) also reaches `ignoreServer` realms (ASIAI, ASIAII) via

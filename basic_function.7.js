@@ -2569,6 +2569,11 @@ function horsemanRanger1Party() {
   return [WARRIOR, RANGER1, PRIEST];
 }
 
+function horsemanAsiaParty() {
+  HEALER = PRIEST;
+  return [ROGUE, MAGE, PRIEST];
+}
+
 const DYNAMIC_PARTY_PRESETS = {
   horseman: {
     EUII: () => {
@@ -2579,6 +2584,8 @@ const DYNAMIC_PARTY_PRESETS = {
     EUI: horsemanRanger1Party,
     USI: horsemanRanger1Party,
     USII: horsemanRanger1Party,
+    ASIAI: horsemanAsiaParty,
+    ASIAII: horsemanAsiaParty,
     default: () => {
       HEALER = PRIEST;
       return [WARRIOR, MAGE, PRIEST];
