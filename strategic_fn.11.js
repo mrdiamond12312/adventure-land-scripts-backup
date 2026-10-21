@@ -2997,7 +2997,7 @@ function adaptStrategyToParty() {
 }
 
 /** Bosses handed to leeches instead of tanked */
-const LEECH_BAIT_BOSSES = ["mrpumpkin"];
+const LEECH_BAIT_BOSSES = [];
 
 /** How close to the boss an outsider counts as on it */
 const LEECH_BAIT_RANGE = 600;
