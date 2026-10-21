@@ -3030,13 +3030,18 @@ function getWitchGatherPlan() {
 /** Realm hour the knocking starts each day */
 const TRICK_OR_TREAT_START_HOUR = 3;
 
-/** Knock from this far below a door */
-const DOOR_FRONT_OFFSET = 24;
+/** Knock from this far below a door, clear of its wall line */
+const DOOR_FRONT_OFFSET = 40;
 
 const DOOR_KNOCK_DISTANCE = 40;
 
+const DOOR_WALK_RETRY_MS = 120_000;
+
 /** Doors knocked or refused this UTC day */
 let settledDoors = { day: undefined, doors: new Set() };
+
+/** Door index → when a failed walk to it may be tried again */
+const doorWalkRetryAt = {};
 
 const getUtcDay = () => new Date().toISOString().slice(0, 10);
 
@@ -3080,20 +3085,31 @@ function getNextTrickOrTreatDoor() {
 
   return doors
     .map((door, index) => ({ index, front: getDoorFront(door) }))
-    .filter(({ index }) => !status.doors.includes(index) && !settled.has(index))
+    .filter(
+      ({ index }) =>
+        !status.doors.includes(index) &&
+        !settled.has(index) &&
+        !(doorWalkRetryAt[index] > Date.now()),
+    )
     .sort((lhs, rhs) => travelCost(lhs.front) - travelCost(rhs.front))[0]
     ?.index;
 }
 
-/** @returns {Promise<boolean>} whether a door was left to walk to or knock */
+/** @returns {Promise<boolean>} whether a walk or knock went ahead */
 async function knockNextDoor() {
   const door = getNextTrickOrTreatDoor();
   if (door === undefined) return false;
 
   const front = getDoorFront(G.events.trickortreat.doors[door]);
   if (distance(character, front) > DOOR_KNOCK_DISTANCE) {
-    await advanceSmartMove(front).catch((e) => console.warn(e));
-    return true;
+    return advanceSmartMove(front).then(
+      () => true,
+      (e) => {
+        console.warn(`[trickortreat] walk to door ${door} failed:`, e);
+        doorWalkRetryAt[door] = Date.now() + DOOR_WALK_RETRY_MS;
+        return false;
+      },
+    );
   }
 
   getSettledDoors().add(door);

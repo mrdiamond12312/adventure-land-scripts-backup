@@ -4047,3 +4047,17 @@ since a ruled-out mix still pays per right place. It only does so above `WITCH_M
 duty, `brewWitchCipher` runs the same pick on bank + bag stock beyond the reserve
 (`countWitchStock`). With nothing worth brewing it marks the round done without walking to the
 Witch, which also releases the hop loop's hold on home.
+
+## Trick or Treat disconnects (`knockNextDoor`, 2026-10-22)
+
+Characters got kicked while knocking. In spookytown the 24px door front sat 4–9px below the
+building's wall line, so alpathfinder found no path. `smartMove` threw right away, but its
+`cleanUp` still called `stop()`, and that sends a `move`. `knockNextDoor` counted the failed walk
+as progress, so the merchant's 21-step errand fired it every ~3ms each tick, and fighters fired it
+every tick. That flood of emits got the characters disconnected. Two fixes:
+- `DOOR_FRONT_OFFSET` is 40, which keeps every front ≥20px clear of walls and still inside the
+  server's 80px knock reach.
+- A failed walk returns `false` and benches that door for `DOOR_WALK_RETRY_MS` (2 min), so a
+  path failure can't repeat faster than once per door per 2 minutes. The bench is per walk, not per
+  day, because a walk cut off by a higher strategy's takeover also rejects.
+Rule: any loop that retries a smart move must treat a rejection as no progress.
