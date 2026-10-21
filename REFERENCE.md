@@ -4034,3 +4034,7 @@ marks the round finished.
   and minimush spawns) and, like him, has no `releaseAtSpot`: the priest stays tanker and kites
   around the spot, so both bosses are fought in one place. The Horseman spawns among the north-west
   graveyard's 9 ghosts (-405,-1642), but `roam` carries him anywhere.
+- Home comes first for the Horseman: `getExemptHopTarget` sorts the home realm ahead of the rest.
+  A live home Horseman (with at least `EXEMPT_HOP_MIN_HP_RATIO` of his hp left) keeps the party
+  home, and pulls it home even off another realm's Horseman. Only with none at home does the
+  party stay on, or hop to, another realm's.

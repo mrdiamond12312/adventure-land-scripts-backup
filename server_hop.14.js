@@ -135,7 +135,11 @@ function hasEventWorthStayingFor() {
   return Boolean(brawling || liveHere);
 }
 
+/** @returns {Object|undefined} the best live fatigue-exempt boss, home first */
 function getExemptHopTarget() {
+  const awayFromHome = (candidate) =>
+    realmOf(candidate) === getHomeServer() ? 0 : 1;
+
   return getRealmData()
     ?.query({ types: FATIGUE_EXEMPT_BOSSES })
     .filter(
@@ -143,7 +147,10 @@ function getExemptHopTarget() {
         isReachableRealm(candidate, true) &&
         candidate.hp >= EXEMPT_HOP_MIN_HP_RATIO * G.monsters[candidate.type].hp,
     )
-    .sort(byHopPriority)[0];
+    .sort(
+      (lhs, rhs) =>
+        awayFromHome(lhs) - awayFromHome(rhs) || byHopPriority(lhs, rhs),
+    )[0];
 }
 
 /** Least gathering left on a realm worth hopping to */
@@ -183,8 +190,12 @@ setInterval(async () => {
 
   if (isWitchGathering() || canBrewWitchCipher()) return;
 
-  if (FATIGUE_EXEMPT_BOSSES.some((name) => server.status[name]?.live)) return;
   const exemptTarget = getExemptHopTarget();
+  if (exemptTarget && realmOf(exemptTarget) === getHomeServer()) {
+    if (!isAtHomeServer()) return hopHome(`${exemptTarget.type} up at home`);
+    return;
+  }
+  if (FATIGUE_EXEMPT_BOSSES.some((name) => server.status[name]?.live)) return;
   if (exemptTarget) return hopToCandidate(exemptTarget);
 
   const gatherTarget = getWitchGatherHopTarget();
