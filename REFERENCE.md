@@ -4030,8 +4030,7 @@ marks the round finished.
   or a fresh gathering still wins.
 - USI and USII also run the Ranger1 Horseman party (`horsemanRanger1Party`). A per-server preset
   value must be an array or function: `getPresetMembers` resolves a string only at the top level.
-- `BOSS_DRAG_ROUTES.horseman` drags him to the xscorpion spawn (halloween -495,686), whose box
-  Mr. Pumpkin also spawns in. Mr. Pumpkin's own drag spot (-243,680) is ~250px east, so both
-  fights end up side by side. The Horseman spawns among the north-west graveyard's 9 ghosts
-  (-405,-1642), but `roam` carries him anywhere. `releaseAtSpot` hands his tanking back from the
-  dragging priest to the warrior on arrival, as for Mr. Green.
+- `BOSS_DRAG_ROUTES.horseman` uses Mr. Pumpkin's own spot (halloween -243,680, between the xscorpion
+  and minimush spawns) and, like him, has no `releaseAtSpot`: the priest stays tanker and kites
+  around the spot, so both bosses are fought in one place. The Horseman spawns among the north-west
+  graveyard's 9 ghosts (-405,-1642), but `roam` carries him anywhere.

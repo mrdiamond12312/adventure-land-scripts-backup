@@ -1381,11 +1381,10 @@ const BOSS_DRAG_ROUTES = {
     spot: { map: "halloween", x: -243, y: 680 },
     mtypes: ["mrpumpkin", "jr"],
   },
-  // The xscorpion spawn, where Mr. Pumpkin also spawns
+  // Mr. Pumpkin's spot
   horseman: {
-    spot: { map: "halloween", x: -495, y: 686 },
+    spot: { map: "halloween", x: -243, y: 680 },
     mtypes: ["horseman", "jackowalker"],
-    releaseAtSpot: true,
   },
   // The mummy spawn
   mrgreen: {
