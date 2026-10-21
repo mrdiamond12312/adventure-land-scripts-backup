@@ -230,15 +230,16 @@ function curseMpFloor() {
 
 /**
  * @param {Object} mob
- * @returns {number} party dps on it plus its dps on whoever it reaches
+ * @param {string[]} prioritized
+ * @returns {number} party dps on it plus its dps on one of ours
  */
-function curseValue(mob) {
+function curseValue(mob, prioritized) {
   const dealt = partyMems
     .map((name) => (name === character.name ? character : get_player(name)))
     .filter((member) => member && !member.rip && member.target === mob.id)
     .reduce((total, member) => total + calculateDamage(member, mob, false), 0);
 
-  const victim = get_player(mob.target);
+  const victim = prioritized.includes(mob.target) && get_player(mob.target);
   const isReachingVictim =
     victim && distance(mob, victim) <= mob.range + mob.speed;
 
@@ -263,10 +264,9 @@ function getCurseTarget() {
           !mob.dead &&
           !mob.s.cursed &&
           is_in_range(mob, "curse") &&
-          mob.hp > CURSE_HP_THRESHOLD &&
-          prioritized.includes(mob.target),
+          mob.hp > CURSE_HP_THRESHOLD,
       )
-      .map((mob) => ({ mob, value: curseValue(mob) }))
+      .map((mob) => ({ mob, value: curseValue(mob, prioritized) }))
       .filter(({ value }) => value > 0)
       .sort((lhs, rhs) => rhs.value - lhs.value)[0]?.mob ?? null
   );

@@ -195,27 +195,12 @@ function rawAttackMultiplier() {
   return character[mainStat] / 20;
 }
 
-/** Server sets a player's attack_ms before frozen/poisoned scale frequency; false once it no longer does */
-const PLAYER_COOLDOWN_SKIPS_FREQUENCYM = true;
-
 /** @returns {number} product of the frequencym of every condition on the entity */
 function conditionFrequencyScale(entity) {
   return Object.keys(entity.s ?? {}).reduce(
     (scale, name) => scale * (G.conditions[name]?.frequencym ?? 1),
     1,
   );
-}
-
-/**
- * Attacks per second the entity's cooldown actually allows.
- * @param {Object} [entity] - defaults to character
- * @returns {number}
- */
-function attackFrequency(entity = character) {
-  if (!PLAYER_COOLDOWN_SKIPS_FREQUENCYM || entity.type !== "character")
-    return entity.frequency;
-
-  return entity.frequency / conditionFrequencyScale(entity);
 }
 
 /**
@@ -566,6 +551,8 @@ function gearStatDelta(picks) {
   return { stats, itemAttack };
 }
 
+const MAX_MP_REDUCTION = 80;
+
 /** Our stats with `picks` worn */
 function projectStatsWith(picks) {
   const { stats, itemAttack } = gearStatDelta(picks);
@@ -619,7 +606,10 @@ function projectStatsWith(picks) {
         ? stats.apiercing
         : stats.rpiercing) /
         15,
-    mp_reduction: (character.mp_reduction ?? 0) + stats.mp_reduction,
+    mp_reduction: Math.min(
+      MAX_MP_REDUCTION,
+      (character.mp_reduction ?? 0) + stats.mp_reduction,
+    ),
   };
 }
 
@@ -796,7 +786,7 @@ function pickTankGear() {
 
     const heal =
       (projected.heal || projected.attack) *
-      attackFrequency(projected) *
+      projected.frequency *
       healMitigation(projected, projected);
     return heal > 0 ? damage / heal : Infinity;
   };
@@ -828,7 +818,7 @@ function pickHealGear() {
           sum + projected.heal * healMitigation(projected, healee),
         0,
       ) / healees.length;
-    const healPerSecond = heal * attackFrequency(projected);
+    const healPerSecond = heal * projected.frequency;
     const mpPerHeal = projected.mp_cost * (1 - projected.mp_reduction / 100);
     return healPerSecond > 0 ? mpPerHeal / healPerSecond : Infinity;
   };
@@ -931,10 +921,8 @@ function rankMageWeapons(target) {
     (offhand ? item_info(offhand) : getOwnedItemInfo(MAGE_OFFHAND)) ?? {};
   const mainStat = classData.main_stat;
   const statMultiplier = rawAttackMultiplier() + 1;
-  const baseFrequency = attackFrequency();
-  const deltaScale = PLAYER_COOLDOWN_SKIPS_FREQUENCYM
-    ? 1
-    : conditionFrequencyScale(character);
+  const baseFrequency = character.frequency;
+  const deltaScale = conditionFrequencyScale(character);
   const mpBudget = getMageAttackMpBudget();
 
   const clusters = new Map();
@@ -1481,7 +1469,7 @@ function isPriestInHealGraceWindow(target) {
     return true;
   }
 
-  const graceMs = 1000 / attackFrequency();
+  const graceMs = 1000 / character.frequency;
   return Date.now() - priestLastHealGearAt < graceMs;
 }
 
@@ -1986,7 +1974,7 @@ function buildEquipPromises(suggestedItems, options) {
   const currentBooster = findInvBooster();
 
   // Budget of penalty_cd we can spend before the next attack comes off cooldown
-  const attackPeriod = 1000 / attackFrequency();
+  const attackPeriod = 1000 / character.frequency;
   const msToNextAttack = ms_to_next_skill("attack");
   const timeToNextAttack =
     msToNextAttack > 0 ? msToNextAttack : isShotPending() ? 0 : attackPeriod;
@@ -2139,7 +2127,7 @@ function projectileEtaMs(target) {
  * @returns {Promise|undefined} the swap promise, or undefined if not swapping
  */
 function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
-  const characterAtkCycleMs = 1000 / attackFrequency();
+  const characterAtkCycleMs = 1000 / character.frequency;
   const mainhand = getServerSlot("mainhand");
   const offhand = getServerSlot("offhand");
   const shouldUseCandyCanes =
@@ -2360,7 +2348,7 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
       return (
         fromEntity.attack *
           mitigation(fromEntity, toEntity) *
-          attackFrequency(fromEntity) *
+          fromEntity.frequency *
           monsterCritFactor(fromEntity) +
         reflectionDmg
       );
@@ -2379,7 +2367,7 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
       return (
         fromEntity.attack *
           mitigation(fromEntity, toEntity, { ignoreHardshell: true }) *
-          attackFrequency(fromEntity) *
+          fromEntity.frequency *
           monsterCritFactor(fromEntity) +
         dreturnDmg
       );
@@ -2388,7 +2376,7 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
     default:
       return (
         fromEntity.attack *
-        attackFrequency(fromEntity) *
+        fromEntity.frequency *
         monsterCritFactor(fromEntity)
       );
   }
@@ -2468,7 +2456,7 @@ function healerHps(healer = get_entity(HEALER) ?? get_entity(RANGER)) {
   const healPerHit = healer.heal || (healer.attack ?? 0) * 0.5;
   maxHealerHps[healer.name] = Math.max(
     maxHealerHps[healer.name] ?? 0,
-    healPerHit * attackFrequency(healer),
+    healPerHit * healer.frequency,
   );
   return maxHealerHps[healer.name] * HEALER_PEAK_SAFETY;
 }
@@ -2551,7 +2539,7 @@ function rawPhysicalDmgShare() {
   let physicalDps = 0;
   let totalDps = 0;
   for (const mob of getFightMobs()) {
-    const dps = mob.attack * attackFrequency(mob);
+    const dps = mob.attack * mob.frequency;
     totalDps += dps;
     if (mob.damage_type === "physical") physicalDps += dps;
   }
@@ -2690,7 +2678,7 @@ function canAffordSwap(slots) {
 
   return (
     !isAutoAttacking ||
-    character.ping > 1000 / attackFrequency() ||
+    character.ping > 1000 / character.frequency ||
     ms_to_next_skill("attack") > slots * EQUIP_PENALTY_MS + character.ping / 2
   );
 }
@@ -3095,6 +3083,15 @@ function isCoopFriendly(holder, boss) {
     parent.party_list.includes(holder.name) ||
     (character.s.coop?.id === boss.id && holder.s?.coop?.id === boss.id)
   );
+}
+
+/** @returns {boolean} whether agitate would pull this mob */
+function isAgitatable(mob) {
+  if (!mob.target || isOwnedCharacter(mob.target)) return true;
+  if (parent.party_list?.includes(mob.target)) return true;
+
+  const holder = get_player(mob.target);
+  return !!character.s.coop && holder?.s?.coop?.id === character.s.coop.id;
 }
 
 /** @returns {number} hp per second hpot1 restores, chugged off cooldown */

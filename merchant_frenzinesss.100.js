@@ -143,6 +143,18 @@ const bossConfigs = {
       return greenInstance;
     },
   },
+  horseman: {
+    shouldJoin: () => isEventTanked("horseman"),
+    shouldAttack: isSafeToHit,
+    strategy: async () => {
+      let horsemanInstance = get_nearest_monster({ type: "horseman" });
+      if (!horsemanInstance) {
+        await advanceSmartMove(server.status.horseman);
+        horsemanInstance = get_nearest_monster({ type: "horseman" });
+      }
+      return horsemanInstance;
+    },
+  },
   franky: {
     shouldJoin: () => isEventTanked("franky"),
     shouldAttack: isSafeToHit,
@@ -506,10 +518,34 @@ async function visitAnniversary() {
   }
 }
 
+const KNOCK_ERRAND_MAX_STEPS = 21;
+
+/** @returns {Promise<boolean>} whether the door errand owned this tick */
+async function knockTrickOrTreatDoors() {
+  if (getEventToJoin() || isMerchantBusy()) return false;
+  if (getNextTrickOrTreatDoor() === undefined) return false;
+
+  const lock = takeDuty(DUTY.ERRAND);
+  if (!lock) return false;
+
+  try {
+    for (let step = 0; step < KNOCK_ERRAND_MAX_STEPS; step++) {
+      if (getEventToJoin() || mustAbandonFight()) break;
+      if (!(await knockNextDoor())) break;
+    }
+    return true;
+  } finally {
+    releaseDuty(lock);
+  }
+}
+
 const merchantStrategies = [
+  attendWitchGathering,
+  brewWitchCipher,
   fightCurrentEvent,
   snipeNearbyWeakMob,
   visitAnniversary,
+  knockTrickOrTreatDoors,
 ];
 // Merchant main attack loop
 async function merchantAttackLoop() {

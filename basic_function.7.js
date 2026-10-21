@@ -1200,7 +1200,7 @@ function getTarget() {
 const INTERVAL_BREAKPOINTS = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 function getLoopInterval() {
   const dynamicInterval = INTERVAL_BREAKPOINTS.map(
-    (breakpoint) => ((1 / attackFrequency()) * 1000) / breakpoint,
+    (breakpoint) => ((1 / character.frequency) * 1000) / breakpoint,
   ).find((loopInterval) => loopInterval > 250);
   const nextAttackMs = ms_to_next_skill("attack");
 
@@ -1380,6 +1380,12 @@ const BOSS_DRAG_ROUTES = {
   mrpumpkin: {
     spot: { map: "halloween", x: -243, y: 680 },
     mtypes: ["mrpumpkin", "jr"],
+  },
+  // The xscorpion spawn, where Mr. Pumpkin also spawns
+  horseman: {
+    spot: { map: "halloween", x: -495, y: 686 },
+    mtypes: ["horseman", "jackowalker"],
+    releaseAtSpot: true,
   },
   // The mummy spawn
   mrgreen: {
@@ -2424,6 +2430,8 @@ setInterval(() => {
 }, 5000);
 
 const PARTICIPATABLE_EVENTS = [
+  "horseman",
+  "graveyard",
   "icegolem",
   "franky",
   "mrpumpkin",
@@ -2556,7 +2564,27 @@ const shouldDeployRogue = () => {
   );
 };
 
+function horsemanRanger1Party() {
+  RANGER = RANGER1;
+  HEALER = PRIEST;
+  return [WARRIOR, RANGER1, PRIEST];
+}
+
 const DYNAMIC_PARTY_PRESETS = {
+  horseman: {
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = PRIEST;
+      return [WARRIOR, RANGER2, PRIEST];
+    },
+    EUI: horsemanRanger1Party,
+    USI: horsemanRanger1Party,
+    USII: horsemanRanger1Party,
+    default: () => {
+      HEALER = PRIEST;
+      return [WARRIOR, MAGE, PRIEST];
+    },
+  },
   mrgreen: () => {
     HEALER = PRIEST;
     return [WARRIOR, PRIEST, ROGUE];
@@ -2730,6 +2758,9 @@ function getPresetMembers(preset, currentServer) {
   return typeof value === "function" ? value() : value;
 }
 
+/** Bosses whose preset wins whenever they are live */
+const PRESET_FIRST_BOSSES = ["horseman"];
+
 /** Bosses useEventStrategy fights lowest hp fraction first */
 const HP_RANKED_BOSSES = ["mrpumpkin", "mrgreen", "icegolem"];
 
@@ -2742,7 +2773,8 @@ function dynamicParty() {
   const activeEvent =
     USE_CAVE_STRATEGY && isCaveUnderway()
       ? "cave"
-      : liveEvents
+      : liveEvents.find((name) => PRESET_FIRST_BOSSES.includes(name)) ??
+        liveEvents
           .filter((name) => HP_RANKED_BOSSES.includes(name))
           .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs))[0] ??
         liveEvents[0] ??
@@ -2887,6 +2919,188 @@ async function visitAnniversaryPlayer() {
   return true;
 }
 
+// Witch's Cipher
+
+const WITCH_GATHER_SPOTS = {
+  verdantspore: { mtype: "spider", map: "main" },
+  frostscale: { mtype: "wolfie", map: "winterland" },
+  embercoal: { mtype: "plantoid", map: "desertland" },
+  gloomfeather: { mtype: "ghost", map: "halloween" },
+};
+
+const WITCH_GATHER_SLOT_MS = 5 * 60_000;
+
+/** Per ingredient: enough for one mix */
+const WITCH_MIX_STOCK = 5;
+
+/** Per ingredient, kept for Cipher Draughts */
+const WITCH_ELIXIR_RESERVE = 2;
+
+const WITCH_INGREDIENTS = Object.keys(WITCH_GATHER_SPOTS);
+
+const WITCH_SLOTS = G.events.witchcipher?.slots ?? 5;
+
+/** @returns {boolean} whether this realm's Witch's Cipher is gathering */
+function isWitchGathering(cipher = server.status.witchcipher) {
+  return !!cipher?.live && Date.now() < cipher.gather_end;
+}
+
+/** @returns {string} this realm's round, e.g. "USII:USII-2026-10-21-06-00-witchcipher" */
+const getWitchRoundKey = (cipher = server.status.witchcipher) =>
+  `${getCurrentServer()}:${cipher?.id}`;
+
+/** @returns {boolean} whether the account can still brew in the home realm's round */
+function canBrewWitchCipher() {
+  const cipher = server.status.witchcipher;
+  if (!isAtHomeServer()) return false;
+  if (!cipher?.live || Date.now() >= cipher.end || isWitchGathering(cipher))
+    return false;
+  if (!(character.witchcipher?.mixes_left > 0)) return false;
+  if (get("witchBrewDone") === getWitchRoundKey(cipher)) return false;
+
+  const stock = getWitchStock();
+  const spare = WITCH_INGREDIENTS.reduce(
+    (sum, kind) => sum + Math.max(0, stock[kind] - WITCH_ELIXIR_RESERVE),
+    0,
+  );
+  return spare >= WITCH_SLOTS;
+}
+
+/** @returns {Object<string, number>} ingredient counts in this bag */
+function countBagWitchIngredients() {
+  return Object.fromEntries(
+    WITCH_INGREDIENTS.map((kind) => [kind, getTotalQuantityOf(kind)]),
+  );
+}
+
+/** @returns {Object<string, number>} ingredient counts over bank and our bags */
+function getWitchStock() {
+  const stock = Object.fromEntries(WITCH_INGREDIENTS.map((kind) => [kind, 0]));
+  const sources = [
+    get("witchStock"),
+    ...partyMems.map((name) => get(`witchBag:${name}`)),
+  ];
+  for (const source of sources)
+    for (const kind of WITCH_INGREDIENTS) stock[kind] += source?.[kind] ?? 0;
+  return stock;
+}
+
+/** @returns {string} the kind this slot goes to */
+function pickWitchGatherKind(visited) {
+  const stock = getWitchStock();
+  const isStocked = WITCH_INGREDIENTS.every(
+    (kind) => stock[kind] >= WITCH_MIX_STOCK + WITCH_ELIXIR_RESERVE,
+  );
+  const unvisited = WITCH_INGREDIENTS.filter(
+    (kind) => !visited.includes(kind),
+  );
+  const kinds = isStocked || !unvisited.length ? WITCH_INGREDIENTS : unvisited;
+  return [...kinds].sort((lhs, rhs) => stock[lhs] - stock[rhs])[0];
+}
+
+/** @returns {{kind: string, mtype: string, spot: Object}|undefined} this slot's gathering, while gathering */
+function getWitchGatherPlan() {
+  const cipher = server.status.witchcipher;
+  if (!isWitchGathering(cipher)) return;
+
+  const key = getWitchRoundKey(cipher);
+  const slot = Math.floor((Date.now() - cipher.start) / WITCH_GATHER_SLOT_MS);
+  let plan = get("witchGatherPlan");
+  if (plan?.key !== key) plan = { key, slot: -1, visited: [] };
+
+  if (plan.slot !== slot) {
+    const kind = pickWitchGatherKind(plan.visited);
+    plan = { key, slot, kind, visited: [...plan.visited, kind] };
+    set("witchGatherPlan", plan);
+  }
+
+  const { mtype, map } = WITCH_GATHER_SPOTS[plan.kind];
+  const spot = getMonsterSpawns(mtype).find((spawn) => spawn.map === map);
+  return spot && { kind: plan.kind, mtype, spot };
+}
+
+// Trick or Treat
+
+/** Realm hour the knocking starts each day */
+const TRICK_OR_TREAT_START_HOUR = 3;
+
+/** Knock from this far below a door */
+const DOOR_FRONT_OFFSET = 24;
+
+const DOOR_KNOCK_DISTANCE = 40;
+
+/** Doors knocked or refused this UTC day */
+let settledDoors = { day: undefined, doors: new Set() };
+
+const getUtcDay = () => new Date().toISOString().slice(0, 10);
+
+function getSettledDoors() {
+  const today = getUtcDay();
+  if (settledDoors.day !== today)
+    settledDoors = { day: today, doors: new Set() };
+  return settledDoors.doors;
+}
+
+const getKnockLimitKey = () => `trickOrTreatLimit:${character.owner}`;
+
+/** @returns {boolean} whether the account hit today's knock limit */
+const isKnockLimitReached = () => get(getKnockLimitKey()) === getUtcDay();
+
+function getRealmHour() {
+  const offset = server.status.schedule?.time_offset ?? 0;
+  return (new Date().getUTCHours() + offset + 24) % 24;
+}
+
+const getDoorFront = ([map, x, y]) => ({ map, x, y: y + DOOR_FRONT_OFFSET });
+
+/** @returns {number|undefined} the nearest door left today */
+function getNextTrickOrTreatDoor() {
+  const status = character.trickortreat;
+  const doors = G.events.trickortreat?.doors;
+  if (
+    !doors ||
+    !server.status.event_flags?.halloween ||
+    !(status?.doors_left > 0)
+  )
+    return;
+  if (!isAtHomeServer() || getRealmHour() < TRICK_OR_TREAT_START_HOUR) return;
+  if (isKnockLimitReached()) return;
+
+  const settled = getSettledDoors();
+  const travelCost = (front) =>
+    front.map === character.map
+      ? simple_distance(character, front)
+      : Number.MAX_SAFE_INTEGER;
+
+  return doors
+    .map((door, index) => ({ index, front: getDoorFront(door) }))
+    .filter(({ index }) => !status.doors.includes(index) && !settled.has(index))
+    .sort((lhs, rhs) => travelCost(lhs.front) - travelCost(rhs.front))[0]
+    ?.index;
+}
+
+/** @returns {Promise<boolean>} whether a door was left to walk to or knock */
+async function knockNextDoor() {
+  const door = getNextTrickOrTreatDoor();
+  if (door === undefined) return false;
+
+  const front = getDoorFront(G.events.trickortreat.doors[door]);
+  if (distance(character, front) > DOOR_KNOCK_DISTANCE) {
+    await advanceSmartMove(front).catch((e) => console.warn(e));
+    return true;
+  }
+
+  getSettledDoors().add(door);
+  await knock(door)
+    .then((result) => console.log(`[trickortreat] door ${door}:`, result))
+    .catch((error) => {
+      if (error?.reason === "trickortreat_limit")
+        set(getKnockLimitKey(), getUtcDay());
+      console.warn(`[trickortreat] door ${door}:`, error);
+    });
+  return true;
+}
+
 // Fighter targeting strategies — the first one to own the tick wins
 if (character.ctype !== "merchant") {
   if (parent.caracAL) {
@@ -2909,9 +3123,11 @@ if (character.ctype !== "merchant") {
     usePriorityMobStrategy,
     // The identifier only resolves when slot 15 was loaded above
     ...(USE_CAVE_STRATEGY ? [useCaveRunStrategy] : []),
+    useWitchGatheringStrategy,
     useEventStrategy,
     ...(USE_CAVE_STRATEGY ? [useCaveEntryStrategy] : []),
     useCryptStrategy,
+    useTrickOrTreatStrategy,
     useSpecialMobStrategy,
     useFarmingStrategy,
   ];

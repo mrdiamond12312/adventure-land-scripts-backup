@@ -906,13 +906,12 @@ keeps the whole party frozen, so every `character.frequency` read was ~0.3x. `ra
 then added the wand's flat `frequency: +60` class bonus to that shrunken base: 1.035 vs 0.435
 (2.38x) instead of 2.05 vs 1.45 (1.41x), and pinkie won every time.
 
-`attackFrequency(entity)` (strategic_fn.11.js) divides a *player's* frequency by the `frequencym`
-of its conditions; monsters pass through untouched. Every read of a player's attack rate goes
-through it, including the `attackSpeedCompensate` snapshots, which would otherwise see a freeze
-land mid-tick as a frequency drop and cut the cooldown by ~1.6s. If the server is fixed, set
-`PLAYER_COOLDOWN_SKIPS_FREQUENCYM = false`: `attackFrequency` then returns the raw frequency, and
-`rankMageWeapons` scales the weapon frequency deltas by the same condition factor so the ranking
-stays consistent.
+Fixed upstream 2026-10-19 (FreezePhoenix, `cd86f47`, PR #31): `attack_ms` now follows
+`calculate_common_stats`, so a frozen player really attacks at 0.3x. On 2026-10-21 the
+`attackFrequency` wrapper and its `PLAYER_COOLDOWN_SKIPS_FREQUENCYM` switch were removed, and
+every read uses `frequency` as the server reports it. `rankMageWeapons` still scales a weapon's
+frequency delta by `conditionFrequencyScale(character)`, because the condition multiplies the
+whole frequency, the weapon's share included. Without it the pinkie bias above comes back.
 
 ## `getLoopInterval` under 250ms cycles (2026-10-11)
 
@@ -3902,3 +3901,137 @@ it is surely ready by. `noteCavalryMobLevels` keeps `{level, since}` per mob id 
 whenever the merchant is on level2w (cavalry run or scout), and the loop waits for the
 earliest of those, never sooner than 15 min after the last visit. A first sighting has no
 history, so its bound is the full wait from then: conservative, but it only gets better.
+
+## Native `town()` settles on landing (`useTownWithRetry`, 2026-10-21)
+
+Upstream `2148cf2`..`43b2c8f` rewrote `town()` in `runner_functions.js`: it resolves
+`{success: true}` on the `new_map` with `effect: 1` (a completed channel, same-map included) and
+rejects on a failed `game_response`, an interruption, `rip`, a disconnect or a 10s timeout.
+`useTownWithRetry` used to poll `character.c.town` and then check the distance to spawn 0. Both
+are gone: the promise is the landing. A rejection now throws, so every `town()` call needs a
+catch (`moveHome` in basic_merchant.5.js has one). caracAL picks the new runner up with the game
+files (version 18183 already has it).
+
+## Agitate only weighs mobs it can take (`isAgitatable`, 2026-10-21)
+
+The server's agitate (`node/server.js`) redirects a mob only when its target is nobody, ourselves,
+or `is_same(player, holder, 1)`: same owner or IP, same party, same `s.coop.id`, same team. A mob
+on a stranger outside all of those is skipped and never comes to us. `usePullSkills` used to judge
+every mob in range, so a stranger's mob nearby failed `nobodyElseTanking` and the warrior never
+agitated. `mobsInAgitateRange` now keeps only `isAgitatable` mobs. Mobs on an outsider in *our*
+party (e.g. Earth) are still taken by agitate, so they still block it: we let him tank.
+
+## Halloween events (2026-10-21)
+
+- **Headless Horseman** (nightly, 00:00 realm clock, 30M HP, roams `halloween`): a simple boss,
+  first in `EVENT_FIGHTS`. Its Jack-o Walkers come from `G.monsters.horseman.spawns` like any
+  minion. He is not on the home drop table, and his achievements go up to 500 kills. Until the
+  season ends (2026-11-02), `FATIGUE_EXEMPT_BOSSES` in server_hop.14.js stays for him, and hops
+  to him ahead of the home-window and realm-fatigue checks. Realm clocks differ by region, so
+  several rides a day are reachable. A ride under `EXEMPT_HOP_MIN_HP_RATIO` would end before the
+  hop lands, so it is skipped.
+- **Graveyard Rising** (every 2h at :30, spookytown): `fightGraveyard` sits right below Franky
+  for the waves. Once the Gargoyle wakes (`server.status.graveyard.gargoyle`), `fightGargoyle`
+  runs the same fight from above the Mr. Pumpkin/Mr. Green group, standing aside while Ice Golem
+  or Franky is live (`GARGOYLE_OUTRANKED_BY`). Ice Golem shares a group with the pumpkins and
+  Franky ranks below it, so a rank of its own couldn't sit between them.
+  It fights in the mummy spawn, ghouls then zombies then the Gargoyle, with the graveyard's
+  mummies last. Wave points carry over to the Gargoyle, so clearing waves is not wasted. It is
+  in `PARTICIPATABLE_EVENTS` but not in the hop-staying lists: realm fatigue may still pull the
+  party away mid-round. Mr. Green's drag spot is the graveyard itself, and he outranks
+  `fightGraveyard`. So during a round `fightSimpleBoss` hands non-tankers any risen mob on one of
+  ours (`getRisenOnAlly`) before the boss. The tanker stays on the boss: retargeting would end the
+  drag, because `resolveKiteTarget` only anchors while the boss is the target, and cleave
+  splashes the risen anyway. The schedule slot has `season: "halloween"`, so no Gargoyle after the
+  season.
+- **Trick or Treat**: `useTrickOrTreatStrategy` is ranked just below `useCryptStrategy`, above
+  special mobs and farming. It knocks on home-realm doors from 03:00 realm time and stands aside
+  while a cave run or gathering is underway. Events outrank it: an account only has 14 knocks a
+  day, too few to hold up a fight for. The door helpers and the one-step `knockNextDoor` live in
+  basic_function.7.js so the merchant shares them. His `knockTrickOrTreatDoors`
+  (merchant_frenzinesss.100.js) runs last among his strategies, under the ERRAND duty like the
+  anniversary visit, so `moveHome` waits between doors. It gives up the doors to any event or
+  hard blocker, and stops after `KNOCK_ERRAND_MAX_STEPS` steps. A door counts as settled once knocked or
+  refused, until the UTC reset. A trick's Ghost uses the plain ghost table (5% drapes, a rare
+  pmace), so we leave it and walk to the next door.
+
+## Curse on mobs strangers hold (`getCurseTarget`, basic_priest.2.js, 2026-10-21)
+
+From 2026-07-26 to 2026-10-21, `getCurseTarget` only cursed mobs whose target was one of ours. In
+a public coop fight (Horseman, Gargoyle, Mr. Pumpkin) a stranger usually holds the boss, so the
+priest never cursed it. The target filter is gone. In `curseValue` the victim term now counts
+only our people, so a mob on a stranger is worth cursing only when our party is hitting it. Curse
+can't be resisted (`cursed` has no `defense`): +20% damage taken, −20% damage dealt, −20 speed.
+
+## Witch's Cipher gathering (2026-10-21)
+
+For the first 20 min of a round (`server.status.witchcipher.gather_end`), the ingredient goes into
+the drop table of 16 monsters at 0.3% per 1k HP, multiplied by luck. Per kill at Luck 1: plantoid
+36%, fireroamer 25%, wolfie 5.8%, spider 5.4%, ghost 3.6%. `WITCH_GATHER_SPOTS` sends each kind to
+its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, ghost/halloween.
+
+- **Plan** (`getWitchGatherPlan`, basic_function.7.js): the round is cut into 5-min slots. Each
+  slot goes to the kind with the least stock that hasn't had a slot yet this round, while any kind
+  is under `WITCH_MIX_STOCK` + `WITCH_ELIXIR_RESERVE` (5 + 2). Once all are, each slot goes to the
+  kind with the least stock. The first character to reach a new slot writes `witchGatherPlan`, so
+  the whole party follows one pick.
+- **Stock** (`getWitchStock`): the merchant's `witchStock` (bank + bag, published every 30s), plus
+  every fighter's `witchBag:<name>` (its own bag, written each gathering tick). A fighter's bag can
+  count twice for up to one tick after it hands the ingredients over.
+- **Fighters**: `useWitchGatheringStrategy` ranks right after the cave run, above every event. It
+  stands aside for an open crypt or a cave run. The 06:00/18:00 slots don't collide with the
+  scheduled events, so in practice it outranks only the always-up Mr. Pumpkin and Mr. Green.
+- **Merchant** (merchant_witch.36.js): `attendWitchGathering` comes first in `merchantStrategies`.
+  It takes the `WITCH` duty (over an event duty) and stays within 200 of a fighter. The fighters'
+  10s handoff in basic_function.7.js then sends him every ingredient, since none is on its keep
+  list. The merchant never sells them: they are not `SALE_ABLE`, and purges only touch gear.
+- **Hopping**: the hop loop never leaves a realm that is gathering. After the Horseman check, it
+  hops to the realm with the most gathering left, if at least `WITCH_HOP_MIN_GATHER_MS` (8 min)
+  remains. Once gathering ends, the normal rules (home windows, "nothing left to chase") take the
+  party home.
+
+## Witch's Cipher brewing (`brewWitchCipher`, merchant_witch.36.js, 2026-10-22)
+
+The live game is ahead of GitHub here (checked against caracAL's game_files/18183 and the MCP docs).
+The repo says `payout: {fits: 1, crack: 4}`, but live is `{right: 1, crack: 50}`. A *new* mix pays 1
+Parcel per ingredient in the right place, fitting or not. A mix already on the board pays 0. The
+account's first crack of the UTC day pays 50, and a later crack pays its 5 right places.
+`G.quests` doesn't exist live: the Witch is `find_npc("witch")`, halloween 858,-160.
+
+`server.status.witchcipher.fit` is 256 hex digits, one bit per recipe: recipe n is bit `n & 3` of
+digit `n >> 2`, and puts ingredient `(n / 4^i) % 4` in slot i, in `G.events.witchcipher.ingredients`
+order. `WITCH_RECIPES` uses the same order. A set bit means the recipe is untried and fits every
+clue of the whole round, not just the 30 the board shows. `getWitchCandidates` reads `fit`, and
+works from the board only when `fit` is missing. Every other player's mix is in both.
+
+`pickWitchMix`: until the account cracks today (`witchCrackedDay`), the 50 dominates. It guesses
+only candidates, taking the lowest Σ n² over the 0..5 right-count groups (the fewest candidates
+left on average); a tie goes to the most expected right places, since those are paid. After the
+crack, any untried mix may be picked, by expected right places alone. A cracked recipe gives no
+hint about the next: the new secret is uniform and the board resets. Simulated alone with 5 mixes
+a day from an empty board: 37% crack, ~26 Parcels a day.
+
+Brewing happens only on the home realm (`canBrewWitchCipher` checks `isAtHomeServer`), where the
+account's first mix of the day fixes its realm anyway. Rounds elsewhere are only for gathering.
+Once gathering ends, the merchant takes the `WITCH` duty, pulls every ingredient stack from the
+bank, walks to the Witch, and brews until a pick or brew fails, never spending the last
+`WITCH_ELIXIR_RESERVE` of a kind. The hop loop holds home while he can brew, and `witchBrewDone`
+marks the round finished.
+
+## Horseman party, ASIA, and leaving a foreign gathering (2026-10-22)
+
+- `DYNAMIC_PARTY_PRESETS.horseman`: warrior + priest with ranger2 on EUII, ranger1 on EUI, and
+  the mage anywhere else. `PRESET_FIRST_BOSSES` puts his preset ahead of the HP-ranked
+  Mr. Pumpkin/Mr. Green pick, which would otherwise win all season.
+- The Horseman hop (`getExemptHopTarget`) also reaches `ignoreServer` realms (ASIAI, ASIAII) via
+  `isReachableRealm(candidate, true)`. Every other boss still skips them.
+- Brewing is home-only, so once a foreign realm's round reaches brewing, the hop loop goes
+  straight home. That comes after the Horseman and gather-elsewhere checks, so a live Horseman
+  or a fresh gathering still wins.
+- USI and USII also run the Ranger1 Horseman party (`horsemanRanger1Party`). A per-server preset
+  value must be an array or function: `getPresetMembers` resolves a string only at the top level.
+- `BOSS_DRAG_ROUTES.horseman` drags him to the xscorpion spawn (halloween -495,686), whose box
+  Mr. Pumpkin also spawns in. Mr. Pumpkin's own drag spot (-243,680) is ~250px east, so both
+  fights end up side by side. The Horseman spawns among the north-west graveyard's 9 ghosts
+  (-405,-1642), but `roam` carries him anywhere. `releaseAtSpot` hands his tanking back from the
+  dragging priest to the warrior on arrival, as for Mr. Green.

@@ -2,10 +2,13 @@
 
 /** Event fights in priority order; each claims the tick only while its event is on. */
 const EVENT_FIGHTS = [
+  () => fightSimpleBoss(["horseman"]),
   fightGoobrawl,
+  fightGargoyle,
   () => fightSimpleBoss(["dragold", "mrpumpkin", "mrgreen", "icegolem"]),
   fightCrabxx,
   fightFranky,
+  fightGraveyard,
   fightSnowman,
   fightAbtesting,
   () => fightSimpleBoss(["pinkgoo", "wabbit"]),
@@ -61,6 +64,7 @@ async function fightGoobrawl() {
  * @type {Object<string, {usePull?: boolean, rangeRate?: function(): number}>}
  */
 const SIMPLE_BOSSES = {
+  horseman: {},
   dragold: {},
   mrpumpkin: {},
   mrgreen: {},
@@ -93,6 +97,9 @@ async function fightSimpleBoss(types) {
   if (bossRangeRate) rangeRate = bossRangeRate();
 
   let bossInstance = get_nearest_monster({ type: bossToFight.type });
+
+  const risen = bossInstance && !isAssignedAsTanker() && getRisenOnAlly();
+  if (risen) return engage(risen);
 
   const minion = bossInstance && getBossMinion(bossToFight.type);
   if (minion) return engage(minion);
@@ -524,6 +531,92 @@ async function fightFranky() {
   return engage(frankyInstance);
 }
 
+// --- Graveyard Rising ---
+
+const GRAVEYARD_RISEN = ["ghoul", "zombie", "gargoyle"];
+
+/** Kill order; mummies last */
+const GRAVEYARD_TARGET_ORDER = [...GRAVEYARD_RISEN, "mummy"];
+
+const GRAVEYARD_RADIUS = 400;
+
+const GRAVEYARD_ARRIVAL_DISTANCE = 100;
+
+const getGraveyardSpot = () =>
+  getMonsterSpawns("mummy").find(({ map }) => map === "spookytown");
+
+/** @param {Object} rising - server.status.graveyard */
+function pickGraveyardTarget(rising) {
+  const isInRound = (mob) =>
+    !!mob &&
+    !mob.dead &&
+    character.map === rising.map &&
+    simple_distance(mob, rising) <= GRAVEYARD_RADIUS;
+  const current = get_targeted_monster();
+
+  for (const type of GRAVEYARD_TARGET_ORDER) {
+    if (current?.mtype === type && isInRound(current)) return current;
+
+    const mob = get_nearest_monster({ type });
+    if (isInRound(mob)) return mob;
+  }
+}
+
+/** @returns {Object|undefined} a risen mob on one of ours, fought before a boss */
+function getRisenOnAlly() {
+  if (!server.status.graveyard?.live) return;
+
+  const allies = getAlliedNames();
+  const isOnAlly = (mob) =>
+    !!mob &&
+    !mob.dead &&
+    GRAVEYARD_RISEN.includes(mob.mtype) &&
+    allies.has(mob.target);
+
+  const current = get_targeted_monster();
+  if (isOnAlly(current)) return current;
+
+  const rank = (mob) => GRAVEYARD_RISEN.indexOf(mob.mtype);
+  return Object.values(parent.entities)
+    .filter((mob) => mob.type === "monster" && isOnAlly(mob))
+    .sort(
+      (lhs, rhs) =>
+        rank(lhs) - rank(rhs) ||
+        distance(character, lhs) - distance(character, rhs),
+    )[0];
+}
+
+const GARGOYLE_OUTRANKED_BY = ["icegolem", "franky"];
+
+/** Graveyard fight once the Gargoyle wakes */
+async function fightGargoyle() {
+  if (!server.status.graveyard?.gargoyle) return;
+  if (GARGOYLE_OUTRANKED_BY.some((name) => server.status[name]?.live)) return;
+
+  return fightGraveyard();
+}
+
+async function fightGraveyard() {
+  const rising = server.status.graveyard;
+  if (!rising?.live) return;
+
+  changeToPullStrategies();
+
+  const target = pickGraveyardTarget(rising);
+  if (target) return engage(target);
+
+  if (character.map !== rising.map && !character.s.hopsickness) {
+    await join("graveyard").catch((e) => console.warn(e));
+    await sleep(character.ping);
+  }
+
+  const spot = getGraveyardSpot() ?? rising;
+  if (distance(character, spot) > GRAVEYARD_ARRIVAL_DISTANCE)
+    await advanceSmartMove(spot).catch((e) => console.warn(e));
+
+  return travelling();
+}
+
 /**
  * @param {Object} boss
  * @param {Object} [route] - its BOSS_DRAG_ROUTES entry
@@ -607,6 +700,52 @@ async function fightSnowman() {
     grinchInstance ??
       (snowmanInstance?.s?.fullguardx ? beeToAttack : snowmanInstance),
   );
+}
+
+// --- Witch's Cipher ---
+
+const WITCH_GATHER_ARRIVAL_DISTANCE = 150;
+
+/** @returns {Object|undefined} the mob on one of ours, else the targeted or nearest gathering mob */
+function getWitchGatherTarget(mtype) {
+  const allies = getAlliedNames();
+  const isAlive = (mob) => !!mob && !mob.dead && mob.type === "monster";
+
+  const onAlly = Object.values(parent.entities).find(
+    (mob) => isAlive(mob) && allies.has(mob.target),
+  );
+  if (onAlly) return onAlly;
+
+  const current = get_targeted_monster();
+  if (isAlive(current) && current.mtype === mtype) return current;
+
+  return get_nearest_monster({ type: mtype });
+}
+
+/** @returns {Promise<object|undefined>} the outcome, while the Cipher is gathering */
+async function useWitchGatheringStrategy() {
+  if (get("cryptInstance") || (USE_CAVE_STRATEGY && isCaveUnderway())) return;
+
+  const plan = getWitchGatherPlan();
+  if (!plan) return;
+
+  set(`witchBag:${character.name}`, countBagWitchIngredients());
+  adaptStrategyToParty();
+
+  const target = getWitchGatherTarget(plan.mtype);
+  if (target) return engage(target);
+
+  if (distance(character, plan.spot) > WITCH_GATHER_ARRIVAL_DISTANCE)
+    await advanceSmartMove(plan.spot).catch((e) => console.warn(e));
+
+  return travelling();
+}
+
+// --- Trick or Treat ---
+
+async function useTrickOrTreatStrategy() {
+  if (USE_CAVE_STRATEGY && isCaveUnderway()) return;
+  if (await knockNextDoor()) return travelling();
 }
 
 // --- Anniversary ---

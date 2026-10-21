@@ -19,6 +19,10 @@ const bosses = {
 };
 const waitForEvent = ["wabbit"];
 
+const FATIGUE_EXEMPT_BOSSES = ["horseman"];
+
+const EXEMPT_HOP_MIN_HP_RATIO = 0.15;
+
 async function hopToServer(serverRegion, serverIdentifier) {
   if (parent.caracAL) {
     send_cm(parent.caracAL.siblings, "loot-before-hopping");
@@ -44,10 +48,13 @@ function realmOf(candidate) {
   return `${candidate.serverRegion}${candidate.serverIdentifier}`;
 }
 
-/** @returns {boolean} whether we are willing to travel to this realm at all */
-function isReachableRealm(candidate) {
+/**
+ * @param {boolean} [isExempt] - a fatigue-exempt boss also goes to ignoreServer realms
+ * @returns {boolean} whether we are willing to travel to this realm at all
+ */
+function isReachableRealm(candidate, isExempt = false) {
   return (
-    !ignoreServer.includes(realmOf(candidate)) &&
+    (isExempt || !ignoreServer.includes(realmOf(candidate))) &&
     candidate.serverIdentifier !== "PVP" &&
     HOP_SERVERS.includes(candidate.serverRegion)
   );
@@ -128,6 +135,38 @@ function hasEventWorthStayingFor() {
   return Boolean(brawling || liveHere);
 }
 
+function getExemptHopTarget() {
+  return getRealmData()
+    ?.query({ types: FATIGUE_EXEMPT_BOSSES })
+    .filter(
+      (candidate) =>
+        isReachableRealm(candidate, true) &&
+        candidate.hp >= EXEMPT_HOP_MIN_HP_RATIO * G.monsters[candidate.type].hp,
+    )
+    .sort(byHopPriority)[0];
+}
+
+/** Least gathering left on a realm worth hopping to */
+const WITCH_HOP_MIN_GATHER_MS = 8 * 60_000;
+
+/** @returns {Object|undefined} the realm gathering longest from now */
+function getWitchGatherHopTarget() {
+  return getRealmData()
+    ?.query({ types: ["witchcipher"] })
+    .filter(
+      (candidate) =>
+        isReachableRealm(candidate) &&
+        candidate.gather_end - Date.now() >= WITCH_HOP_MIN_GATHER_MS,
+    )
+    .sort((lhs, rhs) => rhs.gather_end - lhs.gather_end)[0];
+}
+
+async function hopToCandidate(target) {
+  console.warn(`Hopping to ${realmOf(target)}`);
+  set("currentParty", undefined);
+  await hopToServer(target.serverRegion, target.serverIdentifier);
+}
+
 /** @param {string} reason */
 async function hopHome(reason) {
   console.warn(`Hopping home — ${reason}`);
@@ -141,6 +180,19 @@ setInterval(async () => {
 
   // The merchant is never inside, but its hop takes the party out with it
   if (get("caveRun") > Date.now()) return;
+
+  if (isWitchGathering() || canBrewWitchCipher()) return;
+
+  if (FATIGUE_EXEMPT_BOSSES.some((name) => server.status[name]?.live)) return;
+  const exemptTarget = getExemptHopTarget();
+  if (exemptTarget) return hopToCandidate(exemptTarget);
+
+  const gatherTarget = getWitchGatherHopTarget();
+  if (gatherTarget) return hopToCandidate(gatherTarget);
+
+  const cipher = server.status.witchcipher;
+  if (!isAtHomeServer() && cipher?.live && Date.now() < cipher.end)
+    return hopHome("the Witch's gathering is over");
 
   // Should we return home?
   // When there's gonna be a boss with home server drop table in 30 mins~!
@@ -178,7 +230,5 @@ setInterval(async () => {
   const target = candidates[0];
   if (realmOf(target) === getCurrentServer()) return;
 
-  console.warn(`Hopping to ${realmOf(target)}`);
-  set("currentParty", undefined);
-  await hopToServer(target.serverRegion, target.serverIdentifier);
+  await hopToCandidate(target);
 }, 10000);

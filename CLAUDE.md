@@ -122,6 +122,8 @@ Merchant entry script:
                               (probeLuckySlot runs after an idle upgradeInv; exportLuckySlotTally)
     merchant_cavalry.35.js   tags level 3+ oneeyes from range and calls the cavalry on them
                               (cavalryOneeyeLoop; callCavalry keeps the account cooldown in set())
+    merchant_witch.36.js     Witch's Cipher: publishes ingredient stock, stays with the gathering
+                              party (loaded before slot 100, whose merchantStrategies names it)
 
   The merchant modules do not load each other: basic_merchant.5.js pulls them all in, and every
   cross-module reference is inside a function body, so it resolves at call time. Nothing in the repo

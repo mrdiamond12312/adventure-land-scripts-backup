@@ -7,6 +7,7 @@ if (parent.caracAL) {
     "adventure-land-scripts-backup/merchant_gathering.22.js",
     "adventure-land-scripts-backup/merchant_exchange.23.js",
     "adventure-land-scripts-backup/merchant_luring.24.js",
+    "adventure-land-scripts-backup/merchant_witch.36.js",
     "adventure-land-scripts-backup/merchant_frenzinesss.100.js",
     "adventure-land-scripts-backup/merchant_scout.29.js",
     "adventure-land-scripts-backup/merchant_lucky_slot_finder.30.js",
@@ -20,6 +21,7 @@ if (parent.caracAL) {
   load_code(22);
   load_code(23);
   load_code(24);
+  load_code(36);
   load_code(100);
   load_code(29);
   load_code(30);
@@ -34,6 +36,7 @@ const DUTY = {
   LURE: "lure",
   DRAG: "drag",
   CAVALRY: "cavalry",
+  WITCH: "witch",
 };
 /** The merchant's one duty lock, `{ owner, since }`, null while free */
 var duty = null;
@@ -332,7 +335,7 @@ async function moveHome() {
     }
   } catch (e) {
     if (e?.reason === "failed" && e.failed) {
-      await town();
+      await town().catch(() => undefined);
     }
     console.warn("movehome error:", e);
   }

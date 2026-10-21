@@ -46,8 +46,6 @@ const SMART_MOVE_CONFIG = Object.freeze({
   NEW_MAP_TIMEOUT_MS: 5000, // waitForNewMap default timeout
   TOWN_MAX_RETRIES: 3,
   TOWN_RETRY_DELAY_MS: 300,
-  TOWN_SPAWN_ARRIVAL_DISTANCE: 100, // landed within this of spawn 0 = the town worked
-  TOWN_CHANNEL_TIMEOUT_MS: 5000, // how long to wait for the town channel to finish
   TOWN_FALLBACK_SPEED: 1000, // high enough that the pathfinder plans no town
   DOOR_WALK_SPEED: 1000, // pathing speed of the walk up to a far door
 });
@@ -288,26 +286,15 @@ class StrategicSmartMove {
     while (attempts++ < maxRetries) {
       if (aborted()) return false;
 
-      await town();
-      await waitUntil(
-        () => !character.c.town,
-        SMART_MOVE_CONFIG.TOWN_CHANNEL_TIMEOUT_MS,
+      const landed = await town().then(
+        (result) => !result?.failed,
+        () => false,
       );
-      await sleep(retryDelay);
 
       if (aborted()) return false;
-      // No spawn data to verify against - assume the channel did its job
-      if (!mapData.spawns?.length) return true;
+      if (landed) return true;
 
-      if (
-        distance(character, {
-          map: character.map,
-          x: mapData.spawns[0][0],
-          y: mapData.spawns[0][1],
-        }) <= SMART_MOVE_CONFIG.TOWN_SPAWN_ARRIVAL_DISTANCE
-      ) {
-        return true;
-      }
+      await sleep(retryDelay);
     }
 
     if (walkOnFail && mapData.spawns?.length && !aborted())

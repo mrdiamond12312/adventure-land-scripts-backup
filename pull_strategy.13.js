@@ -53,8 +53,8 @@ async function usePullSkills() {
 
     case "warrior":
       // Everything agitate would reach — what the pull is judged on
-      const mobsInAgitateRange = mobsList.filter((mob) =>
-        is_in_range(mob, "agitate"),
+      const mobsInAgitateRange = mobsList.filter(
+        (mob) => is_in_range(mob, "agitate") && isAgitatable(mob),
       );
 
       const formidableMonsterAppeared = mobsInAgitateRange.find(
