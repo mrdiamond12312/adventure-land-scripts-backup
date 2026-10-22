@@ -3582,13 +3582,19 @@ base layer under tank, fireball, luck and xp gear and every situational rule abo
 - **jacko loses to that.** At CowTheMooh's numbers, jacko +5's 95 rpiercing adds ~6 mp per heal
   (+8.5%) for ~5% more heal on a 240-resistance ally, so `healGear.orb` in the grace window is
   usually the worn orb, and the jacko/test_orb swap stops.
-- **The incumbent is the worn gear, min gain 1%** (`HEAL_GEAR_SWAP_MIN_GAIN`). Gear with no heal
-  stat ties, and a tie keeps what is on, so the stat-less orbs do not flip each heal and luck gear
-  equal for healing may stay. The 1% absorbs the drift of int's worth as the mainhand swaps
-  between lmace and firestaff, which scales item attack.
+- **The incumbent is the `PRIEST_DEFAULT_GEAR` item, else the worn gear, min gain 1%**
+  (`HEAL_GEAR_SWAP_MIN_GAIN`). Gear with no heal stat ties, and a tie keeps the incumbent, so the
+  stat-less orbs (no default) do not flip each heal. The 1% absorbs the drift of int's worth as
+  the mainhand swaps between lmace and firestaff, which scales item attack.
+- **Why the default and not the worn gear (2026-10-23).** Against the worn gear, luck gear put on
+  for a kill never came off, the same trap `lastTankPick` fixed for the tank pick. `ringhs` (luck
+  8, int 4) replaced both zappers. The zapper's extra int is worth about as much heal as its
+  rpiercing (`mp_cost` + rpiercing / 15) costs in mp, well under 1%, so `ringhs` stayed, `hasZapper`
+  was false, and an off-tank priest never zapped. A tanking priest was unaffected because the
+  tank pick scores the zapper's 30 resistance.
 - **Not modelled:** hp, armour and resistance for our own survival (the tank pick owns that),
-  mp_reduction's saving on skills, the zapper's zaps. The zapper keeps its rings on int and
-  rpiercing today; a better heal ring would take one and `getZapTarget` stops.
+  mp_reduction's saving on skills, the zapper's zaps. The zapper keeps its rings because it is the
+  tie-winning default; a ring that out-heals it by 1% would take a slot and `getZapTarget` stops.
 - **Class bonuses are already in `item_info`** (2026-10-23). Some items carry a per-class block,
   e.g. the Laughing Grimoire (`laughingbook`, a `source` offhand): int 22, mp 200, plus
   `priest: {int: 20}` and `mage: {crit: 4, critdamage: 25}`. `item_info` passes

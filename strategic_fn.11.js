@@ -804,9 +804,11 @@ const HEAL_GEAR_SWAP_MIN_GAIN = 0.01;
 
 /**
  * Gear spending the least mp and time per hp healed on us and the allies in sight.
+ * @param {Object<string, string>} [defaults] - slot → item a tie keeps, else the worn one
  * @returns {Object<string, string>} slot → heal item
  */
-function pickHealGear() {
+function pickHealGear(defaults = {}) {
+  const slots = getGearSlots(TANK_GEAR_SKIPPED_SLOT);
   const allies = Array.from(getAlliedNames(), get_player).filter(
     (player) => player && player !== character,
   );
@@ -823,9 +825,15 @@ function pickHealGear() {
     return healPerSecond > 0 ? mpPerHeal / healPerSecond : Infinity;
   };
   return pickGearByScore(
-    getGearSlots(TANK_GEAR_SKIPPED_SLOT),
+    slots,
     score,
     HEAL_GEAR_SWAP_MIN_GAIN,
+    Object.fromEntries(
+      slots.map((slot) => [
+        slot,
+        defaults[slot] ?? character.slots[slot]?.name,
+      ]),
+    ),
   );
 }
 
@@ -1558,7 +1566,7 @@ function calculatePriestItems(target) {
     : feelingWise
     ? pickStatGear("xp")
     : {};
-  const healGear = fireball ? {} : pickHealGear();
+  const healGear = fireball ? {} : pickHealGear(PRIEST_DEFAULT_GEAR);
 
   const mainhand = getPriestMainhand(target, currentTarget, statGear);
   return {
