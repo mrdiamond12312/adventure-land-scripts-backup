@@ -2689,6 +2689,17 @@ deletes its daily reservation, so the visit is not spent. `getZapTarget` now hol
 `isPreparingCave` is set outside the cave, and so does the warrior's `cleaveLoop`, which runs on
 its own timer and kept tagging Dorr's mobs while the strategy chain sat waiting.
 
+### The merchant leaves the party on its own (checked against the server, 2026-10-22)
+
+The server's party `kick` fails with `cant_kick` when the kicker sits later in
+`parties[leader]` (join order) than the one being kicked. The merchant is never shut down for
+ping and does not hop, so it usually outlasts `partyMems[0]`'s last rejoin. The leader's kick
+failed every time, `.catch(() => undefined)` hid it, and `enterCave` held on `entry held: outsiders`
+forever. So any character outside `partyMems` now calls `leave_party()` itself while
+`isCaveUnderway()` and its party holds a `partyMems` member. It reads the shared `caveGathering`/
+`caveRun` keys, because the merchant never loads the cave strat. The leader's kick stays as a
+fallback for outsiders who don't run this file.
+
 ### A stale resume opened a solo run (checked against the server, 2026-10-08)
 
 Server-side `cave_enter` is one call for both cases (`open_generated_zone`, generated_maps.js): if

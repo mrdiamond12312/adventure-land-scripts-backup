@@ -2368,7 +2368,16 @@ setInterval(async () => {
     partyWhitelistRegex.some((regex) => regex.test(member.name)),
   );
 
-  if (isPreparingCave) {
+  // A kick fails on anyone who joined before the kicker, so outsiders leave
+  const isSittingOutCave =
+    USE_CAVE_STRATEGY &&
+    !partyMems.includes(character.name) &&
+    isCaveUnderway();
+
+  if (isSittingOutCave) {
+    if (parent.party_list.some((name) => partyMems.includes(name)))
+      leave_party();
+  } else if (isPreparingCave) {
     // The cave takes the current party in, and an outsider needs their own visit
     if (hasWhitelistedMember) leave_party();
   } else if (
