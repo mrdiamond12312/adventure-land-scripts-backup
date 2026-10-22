@@ -48,12 +48,18 @@ const SMART_MOVE_CONFIG = Object.freeze({
   TOWN_RETRY_DELAY_MS: 300,
   TOWN_FALLBACK_SPEED: 1000, // high enough that the pathfinder plans no town
   DOOR_WALK_SPEED: 1000, // pathing speed of the walk up to a far door
+
+  // getStandablePointNear
+  STANDABLE_SEARCH_STEP: 4,
+  STANDABLE_SEARCH_RADIUS: 120,
+  STANDABLE_CLEARANCE: 20,
 });
 
 class StrategicSmartMove {
   constructor() {
     this.pathfinder = parent.caracAL.ALPathfinder;
     this.patchedMaps = new Set();
+    this.standablePoints = new Map();
     this.preparePathfinder();
     this.scareInterval = undefined;
     this.isDoingSomethingMagical = false;
@@ -184,6 +190,48 @@ class StrategicSmartMove {
    */
   isStandablePoint(position) {
     return this.pathfinder.isWalkable(position.map, position.x, position.y);
+  }
+
+  _isClearPoint({ map, x, y }) {
+    const clearance = SMART_MOVE_CONFIG.STANDABLE_CLEARANCE;
+    return [
+      [0, 0],
+      [clearance, 0],
+      [-clearance, 0],
+      [0, clearance],
+      [0, -clearance],
+    ].every(([dx, dy]) =>
+      this.pathfinder.isWalkable(map, x + dx, y + dy),
+    );
+  }
+
+  /** @returns {{map: string, x: number, y: number}|undefined} the closest point to `position` a path can end on */
+  getStandablePointNear(position) {
+    const key = `${position.map}:${position.x}:${position.y}`;
+    if (!this.standablePoints.has(key))
+      this.standablePoints.set(key, this._searchStandablePoint(position));
+
+    const point = this.standablePoints.get(key);
+    return point && { ...point };
+  }
+
+  _searchStandablePoint({ map, x, y }) {
+    if (this._isClearPoint({ map, x, y })) return { map, x, y };
+
+    const { STANDABLE_SEARCH_STEP: step, STANDABLE_SEARCH_RADIUS: maxRadius } =
+      SMART_MOVE_CONFIG;
+    for (let radius = step; radius <= maxRadius; radius += step) {
+      const count = Math.ceil((2 * Math.PI * radius) / step);
+      for (let i = 0; i < count; i++) {
+        const angle = (2 * Math.PI * i) / count;
+        const point = {
+          map,
+          x: Math.round(x + radius * Math.cos(angle)),
+          y: Math.round(y + radius * Math.sin(angle)),
+        };
+        if (this._isClearPoint(point)) return point;
+      }
+    }
   }
 
   /**

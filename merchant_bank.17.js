@@ -576,7 +576,8 @@ function isBagSupply(item) {
     BAG_SUPPLY_TYPES.includes(type) ||
     BAG_WORK_TYPES.includes(type) ||
     isCraftIngredient(item.name) ||
-    isExchangeQueued(item.name)
+    isExchangeQueued(item.name) ||
+    isHeldForWitchBrew(item.name)
   );
 }
 

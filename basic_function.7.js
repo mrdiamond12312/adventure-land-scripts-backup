@@ -2760,7 +2760,35 @@ const DYNAMIC_PARTY_PRESETS = {
     HEALER = PRIEST;
     return [WARRIOR, PRIEST, MAGE];
   },
+
+  witch: {
+    EUII: () => {
+      RANGER = RANGER2;
+      HEALER = PRIEST;
+      return [RANGER2, PRIEST, MAGE];
+    },
+    default: () => {
+      RANGER = RANGER1;
+      HEALER = PRIEST;
+      return [RANGER1, PRIEST, MAGE];
+    },
+  },
 };
+
+/** Gather kinds whose mobs the ranger's multishot clears faster than the warrior */
+const WITCH_RANGER_KINDS = ["verdantspore", "frostscale", "gloomfeather"];
+
+/** @returns {boolean} whether this round's gathering slot wants the witch preset */
+function isRangerWitchSlot() {
+  const cipher = server.status.witchcipher;
+  if (!isWitchGathering(cipher) || get("cryptInstance")) return false;
+
+  const plan = get("witchGatherPlan");
+  return (
+    plan?.key === getWitchRoundKey(cipher) &&
+    WITCH_RANGER_KINDS.includes(plan.kind)
+  );
+}
 
 function getPresetMembers(preset, currentServer) {
   if (typeof preset === "function") return preset();
@@ -2788,6 +2816,8 @@ function dynamicParty() {
   const activeEvent =
     USE_CAVE_STRATEGY && isCaveUnderway()
       ? "cave"
+      : isRangerWitchSlot()
+      ? "witch"
       : liveEvents.find((name) => PRESET_FIRST_BOSSES.includes(name)) ??
         liveEvents
           .filter((name) => HP_RANKED_BOSSES.includes(name))
@@ -2955,21 +2985,24 @@ const WITCH_INGREDIENTS = Object.keys(WITCH_GATHER_SPOTS);
 
 const WITCH_SLOTS = G.events.witchcipher?.slots ?? 5;
 
+const WITCH_STAGE_LEAD_MS = 4 * 60_000;
+
 /** @returns {boolean} whether this realm's Witch's Cipher is gathering */
 function isWitchGathering(cipher = server.status.witchcipher) {
   return !!cipher?.live && Date.now() < cipher.gather_end;
 }
 
 /** @returns {string} this realm's round, e.g. "USII:USII-2026-10-21-06-00-witchcipher" */
-const getWitchRoundKey = (cipher = server.status.witchcipher) =>
-  `${getCurrentServer()}:${cipher?.id}`;
+function getWitchRoundKey(cipher = server.status.witchcipher) {
+  return `${getCurrentServer()}:${cipher?.id}`;
+}
 
-/** @returns {boolean} whether the account can still brew in the home realm's round */
+/** @returns {boolean} whether the account can still brew in the home realm's round, or get ready to */
 function canBrewWitchCipher() {
   const cipher = server.status.witchcipher;
   if (!isAtHomeServer()) return false;
-  if (!cipher?.live || Date.now() >= cipher.end || isWitchGathering(cipher))
-    return false;
+  if (!cipher?.live || Date.now() >= cipher.end) return false;
+  if (Date.now() < cipher.gather_end - WITCH_STAGE_LEAD_MS) return false;
   if (!(character.witchcipher?.mixes_left > 0)) return false;
   if (get("witchBrewDone") === getWitchRoundKey(cipher)) return false;
 
@@ -3039,10 +3072,7 @@ function getWitchGatherPlan() {
 /** Realm hour the knocking starts each day */
 const TRICK_OR_TREAT_START_HOUR = 3;
 
-/** Knock from this far below a door, clear of its wall line */
-const DOOR_FRONT_OFFSET = 40;
-
-const DOOR_KNOCK_DISTANCE = 40;
+const DOOR_KNOCK_REACH = 70;
 
 const DOOR_WALK_RETRY_MS = 120_000;
 
@@ -3071,7 +3101,8 @@ function getRealmHour() {
   return (new Date().getUTCHours() + offset + 24) % 24;
 }
 
-const getDoorFront = ([map, x, y]) => ({ map, x, y: y + DOOR_FRONT_OFFSET });
+const getDoorFront = ([map, x, y]) =>
+  strategicSmartMove.getStandablePointNear({ map, x, y }) ?? { map, x, y };
 
 /** @returns {number|undefined} the nearest door left today */
 function getNextTrickOrTreatDoor() {
@@ -3109,9 +3140,9 @@ async function knockNextDoor() {
   const door = getNextTrickOrTreatDoor();
   if (door === undefined) return false;
 
-  const front = getDoorFront(G.events.trickortreat.doors[door]);
-  if (distance(character, front) > DOOR_KNOCK_DISTANCE) {
-    return advanceSmartMove(front).then(
+  const [map, x, y] = G.events.trickortreat.doors[door];
+  if (distance(character, { map, x, y }) > DOOR_KNOCK_REACH) {
+    return advanceSmartMove(getDoorFront([map, x, y])).then(
       () => true,
       (e) => {
         console.warn(`[trickortreat] walk to door ${door} failed:`, e);

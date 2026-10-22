@@ -887,6 +887,11 @@ function classWeaponModifier(info) {
 
 const MP_POTIONS = ["mpot1", "mpot0"];
 const MAGE_MP_HORIZON_S = 10;
+const MAGE_RESERVED_BLINKS = 2;
+
+/** @returns {number} mp the mage's weapon choice leaves alone: a magiport and his blinks */
+const mageMpReserve = () =>
+  G.skills["magiport"].mp + MAGE_RESERVED_BLINKS * G.skills["blink"].mp;
 
 /** @returns {number} mp per second our potions, or regen without one, restore */
 function getMpIncome() {
@@ -903,8 +908,7 @@ function getMpIncome() {
 
 /** @returns {number} mp per second the mage can spend on attacks */
 function getMageAttackMpBudget() {
-  const reserve = G.skills["magiport"].mp + G.skills["blink"].mp;
-  const spare = Math.max(0, character.mp - reserve);
+  const spare = Math.max(0, character.mp - mageMpReserve());
   return getMpIncome() + spare / MAGE_MP_HORIZON_S;
 }
 
@@ -1021,7 +1025,7 @@ function calculateMageItems() {
     !currentTarget?.["1hp"] &&
     numberOfMonsterAroundTarget(currentTarget) >=
       TARGET_TO_SWITCH_TO_BLASTER_WEAPON &&
-    character.mp + incomingMp > G.skills["magiport"].mp + G.skills["blink"].mp;
+    character.mp + incomingMp > mageMpReserve();
 
   const feelingLucky = shouldWearLuckGear();
   const feelingWise = shouldWearExpGear();
@@ -2472,6 +2476,23 @@ function totalMobDps(mobs, toEntity = character) {
       accumulator +
       calculateDamage(mob, toEntity) * mobbingMultiplier(mobs.length, mob),
     0,
+  );
+}
+
+const OFF_TANK_EMERGENCY_HP_RATIO = 0.4;
+const OFF_TANK_EMERGENCY_HEAL_SHARE = 0.9;
+
+/**
+ * @param {string} name
+ * @returns {boolean} whether the warrior's off-tank taunt pulls mobs off this ally
+ */
+function isAllyInEmergency(name) {
+  const ally = get_player(name);
+  if (!ally || ally.rip) return false;
+
+  return (
+    ally.hp < ally.max_hp * OFF_TANK_EMERGENCY_HP_RATIO ||
+    avgDmgTaken(ally) > healerHps() * OFF_TANK_EMERGENCY_HEAL_SHARE
   );
 }
 

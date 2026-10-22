@@ -45,22 +45,6 @@ function getWarriorHeldMobs() {
 }
 
 const OFF_TANK_MAX_MOB_DPS = 3000;
-const OFF_TANK_EMERGENCY_HP_RATIO = 0.4;
-const OFF_TANK_EMERGENCY_HEAL_SHARE = 0.9;
-
-/**
- * @param {string} name
- * @returns {boolean}
- */
-function isAllyInEmergency(name) {
-  const ally = get_player(name);
-  if (!ally || ally.rip) return false;
-
-  return (
-    ally.hp < ally.max_hp * OFF_TANK_EMERGENCY_HP_RATIO ||
-    avgDmgTaken(ally) > healerHps() * OFF_TANK_EMERGENCY_HEAL_SHARE
-  );
-}
 
 /** @returns {Object|undefined} a physical mob to take off an ally in trouble */
 function getOffTankTauntTarget() {

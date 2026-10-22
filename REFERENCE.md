@@ -2243,6 +2243,11 @@ reserve spread over 10 s. With mpot1 in the bag the income alone is 250 mp/s, wh
 blaster at ordinary attack speed, so it only bites when potions run out or speed buffs push the
 drain past it.
 
+The reserve is `mageMpReserve()`: a magiport plus `MAGE_RESERVED_BLINKS` (2) blinks, so
+900 + 2 × 1600 = 4100 mp (2026-10-22, up from one blink). The weapon pick and `blasterAllowed`
+both read it, so a swap to a hungrier weapon never eats into the mp for a second blink. The blink
+casts themselves (smartMove, the cave Dark Mage hunt) still only check for one.
+
 ## Curse what the party is hitting (`getCurseTarget`, basic_priest.2.js, 2026-10-18)
 
 Curse is +20% damage taken and −20% damage dealt, so it is worth the party dps on the mob plus the
@@ -3705,8 +3710,14 @@ else) while it is within his reach of the anchor, and goes to it only beyond tha
 plantoids. His taunt pull skips `MELEE_IGNORE_LIST` so porcupines do not block the warrior's
 cleave and agitate; the zapper still pulls them.
 
-The priest's `getAbsorbTarget` skips the warrior while he off-tanks (farmTanker someone else, on
-the spot); it pulled his held ents straight back.
+The priest's `getAbsorbTarget` skips the warrior only while a `warriorHeldMobs` mob is on him
+(absorbing pulled his held ents straight back; absorb takes every mob on the target, so one ent
+blocks the whole absorb), or while the priest himself is in `isAllyInEmergency`, which is the case
+in which the off-tank taunt pulls mobs off him (absorbing those back would ping-pong).
+Otherwise a warrior who isn't TANKER gets absorbed like any other member. (2026-10-22: the
+skip used to cover anything on the warrior while he off-tanked on the farm spot, so with the
+priest tanking, ordinary mobs that wandered onto the warrior stayed there.)
+`isAllyInEmergency` moved from basic_warrior.9.js to strategic_fn.11.js for this.
 
 ## Ranger stalls with no penalty_cd (`getShotPlan`, 2026-10-16)
 
@@ -3992,6 +4003,20 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
 - **Fighters**: `useWitchGatheringStrategy` ranks right after the cave run, above every event. It
   stands aside for an open crypt or a cave run. The 06:00/18:00 slots don't collide with the
   scheduled events, so in practice it outranks only the always-up Mr. Pumpkin and Mr. Green.
+- **Party** (`witch` preset, 2026-10-22): the drop is 0.3% per 1k HP, so at equal damage every
+  mob pays the same. A plantoid's 36% per kill is 120k HP of work. Every gather spot's HP
+  supply (count × hp ÷ `respawn`) is far beyond what the party can kill (spiders 540k/min, ghosts
+  0.9–1.6M/min, boars 576k/min), so the party's damage is the limit, and the overstock of
+  embercoal (133 vs 18–38) comes from time spent on plantoids, not a better rate. While the
+  round's `witchGatherPlan` slot is a `WITCH_RANGER_KINDS` kind (spider, wolfie, ghost),
+  `dynamicParty` picks `witch`: the ranger (RANGER2 on EUII, RANGER1 elsewhere) replaces the
+  warrior, whose single-target swings waste the dense packs, and the priest tanks. Embercoal slots
+  keep the default party, since plantoids hit for 640. The preset ranks just below `cave` and
+  above Horseman, the same order `useWitchGatheringStrategy` takes, and it also stands aside for
+  an open crypt. A swap costs one `deployCharacters` cycle (≤30s plus login), once per kind change.
+  `isRangerWitchSlot` runs from `dynamicParty()`'s load-time call, before the witch section's
+  `const`s exist, so it only touches hoisted functions (`getWitchRoundKey` is one for that reason).
+  Luck was already covered: `shouldWearLuckGear` swaps in luck gear for the killing blow.
 - **Merchant** (merchant_witch.36.js): `attendWitchGathering` comes first in `merchantStrategies`.
   It takes the `WITCH` duty (over an event duty) and stays within 200 of a fighter. The fighters'
   10s handoff in basic_function.7.js then sends him every ingredient, since none is on its keep
@@ -4024,10 +4049,55 @@ a day from an empty board: 37% crack, ~26 Parcels a day.
 
 Brewing happens only on the home realm (`canBrewWitchCipher` checks `isAtHomeServer`), where the
 account's first mix of the day fixes its realm anyway. Rounds elsewhere are only for gathering.
-Once gathering ends, the merchant takes the `WITCH` duty, pulls every ingredient stack from the
-bank, walks to the Witch, and brews until a pick or brew fails, never spending the last
-`WITCH_ELIXIR_RESERVE` of a kind. The hop loop holds home while he can brew, and `witchBrewDone`
-marks the round finished.
+It never spends the last `WITCH_ELIXIR_RESERVE` of a kind. The hop loop holds home while he can
+brew, and `witchBrewDone` marks the round finished.
+
+### Brewing is staged and one step per tick (2026-10-22)
+
+The US4 06:00 round on 2026-10-22 brewed nothing (`mixes: 0`) but still wrote `witchBrewDone`.
+The old routine was one `try` that started at `gather_end`: retrieve, walk, then a `while` loop of
+brews. It had 8 minutes (`end` − `gather_end` = 480s) to get from the bank in `main` to the Witch
+in `halloween` (858, −160), and its `finally` marked the round done however the attempt ended:
+the window closing mid-walk, or a first `brew` refused for `distance`.
+
+Now `canBrewWitchCipher` opens `WITCH_STAGE_LEAD_MS` (4 min) before `gather_end`, and
+`attendWitchGathering` hands over its `WITCH` duty then. `brewWitchCipher` does one step per
+tick: retrieve once per round, walk until within `NPC_REACH` (380 in basic_merchant.5.js, shared
+with Xyn; the server's `B.sell_dist` is 400 for every NPC), wait out the gathering, then brew once every `WITCH_BREW_SPACING_MS`, so
+`server.status` shows our last mix before the next pick (a mix already on the board pays 0).
+Only `witchcipher_not_live` / `_no_mixes` / `_elsewhere`, or no affordable mix left, write
+`witchBrewDone`. Any other refusal just waits for the next spacing.
+
+The ingredients are `material`s, so the bank store puts them away through
+`!isEquipable && !isBagSupply` (`IGNORE` only covers equipables). The retrieve happens once per
+round, and a store after it would leave the bag-only pick empty and end the round. So
+`isBagSupply` takes `isHeldForWitchBrew`: the four kinds stay in the bag while
+`canBrewWitchCipher()` holds, whichever store runs (the tick's emergency store, `bankLoop`, or our
+own). Once the round is done or over, they go back to the bank as before.
+
+A nearly full bag doesn't stop brewing either. The gate is `character.rip`, not
+`mustAbandonFight` (≤3 free slots), because letting go would hand the duty to the emergency store
+mid-window. Brewing needs `WITCH_BAG_SLOTS`: one stack per ingredient (each stacks to 9999), plus
+one for the payout. Parcels land in the bag as `witchparcel`, a gem that stacks to 9999 (confirmed
+by the user in-game). Before retrieving, `bankStoreRoutine(true)` runs if fewer slots are free.
+Before the walk to the Witch, it runs again unless `hasRoomForWitchParcels` (a free slot, or a
+`witchparcel` stack already in the bag). Server-side (`witch_cipher_brew`, node/logic/witch_cipher.js),
+a full bag does not refuse the brew: it consumes the ingredients and counts the mix first, then
+`add_item` finds neither a stack nor an empty slot and silently drops the Parcels. If the bank is
+too tight to take anything, he stays at the bank and the round passes without brewing. Nothing is
+marked done, so the next round tries again.
+
+Also from `witch_cipher_brew`, checked against the repo, which may lag live:
+- The only time check is `Date.now() >= round.end`, so brewing is allowed during gathering too.
+  He waits on purpose until `WITCH_BREW_DELAY_MS` (2 min) past `gather_end`, because every other
+  player's mix until then is another clue. That leaves 6 of the 8 brewing minutes for five brews
+  `WITCH_BREW_SPACING_MS` apart. Waiting has a risk: a crack by someone else resets the board,
+  and the clues go with it.
+- `player.witchcipher` (`mixes_left`) is re-sent after every brew, so `canBrewWitchCipher`'s
+  `mixes_left` gate stays live. The result also carries `mixes_left`.
+- The reach is `B.sell_dist` (400) from the Witch, and brewing from the bank is `cant_in_bank`.
+- The official guide's sample (`docs/guide/event-witchcipher.html`) walks to (858, −120), 40px
+  below her, for the same wall reason `getStandablePointNear` handles.
 
 ## Horseman party, ASIA, and leaving a foreign gathering (2026-10-22)
 
@@ -4066,9 +4136,31 @@ building's wall line, so alpathfinder found no path. `smartMove` threw right awa
 `cleanUp` still called `stop()`, and that sends a `move`. `knockNextDoor` counted the failed walk
 as progress, so the merchant's 21-step errand fired it every ~3ms each tick, and fighters fired it
 every tick. That flood of emits got the characters disconnected. Two fixes:
-- `DOOR_FRONT_OFFSET` is 40, which keeps every front ≥20px clear of walls and still inside the
-  server's 80px knock reach.
+- The front is no longer a fixed offset below the door (it was 40). It is
+  `getStandablePointNear` (see below). Checked against every door with alpathfinder 0.6.0: each
+  lands below its door, ≤49px away, and has a path from `main`. The +40 fronts of doors 2, 4 and 5
+  had failed the 20px clearance check. The knock now measures `DOOR_KNOCK_REACH` (70; the server
+  allows 80) from the door itself, since a front can be up to 49px off.
 - A failed walk returns `false` and benches that door for `DOOR_WALK_RETRY_MS` (2 min), so a
   path failure can't repeat faster than once per door per 2 minutes. The bench is per walk, not per
   day, because a walk cut off by a higher strategy's takeover also rejects.
 Rule: any loop that retries a smart move must treat a rejection as no progress.
+
+## NPCs and doors drawn inside walls (`getStandablePointNear`, strategic_smart_move.21.js, 2026-10-22)
+
+Some interaction targets sit on or inside a wall, so `getPath` to them returns null. The Witch is at
+halloween (858, −160), and the wall line runs at y ≈ −158. Others are fancypots in `main`, the
+jailer, and every trick-or-treat door. `getStandablePointNear` searches rings 4px apart around
+the target, out to 120px, for the closest point where `isWalkable` holds at the point and
+`STANDABLE_CLEARANCE` (20px) out on all four sides. Points that hug a wall pass `isWalkable` but
+still got "no path" (the old 24px door fronts). It returns the target itself when that is already
+clear, and the result is cached per target because walkability comes from static geometry. For
+the Witch it picks (864, −137), 24px away and inside her 400 reach.
+
+alpathfinder 0.6.0's `getSafeWalkTo(map, x_from, y_from, x_to, y_to)` answers a different
+question: how far a straight walk from where you stand gets toward the target before a wall. Its
+answer depends on the starting side ((877, −152) from the right, (732, −128) from the left, null
+from below), so it can't name a destination for a trip that starts on another map.
+
+The scripts target alpathfinder 0.6 (`getPath`'s `{ speed, avoidMaps }` options). On 0.4.8, which
+caracAL's `^0.4.7` range resolves to, that call shape panics the wasm (`unreachable`).

@@ -69,8 +69,8 @@ const PARCEL_HOLD_GRACE = 300_000;
 const STAND_REJECT_MS = 600_000;
 /** Wait between scans while no spot is free */
 const STAND_RESCAN_MS = 5_000;
-/** Xyn's exchange reach without a computer (server B.sell_dist), less a margin */
-const XYN_EXCHANGE_REACH = 380;
+/** Any NPC's reach without a computer (server B.sell_dist), less a margin */
+const NPC_REACH = 380;
 
 // Merrit parcel state
 /** Our claimed parcel spot */
@@ -250,7 +250,7 @@ function isHomeRefused() {
 function isInXynReach(spot) {
   if (!XYN_POSITION) return false;
   const [x, y] = XYN_POSITION;
-  return Math.hypot(spot.x - x, spot.y - y) <= XYN_EXCHANGE_REACH;
+  return Math.hypot(spot.x - x, spot.y - y) <= NPC_REACH;
 }
 
 /**

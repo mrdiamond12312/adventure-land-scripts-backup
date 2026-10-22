@@ -286,12 +286,15 @@ function getAbsorbTarget() {
     get_entity(baitedBoss.target);
   if (baitHolder && is_in_range(baitHolder, "absorb")) return baitHolder;
 
-  const offTank =
-    farmTanker && farmTanker !== WARRIOR && isOnPartyFarmSpot()
-      ? WARRIOR
-      : undefined;
+  const isWarriorHolding =
+    Object.values(parent.entities).some(
+      (e) => e.target === WARRIOR && warriorHeldMobs.includes(e.mtype),
+    ) || isAllyInEmergency(character.name);
   const vulnerableMems = getMyCharacters().filter(
-    (id) => id !== character.name && id !== TANKER && id !== offTank,
+    (id) =>
+      id !== character.name &&
+      id !== TANKER &&
+      !(id === WARRIOR && isWarriorHolding),
   );
   for (const memberId of vulnerableMems) {
     const member = get_entity(memberId);
