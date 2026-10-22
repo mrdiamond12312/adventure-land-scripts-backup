@@ -2210,6 +2210,11 @@ party's average damage taken stays under the priest's heal × frequency. Before 
 priest refused every non-trivial unaggroed mob, so plantoids (`aggro` 0.2, they rarely walk in on
 their own) were never pulled. Other unaggroed mobs keep the old rules.
 
+Between two aggroed mobs (2026-10-23), one that two zaps kill (`isZapKillable`, `ZAP_KILL_HITS`,
+200 magical × our mitigation) comes first, so the zapper takes the last hit. Next comes a
+cooperative mob (`cooperativeFirst`), since every hit on it earns points. After that, the old
+order: higher hp share first, then the farther mob.
+
 Mid-trip the zapper takes `getEnRouteTarget("zapperzap")`, the attack's own trip rule: a mob
 already on the party, else an untargeted one that is harmless or dying, keeps us within courage
 and has no slowing or watchout ability. A hit only retargets a mob that has no target (server

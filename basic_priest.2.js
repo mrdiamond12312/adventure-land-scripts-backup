@@ -204,6 +204,16 @@ const CURSE_HP_THRESHOLD = 15_000;
 
 /** Share of max mp below which the zapper stops */
 const ZAP_MIN_MP_RATIO = 0.6;
+/** Zaps within which an aggroed mob counts as ours to finish */
+const ZAP_KILL_HITS = 2;
+
+/** @returns {boolean} whether ZAP_KILL_HITS zaps kill the mob */
+function isZapKillable(mob) {
+  const { damage, damage_type: damageType } = G.skills["zapperzap"];
+  return (
+    mob.hp <= ZAP_KILL_HITS * damage * mitigation(character, mob, { damageType })
+  );
+}
 
 /** Mp kept on top of partyheal's own cost so an emergency one can always fire */
 const PARTYHEAL_MP_MARGIN = 400;
@@ -384,6 +394,7 @@ function getZapTarget() {
       dist: distance(entity, character),
       hp_p: entity.hp / entity.max_hp,
       weak: entity.max_hp < TRIVIAL_MOB_MAX_HP,
+      killable: isZapKillable(entity),
     }))
     .filter((entity) => {
       if (entity.target) return true;
@@ -433,9 +444,11 @@ function getZapTarget() {
       }
 
       if (lhs.target && rhs.target)
-        return lhs.hp_p !== rhs.hp_p
-          ? rhs.hp_p - lhs.hp_p
-          : rhs.dist - lhs.dist;
+        return (
+          Number(rhs.killable) - Number(lhs.killable) ||
+          cooperativeFirst(lhs, rhs) ||
+          (lhs.hp_p !== rhs.hp_p ? rhs.hp_p - lhs.hp_p : rhs.dist - lhs.dist)
+        );
 
       if (isTanker) return rhs.dist - lhs.dist;
 
