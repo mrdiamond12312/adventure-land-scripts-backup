@@ -3589,6 +3589,13 @@ base layer under tank, fireball, luck and xp gear and every situational rule abo
 - **Not modelled:** hp, armour and resistance for our own survival (the tank pick owns that),
   mp_reduction's saving on skills, the zapper's zaps. The zapper keeps its rings on int and
   rpiercing today; a better heal ring would take one and `getZapTarget` stops.
+- **Class bonuses are already in `item_info`** (2026-10-23). Some items carry a per-class block,
+  e.g. the Laughing Grimoire (`laughingbook`, a `source` offhand): int 22, mp 200, plus
+  `priest: {int: 20}` and `mage: {crit: 4, critdamage: 25}`. `item_info` passes
+  `class: character.ctype` to `calculate_item_properties`, whose `adopt_extras` *adds* that block
+  to the base, so a priest sees int 42 (+5 per compound level) and a mage int 22 with the crit.
+  Int is the priest's main stat, so the heal and tank picks score the book with no special case.
+  Checked against the live client's `stats.js` and `data.js` (game_files/18183).
 
 ### Luck, exp and the ghost heal (`calculatePriestItems`, 2026-10-15)
 
@@ -3950,8 +3957,12 @@ party (e.g. Earth) are still taken by agitate, so they still block it: we let hi
   minion. He is not on the home drop table, and his achievements go up to 500 kills. Until the
   season ends (2026-11-02), `FATIGUE_EXEMPT_BOSSES` in server_hop.14.js stays for him, and hops
   to him ahead of the home-window and realm-fatigue checks. Realm clocks differ by region, so
-  several rides a day are reachable. A ride under `EXEMPT_HOP_MIN_HP_RATIO` would end before the
-  hop lands, so it is skipped.
+  several rides a day are reachable. No ride is skipped for low hp (2026-10-23): the goal is the
+  kill achievement, so any live Horseman is worth a hop for some damage. Among foreign realms the
+  one with the most hp left wins, since it is the likeliest to still be up when the hop lands.
+  Realms in one region share a clock, so killing one Horseman often leaves a sibling realm's still
+  riding. Under the old 15% hp floor that one was likely skipped, so the loop fell through to the
+  home window (Mr. Green's respawn) instead.
 - **Graveyard Rising** (every 2h at :30, spookytown): `fightGraveyard` sits right below Franky
   for the waves. Once the Gargoyle wakes (`server.status.graveyard.gargoyle`), `fightGargoyle`
   runs the same fight from above the Mr. Pumpkin/Mr. Green group, standing aside while Ice Golem
@@ -4117,7 +4128,7 @@ Also from `witch_cipher_brew`, checked against the repo, which may lag live:
   around the spot, so both bosses are fought in one place. The Horseman spawns among the north-west
   graveyard's 9 ghosts (-405,-1642), but `roam` carries him anywhere.
 - Home comes first for the Horseman: `getExemptHopTarget` sorts the home realm ahead of the rest.
-  A live home Horseman (with at least `EXEMPT_HOP_MIN_HP_RATIO` of his hp left) keeps the party
+  A live home Horseman keeps the party
   home, and pulls it home even off another realm's Horseman. Only with none at home does the
   party stay on, or hop to, another realm's.
 

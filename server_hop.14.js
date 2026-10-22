@@ -21,8 +21,6 @@ const waitForEvent = ["wabbit"];
 
 const FATIGUE_EXEMPT_BOSSES = ["horseman"];
 
-const EXEMPT_HOP_MIN_HP_RATIO = 0.15;
-
 async function hopToServer(serverRegion, serverIdentifier) {
   if (parent.caracAL) {
     send_cm(parent.caracAL.siblings, "loot-before-hopping");
@@ -135,21 +133,21 @@ function hasEventWorthStayingFor() {
   return Boolean(brawling || liveHere);
 }
 
-/** @returns {Object|undefined} the best live fatigue-exempt boss, home first */
+/** @returns {Object|undefined} the live fatigue-exempt boss, home first, then most hp left */
 function getExemptHopTarget() {
   const awayFromHome = (candidate) =>
     realmOf(candidate) === getHomeServer() ? 0 : 1;
+  const hpFraction = (candidate) =>
+    (candidate.hp ?? G.monsters[candidate.type].hp) /
+    G.monsters[candidate.type].hp;
 
   return getRealmData()
     ?.query({ types: FATIGUE_EXEMPT_BOSSES })
-    .filter(
-      (candidate) =>
-        isReachableRealm(candidate, true) &&
-        candidate.hp >= EXEMPT_HOP_MIN_HP_RATIO * G.monsters[candidate.type].hp,
-    )
+    .filter((candidate) => isReachableRealm(candidate, true))
     .sort(
       (lhs, rhs) =>
-        awayFromHome(lhs) - awayFromHome(rhs) || byHopPriority(lhs, rhs),
+        awayFromHome(lhs) - awayFromHome(rhs) ||
+        hpFraction(rhs) - hpFraction(lhs),
     )[0];
 }
 
