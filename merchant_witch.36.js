@@ -119,9 +119,10 @@ function scoreWitchMix(mix, candidates) {
  * @param {Object} cipher - server.status.witchcipher
  * @param {Object<string, number>} counts - ingredients we may spend
  * @param {boolean} hasCracked - whether the account took today's crack bonus
+ * @param {boolean} [mayMiss] - whether a mix that can't crack is still worth brewing
  * @returns {string[]|undefined} before the crack, the candidate narrowing most; else the untried mix paying most
  */
-function pickWitchMix(cipher, counts, hasCracked) {
+function pickWitchMix(cipher, counts, hasCracked, mayMiss = true) {
   const candidates = getWitchCandidates(cipher);
   if (!candidates.length) return;
 
@@ -141,7 +142,7 @@ function pickWitchMix(cipher, counts, hasCracked) {
         bestScore = score;
       }
     }
-    if (best) return best;
+    if (best || !mayMiss) return best;
   }
 
   const tried = new Set((cipher.board ?? []).map(({ mix }) => mix.join()));
@@ -174,9 +175,60 @@ const WITCH_FINAL_REJECTIONS = [
   "witchcipher_elsewhere",
 ];
 
-const WITCH_BREW_DELAY_MS = 2 * 60_000;
+/** Candidates left at or below which a guess is worth one of the day's mixes */
+const WITCH_STRIKE_POSSIBLE = 32;
+
+/** How long before the cauldron closes the day's last round spends what is left */
+const WITCH_FLUSH_LEAD_MS = 60_000;
+
+/** How long an untouched board waits, once gathering is over, before the day's last round brews alone */
+const WITCH_QUIET_MS = 2 * 60_000;
+
+const WITCH_DAY_MS = 24 * 60 * 60_000;
 
 const WITCH_BREW_SPACING_MS = 3_000;
+
+/** @returns {boolean} whether today's mixes end with this round: we are abroad, or the lineup holds no later round before the UTC day ends */
+function isLastWitchRoundOfDay(cipher) {
+  if (!isAtHomeServer()) return true;
+
+  const schedule = server.status.schedule;
+  const dayEnd = (Math.floor(cipher.start / WITCH_DAY_MS) + 1) * WITCH_DAY_MS;
+  return ![...(schedule?.events ?? []), ...(schedule?.repeats ?? [])].some(
+    ({ event, status, at }) =>
+      event === "witchcipher" &&
+      status === "scheduled" &&
+      at > cipher.end &&
+      at < dayEnd,
+  );
+}
+
+let witchBoardSeen = { state: undefined, at: 0 };
+
+let witchSoloRound;
+
+/** @returns {number} ms since the board last took a mix or a crack */
+function getWitchBoardQuietMs(cipher) {
+  const state = `${cipher.id}|${cipher.cracks}|${cipher.mixes}`;
+  if (witchBoardSeen.state !== state) witchBoardSeen = { state, at: Date.now() };
+  return Date.now() - witchBoardSeen.at;
+}
+
+/** @returns {boolean} whether the day's last round spends what is left: nobody is narrowing, or it is about to close */
+function isFlushingWitchMixes(cipher) {
+  const quietMs = getWitchBoardQuietMs(cipher);
+  if (!isLastWitchRoundOfDay(cipher)) return false;
+
+  const key = getWitchRoundKey(cipher);
+  if (witchSoloRound === key) return true;
+
+  const now = Date.now();
+  const isQuiet = now >= cipher.gather_end && quietMs >= WITCH_QUIET_MS;
+  if (!isQuiet && now < cipher.end - WITCH_FLUSH_LEAD_MS) return false;
+
+  witchSoloRound = key;
+  return true;
+}
 
 /** A stack per ingredient, and one for the Parcels */
 const WITCH_BAG_SLOTS = WITCH_INGREDIENTS.length + 1;
@@ -252,18 +304,20 @@ async function brewWitchCipher() {
     return true;
   }
 
-  const brewFrom = Math.max(
-    cipher.gather_end + WITCH_BREW_DELAY_MS,
-    nextWitchBrewAt,
-  );
-  if (Date.now() < brewFrom) return true;
+  if (Date.now() < nextWitchBrewAt) return true;
+
+  const isFlushing = isFlushingWitchMixes(cipher);
+  const possible = cipher.possible ?? getWitchCandidates(cipher).length;
+  if (!isFlushing && possible > WITCH_STRIKE_POSSIBLE) return true;
 
   const mix = pickWitchMix(
     cipher,
     spareWitchIngredients(countBagWitchIngredients()),
     hasCracked,
+    isFlushing,
   );
   if (!mix) {
+    if (!isFlushing) return true;
     finishWitchBrewing();
     return false;
   }

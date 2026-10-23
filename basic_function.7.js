@@ -2805,7 +2805,13 @@ function getPresetMembers(preset, currentServer) {
 const PRESET_FIRST_BOSSES = ["horseman"];
 
 /** Bosses useEventStrategy fights lowest hp fraction first */
-const HP_RANKED_BOSSES = ["mrpumpkin", "mrgreen", "icegolem"];
+const HP_RANKED_BOSSES = [
+  "icegolem",
+  "franky",
+  "dragold",
+  "mrpumpkin",
+  "mrgreen",
+];
 
 function dynamicParty() {
   const currentServer = `${server.region}${server.id}`;
@@ -2997,10 +3003,36 @@ function getWitchRoundKey(cipher = server.status.witchcipher) {
   return `${getCurrentServer()}:${cipher?.id}`;
 }
 
-/** @returns {boolean} whether the account can still brew in the home realm's round, or get ready to */
+/** @returns {boolean} whether home still runs a Witch round this UTC day, assumed so when its lineup is out of reach */
+function hasHomeWitchRoundToday() {
+  const status = isAtHomeServer()
+    ? server.status
+    : typeof getHomeRealmStatus === "function"
+      ? getHomeRealmStatus()
+      : undefined;
+  const events = status?.schedule?.events;
+  if (!events) return true;
+
+  const dayEnd = new Date().setUTCHours(24, 0, 0, 0);
+  return events.some(
+    ({ event, status, at }) =>
+      event === "witchcipher" &&
+      (status === "live" || (status === "scheduled" && at < dayEnd)),
+  );
+}
+
+/** @returns {boolean} whether today's mixes belong here: the realm the account brewed on, else home, else wherever we are once home has no round left today */
+function isWitchBrewRealm() {
+  const day = character.witchcipher;
+  if (day?.server) return false;
+  if (day?.mixes > 0) return true;
+  return isAtHomeServer() || !hasHomeWitchRoundToday();
+}
+
+/** @returns {boolean} whether the account can still brew in this realm's round, or get ready to */
 function canBrewWitchCipher() {
   const cipher = server.status.witchcipher;
-  if (!isAtHomeServer()) return false;
+  if (!isWitchBrewRealm()) return false;
   if (!cipher?.live || Date.now() >= cipher.end) return false;
   if (Date.now() < cipher.gather_end - WITCH_STAGE_LEAD_MS) return false;
   if (!(character.witchcipher?.mixes_left > 0)) return false;

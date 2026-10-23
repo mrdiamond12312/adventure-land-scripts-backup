@@ -5,9 +5,8 @@ const EVENT_FIGHTS = [
   () => fightSimpleBoss(["horseman"]),
   fightGoobrawl,
   fightGargoyle,
-  () => fightSimpleBoss(["dragold", "mrpumpkin", "mrgreen", "icegolem"]),
+  fightLowestHpBoss,
   fightCrabxx,
-  fightFranky,
   fightGraveyard,
   fightSnowman,
   fightAbtesting,
@@ -25,6 +24,35 @@ const EVENT_FIGHTS = [
 async function useEventStrategy() {
   for (const fight of EVENT_FIGHTS) {
     const outcome = await fight();
+    if (outcome) return outcome;
+  }
+  return undefined;
+}
+
+// --- Hp-ranked bosses ---
+
+/** Each of HP_RANKED_BOSSES (basic_function.7.js) through its own fight */
+const HP_RANKED_FIGHTS = {
+  icegolem: () => fightSimpleBoss(["icegolem"]),
+  franky: fightFranky,
+  dragold: () => fightSimpleBoss(["dragold"]),
+  mrpumpkin: () => fightSimpleBoss(["mrpumpkin"]),
+  mrgreen: () => fightSimpleBoss(["mrgreen"]),
+};
+
+/** @returns {Promise<object|undefined>} the outcome against the live hp-ranked boss with the least hp left */
+async function fightLowestHpBoss() {
+  const hpFraction = (name) => {
+    const { hp, max_hp = G.monsters[name].hp } = server.status[name];
+    return (hp ?? max_hp) / max_hp;
+  };
+
+  const live = HP_RANKED_BOSSES.filter(
+    (name) => server.status[name]?.live,
+  ).sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs));
+
+  for (const name of live) {
+    const outcome = await HP_RANKED_FIGHTS[name]();
     if (outcome) return outcome;
   }
   return undefined;

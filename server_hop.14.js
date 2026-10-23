@@ -16,10 +16,14 @@ const bosses = {
   dragold: { type: "dragold", threshold: 0.85, hoppable: 1 },
   pinkgoo: { type: "pinkgoo", threshold: 0.65, hoppable: 1 },
   // wabbit: { type: "wabbit", threshold: 0.5, hoppable: 1 },
+  horseman: { type: "horseman", hoppable: 1, fatigueExempt: true },
 };
 const waitForEvent = ["wabbit"];
 
-const FATIGUE_EXEMPT_BOSSES = ["horseman"];
+/** Bosses chased home first and across ignoreServer, ahead of the home windows and realm fatigue */
+const fatigueExemptBosses = Object.keys(bosses).filter(
+  (name) => bosses[name].fatigueExempt,
+);
 
 async function hopToServer(serverRegion, serverIdentifier) {
   if (parent.caracAL) {
@@ -98,9 +102,12 @@ function byHopPriority(lhs, rhs) {
   return 0;
 }
 
-/** @returns {string[]} every boss this script knows how to chase */
+/** @returns {string[]} every boss the HP race chases; fatigue-exempt ones have their own hop */
 function trackedBossTypes() {
-  return [...tankableBoss, ...Object.keys(bosses)];
+  return [
+    ...tankableBoss,
+    ...Object.keys(bosses).filter((name) => !bosses[name].fatigueExempt),
+  ];
 }
 
 /** @returns {boolean} whether a boss here is already softened enough to stay for */
@@ -142,7 +149,7 @@ function getExemptHopTarget() {
     G.monsters[candidate.type].hp;
 
   return getRealmData()
-    ?.query({ types: FATIGUE_EXEMPT_BOSSES })
+    ?.query({ types: fatigueExemptBosses })
     .filter((candidate) => isReachableRealm(candidate, true))
     .sort(
       (lhs, rhs) =>
@@ -164,6 +171,106 @@ function getWitchGatherHopTarget() {
         candidate.gather_end - Date.now() >= WITCH_HOP_MIN_GATHER_MS,
     )
     .sort((lhs, rhs) => rhs.gather_end - lhs.gather_end)[0];
+}
+
+/** Foreign events worth landing early for, so hop sickness wears off before they start */
+const EARLY_HOP_EVENTS = ["witchcipher"];
+
+/** How long before a foreign event we land on its realm */
+const EARLY_HOP_LEAD_MS = 14 * 60_000;
+
+const HOP_SICKNESS_MS = G.conditions.hopsickness?.duration ?? 720_000;
+
+/** Overrun past an event's own length before the party is free to head home */
+const EVENT_STAY_SLACK_MS = 60_000;
+
+const WITCH_DAY_REFRESH_MS = 5 * 60_000;
+
+/** The account's Witch day from witch_cipher_info(): mixes_left, and server once it has a claim */
+let witchDay = { at: 0 };
+
+/** Refreshes witchDay in the background; character.witchcipher only exists during a round here */
+async function refreshWitchDay() {
+  if (Date.now() - witchDay.at < WITCH_DAY_REFRESH_MS) return;
+  witchDay.at = Date.now();
+
+  const info = await witch_cipher_info().catch((e) => console.warn(e));
+  if (info) witchDay = { ...info, at: Date.now() };
+}
+
+/** @returns {boolean} whether the party would brew at `realm`'s Witch round rather than leave after gathering */
+function canBrewWitchAt(realm) {
+  refreshWitchDay();
+  return (
+    witchDay.mixes_left > 0 &&
+    (!witchDay.server || witchDay.server === realm) &&
+    !hasHomeWitchRoundToday()
+  );
+}
+
+/** @returns {number} ms the party spends on a foreign event once it starts */
+function getForeignEventStayMs(event, realm) {
+  const { duration = 0, gathering } = G.events[event] ?? {};
+  const isGatherOnly = event === "witchcipher" && !canBrewWitchAt(realm);
+  return ((isGatherOnly ? gathering : duration) ?? duration) * 1000 + EVENT_STAY_SLACK_MS;
+}
+
+/** @returns {Object[]} a realm's upcoming lineup entries for `events` */
+const getScheduledEvents = (status, events) =>
+  (status?.schedule?.events ?? []).filter(
+    (entry) =>
+      events.includes(entry.event) &&
+      ["scheduled", "live"].includes(entry.status),
+  );
+
+/** @returns {boolean} whether home runs an early-hop event or a fatigue-exempt boss of its own by `by` */
+function hasHomeEventBy(by) {
+  return getScheduledEvents(getHomeRealmStatus(), [
+    ...EARLY_HOP_EVENTS,
+    ...fatigueExemptBosses,
+  ]).some(({ at }) => at <= by);
+}
+
+/** @returns {Object|undefined} the foreign event to land early for: far enough out to shed hop sickness, back home before the next scheduled home window */
+function getEarlyHopTarget() {
+  const realmData = getRealmData();
+  if (!realmData) return;
+
+  const now = Date.now();
+  const untilHomeWindow = msUntilHomeScheduledEvent();
+  const targets = [];
+  for (const key of Object.keys(realmData.realms)) {
+    if (key === getHomeServer()) continue;
+
+    const { region, name } = realmData.realms[key];
+    const realm = { serverRegion: region, serverIdentifier: name };
+    if (!isReachableRealm(realm)) continue;
+
+    for (const { event, status, at } of getScheduledEvents(
+      realmData.status(key),
+      EARLY_HOP_EVENTS,
+    )) {
+      const until = at - now;
+      const stayMs = getForeignEventStayMs(event, key);
+      if (status !== "scheduled") continue;
+      if (until < HOP_SICKNESS_MS || until > EARLY_HOP_LEAD_MS) continue;
+      if (until + stayMs + HOME_RETURN_LEAD_MS > untilHomeWindow) continue;
+      if (hasHomeEventBy(at + stayMs)) continue;
+
+      targets.push({ ...realm, type: event, at });
+    }
+  }
+  return targets.sort((lhs, rhs) => lhs.at - rhs.at)[0];
+}
+
+/** @returns {boolean} whether an early-hop event here is about to start or running */
+function hasEarlyHopEventHere() {
+  const now = Date.now();
+  return getScheduledEvents(server.status, EARLY_HOP_EVENTS).some(
+    ({ status, at }) =>
+      status === "live" ||
+      (status === "scheduled" && at - now <= EARLY_HOP_LEAD_MS && at > now),
+  );
 }
 
 async function hopToCandidate(target) {
@@ -193,7 +300,7 @@ setInterval(async () => {
     if (!isAtHomeServer()) return hopHome(`${exemptTarget.type} up at home`);
     return;
   }
-  if (FATIGUE_EXEMPT_BOSSES.some((name) => server.status[name]?.live)) return;
+  if (fatigueExemptBosses.some((name) => server.status[name]?.live)) return;
   if (exemptTarget) return hopToCandidate(exemptTarget);
 
   const gatherTarget = getWitchGatherHopTarget();
@@ -203,6 +310,9 @@ setInterval(async () => {
   if (!isAtHomeServer() && cipher?.live && Date.now() < cipher.end)
     return hopHome("the Witch's gathering is over");
 
+  // The early hop already budgeted every scheduled home window
+  if (!isAtHomeServer() && hasEarlyHopEventHere()) return;
+
   // Should we return home?
   // When there's gonna be a boss with home server drop table in 30 mins~!
   const settleReason = shouldReturnHomeToSettle();
@@ -210,6 +320,9 @@ setInterval(async () => {
 
   if (hasSoftenedBossHere()) return;
   if (hasEventWorthStayingFor()) return;
+
+  const earlyTarget = getEarlyHopTarget();
+  if (earlyTarget) return hopToCandidate(earlyTarget);
 
   const holdReason = shouldHoldAtHome();
   if (holdReason) {

@@ -335,6 +335,75 @@ nightly, and all three carry home tables, so a window is worth being home for. `
 `mrpumpkin` and `mrgreen` are seasonal and absent from `G.events` — they are caught by the live
 `S` scan instead, not the clock.
 
+**The lineup says which (2026-10-23).** Data 18183's Events window reads
+`schedule.events` (`{id, event, at, status: scheduled|live|done|missed}`, plus `season` and, once
+run, `started`/`ended`) and `schedule.repeats` (`{id, event, at, status, every}`), so each slot
+now names its event. Confirmed live on USIV: `at` is epoch ms, and `events` runs about a week
+ahead, done rounds included. The `id` carries the realm-clock slot, e.g.
+`USIV-2026-10-23-2000-goobrawl`. The dailies (13, 20) rotate abtesting/goobrawl/crabxx, the
+nightly (23) rotates franky/icegolem, and Halloween adds witchcipher at 06/18, horseman at 00,
+and a graveyard repeat every 2h.
+
+Every realm's lineup reaches `ServerRealmData` with no extra listener. Server-side,
+`broadcast_e` merges `event_schedule.publish()` (`realm`, `server_time`, `events`, `repeats`) into
+`E.schedule`. `E` is the `S` that `welcome` sends (refreshed just before) and that `server_info`
+broadcasts to every socket on the realm, our unauthenticated observers included. That happens on
+the periodic tick and on every event change. So `getRealmData().status(key).schedule.events` is as
+fresh as the last pulse. The home-only `new_map`/`entities` feed carries monsters, not `S`. `msUntilNextLineupEvent` counts only
+`isHomeSettleEvent` ones: home-table monsters, plus `HOME_BONUS_EVENTS` (`goobrawl`: `rgoo` and
+`bgoo` are `cooperative`, so they get the 5x home contribution that realm fatigue blocks). A live
+one reads as 0. A `scheduled` one more than `SPAWN_OVERDUE_GRACE_MS` past its `at` is ignored.
+With no `events` array it falls back to every daily/nightly hour as before. So an abtesting,
+dreams or Witch slot no longer pins the party home or blocks a cave run. The Witch needs no
+settle: it has no home table and no cooperative kill, and the Witch hop rules already bring the
+party home for brewing.
+
+Two conditions, easy to mix up: `hopsickness` (12 min of online play, -80 luck/gold/xp, -20
+output) comes from *leaving* home and **clears the moment you return**. `realmfatigue` (30 min,
+blocks home bonuses) comes from a sibling being elsewhere and is **not** cleared by returning.
+Only the fatigue needs the 32-min settle lead. Corollary: a Witch gathering hop abroad gathers
+under -80 luck for its first 12 minutes.
+
+**Landing early for a foreign event** (`getEarlyHopTarget`, server_hop.14.js, 2026-10-23). With
+every realm's lineup in `ServerRealmData`, the hop loop hops to another realm's Witch round
+(`EARLY_HOP_EVENTS`) when it starts in 12–14 min: `HOP_SICKNESS_MS` to `EARLY_HOP_LEAD_MS`. The
+party farms its usual spot there while the sickness wears off, then Witch gathering takes over.
+Foreign goobrawl was dropped on purpose: its rewards are meh, and a 10-min brawl isn't worth
+risking a home crabxx. It only goes when:
+- the realm is reachable, and the entry is `scheduled`;
+- start + stay + `HOME_RETURN_LEAD_MS` still lands before the next home window, so the trip never
+  costs a settled home crabxx/goobrawl/franky/icegolem. The stay is the round's `duration` (28
+  min) when `canBrewWitchAt` that realm, else its `gathering` (20 min) when he'll brew at home
+  instead, plus `EVENT_STAY_SLACK_MS` (1 min): about 29 or 21 min. The merchant is the hop owner
+  (the one `enabled` caracAL character, which deploys the rest to its realm), so he is always
+  there to brew;
+- home has no Witch round, and no `fatigueExemptBosses` (Horseman) slot, of its own by the
+  foreign round's end (`hasHomeEventBy`). That keeps the party, and the merchant, home for those.
+  Horseman needs this because the hop loop's `isWitchGathering()` return sits above the
+  Horseman check: once gathering abroad, the party would not come back for him. EU's 06:00 round
+  is 05:00 UTC, the same moment as USIV's 00:00 Horseman.
+
+Simulated over 2026-10-24 UTC with USIV's real lineup and EU's rotation (realm clock UTC+1): the
+only early hop is EU's 17:00 UTC round. It hops at 16:46 and needs 66 min against 73 to the
+18:00 crabxx. EU 05:00 is blocked by the home Horseman, and the other US realms' rounds by home's
+own 11:00/23:00 rounds. Holds start 32 min before goobrawl 01:00, franky 04:00 and crabxx 18:00,
+and abtesting no longer holds. With a mrpumpkin respawn 10 min out, the 16:46 hop still goes.
+
+**Scheduled windows only (2026-10-23, the user's call).** The admission check uses
+`msUntilHomeScheduledEvent`, not `msUntilHomeWindow`, so mrpumpkin/mrgreen respawns don't count.
+They die whenever players kill them, and with an unstable player base the next death can't be
+predicted. Included, they would close every trip all Halloween: alive means a hold, dead means a
+respawn within 54/94 min, under the ~66 min a trip needs. Two placements follow from that. The
+early hop runs **before** `shouldHoldAtHome`, which also holds for those two: a scheduled hold
+can't conflict, since the admission check already rejects a trip into one. And
+`hasEarlyHopEventHere` sits **above** `shouldReturnHomeToSettle`, so a Pumpkin respawn can't
+recall the party mid-trip. The cost is the home table on a Pumpkin/Green kill that lands within
+~30 min of coming back. Below the settle hop, the soft-boss/event checks still keep the party on
+a live event here, and the boss race and "nothing left to chase" can't pull it home mid-wait. Afterwards the Witch's "gathering is over" rule, or
+"nothing left to chase", brings it home under 30 min of fatigue, which the admission check
+already budgeted. A lineup entry is read only when `scheduled` or `live`: `missed` ones keep a past
+`at` and would otherwise block forever.
+
 **The two policies**, both behind `FATIGUE_AWARE_HOPPING`:
 
 - `shouldHoldAtHome()` — refuse to leave home when a home-table boss is live or `spawn`-scheduled
@@ -3966,8 +4035,11 @@ party (e.g. Earth) are still taken by agitate, so they still block it: we let hi
 - **Headless Horseman** (nightly, 00:00 realm clock, 30M HP, roams `halloween`): a simple boss,
   first in `EVENT_FIGHTS`. Its Jack-o Walkers come from `G.monsters.horseman.spawns` like any
   minion. He is not on the home drop table, and his achievements go up to 500 kills. Until the
-  season ends (2026-11-02), `FATIGUE_EXEMPT_BOSSES` in server_hop.14.js stays for him, and hops
-  to him ahead of the home-window and realm-fatigue checks. Realm clocks differ by region, so
+  season ends (2026-11-02), his `bosses` entry in server_hop.14.js stays, with `fatigueExempt:
+  true`. That flag builds `fatigueExemptBosses`, which `getExemptHopTarget` hops to ahead of the
+  home-window and realm-fatigue checks (home first, `ignoreServer` realms allowed).
+  `trackedBossTypes` leaves flagged bosses out of the HP race. Remove the flag or comment the
+  entry out to stop chasing him. Realm clocks differ by region, so
   several rides a day are reachable. No ride is skipped for low hp (2026-10-23): the goal is the
   kill achievement, so any live Horseman is worth a hop for some damage. Among foreign realms the
   one with the most hp left wins, since it is the likeliest to still be up when the hop lands.
@@ -4069,8 +4141,29 @@ crack, any untried mix may be picked, by expected right places alone. A cracked 
 hint about the next: the new secret is uniform and the board resets. Simulated alone with 5 mixes
 a day from an empty board: 37% crack, ~26 Parcels a day.
 
-Brewing happens only on the home realm (`canBrewWitchCipher` checks `isAtHomeServer`), where the
-account's first mix of the day fixes its realm anyway. Rounds elsewhere are only for gathering.
+Brewing happens on the realm `isWitchBrewRealm` picks, since the account's first mix of the day
+fixes its realm (`witchcipher_elsewhere` after that). In order: not here if the day is claimed
+elsewhere; here if it is claimed here; else home while it still runs a round this UTC day
+(`hasHomeWitchRoundToday`, which assumes so if the home lineup is unreadable); else wherever we
+are.
+
+From the server source (`node/logic/witch_cipher.js` in `kaansoral/adventureland_mongodb`,
+`witch_cipher_status` / `witch_cipher_info`):
+- `character.witchcipher` is `{day, mixes, mixes_left, parcels}`. It only exists while a round runs
+  on the current realm and is nulled when the round finishes. It carries `server` only when the
+  day is claimed on **another** realm, and then `mixes_left` is forced to 0. So `server` present
+  means elsewhere, and `mixes > 0` without it means here.
+- `witch_cipher_info()` works anytime: `{mixes, mixes_left, parcels, live, server}`. Here `mixes`
+  is the rule's 5, not the count used, and `server` is set whenever a claim exists, this realm
+  included. The hop loop needs the day outside a round, so `canBrewWitchAt` reads a `witchDay`
+  copy of it, refreshed in the background every 5 min and only when a foreign Witch round is in
+  the early-hop window. A first tick with no data budgets the gather-only stay. Each call can log
+  caracAL's harmless `Weird resolve_deferred issue: interaction`.
+- The day is the UTC date, and a round belongs to the day it started on, even past midnight. The
+  crack bonus is once per account per day (`!claim.cracks`). During Halloween home always
+has a round, so foreign rounds are for gathering only. Once the Witch joins the daily rotation, a
+day without a home round brews at the foreign round the early hop took us to. Abroad,
+`isLastWitchRoundOfDay` is always true: there is no later round we'll be at.
 It never spends the last `WITCH_ELIXIR_RESERVE` of a kind. The hop loop holds home while he can
 brew, and `witchBrewDone` marks the round finished.
 
@@ -4085,7 +4178,7 @@ the window closing mid-walk, or a first `brew` refused for `distance`.
 Now `canBrewWitchCipher` opens `WITCH_STAGE_LEAD_MS` (4 min) before `gather_end`, and
 `attendWitchGathering` hands over its `WITCH` duty then. `brewWitchCipher` does one step per
 tick: retrieve once per round, walk until within `NPC_REACH` (380 in basic_merchant.5.js, shared
-with Xyn; the server's `B.sell_dist` is 400 for every NPC), wait out the gathering, then brew once every `WITCH_BREW_SPACING_MS`, so
+with Xyn; the server's `B.sell_dist` is 400 for every NPC), wait for a narrow board (see below), then brew once every `WITCH_BREW_SPACING_MS`, so
 `server.status` shows our last mix before the next pick (a mix already on the board pays 0).
 Only `witchcipher_not_live` / `_no_mixes` / `_elsewhere`, or no affordable mix left, write
 `witchBrewDone`. Any other refusal just waits for the next spacing.
@@ -4111,15 +4204,31 @@ marked done, so the next round tries again.
 
 Also from `witch_cipher_brew`, checked against the repo, which may lag live:
 - The only time check is `Date.now() >= round.end`, so brewing is allowed during gathering too.
-  He waits on purpose until `WITCH_BREW_DELAY_MS` (2 min) past `gather_end`, because every other
-  player's mix until then is another clue. That leaves 6 of the 8 brewing minutes for five brews
-  `WITCH_BREW_SPACING_MS` apart. Waiting has a risk: a crack by someone else resets the board,
-  and the clues go with it.
+  See "Brewing waits for a narrow board" below for when he actually brews.
 - `player.witchcipher` (`mixes_left`) is re-sent after every brew, so `canBrewWitchCipher`'s
   `mixes_left` gate stays live. The result also carries `mixes_left`.
 - The reach is `B.sell_dist` (400) from the Witch, and brewing from the bank is `cant_in_bank`.
 - The official guide's sample (`docs/guide/event-witchcipher.html`) walks to (858, −120), 40px
   below her, for the same wall reason `getStandablePointNear` handles.
+
+## Franky and icegolem join the hp ranking (2026-10-23)
+
+A Mr. Pumpkin or Mr. Green spawning mid-Franky pulled the fighters off Franky. `EVENT_FIGHTS` ran
+`fightSimpleBoss(["dragold", "mrpumpkin", "mrgreen", "icegolem"])` above `fightFranky`, so any
+live Pumpkin outranked him whatever his hp. `dynamicParty`'s `HP_RANKED_BOSSES` left Franky out
+too, so the party preset swapped to Pumpkin's. Now all five compete on hp fraction, as the
+merchant's `getEventToJoin` always did. A fresh Pumpkin doesn't pull the party off an 80% Franky;
+one softened below him does.
+- `HP_RANKED_BOSSES` (basic_function.7.js) is `[icegolem, franky, dragold, mrpumpkin, mrgreen]`,
+  shared by the fighters and `dynamicParty`.
+- Fighters: `fightLowestHpBoss` sorts the live ones by `server.status` hp / `max_hp` (falling back
+  to `G.monsters[].hp`, and to full when hp is missing), then runs each one's own fight from
+  `HP_RANKED_FIGHTS`: `fightFranky` for Franky, `fightSimpleBoss([name])` for the rest. It falls
+  through to the next one if a fight doesn't claim the tick. Franky's strategy differs, so he
+  can't just join `fightSimpleBoss`'s list.
+- Crabxx stays outside the ranking, right after it. While shelled (`"1hp"`) his fraction barely
+  moves, so he'd lose to any Pumpkin. He's daily and Franky/icegolem nightly, so they don't
+  overlap anyway.
 
 ## Horseman party, ASIA, and leaving a foreign gathering (2026-10-22)
 
@@ -4150,6 +4259,51 @@ since a ruled-out mix still pays per right place. It only does so above `WITCH_M
 duty, `brewWitchCipher` runs the same pick on bank + bag stock beyond the reserve
 (`countWitchStock`). With nothing worth brewing it marks the round done without walking to the
 Witch, which also releases the hop loop's hold on home.
+
+### Brewing waits for a narrow board (2026-10-23)
+
+USIV on 2026-10-23 gave 8 Parcels for the day's 5 mixes. That is the usual result of brewing on a
+fresh board: a miss pays about 1.25–1.6 per mix. The old timing (all five at `gather_end` + 2 min,
+3s apart) never looked at the board. If someone else had just cracked, the day went to a reset
+board with 1024 candidates. `mixes_left` is per account per day, so the mixes don't have to go
+in the first round.
+
+How good a mix is depends far more on the board than on the picker. In simulation, our picker
+beats the sample's "first fitting recipe" on an empty board (34% vs 27% crack, 24 vs 21
+Parcels). With just 3 random mixes from others on the board first, both crack about 99%. Starting
+from ≤ N candidates, ours cracks 99–100% for: N=8, 2.0 mixes; N=32, 2.8; N=64, 3.2.
+
+- **Strike**: while `cipher.possible` ≤ `WITCH_STRIKE_POSSIBLE` (32), he brews every
+  `WITCH_BREW_SPACING_MS`. His own mixes keep the board narrow, so he keeps going until it cracks.
+  If another crack resets the board, `possible` jumps past the gate and he stops. A higher gate
+  strikes sooner, before other players do, and still leaves mixes for a second board. Before the
+  day's crack, a strike brews only candidates. With no affordable candidate he waits instead of
+  spending a mix that can't crack (`mayMiss` false).
+- **Flush**: in the day's last round, he brews whatever is left. `isLastWitchRoundOfDay` asks the
+  realm's lineup (`server.status.schedule.events` + `.repeats`, `{event, status, at}`, the same
+  lists the client's `schedule_next` reads) whether another `witchcipher` round is `scheduled`
+  before the next UTC midnight. After Halloween the Witch joins the daily rotation, so a fixed
+  06:00/18:00 pair can't be assumed. With no lineup, every round counts as the last, so the mixes
+  get spent rather than lost. That starts as soon as nobody is narrowing: past
+  `gather_end`, with no mix or crack for `WITCH_QUIET_MS` (2 min, timed from his arrival). At the
+  latest, it starts `WITCH_FLUSH_LEAD_MS` (60s) before `end`. `witchSoloRound` latches it, since
+  his own brews change the board. From an empty board that is the solo attempt (about 33%), then
+  the paying fallback, which works as before. On USIV (realm time UTC−5) the last round is 18:00
+  (23:00 UTC), and the 06:00 round only strikes.
+- **No waiting for a narrower strike.** Striking at ≤ 8 instead of ≤ 32 saves about 0.8 of a mix,
+  but it pays fewer Parcels even alone (52.4 vs 53.8), since the extra brews pay right places too.
+  Against other players it also risks the 50: USIV's 06:00 round on 2026-10-23 had two cracks,
+  neither ours.
+- **Empty-board solvers are capped.** 1024 recipes is 10 bits, and a clue gives about 2. Every
+  picker tried (candidate Σ n², candidate entropy, 1–3 non-candidate probes first) cracks 32–33%
+  with 5 mixes. Pure probes do worse (27–30%). Feeding an early mix hands the clue to everyone
+  else and costs one of the five.
+- Rounds other than the last just lapse unused if the board never narrows. The cost: if he misses
+  the last round (dead, off home, bank too tight), the day's mixes are lost.
+- The pick uses only the bag, minus `WITCH_ELIXIR_RESERVE`. A kind with ≤ 2 in the bag rules out
+  every recipe that uses it, which is 76% of them. Then the secret is unbrewable 76% of the time,
+  so a strike waits and a flush falls back to a mix that can't crack. Any one recipe needs at most
+  5 of a kind, plus the reserve.
 
 ## Trick or Treat disconnects (`knockNextDoor`, 2026-10-22)
 
