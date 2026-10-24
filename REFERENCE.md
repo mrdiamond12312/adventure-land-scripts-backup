@@ -347,7 +347,7 @@ and a graveyard repeat every 2h.
 Every reader goes through `getLineup(schedule, events)` (basic_function.7.js): the `scheduled` and
 `live` entries of both `events` and `repeats` for the named events. `getUtcDayEnd(at)` gives the
 UTC midnight closing that day. Users: `hasHomeWitchRoundToday`, `isLastWitchRoundOfDay`,
-`msUntilNextLineupEvent`, `hasHomeEventBy`, `getEarlyHopTarget`, `hasEarlyHopEventHere`. Every
+`msUntilNextLineupEvent`, `hasClashingEventBy`, `getEarlyHopTarget`, `hasEarlyHopEventHere`. Every
 live entry carries a `status`, so there is no branch for one without.
 
 Every realm's lineup reaches `ServerRealmData` with no extra listener. Server-side,
@@ -383,11 +383,17 @@ risking a home crabxx. It only goes when:
   instead, plus `EVENT_STAY_SLACK_MS` (1 min): about 29 or 21 min. The merchant is the hop owner
   (the one `enabled` caracAL character, which deploys the rest to its realm), so he is always
   there to brew;
-- home has no Witch round, and no `fatigueExemptBosses` (Horseman) slot, of its own by the
-  foreign round's end (`hasHomeEventBy`). That keeps the party, and the merchant, home for those.
-  Horseman needs this because the hop loop's `isWitchGathering()` return sits above the
-  Horseman check: once gathering abroad, the party would not come back for him. EU's 06:00 round
-  is 05:00 UTC, the same moment as USIV's 00:00 Horseman.
+- by the foreign round's end, home has no Witch round of its own, and no `fatigueExemptBosses`
+  (Horseman) slot is due on any realm reachable for him, `ignoreServer` included
+  (`hasClashingEventBy`). On 2026-10-24 it only checked home, so it took EU's 17:00 UTC round while
+  ASIA's Horseman (ASIA 00:00) rode at the same moment, every day. EU's 06:00 round (05:00 UTC)
+  clashes the same way with USIV's 00:00 Horseman.
+- The hop loop's Witch hold now yields to a live fatigue-exempt boss when the round is foreign:
+  `isWitchRoundHere && (isAtHomeServer() || !exemptTarget)` returns, and anything else falls
+  through to the Horseman hop. Before, the hold sat above `getExemptHopTarget`, so a party
+  gathering abroad never left for him. Checked on live data at 17:04 UTC: on EUI mid-gathering
+  it hops to ASIAI's Horseman. At home the round still holds. USIV's last round (23:00 UTC) meets
+  EU's Horseman (EU 00:00) every day, and that trade is still open.
 
 Simulated over 2026-10-24 UTC with USIV's real lineup and EU's rotation (realm clock UTC+1): the
 only early hop is EU's 17:00 UTC round. It hops at 16:46 and needs 66 min against 73 to the

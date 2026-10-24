@@ -140,13 +140,12 @@ function hasEventWorthStayingFor() {
   return Boolean(brawling || liveHere);
 }
 
-/** @returns {Object|undefined} the live fatigue-exempt boss, home first, then most hp left */
+/** @returns {Object|undefined} the live fatigue-exempt boss, home first, then least hp left */
 function getExemptHopTarget() {
   const awayFromHome = (candidate) =>
     realmOf(candidate) === getHomeServer() ? 0 : 1;
-  const hpFraction = (candidate) =>
-    (candidate.hp ?? G.monsters[candidate.type].hp) /
-    G.monsters[candidate.type].hp;
+  const hpFraction = ({ type, hp, max_hp = G.monsters[type].hp }) =>
+    (hp ?? max_hp) / max_hp;
 
   return getRealmData()
     ?.query({ types: fatigueExemptBosses })
@@ -154,7 +153,7 @@ function getExemptHopTarget() {
     .sort(
       (lhs, rhs) =>
         awayFromHome(lhs) - awayFromHome(rhs) ||
-        hpFraction(rhs) - hpFraction(lhs),
+        hpFraction(lhs) - hpFraction(rhs),
     )[0];
 }
 
