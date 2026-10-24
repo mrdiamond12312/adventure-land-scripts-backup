@@ -4100,6 +4100,12 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
 - **Stock** (`getWitchStock`): the merchant's `witchStock` (bank + bag, published every 30s), plus
   every fighter's `witchBag:<name>` (its own bag, written each gathering tick). A fighter's bag can
   count twice for up to one tick after it hands the ingredients over.
+- **Stuck at the farm (fixed 2026-10-24).** `getWitchGatherTarget` returned "any mob targeting
+  one of ours" first, wherever the party stood. On USIV's 06:00 round the mage and priest stayed
+  in `mforest` on odinos for the whole spider slot. The snapshot showed the tick owned by
+  `useWitchGatheringStrategy`, with `target: "odino"`: some dino was always aggroed on someone,
+  so the strategy never got past `engage` to the walk to `main`. The ally rule now applies only
+  on the plan spot's map. Elsewhere it is the plan's own mtype or the walk.
 - **Fighters**: `useWitchGatheringStrategy` ranks right after the cave run, above every event. It
   stands aside for an open crypt or a cave run. The 06:00/18:00 slots don't collide with the
   scheduled events, so in practice it outranks only the always-up Mr. Pumpkin and Mr. Green.

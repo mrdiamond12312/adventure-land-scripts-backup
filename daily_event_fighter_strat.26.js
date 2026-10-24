@@ -725,15 +725,17 @@ async function fightSnowman() {
 
 const WITCH_GATHER_ARRIVAL_DISTANCE = 150;
 
-/** @returns {Object|undefined} the mob on one of ours, else the targeted or nearest gathering mob */
-function getWitchGatherTarget(mtype) {
-  const allies = getAlliedNames();
+/** @returns {Object|undefined} on the gathering map, the mob on one of ours; else the targeted or nearest gathering mob */
+function getWitchGatherTarget({ mtype, spot }) {
   const isAlive = (mob) => !!mob && !mob.dead && mob.type === "monster";
 
-  const onAlly = Object.values(parent.entities).find(
-    (mob) => isAlive(mob) && allies.has(mob.target),
-  );
-  if (onAlly) return onAlly;
+  if (character.map === spot.map) {
+    const allies = getAlliedNames();
+    const onAlly = Object.values(parent.entities).find(
+      (mob) => isAlive(mob) && allies.has(mob.target),
+    );
+    if (onAlly) return onAlly;
+  }
 
   const current = get_targeted_monster();
   if (isAlive(current) && current.mtype === mtype) return current;
@@ -751,7 +753,7 @@ async function useWitchGatheringStrategy() {
   set(`witchBag:${character.name}`, countBagWitchIngredients());
   adaptStrategyToParty();
 
-  const target = getWitchGatherTarget(plan.mtype);
+  const target = getWitchGatherTarget(plan);
   if (target) return engage(target);
 
   if (distance(character, plan.spot) > WITCH_GATHER_ARRIVAL_DISTANCE)
