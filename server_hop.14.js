@@ -158,21 +158,6 @@ function getExemptHopTarget() {
     )[0];
 }
 
-/** Least gathering left on a realm worth hopping to */
-const WITCH_HOP_MIN_GATHER_MS = 8 * 60_000;
-
-/** @returns {Object|undefined} the realm gathering longest from now */
-function getWitchGatherHopTarget() {
-  return getRealmData()
-    ?.query({ types: ["witchcipher"] })
-    .filter(
-      (candidate) =>
-        isReachableRealm(candidate) &&
-        candidate.gather_end - Date.now() >= WITCH_HOP_MIN_GATHER_MS,
-    )
-    .sort((lhs, rhs) => rhs.gather_end - lhs.gather_end)[0];
-}
-
 /** Foreign events worth landing early for, so hop sickness wears off before they start */
 const EARLY_HOP_EVENTS = ["witchcipher"];
 
@@ -210,22 +195,14 @@ function canBrewWitchAt(realm) {
 
 /** @returns {number} ms the party spends on a foreign event once it starts */
 function getForeignEventStayMs(event, realm) {
-  const { duration = 0, gathering } = G.events[event] ?? {};
+  const { duration = 0, gathering = duration } = G.events[event] ?? {};
   const isGatherOnly = event === "witchcipher" && !canBrewWitchAt(realm);
-  return ((isGatherOnly ? gathering : duration) ?? duration) * 1000 + EVENT_STAY_SLACK_MS;
+  return (isGatherOnly ? gathering : duration) * 1000 + EVENT_STAY_SLACK_MS;
 }
-
-/** @returns {Object[]} a realm's upcoming lineup entries for `events` */
-const getScheduledEvents = (status, events) =>
-  (status?.schedule?.events ?? []).filter(
-    (entry) =>
-      events.includes(entry.event) &&
-      ["scheduled", "live"].includes(entry.status),
-  );
 
 /** @returns {boolean} whether home runs an early-hop event or a fatigue-exempt boss of its own by `by` */
 function hasHomeEventBy(by) {
-  return getScheduledEvents(getHomeRealmStatus(), [
+  return getLineup(getHomeRealmStatus()?.schedule, [
     ...EARLY_HOP_EVENTS,
     ...fatigueExemptBosses,
   ]).some(({ at }) => at <= by);
@@ -246,14 +223,15 @@ function getEarlyHopTarget() {
     const realm = { serverRegion: region, serverIdentifier: name };
     if (!isReachableRealm(realm)) continue;
 
-    for (const { event, status, at } of getScheduledEvents(
-      realmData.status(key),
+    for (const { event, status, at } of getLineup(
+      realmData.status(key)?.schedule,
       EARLY_HOP_EVENTS,
     )) {
       const until = at - now;
-      const stayMs = getForeignEventStayMs(event, key);
       if (status !== "scheduled") continue;
       if (until < HOP_SICKNESS_MS || until > EARLY_HOP_LEAD_MS) continue;
+
+      const stayMs = getForeignEventStayMs(event, key);
       if (until + stayMs + HOME_RETURN_LEAD_MS > untilHomeWindow) continue;
       if (hasHomeEventBy(at + stayMs)) continue;
 
@@ -266,7 +244,7 @@ function getEarlyHopTarget() {
 /** @returns {boolean} whether an early-hop event here is about to start or running */
 function hasEarlyHopEventHere() {
   const now = Date.now();
-  return getScheduledEvents(server.status, EARLY_HOP_EVENTS).some(
+  return getLineup(server.status.schedule, EARLY_HOP_EVENTS).some(
     ({ status, at }) =>
       status === "live" ||
       (status === "scheduled" && at - now <= EARLY_HOP_LEAD_MS && at > now),
@@ -302,9 +280,6 @@ setInterval(async () => {
   }
   if (fatigueExemptBosses.some((name) => server.status[name]?.live)) return;
   if (exemptTarget) return hopToCandidate(exemptTarget);
-
-  const gatherTarget = getWitchGatherHopTarget();
-  if (gatherTarget) return hopToCandidate(gatherTarget);
 
   const cipher = server.status.witchcipher;
   if (!isAtHomeServer() && cipher?.live && Date.now() < cipher.end)

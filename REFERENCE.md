@@ -344,13 +344,19 @@ ahead, done rounds included. The `id` carries the realm-clock slot, e.g.
 nightly (23) rotates franky/icegolem, and Halloween adds witchcipher at 06/18, horseman at 00,
 and a graveyard repeat every 2h.
 
+Every reader goes through `getLineup(schedule, events)` (basic_function.7.js): the `scheduled` and
+`live` entries of both `events` and `repeats` for the named events. `getUtcDayEnd(at)` gives the
+UTC midnight closing that day. Users: `hasHomeWitchRoundToday`, `isLastWitchRoundOfDay`,
+`msUntilNextLineupEvent`, `hasHomeEventBy`, `getEarlyHopTarget`, `hasEarlyHopEventHere`. Every
+live entry carries a `status`, so there is no branch for one without.
+
 Every realm's lineup reaches `ServerRealmData` with no extra listener. Server-side,
 `broadcast_e` merges `event_schedule.publish()` (`realm`, `server_time`, `events`, `repeats`) into
 `E.schedule`. `E` is the `S` that `welcome` sends (refreshed just before) and that `server_info`
 broadcasts to every socket on the realm, our unauthenticated observers included. That happens on
 the periodic tick and on every event change. So `getRealmData().status(key).schedule.events` is as
 fresh as the last pulse. The home-only `new_map`/`entities` feed carries monsters, not `S`. `msUntilNextLineupEvent` counts only
-`isHomeSettleEvent` ones: home-table monsters, plus `HOME_BONUS_EVENTS` (`goobrawl`: `rgoo` and
+`getHomeSettleEvents` ones: home-table monsters, plus `HOME_BONUS_EVENTS` (`goobrawl`: `rgoo` and
 `bgoo` are `cooperative`, so they get the 5x home contribution that realm fatigue blocks). A live
 one reads as 0. A `scheduled` one more than `SPAWN_OVERDUE_GRACE_MS` past its `at` is ignored.
 With no `events` array it falls back to every daily/nightly hour as before. So an abtesting,
@@ -4115,10 +4121,15 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   It takes the `WITCH` duty (over an event duty) and stays within 200 of a fighter. The fighters'
   10s handoff in basic_function.7.js then sends him every ingredient, since none is on its keep
   list. The merchant never sells them: they are not `SALE_ABLE`, and purges only touch gear.
-- **Hopping**: the hop loop never leaves a realm that is gathering. After the Horseman check, it
-  hops to the realm with the most gathering left, if at least `WITCH_HOP_MIN_GATHER_MS` (8 min)
-  remains. Once gathering ends, the normal rules (home windows, "nothing left to chase") take the
-  party home.
+- **Hopping**: the hop loop never leaves a realm that is gathering. Foreign rounds are reached
+  only by the early hop (see "Landing early for a foreign event"). Once gathering ends abroad,
+  the "gathering is over" rule takes the party home. Until 2026-10-24 there was also
+  `getWitchGatherHopTarget`, which hopped to whichever realm had the most gathering left (≥ 8 min,
+  `WITCH_HOP_MIN_GATHER_MS`). It only checked that this realm wasn't gathering or brewing, so it
+  ran ahead of every home check. It hopped USIV → USV while home had its own round: before ours
+  started, or after our gathering ended with no brewing left. The party then gathered under hop
+  sickness and came home fatigued. Removed; the early hop covers foreign rounds without either
+  cost.
 
 ## Witch's Cipher brewing (`brewWitchCipher`, merchant_witch.36.js, 2026-10-22)
 
@@ -4156,9 +4167,11 @@ From the server source (`node/logic/witch_cipher.js` in `kaansoral/adventureland
 - `witch_cipher_info()` works anytime: `{mixes, mixes_left, parcels, live, server}`. Here `mixes`
   is the rule's 5, not the count used, and `server` is set whenever a claim exists, this realm
   included. The hop loop needs the day outside a round, so `canBrewWitchAt` reads a `witchDay`
-  copy of it, refreshed in the background every 5 min and only when a foreign Witch round is in
-  the early-hop window. A first tick with no data budgets the gather-only stay. Each call can log
-  caracAL's harmless `Weird resolve_deferred issue: interaction`.
+  copy of it, refreshed in the background at most every 5 min. `getEarlyHopTarget` only asks for
+  the stay once a foreign round passes the 12–14 min window check, so that comes to about four
+  calls a day, one per foreign round (simulated). Asking before the check made it every 5 min all
+  day. A first tick with no data budgets the gather-only stay. Each call can log caracAL's
+  harmless `Weird resolve_deferred issue: interaction`.
 - The day is the UTC date, and a round belongs to the day it started on, even past midnight. The
   crack bonus is once per account per day (`!claim.cracks`). During Halloween home always
 has a round, so foreign rounds are for gathering only. Once the Witch joins the daily rotation, a
@@ -4221,8 +4234,11 @@ merchant's `getEventToJoin` always did. A fresh Pumpkin doesn't pull the party o
 one softened below him does.
 - `HP_RANKED_BOSSES` (basic_function.7.js) is `[icegolem, franky, dragold, mrpumpkin, mrgreen]`,
   shared by the fighters and `dynamicParty`.
-- Fighters: `fightLowestHpBoss` sorts the live ones by `server.status` hp / `max_hp` (falling back
-  to `G.monsters[].hp`, and to full when hp is missing), then runs each one's own fight from
+- One ranking: `rankLiveBossesByHp` (basic_function.7.js, hoisted for `dynamicParty()`'s load-time
+  call) sorts the live ones by `server.status` hp / `max_hp`, falling back to `G.monsters[].hp`,
+  and to full when hp is missing. Fighters and the party preset both read it, so the preset
+  always matches the boss being fought. `dynamicParty` used to divide by `G.monsters[].hp` alone.
+- Fighters: `fightLowestHpBoss` walks that ranking and runs each one's own fight from
   `HP_RANKED_FIGHTS`: `fightFranky` for Franky, `fightSimpleBoss([name])` for the rest. It falls
   through to the next one if a fight doesn't claim the tick. Franky's strategy differs, so he
   can't just join `fightSimpleBoss`'s list.

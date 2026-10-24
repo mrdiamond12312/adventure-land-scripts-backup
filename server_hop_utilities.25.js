@@ -330,14 +330,13 @@ function msUntilNextScheduledEvent(schedule) {
 /** Scheduled events whose cooperative monsters pay the home contribution bonus */
 const HOME_BONUS_EVENTS = ["goobrawl"];
 
-/** @returns {boolean} whether this scheduled event only pays in full to a party settled at home */
-function isHomeSettleEvent(event) {
-  return homeDropMonsters().has(event) || HOME_BONUS_EVENTS.includes(event);
+/** @returns {string[]} scheduled events that only pay in full to a party settled at home */
+function getHomeSettleEvents() {
+  return [...homeDropMonsters(), ...HOME_BONUS_EVENTS];
 }
 
 /**
- * Time to the next home-paying event in a realm's lineup (`schedule.events`
- * and `schedule.repeats`, the occurrences the client's Events window lists).
+ * Time to the next home-paying event in a realm's lineup.
  * @param {object} [schedule] the realm's server.status.schedule
  * @returns {number|undefined} ms until it, 0 while one is live, Infinity when none is listed, undefined without a lineup
  */
@@ -346,16 +345,11 @@ function msUntilNextLineupEvent(schedule) {
 
   const now = Date.now();
   let soonest = Infinity;
-  for (const { event, status, at } of [
-    ...schedule.events,
-    ...(schedule.repeats ?? []),
-  ]) {
-    if (!isHomeSettleEvent(event)) continue;
+  for (const { status, at } of getLineup(schedule, getHomeSettleEvents())) {
     if (status === "live") return 0;
 
-    const until = new Date(at).getTime() - now;
-    if (!Number.isFinite(until) || until <= -SPAWN_OVERDUE_GRACE_MS) continue;
-    if (status === "scheduled" || (!status && until > 0))
+    const until = at - now;
+    if (until > -SPAWN_OVERDUE_GRACE_MS)
       soonest = Math.min(soonest, Math.max(0, until));
   }
   return soonest;

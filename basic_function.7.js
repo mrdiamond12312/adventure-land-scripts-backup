@@ -81,6 +81,24 @@ function isAtHomeServer() {
   return getCurrentServer() === getHomeServer();
 }
 
+/** @returns {number} the UTC midnight that ends the day `at` falls on */
+function getUtcDayEnd(at = Date.now()) {
+  return new Date(at).setUTCHours(24, 0, 0, 0);
+}
+
+/**
+ * @param {object} [schedule] a realm's server.status.schedule
+ * @param {string[]} events
+ * @returns {{event: string, status: string, at: number}[]} its `scheduled` and `live` lineup entries for `events`, dated and repeating
+ */
+function getLineup(schedule, events) {
+  return [...(schedule?.events ?? []), ...(schedule?.repeats ?? [])].filter(
+    (entry) =>
+      events.includes(entry.event) &&
+      ["scheduled", "live"].includes(entry.status),
+  );
+}
+
 var partyMerchant = "MerchantMooh";
 var buffThreshold = 0.7;
 
@@ -2815,21 +2833,30 @@ const HP_RANKED_BOSSES = [
   "mrgreen",
 ];
 
+/** @returns {string[]} the live ones of `names`, least hp fraction first */
+function rankLiveBossesByHp(names = HP_RANKED_BOSSES) {
+  const hpFraction = (name) => {
+    const { hp, max_hp = G.monsters[name].hp } = server.status[name];
+    return (hp ?? max_hp) / max_hp;
+  };
+
+  return names
+    .filter((name) => server.status[name]?.live)
+    .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs));
+}
+
 function dynamicParty() {
   const currentServer = `${server.region}${server.id}`;
   const liveEvents = Object.keys(DYNAMIC_PARTY_PRESETS).filter(
     (name) => server.status[name]?.live,
   );
-  const hpFraction = (name) => server.status[name].hp / G.monsters[name].hp;
   const activeEvent =
     USE_CAVE_STRATEGY && isCaveUnderway()
       ? "cave"
       : isRangerWitchSlot()
       ? "witch"
       : liveEvents.find((name) => PRESET_FIRST_BOSSES.includes(name)) ??
-        liveEvents
-          .filter((name) => HP_RANKED_BOSSES.includes(name))
-          .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs))[0] ??
+        rankLiveBossesByHp().find((name) => liveEvents.includes(name)) ??
         liveEvents[0] ??
         "default";
 
@@ -3012,14 +3039,11 @@ function hasHomeWitchRoundToday() {
     : typeof getHomeRealmStatus === "function"
       ? getHomeRealmStatus()
       : undefined;
-  const events = status?.schedule?.events;
-  if (!events) return true;
+  if (!status?.schedule?.events) return true;
 
-  const dayEnd = new Date().setUTCHours(24, 0, 0, 0);
-  return events.some(
-    ({ event, status, at }) =>
-      event === "witchcipher" &&
-      (status === "live" || (status === "scheduled" && at < dayEnd)),
+  const dayEnd = getUtcDayEnd();
+  return getLineup(status.schedule, ["witchcipher"]).some(
+    ({ status, at }) => status === "live" || at < dayEnd,
   );
 }
 

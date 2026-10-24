@@ -82,7 +82,9 @@ basic_function.7.js          [SHARED — the core library]
     server_hop_utilities.25.js   the cross-realm ServerRealmData distributor and realm-fatigue
                                  hop policy (HOME_SERVER itself is config in 7); loaded just before
                                  14, which consults it
-    server_hop.14.js             server-hopping automation (only if caracALconfig enables the character)
+    server_hop.14.js             server-hopping automation (only if caracALconfig enables the character):
+                                 the boss race, fatigue-exempt bosses (Horseman), and the early hop
+                                 to a foreign Witch round 12–14 min ahead
     cave_fighter_strat.15.js         \_ the fighter targeting chain, walked in this
     daily_event_fighter_strat.26.js   | order by selectFightTarget(); each one carries
     crypt_fighter_strat.16.js         | its own smart move and owns the tick or defers
@@ -123,7 +125,9 @@ Merchant entry script:
     merchant_cavalry.35.js   tags level 3+ oneeyes from range and calls the cavalry on them
                               (cavalryOneeyeLoop; callCavalry keeps the account cooldown in set())
     merchant_witch.36.js     Witch's Cipher: publishes ingredient stock, stays with the gathering
-                              party (loaded before slot 100, whose merchantStrategies names it)
+                              party, brews (strikes on a narrow board, spends what is left in the
+                              day's last round) (loaded before slot 100, whose merchantStrategies
+                              names it)
 
   The merchant modules do not load each other: basic_merchant.5.js pulls them all in, and every
   cross-module reference is inside a function body, so it resolves at call time. Nothing in the repo

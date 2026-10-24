@@ -184,22 +184,15 @@ const WITCH_FLUSH_LEAD_MS = 60_000;
 /** How long an untouched board waits, once gathering is over, before the day's last round brews alone */
 const WITCH_QUIET_MS = 2 * 60_000;
 
-const WITCH_DAY_MS = 24 * 60 * 60_000;
-
 const WITCH_BREW_SPACING_MS = 3_000;
 
 /** @returns {boolean} whether today's mixes end with this round: we are abroad, or the lineup holds no later round before the UTC day ends */
 function isLastWitchRoundOfDay(cipher) {
   if (!isAtHomeServer()) return true;
 
-  const schedule = server.status.schedule;
-  const dayEnd = (Math.floor(cipher.start / WITCH_DAY_MS) + 1) * WITCH_DAY_MS;
-  return ![...(schedule?.events ?? []), ...(schedule?.repeats ?? [])].some(
-    ({ event, status, at }) =>
-      event === "witchcipher" &&
-      status === "scheduled" &&
-      at > cipher.end &&
-      at < dayEnd,
+  const dayEnd = getUtcDayEnd(cipher.start);
+  return !getLineup(server.status.schedule, ["witchcipher"]).some(
+    ({ status, at }) => status === "scheduled" && at > cipher.end && at < dayEnd,
   );
 }
 
