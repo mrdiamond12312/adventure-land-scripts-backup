@@ -27,7 +27,9 @@ const MIDAS_CHARACTER = [MAGE, "CrownPriest"];
 
 // Outsiders we team up with — their tank changes what the party can hold
 const trustedPartners = ["earthPri", "earthWar"];
-const knownTankers = ["CrownPriest", "Hierophant", ...trustedPartners];
+const knownTankers = ["CrownPriest", "Hierophant", 
+  // ...trustedPartners
+];
 
 /** Cave of Many Dreams — the one switch for the daily run, loader and all */
 var USE_CAVE_STRATEGY = true;
