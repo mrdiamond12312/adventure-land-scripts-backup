@@ -286,8 +286,12 @@ setInterval(async () => {
     if (!isAtHomeServer()) return hopHome(`${exemptTarget.type} up at home`);
     return;
   }
+  // Abroad, the least-hp one anywhere wins, even over one live here
+  if (exemptTarget) {
+    if (realmOf(exemptTarget) === getCurrentServer()) return;
+    return hopToCandidate(exemptTarget);
+  }
   if (fatigueExemptBosses.some((name) => server.status[name]?.live)) return;
-  if (exemptTarget) return hopToCandidate(exemptTarget);
 
   const cipher = server.status.witchcipher;
   if (!isAtHomeServer() && cipher?.live && Date.now() < cipher.end)

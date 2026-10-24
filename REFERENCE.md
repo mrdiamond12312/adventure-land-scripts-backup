@@ -4057,9 +4057,11 @@ party (e.g. Earth) are still taken by agitate, so they still block it: we let hi
   one with the **least** hp left wins (2026-10-24, the user's call; it was most hp, the likeliest
   to still be up on landing). The fraction now reads the realm's `max_hp` before
   `G.monsters[].hp`. Live check at 17:0x UTC: ASIAI 93%, ASIAII 47%, so it picks ASIAII. A
-  nearly dead one may die mid-hop, and the next tick picks the next live one. A party already on a
-  live Horseman's realm stays there (the hop loop's "boss live here" step comes first), so this
-  only chooses where to go.
+  nearly dead one may die mid-hop, and the next tick picks the next live one. Only home holds the
+  party on a live Horseman. Abroad, the hop loop goes to `getExemptHopTarget` whenever it is
+  another realm, even off a live one here, with no margin (the user's call). Two Horsemen near the
+  same hp can bounce the party, since each hop costs ~30s+ of riding. "Live here" alone only holds
+  when realm data is missing.
   Realms in one region share a clock, so killing one Horseman often leaves a sibling realm's still
   riding. Under the old 15% hp floor that one was likely skipped, so the loop fell through to the
   home window (Mr. Green's respawn) instead.
