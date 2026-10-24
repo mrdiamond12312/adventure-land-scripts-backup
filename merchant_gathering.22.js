@@ -180,7 +180,7 @@ async function dismantleSomething() {
   const itemToDismantle = DISMANTLE_LIST.find((id) => locate_item(id) !== -1);
   if (!itemToDismantle) return;
 
-  if (get_nearest_npc()?.name !== "Leo" && !haveAComputer()) {
+  if (get_nearest_npc()?.name !== "Leo" && !canUseNpcsRemotely()) {
     await advanceSmartMove(find_npc("craftsman"));
   }
 

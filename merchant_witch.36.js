@@ -26,7 +26,7 @@ setInterval(publishWitchStock, WITCH_STOCK_PUBLISH_MS);
 
 /** @returns {Promise<boolean>} whether staying with the gathering party owned this tick */
 async function attendWitchGathering() {
-  if (canBrewWitchCipher()) return false;
+  if (isWitchBrewDue()) return false;
 
   const plan = getWitchGatherPlan();
   const isFree =
@@ -186,16 +186,6 @@ const WITCH_QUIET_MS = 2 * 60_000;
 
 const WITCH_BREW_SPACING_MS = 3_000;
 
-/** @returns {boolean} whether today's mixes end with this round: we are abroad, or the lineup holds no later round before the UTC day ends */
-function isLastWitchRoundOfDay(cipher) {
-  if (!isAtHomeServer()) return true;
-
-  const dayEnd = getUtcDayEnd(cipher.start);
-  return !getLineup(server.status.schedule, ["witchcipher"]).some(
-    ({ status, at }) => status === "scheduled" && at > cipher.end && at < dayEnd,
-  );
-}
-
 let witchBoardSeen = { state: undefined, at: 0 };
 
 let witchSoloRound;
@@ -245,7 +235,7 @@ function finishWitchBrewing() {
 /** @returns {Promise<boolean>} whether brewing owned this tick */
 async function brewWitchCipher() {
   const isFree = !isOnDuty() || isOnDuty(DUTY.WITCH);
-  if (!canBrewWitchCipher() || character.rip || !isFree || !hasVisitedBank) {
+  if (!isWitchBrewDue() || character.rip || !isFree || !hasVisitedBank) {
     if (isOnDuty(DUTY.WITCH)) releaseDuty(duty);
     return false;
   }
@@ -288,12 +278,17 @@ async function brewWitchCipher() {
     return false;
   }
 
-  const isAtWitch =
-    character.map === witch.map &&
-    distance(character, witch) <= NPC_REACH;
-  if (!isAtWitch) {
-    const spot = strategicSmartMove.getStandablePointNear(witch) ?? witch;
-    await advanceSmartMove(spot).catch((e) => console.warn(e));
+  // A computer reaches her from anywhere but the bank
+  const hasComputer = haveAComputer();
+  const isInReach = hasComputer
+    ? !isInBank()
+    : character.map === witch.map && distance(character, witch) <= NPC_REACH;
+  if (!isInReach) {
+    if (hasComputer) await moveHome();
+    else {
+      const spot = strategicSmartMove.getStandablePointNear(witch) ?? witch;
+      await advanceSmartMove(spot).catch((e) => console.warn(e));
+    }
     return true;
   }
 

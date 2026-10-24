@@ -149,9 +149,8 @@ async function ensureScroll(scrollType, itemGrade) {
   let scrollSlot = locate_item(scrollType);
   if (scrollSlot !== -1) return scrollSlot;
 
-  // A stack the merchant is standing next to is fetched on the next try, never
-  // bought over; from anywhere else buying beats walking off the spot
-  if (isStashed && isInBank()) return -1;
+  // The bank refuses a buy; a stashed stack is fetched above on the next try
+  if (isInBank()) return -1;
 
   if (itemGrade >= 2 && character.gold < IGNORE_RARE_GOLD_THRESHOLD) return -1;
 
@@ -568,6 +567,8 @@ async function findAndCompound() {
     }
 
     await ensureOffering(isRareItem);
+    // Scrolls and offerings come out of the bank, but it refuses the compound
+    if (isInBank()) break;
     activateMassProduction();
 
     const offeringSlot = getOfferingSlot(isRareItem);
@@ -681,6 +682,8 @@ async function findAndUpgrade() {
   if (scrollSlot === -1) return;
 
   await ensureOffering(isRareItem);
+  // Scrolls and offerings come out of the bank, but it refuses the upgrade
+  if (isInBank()) return;
   const production = getLeakSafeProduction(item);
   if (production) activateMassProduction(production === "pp");
 

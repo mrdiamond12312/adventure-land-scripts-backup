@@ -4105,7 +4105,10 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   in `mforest` on odinos for the whole spider slot. The snapshot showed the tick owned by
   `useWitchGatheringStrategy`, with `target: "odino"`: some dino was always aggroed on someone,
   so the strategy never got past `engage` to the walk to `main`. The ally rule now applies only
-  on the plan spot's map. Elsewhere it is the plan's own mtype or the walk.
+  within `WITCH_GATHER_DEFEND_DISTANCE` (400) of the plan spot. The gather spawn boxes are about
+  250–310 px from center to corner, so that covers them plus kiting room. The game's `distance`
+  returns 99999999 across maps and instances, so the same check covers the wrong map. Beyond it,
+  the target is the plan's own mtype or the walk.
 - **Fighters**: `useWitchGatheringStrategy` ranks right after the cave run, above every event. It
   stands aside for an open crypt or a cave run. The 06:00/18:00 slots don't collide with the
   scheduled events, so in practice it outranks only the always-up Mr. Pumpkin and Mr. Green.
@@ -4295,6 +4298,24 @@ beats the sample's "first fitting recipe" on an empty board (34% vs 27% crack, 2
 Parcels). With just 3 random mixes from others on the board first, both crack about 99%. Starting
 from ≤ N candidates, ours cracks 99–100% for: N=8, 2.0 mixes; N=32, 2.8; N=64, 3.2.
 
+- **Earlier rounds call him in only as the board narrows (2026-10-24).** `canBrewWitchCipher`
+  (basic_function.7.js) is eligibility: realm, live round, from `WITCH_STAGE_LEAD_MS` before
+  `gather_end`, mixes left, stock. It still keeps the four kinds in the bag
+  (`isHeldForWitchBrew`) and holds the hop loop. `isWitchBrewDue` decides whether brewing takes
+  the merchant: always in the day's last round (`isLastWitchRoundOfDay`, also in
+  basic_function.7.js), and in an earlier round only once `possible` ≤ `WITCH_APPROACH_POSSIBLE`
+  (128). `attendWitchGathering` and `brewWitchCipher` both read it. Otherwise he stays with the
+  gathering party, and then the `WITCH` duty is released for his normal loop. Parking him at the
+  Witch for the whole 06:00 window (old) cost about 12 idle minutes. Not brewing in that round
+  at all (tried briefly) threw away a second chance at the 50 whenever other players narrowed a
+  board. USIV's 06:00 on 2026-10-23 had two cracks. 128 leaves room to arrive before the strike
+  gate, and a crack that resets the board sends him back.
+- **A computer skips the walk.** The server's `witch_cipher_near` returns true for
+  `player.computer`, set by a `computer` (the "Ancient Computer") or `supercomputer` in the bag.
+  Only `cant_in_bank` still applies. So with `haveAComputer()` he brews from where he stands,
+  and `moveHome()` first if he is in the bank, e.g. right after the retrieve.
+  `basic_merchant.5.js` already keeps the computer in the bag. `haveAComputer` used to test
+  `ancientcomputer`, which is not an item id, and missed `supercomputer`.
 - **Strike**: while `cipher.possible` ≤ `WITCH_STRIKE_POSSIBLE` (32), he brews every
   `WITCH_BREW_SPACING_MS`. His own mixes keep the board narrow, so he keeps going until it cracks.
   If another crack resets the board, `possible` jumps past the gate and he stops. A higher gate
@@ -4311,7 +4332,7 @@ from ≤ N candidates, ours cracks 99–100% for: N=8, 2.0 mixes; N=32, 2.8; N=6
   latest, it starts `WITCH_FLUSH_LEAD_MS` (60s) before `end`. `witchSoloRound` latches it, since
   his own brews change the board. From an empty board that is the solo attempt (about 33%), then
   the paying fallback, which works as before. On USIV (realm time UTC−5) the last round is 18:00
-  (23:00 UTC), and the 06:00 round only strikes.
+  (23:00 UTC). The 06:00 round only strikes, once called in.
 - **No waiting for a narrower strike.** Striking at ≤ 8 instead of ≤ 32 saves about 0.8 of a mix,
   but it pays fewer Parcels even alone (52.4 vs 53.8), since the extra brews pay right places too.
   Against other players it also risks the 50: USIV's 06:00 round on 2026-10-23 had two cracks,
@@ -4320,8 +4341,7 @@ from ≤ N candidates, ours cracks 99–100% for: N=8, 2.0 mixes; N=32, 2.8; N=6
   picker tried (candidate Σ n², candidate entropy, 1–3 non-candidate probes first) cracks 32–33%
   with 5 mixes. Pure probes do worse (27–30%). Feeding an early mix hands the clue to everyone
   else and costs one of the five.
-- Rounds other than the last just lapse unused if the board never narrows. The cost: if he misses
-  the last round (dead, off home, bank too tight), the day's mixes are lost.
+- If he misses the last round (dead, off home, bank too tight), the day's mixes are lost.
 - The pick uses only the bag, minus `WITCH_ELIXIR_RESERVE`. A kind with ≤ 2 in the bag rules out
   every recipe that uses it, which is 76% of them. Then the secret is unbrewable 76% of the time,
   so a strike waits and a flush falls back to a mix that can't crack. Any one recipe needs at most
@@ -4362,3 +4382,42 @@ from below), so it can't name a destination for a trip that starts on another ma
 
 The scripts target alpathfinder 0.6 (`getPath`'s `{ speed, avoidMaps }` options). On 0.4.8, which
 caracAL's `^0.4.7` range resolves to, that call shape panics the wasm (`unreachable`).
+
+## The bank refuses every trade (`canUseNpcsRemotely`, 2026-10-24)
+
+The merchant spammed "can't buy in bank". Server-side (`node/server.js`), `player.user` is set
+while a character stands in a bank, and these handlers fail with `cant_in_bank` while it is:
+`buy`, `sell`, `sbuy` (Ponty), `upgrade`, `compound`, `craft`, `dismantle`, `exchange`,
+`exchange_buy`, `locksmith`, `send`, `join`, `magiport`, `trade_buy`/`trade_sell`/`trade_swap`,
+`destat`, `donate`, `buy_shells`, `buy_with_cash`, `bless_server`, and `blink` across bank maps.
+The Witch's `brew` too. A computer skips the walk to the NPC, but not this check.
+
+The leaks were computer paths that acted wherever he stood. The 750ms tick runs `compoundInv`,
+`upgradeInv`, `exchangeSomething`, `dismantleSomething`, every `craft` and `sellMarkedItems` on
+each pass, bank or not, and `bankLoop` keeps putting him in the bank. `canUseNpcsRemotely()`
+(basic_merchant.5.js) is `haveAComputer() && !isInBank()`, and the "act from here?" call sites
+use it: his own potion buy (basic_function.7.js), the potion and vendor restocks in
+merchant_service.19.js (the first one tested the opposite), `dismantleSomething`,
+`getExchangeNpc`, and `craft`'s walk. Where bank work comes first, the action is gated on
+`!isInBank()` instead:
+- `findAndUpgrade` and `findAndCompound` still pull the scroll and offering in the bank, then
+  stop before the upgrade or compound. The next tick outside fires it.
+- `ensureScroll` never buys in the bank, stashed or not.
+- `craft` buys only outside. Its bank retrieves stay where they are.
+- `exchangeSomething` doesn't exchange in place in the bank.
+- The tick's `sellMarkedItems`, `freeBagSlotForWork` and the Ponty `secondhandsHandler` skip the
+  bank.
+- `probeLuckySlot` already returned there.
+
+The "owns a computer" checks that plan rather than act were left alone: `isPreferredSpot`, the
+stand retrieve in `moveHome`, and `canServe`'s `buy_potions`.
+
+**The purge never sold anything.** `purgeBank` and `freeSlotsForUpgrading` (merchant_bank.17.js)
+pulled surplus in the bank and sold it right there. Every sale failed, and the next store pass
+put it all back. Both now step out first through `leaveBankForSale()` (`moveHome` when in a
+bank). If he still isn't out (mid-move, a drag), the sale is skipped rather than refused.
+`purgeBank` steps out once per retrieved batch. `freeSlotsForUpgrading` steps out at most twice
+(`sellPurgeVictims`): bag copies first, which also frees room for the retrieves, then every
+retrieved bank copy in one go. It used to sell after each single retrieve. Stub-tested: bag
+blade + bow sold, wand + staff retrieved, one exit, both sold, none refused. The bank loop's
+`bankStoreRoutine`/`stackBank` after the purge walk back in on their own.

@@ -2202,7 +2202,7 @@ setInterval(async function () {
   // The merchant has no merchant to ask — it buys its own stack instead of
   // sending itself the buy_potions cm below
   if (isMerchant()) {
-    if (haveAComputer() && !isInvFull(2)) {
+    if (canUseNpcsRemotely() && !isInvFull(2)) {
       for (const potionId of desiredPotions) {
         const owned = getTotalQuantityOf(potionId);
         if (owned >= POTION_REFILL_AT) continue;
@@ -3055,6 +3055,16 @@ function isWitchBrewRealm() {
   return isAtHomeServer() || !hasHomeWitchRoundToday();
 }
 
+/** @returns {boolean} whether today's mixes end with this round: we are abroad, or the lineup holds no later round before the UTC day ends */
+function isLastWitchRoundOfDay(cipher) {
+  if (!isAtHomeServer()) return true;
+
+  const dayEnd = getUtcDayEnd(cipher.start);
+  return !getLineup(server.status.schedule, ["witchcipher"]).some(
+    ({ status, at }) => status === "scheduled" && at > cipher.end && at < dayEnd,
+  );
+}
+
 /** @returns {boolean} whether the account can still brew in this realm's round, or get ready to */
 function canBrewWitchCipher() {
   const cipher = server.status.witchcipher;
@@ -3070,6 +3080,20 @@ function canBrewWitchCipher() {
     0,
   );
   return spare >= WITCH_SLOTS;
+}
+
+/** Candidates left at or below which an earlier round of the day calls the merchant over to strike */
+const WITCH_APPROACH_POSSIBLE = 128;
+
+/** @returns {boolean} whether brewing wants the merchant now: the day's last round, or an earlier one narrowing toward a strike */
+function isWitchBrewDue() {
+  if (!canBrewWitchCipher()) return false;
+
+  const cipher = server.status.witchcipher;
+  return (
+    isLastWitchRoundOfDay(cipher) ||
+    (cipher.possible ?? Infinity) <= WITCH_APPROACH_POSSIBLE
+  );
 }
 
 /** @returns {Object<string, number>} ingredient counts in this bag */

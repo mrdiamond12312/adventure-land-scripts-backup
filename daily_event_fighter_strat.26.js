@@ -725,11 +725,14 @@ async function fightSnowman() {
 
 const WITCH_GATHER_ARRIVAL_DISTANCE = 150;
 
-/** @returns {Object|undefined} on the gathering map, the mob on one of ours; else the targeted or nearest gathering mob */
+/** How near the gathering spot a mob on one of ours is worth stopping for: the spawn area plus kiting room */
+const WITCH_GATHER_DEFEND_DISTANCE = 400;
+
+/** @returns {Object|undefined} near the gathering spot, the mob on one of ours; else the targeted or nearest gathering mob */
 function getWitchGatherTarget({ mtype, spot }) {
   const isAlive = (mob) => !!mob && !mob.dead && mob.type === "monster";
 
-  if (character.map === spot.map) {
+  if (distance(character, spot) <= WITCH_GATHER_DEFEND_DISTANCE) {
     const allies = getAlliedNames();
     const onAlly = Object.values(parent.entities).find(
       (mob) => isAlive(mob) && allies.has(mob.target),

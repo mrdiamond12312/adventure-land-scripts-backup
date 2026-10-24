@@ -350,8 +350,7 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
       if (!level) releaseCraftLevel(name, 0);
 
   // A computer crafts anywhere but the bank, so a duty only blocks what would move us
-  const canCraftInPlace =
-    haveAComputer() && !isInBank() && !fromBank.length;
+  const canCraftInPlace = canUseNpcsRemotely() && !fromBank.length;
 
   // The check above is bookkeeping and runs every call; only acting on it waits
   if (
@@ -364,11 +363,11 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
     return;
 
   // Runs even when the craft can't fire yet — the climb needs the base items now
-  if (targetBuy.length) {
+  if (targetBuy.length && !isInBank()) {
     await Promise.all(targetBuy.map((id) => buy(id).catch(() => {})));
   }
 
-  if (vendorBuy.length && isEnoughIngredients) {
+  if (vendorBuy.length && isEnoughIngredients && !isInBank()) {
     await Promise.all(vendorBuy.map((id) => buy(id)));
   }
 
@@ -381,13 +380,11 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   }
 
   if (isEnoughIngredients) {
-    const hasComputer = haveAComputer();
-
     if (
       !isAdvanceSmartMoving &&
       !smart.moving &&
-      ((!hasComputer && get_nearest_npc()?.name !== "Leo") ||
-        (hasComputer && isInBank()))
+      !canUseNpcsRemotely() &&
+      get_nearest_npc()?.name !== "Leo"
     ) {
       await advanceSmartMove(place, { useBlink: false, useMagiport: false });
     }

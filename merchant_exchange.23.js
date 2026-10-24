@@ -130,7 +130,7 @@ function isExchangeQueued(itemName) {
 function getExchangeNpc(entry) {
   if (entry.holidayNpc && server.status["holidayseason"])
     return entry.holidayNpc;
-  if (entry.npc && !haveAComputer()) return entry.npc;
+  if (entry.npc && !canUseNpcsRemotely()) return entry.npc;
 }
 
 /**
@@ -255,7 +255,7 @@ async function exchangeSomething() {
   if (!entry) return fetchExchangeStock();
 
   const npc = getExchangeNpc(entry);
-  if (!npc) return exchangeFrom(slot);
+  if (!npc) return isInBank() ? undefined : exchangeFrom(slot);
 
   if (isAdvanceSmartMoving || smart.moving) return;
   const lock = takeDuty(DUTY.ERRAND);

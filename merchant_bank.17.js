@@ -87,6 +87,12 @@ function isInBank() {
   return character.map.startsWith("bank");
 }
 
+/** @returns {Promise<boolean>} whether we are out of the bank, which refuses every sale, after stepping out */
+async function leaveBankForSale() {
+  if (isInBank()) await moveHome();
+  return !isInBank();
+}
+
 /** Merges character.bank into bankCache */
 async function updateBank() {
   if (character.bank) bankCache = { ...bankCache, ...character.bank };
@@ -946,6 +952,7 @@ async function purgeBank() {
     if (!batch.length) break;
 
     await retrieveAll(batch);
+    if (!(await leaveBankForSale())) break;
     await sellMarkedItems(shouldSellItem);
   }
 
@@ -971,47 +978,60 @@ function getPurgeSlotTarget() {
  * @returns {Promise<number>} slots freed
  */
 async function freeSlotsForUpgrading() {
-  let freed = 0;
-
   // Bag copies first, then one floor at a time
   const victims = findPurgeVictims(getPurgeSlotTarget()).sort(
     (lhs, rhs) =>
       (lhs.index === undefined) - (rhs.index === undefined) ||
       (lhs.floor ?? "").localeCompare(rhs.floor ?? ""),
   );
+  const isInBag = (victim) => victim.index !== undefined;
 
-  for (const victim of victims) {
-    let slot = victim.index;
+  const freed = await sellPurgeVictims(
+    victims.filter(isInBag).map((victim) => ({ victim, slot: victim.index })),
+  );
 
-    if (slot === undefined) {
-      // A retrieve needs somewhere to land; bag sales above make that room
-      if (isInvFull(0)) continue;
+  const retrieved = [];
+  for (const victim of victims.filter((victim) => !isInBag(victim))) {
+    // A retrieve needs somewhere to land; the bag sales above made that room
+    if (isInvFull(0)) continue;
 
-      const held = new Set(
-        character.items.flatMap((item, index) =>
-          matchesPurgeVictim(item, victim) ? [index] : [],
-        ),
-      );
+    const held = new Set(
+      character.items.flatMap((item, index) =>
+        matchesPurgeVictim(item, victim) ? [index] : [],
+      ),
+    );
 
-      await retrieveAll([victim]);
+    await retrieveAll([victim]);
 
-      slot = character.items.findIndex(
-        (item, index) => !held.has(index) && matchesPurgeVictim(item, victim),
-      );
-    }
+    const slot = character.items.findIndex(
+      (item, index) => !held.has(index) && matchesPurgeVictim(item, victim),
+    );
+    if (slot !== -1) retrieved.push({ victim, slot });
+  }
 
-    if (slot === -1 || !matchesPurgeVictim(character.items[slot], victim))
-      continue;
+  return freed + (await sellPurgeVictims(retrieved));
+}
+
+/**
+ * Sells one copy per victim, out of the bank.
+ * @param {{victim: object, slot: number}[]} sales
+ * @returns {Promise<number>} copies sold
+ */
+async function sellPurgeVictims(sales) {
+  if (!sales.length || !(await leaveBankForSale())) return 0;
+
+  let sold = 0;
+  for (const { victim, slot } of sales) {
+    if (!matchesPurgeVictim(character.items[slot], victim)) continue;
 
     try {
       await sell(slot, 1);
-      freed++;
+      sold++;
     } catch (e) {
       console.warn(`Failed purging ${victim.item.name}`, e);
     }
   }
-
-  return freed;
+  return sold;
 }
 
 /**
@@ -1022,7 +1042,7 @@ async function freeSlotsForUpgrading() {
  * @returns {Promise<boolean>} whether a slot was freed
  */
 async function freeBagSlotForWork() {
-  if (!isBankTight) return false;
+  if (!isBankTight || isInBank()) return false;
   if (!isInvFull(RETRIEVE_SCROLL_SLOTS)) return false;
   if (!hasBagUpgradeWork()) return false;
   if (!lockInventory("mutate")) return false;

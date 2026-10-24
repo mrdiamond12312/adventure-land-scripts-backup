@@ -148,8 +148,12 @@ function isAwaitingParcel() {
 const distanceToSpot = (spot) =>
   Math.hypot(character.real_x - spot.x, character.real_y - spot.y);
 
+/** @returns {boolean} whether the bag networks us to NPCs: the server counts `computer` and `supercomputer` */
 const haveAComputer = () =>
-  locate_item("computer") !== -1 || locate_item("ancientcomputer") !== -1;
+  locate_item("computer") !== -1 || locate_item("supercomputer") !== -1;
+
+/** @returns {boolean} whether NPCs answer us where we stand: a computer works anywhere but the bank, which refuses every trade */
+const canUseNpcsRemotely = () => haveAComputer() && !isInBank();
 
 /**
  * @param {{x: number, y: number}} spot
@@ -414,7 +418,7 @@ setInterval(async function () {
       // craft("firestars", character.esize - 6, { map: "main", x: -2, y: 295 }),
       craft("basketofeggs", 1, homeLocation),
       craft("lanternshield", 1, { map: "main", x: -2, y: 295 }),
-      !isInventorySorting() && sellMarkedItems(),
+      !isInventorySorting() && !isInBank() && sellMarkedItems(),
     ]),
     300000,
   );
@@ -620,7 +624,7 @@ function matchesWantedItem(item, wanted) {
 }
 
 function secondhandsHandler(events) {
-  if (isInvFull(6)) return false;
+  if (isInvFull(6) || isInBank()) return false;
   for (const item of events) {
     if (!item) continue;
 

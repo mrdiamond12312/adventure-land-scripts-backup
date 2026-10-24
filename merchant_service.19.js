@@ -225,8 +225,7 @@ function deliverPotions(name, potionId, message) {
     deliver: POTION_DELIVERY,
     reserve: POTION_STACK,
     restock: async (shortfall) => {
-      if (!haveAComputer() && !isInBank())
-        await advanceSmartMove(POTION_SHOP);
+      if (!canUseNpcsRemotely()) await advanceSmartMove(POTION_SHOP);
       return buy(potionId, shortfall);
     },
   });
@@ -251,7 +250,7 @@ async function restockFromBankOrVendor(itemId, shortfall, npcId) {
   const vendor = findVendorMerchantOf(itemId) ?? npcId;
   if (!vendor) return;
 
-  if (!haveAComputer()) await advanceSmartMove(find_npc(vendor));
+  if (!canUseNpcsRemotely()) await advanceSmartMove(find_npc(vendor));
 
   return buy(itemId, stillMissing);
 }
