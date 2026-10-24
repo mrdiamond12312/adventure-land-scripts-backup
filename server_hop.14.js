@@ -200,12 +200,18 @@ function getForeignEventStayMs(event, realm) {
   return (isGatherOnly ? gathering : duration) * 1000 + EVENT_STAY_SLACK_MS;
 }
 
-/** @returns {boolean} whether home runs an early-hop event or a fatigue-exempt boss of its own by `by` */
-function hasHomeEventBy(by) {
-  return getLineup(getHomeRealmStatus()?.schedule, [
-    ...EARLY_HOP_EVENTS,
-    ...fatigueExemptBosses,
-  ]).some(({ at }) => at <= by);
+/** @returns {boolean} whether, by `by`, home runs an early-hop event of its own, or a fatigue-exempt boss is due on any realm we would chase it to */
+function hasClashingEventBy(by) {
+  const realmData = getRealmData();
+  const isDue = (schedule, events) =>
+    getLineup(schedule, events).some(({ at }) => at <= by);
+
+  if (isDue(getHomeRealmStatus()?.schedule, EARLY_HOP_EVENTS)) return true;
+  return Object.entries(realmData?.realms ?? {}).some(
+    ([key, { region, name }]) =>
+      isReachableRealm({ serverRegion: region, serverIdentifier: name }, true) &&
+      isDue(realmData.status(key)?.schedule, fatigueExemptBosses),
+  );
 }
 
 /** @returns {Object|undefined} the foreign event to land early for: far enough out to shed hop sickness, back home before the next scheduled home window */
@@ -233,7 +239,7 @@ function getEarlyHopTarget() {
 
       const stayMs = getForeignEventStayMs(event, key);
       if (until + stayMs + HOME_RETURN_LEAD_MS > untilHomeWindow) continue;
-      if (hasHomeEventBy(at + stayMs)) continue;
+      if (hasClashingEventBy(at + stayMs)) continue;
 
       targets.push({ ...realm, type: event, at });
     }
@@ -271,9 +277,12 @@ setInterval(async () => {
   // The merchant is never inside, but its hop takes the party out with it
   if (get("caveRun") > Date.now()) return;
 
-  if (isWitchGathering() || canBrewWitchCipher()) return;
-
   const exemptTarget = getExemptHopTarget();
+
+  // A live fatigue-exempt boss outranks a foreign Witch round; home's own round still holds
+  const isWitchRoundHere = isWitchGathering() || canBrewWitchCipher();
+  if (isWitchRoundHere && (isAtHomeServer() || !exemptTarget)) return;
+
   if (exemptTarget && realmOf(exemptTarget) === getHomeServer()) {
     if (!isAtHomeServer()) return hopHome(`${exemptTarget.type} up at home`);
     return;
