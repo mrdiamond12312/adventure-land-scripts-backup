@@ -4054,7 +4054,12 @@ party (e.g. Earth) are still taken by agitate, so they still block it: we let hi
   entry out to stop chasing him. Realm clocks differ by region, so
   several rides a day are reachable. No ride is skipped for low hp (2026-10-23): the goal is the
   kill achievement, so any live Horseman is worth a hop for some damage. Among foreign realms the
-  one with the most hp left wins, since it is the likeliest to still be up when the hop lands.
+  one with the **least** hp left wins (2026-10-24, the user's call; it was most hp, the likeliest
+  to still be up on landing). The fraction now reads the realm's `max_hp` before
+  `G.monsters[].hp`. Live check at 17:0x UTC: ASIAI 93%, ASIAII 47%, so it picks ASIAII. A
+  nearly dead one may die mid-hop, and the next tick picks the next live one. A party already on a
+  live Horseman's realm stays there (the hop loop's "boss live here" step comes first), so this
+  only chooses where to go.
   Realms in one region share a clock, so killing one Horseman often leaves a sibling realm's still
   riding. Under the old 15% hp floor that one was likely skipped, so the loop fell through to the
   home window (Mr. Green's respawn) instead.
