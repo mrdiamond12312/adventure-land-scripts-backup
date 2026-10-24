@@ -2719,7 +2719,7 @@ function canAffordSwap(slots) {
  */
 /** @returns {number} mp the warrior needs for an AOE pull, cleave or agitate alike */
 function warriorAoeMpFloor() {
-  return G.skills["cleave"].mp + 200 + surgeMpReserve();
+  return G.skills["cleave"].mp + 400 + surgeMpReserve();
 }
 
 function planCleave(strategyName) {
