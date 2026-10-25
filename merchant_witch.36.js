@@ -5,6 +5,9 @@ const WITCH_STOCK_PUBLISH_MS = 30_000;
 /** Distance he keeps to a gathering fighter */
 const WITCH_ATTEND_DISTANCE = 200;
 
+/** Within this of the mage he walks to the party instead of asking for a magiport */
+const WITCH_WALK_TO_MAGE_DISTANCE = 400;
+
 /** @returns {Object<string, number>} ingredient counts over bank and bag */
 const countWitchStock = () =>
   Object.fromEntries(
@@ -51,8 +54,14 @@ async function attendWitchGathering() {
   const anchor = fighter
     ? { map: character.map, x: fighter.real_x, y: fighter.real_y }
     : plan.spot;
+  const mage = get_entity(MAGE);
+  const isMageNearby =
+    !!mage && distance(character, mage) < WITCH_WALK_TO_MAGE_DISTANCE;
   if (distance(character, anchor) > WITCH_ATTEND_DISTANCE)
-    await advanceSmartMove(anchor).catch((e) => console.warn(e));
+    await advanceSmartMove(anchor, {
+      useScare: true,
+      useMagiport: !isMageNearby,
+    }).catch((e) => console.warn(e));
 
   return true;
 }
