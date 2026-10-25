@@ -39,7 +39,7 @@ const REALM_STALE_MS = 90000;
  * @returns {boolean}
  */
 function shouldOwnRealmSockets() {
-  if (!parent.caracAL) return true;
+  if (!parent.caracAL) return isMerchant() || !isPartyPlanFollower();
 
   const hoppers = Object.keys(caracALconfig?.characters ?? {}).filter(
     (name) => caracALconfig.characters[name].enabled,

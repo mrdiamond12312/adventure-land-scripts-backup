@@ -4319,29 +4319,90 @@ one softened below him does.
   `witchDay` still has mixes for home, it sends the merchant home. The home round's timing comes off
   the realm socket. If `gather_end` is missing it uses `start` plus `G.events.witchcipher.gathering`,
   and if both are missing it returns at once.
-  - **Only the merchant goes back** (`canHopAlone`, caracAL only). `hopAlone` runs
-    `deploy(null, SR_<home>)` without shutting anyone down, so the fighters stay on the Horseman.
-    It first stores their realm in `PARTY_AWAY_LS_KEY`. While that key is set, `deployCharacters`
-    does nothing. Otherwise the merchant's home `dynamicParty` preset would shut down the fighters
-    abroad, or deploy missing ones to his realm. A `deploy(id, null)` goes to the *sender's* realm
-    (`m.realm || char_block.realm` in CharacterCoordinator.js).
-  - The party-away block sits **above** the Witch hold, so the fighters are managed while he waits
-    to brew. If there is no exempt target, or it is on his own realm, `recallParty` shuts them down.
-    The key is cleared, and `deployCharacters` brings home's roster back within 30s. If the target is
-    on another realm while the round still runs here, `sendPartyTo` sends **that realm's** roster
-    there: `getRealmRoster` resolves `DYNAMIC_PARTY_PRESETS[type]` for the target realm (EUII ranger2,
-    EUI ranger1, EUIII/EUIV the default warrior, ASIA rogue). It shuts down configured characters
-    outside it and deploys the members with `deploy(id, SR_<realm>, script)`, 1s apart, while the
-    merchant stays home. Preset functions write `RANGER`/`HEALER`, so `getRealmRoster` puts the
-    merchant's own values back.
-  - **After brewing** (the round no longer holds): if the exempt target is on the fighters' realm, he
-    hops there alone and clears the key. His `dynamicParty` there picks the same preset, so the
-    roster matches. If it is on another realm, he does a normal full hop, which clears the key and
-    redeploys everyone there.
+  - **Only the merchant goes back** (`BREW_ALONE`, `canHopAlone`). `hopAlone` moves only him and
+    leaves the party plan pointing at the Horseman's realm, so the fighters stay there. See "Party
+    plan" below for how that works in both environments.
+  - `steerSplitParty` runs **above** the Witch hold, so the fighters are managed while he waits to
+    brew. With no exempt target, or one on his own realm, the plan points home. With one on another
+    realm while the round still runs here, the plan points there. The plan carries that realm's
+    roster (`getRealmRoster` on its socket status), so EUII gets ranger2, EUI ranger1, EUIII/EUIV
+    the default warrior, ASIA the rogue. After brewing, if the target is on the plan's realm, he hops
+    there alone. Otherwise the normal full hop takes over.
   - Fatigue only counts non-merchant siblings, so the split costs nothing there, and the server's
-    brew has no fatigue or hop-sickness gate (`witch_cipher_brew`; checked 2026-10-26). Under
-    native CODE the hop owner just hops home as before.
+    brew has no fatigue or hop-sickness gate (`witch_cipher_brew`; checked 2026-10-26).
+  - Switches at the top of server_hop.14.js: `SKIP_HOME_GATHERING_FOR_EXEMPT`, `BREW_ALONE`. The
+    exempt bosses themselves are still `bosses[name].fatigueExempt`.
   Once the season ends there is no exempt target, so none of this runs.
+
+## Party plan (`party_plan.37.js`, 2026-10-26)
+
+One character, the hop owner, decides both where the fighters belong and who is on the roster,
+and publishes it. The others carry it out. Every character loads the file.
+
+- **Why one decider** (the user's call, after the sim). Every character could run the same logic,
+  but their inputs differ. Realm sockets pulse about every 24s, unsynchronised. Some inputs are
+  per-character: where you stand, your own hop sickness, the merchant's own Witch state. And every
+  loop runs at its own offset. Two fighters disagreeing on the realm is a split home, so realm
+  fatigue for every sibling.
+- **The plan** (`partyPlan`: `{realm, region, id, members, ranger, healer, by, at}`, stale after
+  2 min) is written only by the owner. That happens every hop tick (`refreshPartyPlan`) and on
+  every hop (`hopToServer` points it at the target first). `hopAlone` leaves it as it is, which is
+  the split. `setPartyRealm` fills the roster from `getRealmRoster`: the owner's own `partyMems`,
+  `RANGER` and `HEALER` on his own realm. On another realm it runs `pickPartyMembers` on that
+  realm's socket status, then puts his role globals back.
+- **Followers take the plan's roster.** On the plan's realm, `dynamicParty` sets `partyMems`,
+  `RANGER` and `HEALER` from the plan. Anywhere else, or with no fresh plan, it picks from the
+  local status as before. With a stale plan a fighter picks its roster but never changes realm.
+  - This fixed the sim's F1. When a Horseman died, every fighter's local pick fell to the default
+    preset within 3s, and the roster check (5s) swapped people on a realm the owner's next tick
+    (10s, or up to about 34s during the split, socket included) was about to abandon. Now the
+    roster only changes when the plan does.
+- **Heartbeats** (`realmBeat:<name>`: `{realm, window, ctype, at}`, every 5s, stale after 30s) say
+  who stands where. `window` is the native window, `character.controller || character.name`.
+- **Owner:** under caracAL, the first enabled character, as before. Natively, the merchant main
+  always owns. A fighter main owns only while no fresh plan comes from someone else
+  (`shouldOwnRealmSockets`), so a second window follows instead of opening its own sockets.
+- **caracAL fighters** (`followPartyPlan` → `fitPartyRoster`, every 5s, not in a cave or crypt):
+  - Off-roster fighters, on any realm, sorted, pair with the missing members, sorted. Each one
+    deploys its partner straight onto the plan's realm and shuts itself down.
+  - A rostered fighter on the wrong realm redeploys itself there (`moveToPartyRealm`).
+  - The first rostered fighter already there deploys the remaining missing members.
+  - A member is **missing** only with no sibling entry, no fresh heartbeat, and no `deployedAt:`
+    stamp in the last 60s. A member that is moving, or still logging in, still beats, so it is
+    neither missing nor stolen.
+- **One deploy per character per 60s** (`deployCharacterOnce`, `markDeployed`). Self-moves and
+  the owner's own hops stamp it too. Without that, a character mid-login (not in `siblings`) was
+  deployed again, which restarted its login (sim F2).
+- **The owner's `deployCharacters`, caracAL:** fits to `plan.members`. With the party, it shuts
+  down off-roster siblings and deploys missing members. Away from it, it leaves the realm to the
+  fighters there, or deploys `plan.members` onto it with `SR_<realm>` when nobody is there.
+- **Native:** a window main follows the plan's realm with `change_server`, and its runners go with
+  it. The main's `deployCharacters` starts and stops runners from `partyMems`, which is the plan's
+  roster.
+  - **Two windows** need `SEPARATE_MERCHANT_WINDOW = true`. The merchant main then starts no
+    fighters, and a fighter main never starts the merchant. Without it, whichever window runs
+    `deployCharacters` first has no heartbeats to go on yet and takes every character, and the
+    split silently becomes a whole-window hop (sim N1).
+  - `canHopAlone` holds for a merchant with no fighters among his runners.
+  - `start_character` rejections (`already_running`) are caught.
+  - Older than this change: a fighter main can't leave its window, so it stays even when the realm's
+    roster doesn't want it.
+- The presets live here too: `DYNAMIC_PARTY_PRESETS`, `getPresetMembers`, `PRESET_FIRST_BOSSES`,
+  the witch-slot pick, and `pickPartyMembers(status, realm)`. `HP_RANKED_BOSSES` and
+  `rankLiveBossesByHp(names, status)` stay in basic_function.7.js, because the fights use them too.
+  So does the load-time `dynamicParty()` call: slot 37 loads before that `const`, so calling it
+  from 37's top level would hit its TDZ.
+- Native needs slot 37 filled in the CODE editor, like every other `load_code` target.
+- **Checked 2026-10-26.**
+  - Live sockets confirm `witchcipher` carries `start`, `gather_end` and `end`, and keeps them with
+    `live:false` after the round.
+  - Server source: the Horseman has `respawn: -1`, and disappears after `G.events.horseman.duration`
+    (40 min) unless he was hit in the last 20s. The per-realm character cap skips merchants.
+  - caracAL: storage is shared over IPC and persisted. `siblings` is the connected set, refreshed on
+    every login and every 6s.
+  - A vm sim that ran the real 37 and 14 over 15 scenarios (EU night, stock, switches, early or
+    in-brew deaths, a 2s storage lag, an owner crash, native windows) ended every one with the party
+    home and no redundant deploys.
 
 `pickWitchMix` fallback (2026-10-22): when no affordable mix could still be the answer (or after
 the day's crack), it brews the affordable *untried* mix with the most expected right places,

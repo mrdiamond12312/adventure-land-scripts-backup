@@ -79,6 +79,10 @@ basic_function.7.js          [SHARED — the core library]
     growth_tracker.34.js         `grow` spawn groups: permanent vs temp spawns and group live counts;
                                  sortPullTargets ranks kills that waste a grow respawn last
                                  (fighters only, loaded with 12/13)
+    party_plan.37.js             every character: the party presets (DYNAMIC_PARTY_PRESETS,
+                                 dynamicParty), the hop owner's partyPlan (which realm the fighters
+                                 belong on), realm heartbeats, deployCharacters, and each fighter
+                                 following the plan and fitting its realm's roster; loaded before 25
     server_hop_utilities.25.js   the cross-realm ServerRealmData distributor and realm-fatigue
                                  hop policy (HOME_SERVER itself is config in 7); loaded just before
                                  14, which consults it

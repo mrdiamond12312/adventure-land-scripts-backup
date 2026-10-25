@@ -54,9 +54,6 @@ const HOME_SERVER = {
 /** Published by server_hop_utilities.25.js */
 const HOME_WINDOW_LS_KEY = "homeWindow";
 
-/** The realm the fighters were left on while the merchant brews at home */
-const PARTY_AWAY_LS_KEY = "partyAwayRealm";
-
 /** Published home window shelf life */
 const HOME_WINDOW_STALE_MS = 60 * 1000;
 
@@ -445,6 +442,13 @@ if (parent.caracAL) {
     load_code(34);
     var currentStrategy = usePullStrategies;
   }
+}
+
+// Party plan — read by 25 and 14, so it loads first
+if (parent.caracAL) {
+  parent.caracAL.load_scripts(["adventure-land-scripts-backup/party_plan.37.js"]);
+} else {
+  load_code(37);
 }
 
 // Server hoping — 25 defines the policy 14 consults, so it loads first
@@ -2320,53 +2324,10 @@ async function getServerPlayers() {
   return playersData;
 }
 
-async function deployCharacters() {
-  //// Deploy characters which arent active
-  const loadedCharacters = get_active_characters();
-  const loadedCharactersNames = Object.keys(loadedCharacters);
-  const allCharacters = getMyCharacters();
-
-  if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
-    // The fighters were left abroad on purpose; the hop loop brings them back
-    if (get(PARTY_AWAY_LS_KEY)) return;
-
-    if (character.ctype === "merchant" && parent.caracAL.siblings.length)
-      parent.caracAL.siblings
-        .filter((id) => id !== character.name && !partyMems.includes(id))
-        .forEach(async (id) => {
-          send_cm(id, "dc-harakiri");
-          await sleep(character.ping);
-          parent.caracAL.shutdown(id);
-        });
-
-    //the server only confirms one login at a time per account - deploying
-    //these in the same tick gets all but one rejected as characters_unconfirmed
-    for (const id of allCharacters.filter(
-      (id) => parent.caracAL && !parent.caracAL.siblings.includes(id),
-    )) {
-      parent.caracAL.deploy(id, null, caracALconfig.characters[id].script);
-      await sleep(1000);
-    }
-  } else if (!parent.caracAL && !character.controller) {
-    loadedCharactersNames
-      .filter(
-        (id) => loadedCharacters[id] !== "self" && !allCharacters.includes(id),
-      )
-      .forEach((id) => stop_character(id));
-
-    allCharacters
-      .filter((id) => !loadedCharacters[id])
-      .forEach((id) => start_character(id, CODE_SLOTS[id].script));
-  }
-}
-
 /** Raised by cave_fighter_strat.15.js while a run is being set up or fought */
 var isPreparingCave = false;
 
 // Party Setups
-setTimeout(deployCharacters, 5000);
-setInterval(deployCharacters, 30000);
-
 setInterval(async () => {
   // if (isMerchant()) return;
 
@@ -2602,238 +2563,6 @@ const shouldDeployRogue = () => {
   );
 };
 
-function horsemanRanger1Party() {
-  RANGER = RANGER1;
-  HEALER = PRIEST;
-  return [RANGER1, MAGE, PRIEST];
-}
-
-function horsemanAsiaParty() {
-  HEALER = PRIEST;
-  return [ROGUE, MAGE, PRIEST];
-}
-
-const DYNAMIC_PARTY_PRESETS = {
-  horseman: {
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = PRIEST;
-      return [RANGER2, MAGE, PRIEST];
-    },
-    EUI: horsemanRanger1Party,
-    USI: horsemanRanger1Party,
-    USII: horsemanRanger1Party,
-    ASIAI: horsemanAsiaParty,
-    ASIAII: horsemanAsiaParty,
-    default: () => {
-      HEALER = PRIEST;
-      return [WARRIOR, MAGE, PRIEST];
-    },
-  },
-  mrgreen: () => {
-    HEALER = PRIEST;
-    return [WARRIOR, PRIEST, ROGUE];
-  },
-  mrpumpkin: {
-    USIV: () => {
-      HEALER = PRIEST;
-      return [MAGE, PRIEST, ROGUE];
-    },
-    default: () => {
-      HEALER = PRIEST;
-      return [WARRIOR, PRIEST, ROGUE];
-    },
-  },
-  franky: {
-    EUII: () => {
-      RANGER = RANGER2;
-      return [RANGER2, PRIEST, ROGUE];
-    },
-    EUI: () => {
-      RANGER = RANGER1;
-      return [RANGER1, PRIEST, ROGUE];
-    },
-    default: [WARRIOR, PRIEST, ROGUE],
-  },
-  icegolem: {
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = RANGER2;
-      return [RANGER2, ROGUE, MAGE];
-    },
-    EUI: () => {
-      RANGER = RANGER1;
-      HEALER = RANGER1;
-      return [RANGER, ROGUE, MAGE];
-    },
-    USI: [WARRIOR, PRIEST, MAGE],
-    USIV: [WARRIOR, PRIEST, MAGE],
-    default: () => {
-      HEALER = PRIEST;
-      return [PRIEST, ROGUE, MAGE];
-    },
-  },
-  dragold: {
-    USII: [WARRIOR, PRIEST, ROGUE],
-    EUI: () => {
-      RANGER = RANGER1;
-      HEALER = PRIEST;
-      return [WARRIOR, RANGER, PRIEST];
-    },
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = PRIEST;
-      return [WARRIOR, RANGER, PRIEST];
-    },
-    USI: () => {
-      HEALER = PRIEST;
-      return [WARRIOR, MAGE, PRIEST];
-    },
-    USIV: () => {
-      HEALER = PRIEST;
-      return [WARRIOR, MAGE, PRIEST];
-    },
-    default: [WARRIOR, PRIEST, ROGUE],
-  },
-  crabxx: {
-    EUII: () => {
-      RANGER = RANGER2;
-      return [WARRIOR, RANGER, PRIEST];
-    },
-    default: () => {
-      RANGER = RANGER1;
-      return [WARRIOR, RANGER, PRIEST];
-    },
-  },
-  pinkgoo: {
-    USII: [MAGE, PRIEST, ROGUE],
-    USI: [WARRIOR, MAGE, PRIEST],
-    USIV: [WARRIOR, MAGE, PRIEST],
-    EUI: () => {
-      RANGER = RANGER1;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
-    },
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
-    },
-    default: () => {
-      RANGER = RANGER1;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
-    },
-  },
-  wabbit: {
-    USII: () => {
-      RANGER = RANGER1;
-      HEALER = RANGER;
-      return [ROGUE, RANGER, MAGE];
-    },
-    USIV: [MAGE, RANGER, PRIEST],
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
-    },
-    default: () => {
-      RANGER = RANGER1;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
-    },
-  },
-  snowman: {
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
-    },
-    USII: () => {
-      RANGER = RANGER1;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, ROGUE];
-    },
-    USIV: () => {
-      RANGER = RANGER1;
-      HEALER = PRIEST;
-      return [WARRIOR, RANGER, PRIEST];
-    },
-    default: () => {
-      RANGER = RANGER1;
-      HEALER = RANGER;
-      return [WARRIOR, RANGER, MAGE];
-    },
-  },
-
-  default: () => {
-    const globalParty = get("currentParty");
-    HEALER = PRIEST;
-
-    if (
-      globalParty &&
-      globalParty.some((id) => knownTankers.includes(id)) &&
-      !serverCurrentlyHasLiveEvent()
-    ) {
-      setRogueSpeedLastDeployment();
-      if (shouldDeployRogue()) {
-        return [WARRIOR, ROGUE, MAGE];
-      } else {
-        return [WARRIOR, PRIEST, MAGE];
-      }
-    }
-
-    return [WARRIOR, PRIEST, MAGE];
-  },
-
-  cave: () => {
-    HEALER = PRIEST;
-    return [WARRIOR, PRIEST, MAGE];
-  },
-
-  witch: {
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = PRIEST;
-      return [RANGER2, PRIEST, MAGE];
-    },
-    default: () => {
-      RANGER = RANGER1;
-      HEALER = PRIEST;
-      return [RANGER1, PRIEST, MAGE];
-    },
-  },
-};
-
-/** Gather kinds whose mobs the ranger's multishot clears faster than the warrior */
-const WITCH_RANGER_KINDS = ["verdantspore", "frostscale", "gloomfeather"];
-
-/** @returns {boolean} whether this round's gathering slot wants the witch preset */
-function isRangerWitchSlot() {
-  const cipher = server.status.witchcipher;
-  if (!isWitchGathering(cipher) || get("cryptInstance")) return false;
-
-  const plan = get("witchGatherPlan");
-  return (
-    plan?.key === getWitchRoundKey(cipher) &&
-    WITCH_RANGER_KINDS.includes(plan.kind)
-  );
-}
-
-function getPresetMembers(preset, currentServer) {
-  if (typeof preset === "function") return preset();
-  if (Array.isArray(preset)) return preset;
-  if (typeof preset === "string")
-    return getPresetMembers(DYNAMIC_PARTY_PRESETS[preset], currentServer);
-
-  const value =
-    preset[currentServer] ?? preset.default ?? DYNAMIC_PARTY_PRESETS.default();
-  return typeof value === "function" ? value() : value;
-}
-
-/** Bosses whose preset wins whenever they are live */
-const PRESET_FIRST_BOSSES = ["horseman"];
-
 /** Bosses useEventStrategy fights lowest hp fraction first */
 const HP_RANKED_BOSSES = [
   "icegolem",
@@ -2843,40 +2572,19 @@ const HP_RANKED_BOSSES = [
   "mrgreen",
 ];
 
-/** @returns {string[]} the live ones of `names`, least hp fraction first */
-function rankLiveBossesByHp(names = HP_RANKED_BOSSES) {
+/** @returns {string[]} the live ones of `names` in `status`, least hp fraction first */
+function rankLiveBossesByHp(names = HP_RANKED_BOSSES, status = server.status) {
   const hpFraction = (name) => {
-    const { hp, max_hp = G.monsters[name].hp } = server.status[name];
+    const { hp, max_hp = G.monsters[name].hp } = status[name];
     return (hp ?? max_hp) / max_hp;
   };
 
   return names
-    .filter((name) => server.status[name]?.live)
+    .filter((name) => status[name]?.live)
     .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs));
 }
 
-function dynamicParty() {
-  const currentServer = `${server.region}${server.id}`;
-  const liveEvents = Object.keys(DYNAMIC_PARTY_PRESETS).filter(
-    (name) => server.status[name]?.live,
-  );
-  const activeEvent =
-    USE_CAVE_STRATEGY && isCaveUnderway()
-      ? "cave"
-      : isRangerWitchSlot()
-      ? "witch"
-      : liveEvents.find((name) => PRESET_FIRST_BOSSES.includes(name)) ??
-        rankLiveBossesByHp().find((name) => liveEvents.includes(name)) ??
-        liveEvents[0] ??
-        "default";
-
-  if (!activeEvent) return;
-
-  const preset = DYNAMIC_PARTY_PRESETS[activeEvent];
-  const members = getPresetMembers(preset, currentServer);
-
-  if (members) partyMems = members;
-}
+// party_plan.37.js's presets read HP_RANKED_BOSSES
 dynamicParty();
 setInterval(dynamicParty, 3000);
 
