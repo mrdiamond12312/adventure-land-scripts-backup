@@ -1445,7 +1445,9 @@ function calculateRangerItems(target) {
       ? "rabbitsfoot"
       : feelingWise
       ? "talkingskull"
-      : findMaxLevelItem('cave_loaded_die') !== -1 ? "orbofdex",
+      : findMaxLevelItem("cave_loaded_die") !== -1
+      ? "cave_loaded_die"
+      : "orbofdex",
     amulet: feelingWise ? "spookyamulet" : "dexamulet",
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
@@ -2387,9 +2389,7 @@ function calculateDamage(fromEntity, toEntity, recursion = true) {
 
     default:
       return (
-        fromEntity.attack *
-        fromEntity.frequency *
-        monsterCritFactor(fromEntity)
+        fromEntity.attack * fromEntity.frequency * monsterCritFactor(fromEntity)
       );
   }
 }
