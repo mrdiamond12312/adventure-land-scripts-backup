@@ -1487,8 +1487,13 @@ function isPriestInHealGraceWindow(target) {
   return Date.now() - priestLastHealGearAt < graceMs;
 }
 
+/** @returns {boolean} whether the target is a ghost with no heal landed or in the air */
 function isUnhealedGhost(target) {
-  return target?.mtype === "ghost" && !target.s?.healed;
+  return (
+    target?.mtype === "ghost" &&
+    !target.s?.healed &&
+    !projectileManager?.hasIncoming(target.id, "heal")
+  );
 }
 
 function isPriestInDanger() {
@@ -2295,7 +2300,7 @@ function getPlayersToHeal() {
       if (entity.dead || entity.rip) return false;
 
       if (character.ctype === "priest" && entity.mtype === "ghost") {
-        return !entity.s.healed && entity.hp < 7000;
+        return isUnhealedGhost(entity) && entity.hp < 7000;
       }
 
       if (entity.type === "monster" || entity.citizen) return false;
@@ -3827,6 +3832,18 @@ class ProjectileManagement {
     }
 
     return total;
+  }
+
+  /**
+   * @param {string} target entity id
+   * @param {"attack"|"heal"} type
+   * @returns {boolean} whether a projectile of that type is in the air to it
+   */
+  hasIncoming(target, type) {
+    for (const projectile of this.projectilesByTarget.get(target)?.values() ??
+      [])
+      if (projectile.type === type) return true;
+    return false;
   }
 
   init() {
