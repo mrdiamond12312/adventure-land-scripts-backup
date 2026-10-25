@@ -1445,7 +1445,7 @@ function calculateRangerItems(target) {
       ? "rabbitsfoot"
       : feelingWise
       ? "talkingskull"
-      : findMaxLevelItem("cave_loaded_die") !== -1
+      : getOwnedItemInfo("cave_loaded_die")
       ? "cave_loaded_die"
       : "orbofdex",
     amulet: feelingWise ? "spookyamulet" : "dexamulet",
