@@ -80,10 +80,10 @@ async function fightGoobrawl() {
 
 /**
  * Per-boss overrides; the default is the pull strategy at the usual kite distance.
- * @type {Object<string, {usePull?: boolean, rangeRate?: function(): number}>}
+ * @type {Object<string, {usePull?: boolean, rangeRate?: function(): number, isPinned?: boolean}>}
  */
 const SIMPLE_BOSSES = {
-  horseman: {},
+  horseman: { isPinned: true },
   dragold: {},
   mrpumpkin: {},
   mrgreen: {},
@@ -109,8 +109,11 @@ async function fightSimpleBoss(types) {
   const kaneOutcome = await waitOutBossAtKane(bossToFight.type);
   if (kaneOutcome) return kaneOutcome;
 
-  const { usePull = true, rangeRate: bossRangeRate } =
-    SIMPLE_BOSSES[bossToFight.type];
+  const {
+    usePull = true,
+    rangeRate: bossRangeRate,
+    isPinned = false,
+  } = SIMPLE_BOSSES[bossToFight.type];
   if (usePull) changeToPullStrategies();
   else changeToNormalStrategies();
   if (bossRangeRate) rangeRate = bossRangeRate();
@@ -128,7 +131,7 @@ async function fightSimpleBoss(types) {
     bossInstance = get_nearest_monster({ type: bossToFight.type });
   }
 
-  return engage(bossInstance);
+  return engage(bossInstance, { isPinned });
 }
 
 /**

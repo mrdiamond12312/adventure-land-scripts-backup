@@ -4049,7 +4049,7 @@ party (e.g. Earth) are still taken by agitate, so they still block it: we let hi
   minion. He is not on the home drop table, and his achievements go up to 500 kills. Until the
   season ends (2026-11-02), his `bosses` entry in server_hop.14.js stays, with `fatigueExempt:
   true`. That flag builds `fatigueExemptBosses`, which `getExemptHopTarget` hops to ahead of the
-  home-window and realm-fatigue checks (home first, `ignoreServer` realms allowed).
+  home-window and realm-fatigue checks (`ignoreServer` realms allowed).
   `trackedBossTypes` leaves flagged bosses out of the HP race. Remove the flag or comment the
   entry out to stop chasing him. Realm clocks differ by region, so
   several rides a day are reachable. No ride is skipped for low hp (2026-10-23): the goal is the
@@ -4057,9 +4057,11 @@ party (e.g. Earth) are still taken by agitate, so they still block it: we let hi
   one with the **least** hp left wins (2026-10-24, the user's call; it was most hp, the likeliest
   to still be up on landing). The fraction now reads the realm's `max_hp` before
   `G.monsters[].hp`. Live check at 17:0x UTC: ASIAI 93%, ASIAII 47%, so it picks ASIAII. A
-  nearly dead one may die mid-hop, and the next tick picks the next live one. Only home holds the
-  party on a live Horseman. Abroad, the hop loop goes to `getExemptHopTarget` whenever it is
-  another realm, even off a live one here, with no margin (the user's call). Two Horsemen near the
+  nearly dead one may die mid-hop, and the next tick picks the next live one. The hop loop goes
+  to `getExemptHopTarget` whenever it is another realm, even off a live one here, with no margin
+  (the user's call). Home gets no preference (2026-10-25, the user's call): a home Horseman is
+  ranked by hp like any other, so the party no longer sits home on him while a lower-hp one rides
+  elsewhere, and is not pulled home off a foreign one. Two Horsemen near the
   same hp can bounce the party, since each hop costs ~30s+ of riding. "Live here" alone only holds
   when realm data is missing.
   Realms in one region share a clock, so killing one Horseman often leaves a sibling realm's still
@@ -4284,11 +4286,22 @@ one softened below him does.
 - `BOSS_DRAG_ROUTES.horseman` uses Mr. Pumpkin's own spot (halloween -243,680, between the xscorpion
   and minimush spawns) and, like him, has no `releaseAtSpot`: the priest stays tanker and kites
   around the spot, so both bosses are fought in one place. The Horseman spawns among the north-west
-  graveyard's 9 ghosts (-405,-1642), but `roam` carries him anywhere.
-- Home comes first for the Horseman: `getExemptHopTarget` sorts the home realm ahead of the rest.
-  A live home Horseman keeps the party
-  home, and pulls it home even off another realm's Horseman. Only with none at home does the
-  party stay on, or hop to, another realm's.
+  graveyard's 9 ghosts (-405,-1642), but `roam` carries him anywhere. Since 2026-10-25 the drag has
+  `dragWhileLive: "mrpumpkin"` (the user's call): with no live Mr. Pumpkin there is nothing to
+  share the spot with, so the walk across the map only costs damage time, and the priest kites him
+  where he stands. `isDragWanted` gates only `dragToSpot`. The priest-as-tanker pick
+  (`assignRoles`) and the take-back from strangers still apply. The take-back stays even with no
+  drag, because a coop boss's hits earn its target `attack × dps_tank_mult` (0.25) coop points.
+- Mr. Pumpkin outranked the Horseman at that shared spot (2026-10-25). `fightSimpleBoss` handed
+  the Horseman back unpinned, so each class's pull-mode `planFight` picked again. `cooperativeFirst`
+  ties two coop bosses, and `sortPullTargets` then takes the bigger cluster and the higher hp, which
+  is Mr. Pumpkin (36M against 30M). The rogue's own comparator gives no real order for two coop
+  bosses. The take-back loops (`getStolenDragBoss`, `getDragBossOnAlly`) also walked
+  `BOSS_DRAG_ROUTES` with `mrpumpkin` first. Now `SIMPLE_BOSSES.horseman.isPinned` pins him, so
+  every class's pick keeps him (Jack-o Walkers still come first, unpinned), and his drag route comes
+  before Mr. Pumpkin's.
+- ~~Home comes first for the Horseman~~ — superseded 2026-10-25: `getExemptHopTarget` ranks every
+  realm, home included, by hp left alone (see the Halloween events section).
 
 `pickWitchMix` fallback (2026-10-22): when no affordable mix could still be the answer (or after
 the day's crack), it brews the affordable *untried* mix with the most expected right places,

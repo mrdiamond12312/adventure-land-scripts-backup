@@ -1381,14 +1381,8 @@ function extraDistanceWithinHitbox(target) {
 var lastKitingTargetId = undefined;
 
 /**
- * Bosses the priest, as tanker, drags to a spot and kites around there, keyed
- * by boss type. `mtypes` are the targets that start the drag: the boss and its
- * adds. Without a priest in the party, or with a known tanker in sight to take
- * it back, the boss is fought where it stands. With `releaseAtSpot` the drag
- * lets go once the boss reaches the spot: the usual damage-ratio tanker pick
- * and kiting take over. With `takeBackFromParty` the tanker also takes the
- * boss back off our own party members, not just strangers.
- * @type {Object<string, {spot: Object, mtypes: string[], releaseAtSpot?: boolean, takeBackFromParty?: boolean}>}
+ * Bosses the tank drags to a spot
+ * @type {Object<string, {spot: Object, mtypes: string[], releaseAtSpot?: boolean, takeBackFromParty?: boolean, dragWhileLive?: string}>}
  */
 const BOSS_DRAG_ROUTES = {
   franky: {
@@ -1396,15 +1390,16 @@ const BOSS_DRAG_ROUTES = {
     mtypes: ["franky", "nerfedmummy"],
     takeBackFromParty: true,
   },
-  // Between the xscorpion and minimush spawns
-  mrpumpkin: {
-    spot: { map: "halloween", x: -243, y: 680 },
-    mtypes: ["mrpumpkin", "jr"],
-  },
   // Mr. Pumpkin's spot
   horseman: {
     spot: { map: "halloween", x: -243, y: 680 },
     mtypes: ["horseman", "jackowalker"],
+    dragWhileLive: "mrpumpkin",
+  },
+  // Between the xscorpion and minimush spawns
+  mrpumpkin: {
+    spot: { map: "halloween", x: -243, y: 680 },
+    mtypes: ["mrpumpkin", "jr"],
   },
   // The mummy spawn
   mrgreen: {
@@ -1433,6 +1428,10 @@ function isDragReleased(dragRoute) {
   if (distance(boss, route.spot) <= DRAG_ARRIVAL_DISTANCE)
     arrivedDragBossIds.add(boss.id);
   return arrivedDragBossIds.has(boss.id);
+}
+
+function isDragWanted(route) {
+  return !route.dragWhileLive || !!server.status[route.dragWhileLive]?.live;
 }
 
 /** @returns {Object|undefined} a dragged boss in view held by one of our allies, not us */
@@ -1558,7 +1557,12 @@ async function resolveKiteTarget(target) {
     }
 
     const isBaited = !!boss && getBaitedBoss()?.id === boss.id;
-    if (partyMems.includes(PRIEST) && !isKnownTankerAround() && !isBaited)
+    if (
+      partyMems.includes(PRIEST) &&
+      !isKnownTankerAround() &&
+      !isBaited &&
+      isDragWanted(route)
+    )
       return dragToSpot(target, route.spot, boss);
   }
 

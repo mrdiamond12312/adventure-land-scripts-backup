@@ -20,7 +20,7 @@ const bosses = {
 };
 const waitForEvent = ["wabbit"];
 
-/** Bosses chased home first and across ignoreServer, ahead of the home windows and realm fatigue */
+/** Bosses chased on any realm, ignoreServer included */
 const fatigueExemptBosses = Object.keys(bosses).filter(
   (name) => bosses[name].fatigueExempt,
 );
@@ -140,21 +140,15 @@ function hasEventWorthStayingFor() {
   return Boolean(brawling || liveHere);
 }
 
-/** @returns {Object|undefined} the live fatigue-exempt boss, home first, then least hp left */
+/** @returns {Object|undefined} the live fatigue-exempt boss with the least hp left */
 function getExemptHopTarget() {
-  const awayFromHome = (candidate) =>
-    realmOf(candidate) === getHomeServer() ? 0 : 1;
   const hpFraction = ({ type, hp, max_hp = G.monsters[type].hp }) =>
     (hp ?? max_hp) / max_hp;
 
   return getRealmData()
     ?.query({ types: fatigueExemptBosses })
     .filter((candidate) => isReachableRealm(candidate, true))
-    .sort(
-      (lhs, rhs) =>
-        awayFromHome(lhs) - awayFromHome(rhs) ||
-        hpFraction(lhs) - hpFraction(rhs),
-    )[0];
+    .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs))[0];
 }
 
 /** Foreign events worth landing early for, so hop sickness wears off before they start */
@@ -282,11 +276,6 @@ setInterval(async () => {
   const isWitchRoundHere = isWitchGathering() || canBrewWitchCipher();
   if (isWitchRoundHere && (isAtHomeServer() || !exemptTarget)) return;
 
-  if (exemptTarget && realmOf(exemptTarget) === getHomeServer()) {
-    if (!isAtHomeServer()) return hopHome(`${exemptTarget.type} up at home`);
-    return;
-  }
-  // Abroad, the least-hp one anywhere wins, even over one live here
   if (exemptTarget) {
     if (realmOf(exemptTarget) === getCurrentServer()) return;
     return hopToCandidate(exemptTarget);
