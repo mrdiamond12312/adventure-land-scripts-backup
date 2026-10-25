@@ -14,7 +14,7 @@ const BANK_FLOORS = {
  * Slots to skip globally (gold, personal storage).
  * items23 is reserved for personal items and is never touched.
  */
-const IGNORE_BANK_SLOTS = ["gold", "items23"];
+const IGNORE_BANK_SLOTS = ["gold", "items24"];
 const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
 
 /** How long a batch of bank calls may take */
@@ -358,9 +358,7 @@ function getMaxStack(itemName) {
 /** @returns {boolean} whether this stack can take more of its item */
 function isStackMergeable(item) {
   const hasTitle = item.p && !G.titles?.[item.p]?.stackable;
-  return (
-    !item.l && !hasTitle && !item.b && !item.v && !item.data && !item.m
-  );
+  return !item.l && !hasTitle && !item.b && !item.v && !item.data && !item.m;
 }
 
 /**
@@ -787,7 +785,9 @@ function isPurgeCandidate(item) {
 
   const def = G.items[item.name];
   if (!def?.upgrade && !def?.compound) return false;
-  return !isCraftIngredient(item.name) && !getMerchantGearNames().has(item.name);
+  return (
+    !isCraftIngredient(item.name) && !getMerchantGearNames().has(item.name)
+  );
 }
 
 /** @returns {boolean} whether this item is surplus to sell once the bank is full */
@@ -1205,7 +1205,9 @@ async function returnStrays(itemName) {
  */
 async function runStackDrains(drains) {
   for (const [floor, group] of Object.entries(
-    groupByFloor(drains.map((drain) => ({ ...drain, floor: drain.source.floor }))),
+    groupByFloor(
+      drains.map((drain) => ({ ...drain, floor: drain.source.floor })),
+    ),
   )) {
     const empty = getEmptyBagSlots();
     group.forEach((drain, i) => (drain.index = empty[i]));
