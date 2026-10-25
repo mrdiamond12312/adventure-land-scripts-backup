@@ -2599,7 +2599,7 @@ const shouldDeployRogue = () => {
 function horsemanRanger1Party() {
   RANGER = RANGER1;
   HEALER = PRIEST;
-  return [WARRIOR, RANGER1, PRIEST];
+  return [RANGER1, MAGE, PRIEST];
 }
 
 function horsemanAsiaParty() {
@@ -2612,7 +2612,7 @@ const DYNAMIC_PARTY_PRESETS = {
     EUII: () => {
       RANGER = RANGER2;
       HEALER = PRIEST;
-      return [WARRIOR, RANGER2, PRIEST];
+      return [RANGER2, MAGE, PRIEST];
     },
     EUI: horsemanRanger1Party,
     USI: horsemanRanger1Party,

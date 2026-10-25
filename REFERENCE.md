@@ -4281,7 +4281,10 @@ one softened below him does.
 - Brewing is home-only, so once a foreign realm's round reaches brewing, the hop loop goes
   straight home. That comes after the Horseman and gather-elsewhere checks, so a live Horseman
   or a fresh gathering still wins.
-- USI and USII also run the Ranger1 Horseman party (`horsemanRanger1Party`). A per-server preset
+- USI and USII also run the Ranger1 Horseman party (`horsemanRanger1Party`). Since 2026-10-25 every Horseman
+  preset has the mage, so he can magiport the party in on realms that kill the Horseman within a
+  minute. The ranger presets dropped the warrior instead (the user's call), and with no warrior
+  `assignRoles` makes the priest tank. A per-server preset
   value must be an array or function: `getPresetMembers` resolves a string only at the top level.
 - `BOSS_DRAG_ROUTES.horseman` uses Mr. Pumpkin's own spot (halloween -243,680, between the xscorpion
   and minimush spawns) and, like him, has no `releaseAtSpot`: the priest stays tanker and kites
