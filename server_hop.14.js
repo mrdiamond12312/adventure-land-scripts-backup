@@ -25,15 +25,21 @@ const fatigueExemptBosses = Object.keys(bosses).filter(
   (name) => bosses[name].fatigueExempt,
 );
 
+/** Shuts every other configured character down; deployCharacters brings the roster back on our realm */
+function shutdownOtherCharacters() {
+  Object.keys(caracALconfig.characters)
+    .filter((id) => id !== character.name)
+    .forEach((id) => parent.caracAL.shutdown(id));
+}
+
 async function hopToServer(serverRegion, serverIdentifier) {
   if (parent.caracAL) {
     send_cm(parent.caracAL.siblings, "loot-before-hopping");
     await midasLooting(true);
     await sleep(1000);
 
-    Object.keys(caracALconfig.characters)
-      .filter((id) => id !== character.name)
-      .forEach((id) => parent.caracAL.shutdown(id));
+    set(PARTY_AWAY_LS_KEY, undefined);
+    shutdownOtherCharacters();
 
     parent.caracAL.deploy(null, `SR_${serverRegion}${serverIdentifier}`);
   } else {
@@ -186,6 +192,56 @@ function canBrewWitchAt(realm) {
   );
 }
 
+/** Hop time budgeted ahead of home's brewing stage */
+const WITCH_RETURN_HOP_MS = 60_000;
+
+/** Least time abroad worth skipping home's gathering for */
+const WITCH_SKIP_MIN_STAY_MS = 5 * 60_000;
+
+/** @returns {number} when the party hops home for this round's brewing, now when the round's timing is unknown */
+function getWitchReturnAt(cipher) {
+  const gatherEnd =
+    cipher.gather_end ??
+    cipher.start + (G.events.witchcipher?.gathering ?? 0) * 1000;
+  if (!Number.isFinite(gatherEnd)) return Date.now();
+  return gatherEnd - WITCH_STAGE_LEAD_MS - WITCH_RETURN_HOP_MS;
+}
+
+/** @returns {boolean} whether the merchant's own stock already covers the day's remaining mixes */
+function hasWitchStockForDay() {
+  const needed = (character.witchcipher?.mixes_left ?? 0) * WITCH_SLOTS;
+  const stock = get("witchStock") ?? {};
+  return WITCH_INGREDIENTS.every(
+    (kind) => stock[kind] - WITCH_ELIXIR_RESERVE >= needed,
+  );
+}
+
+/** @returns {boolean} whether home's gathering can be skipped for a fatigue-exempt boss, back in time to brew */
+function canSkipHomeWitchGathering() {
+  const cipher = server.status.witchcipher;
+  return (
+    isAtHomeServer() &&
+    isWitchGathering(cipher) &&
+    getWitchReturnAt(cipher) - Date.now() >= WITCH_SKIP_MIN_STAY_MS &&
+    hasWitchStockForDay()
+  );
+}
+
+/** @returns {boolean} whether we are abroad while home's brewing is about to open, with mixes left for it */
+function isHomeWitchBrewDue() {
+  if (isAtHomeServer()) return false;
+
+  const cipher = getHomeRealmStatus()?.witchcipher;
+  if (!cipher?.live || Date.now() >= cipher.end) return false;
+  if (Date.now() < getWitchReturnAt(cipher)) return false;
+
+  refreshWitchDay();
+  return (
+    witchDay.mixes_left > 0 &&
+    (!witchDay.server || witchDay.server === getHomeServer())
+  );
+}
+
 /** @returns {number} ms the party spends on a foreign event once it starts */
 function getForeignEventStayMs(event, realm) {
   const { duration = 0, gathering = duration } = G.events[event] ?? {};
@@ -263,6 +319,59 @@ async function hopHome(reason) {
   await hopToServer(HOME_SERVER.serverRegion, HOME_SERVER.serverIdentifier);
 }
 
+/** @returns {boolean} whether this character can change realm without taking the fighters along */
+function canHopAlone() {
+  return !!parent.caracAL && character.ctype === "merchant";
+}
+
+/** Moves only this character to `realm`; the fighters stay where they are */
+async function hopAlone(realm, reason) {
+  console.warn(`Hopping to ${realm} alone — ${reason}`);
+  await midasLooting(true);
+  parent.caracAL.deploy(null, `SR_${realm}`);
+}
+
+/** @returns {string[]} the roster `type`'s preset fields on `realm`, leaving our role globals as they were */
+function getRealmRoster(type, realm) {
+  const roles = { RANGER, HEALER };
+  const members = getPresetMembers(
+    DYNAMIC_PARTY_PRESETS[type] ?? DYNAMIC_PARTY_PRESETS.default,
+    realm,
+  );
+  ({ RANGER, HEALER } = roles);
+  return members;
+}
+
+/** Deploys `target`'s roster for its realm onto it without moving this character */
+async function sendPartyTo(target) {
+  const realm = realmOf(target);
+  const members = getRealmRoster(target.type, realm);
+  console.warn(`Sending ${members.join(", ")} to ${realm}`);
+
+  send_cm(parent.caracAL.siblings, "loot-before-hopping");
+  await sleep(1000);
+  set(PARTY_AWAY_LS_KEY, realm);
+
+  Object.keys(caracALconfig.characters)
+    .filter((id) => id !== character.name && !members.includes(id))
+    .forEach((id) => parent.caracAL.shutdown(id));
+
+  // The server confirms one login at a time per account
+  for (const id of members) {
+    parent.caracAL.deploy(id, `SR_${realm}`, caracALconfig.characters[id].script);
+    await sleep(1000);
+  }
+}
+
+/** Brings the fighters left abroad back to our realm */
+async function recallParty(reason) {
+  console.warn(`Recalling the party — ${reason}`);
+  send_cm(parent.caracAL.siblings, "loot-before-hopping");
+  await sleep(1000);
+  set(PARTY_AWAY_LS_KEY, undefined);
+  shutdownOtherCharacters();
+}
+
 setInterval(async () => {
   // An open instance is paid-for content; nothing outranks finishing it
   if (get("cryptInstance")) return;
@@ -270,11 +379,38 @@ setInterval(async () => {
   // The merchant is never inside, but its hop takes the party out with it
   if (get("caveRun") > Date.now()) return;
 
-  const exemptTarget = getExemptHopTarget();
+  if (isHomeWitchBrewDue()) {
+    const reason = "home's Witch brewing is about to open";
+    if (!canHopAlone()) return hopHome(reason);
 
-  // A live fatigue-exempt boss outranks a foreign Witch round; home's own round still holds
+    set(PARTY_AWAY_LS_KEY, getCurrentServer());
+    return hopAlone(getHomeServer(), reason);
+  }
+
+  const exemptTarget = getExemptHopTarget();
   const isWitchRoundHere = isWitchGathering() || canBrewWitchCipher();
-  if (isWitchRoundHere && (isAtHomeServer() || !exemptTarget)) return;
+
+  // Fighters left abroad follow the exempt boss, even while we brew, and come back once none is left
+  const partyRealm = get(PARTY_AWAY_LS_KEY);
+  if (partyRealm) {
+    const targetRealm = exemptTarget && realmOf(exemptTarget);
+    if (!targetRealm || targetRealm === getCurrentServer())
+      return recallParty(`nothing left to chase on ${partyRealm}`);
+
+    if (isWitchRoundHere) {
+      if (targetRealm !== partyRealm) return sendPartyTo(exemptTarget);
+      return;
+    }
+    if (targetRealm === partyRealm) {
+      set(PARTY_AWAY_LS_KEY, undefined);
+      return hopAlone(partyRealm, "rejoining the party");
+    }
+  }
+
+  // A live fatigue-exempt boss outranks a foreign Witch round, and home's gathering once stock covers the brew
+  const mayLeaveWitchRound =
+    exemptTarget && (!isAtHomeServer() || canSkipHomeWitchGathering());
+  if (isWitchRoundHere && !mayLeaveWitchRound) return;
 
   if (exemptTarget) {
     if (realmOf(exemptTarget) === getCurrentServer()) return;

@@ -393,7 +393,8 @@ risking a home crabxx. It only goes when:
   through to the Horseman hop. Before, the hold sat above `getExemptHopTarget`, so a party
   gathering abroad never left for him. Checked on live data at 17:04 UTC: on EUI mid-gathering
   it hops to ASIAI's Horseman. At home the round still holds. USIV's last round (23:00 UTC) meets
-  EU's Horseman (EU 00:00) every day, and that trade is still open.
+  EU's Horseman (EU 00:00) every day. Since 2026-10-26 the party skips home's gathering for him
+  when stock allows (see "Skipping home's gathering for the EU Horseman").
 
 Simulated over 2026-10-24 UTC with USIV's real lineup and EU's rotation (realm clock UTC+1): the
 only early hop is EU's 17:00 UTC round. It hops at 16:46 and needs 66 min against 73 to the
@@ -4305,6 +4306,42 @@ one softened below him does.
   before Mr. Pumpkin's.
 - ~~Home comes first for the Horseman~~ — superseded 2026-10-25: `getExemptHopTarget` ranks every
   realm, home included, by hp left alone (see the Halloween events section).
+- **Skipping home's gathering for the EU Horseman (2026-10-26, temporary, the user's call).** The
+  live list has 13 realms, 11 of them PvE: US I–V ride at 05:00 UTC, ASIA I–II at 17:00, EU I–IV at
+  23:00. That makes 11 Horsemen a day at most. Home (USIV, UTC−5) starts its 18:00 round at 23:00
+  UTC, and before this change the home hold kept the party there for the whole round. Now
+  `canSkipHomeWitchGathering` lets a live Horseman elsewhere break the hold during gathering. That
+  needs at least `WITCH_SKIP_MIN_STAY_MS` (5 min) before the return time, and `hasWitchStockForDay`:
+  every kind in the merchant's own `witchStock` (bank + bag), minus `WITCH_ELIXIR_RESERVE`, must cover
+  `mixes_left × WITCH_SLOTS`, which is enough for any recipe on every remaining mix. Fighters' bags
+  don't count, because they stay abroad. Abroad, `isHomeWitchBrewDue` runs first in the loop. At
+  `getWitchReturnAt` (`gather_end − WITCH_STAGE_LEAD_MS − WITCH_RETURN_HOP_MS`, about 23:15 UTC), while
+  `witchDay` still has mixes for home, it sends the merchant home. The home round's timing comes off
+  the realm socket. If `gather_end` is missing it uses `start` plus `G.events.witchcipher.gathering`,
+  and if both are missing it returns at once.
+  - **Only the merchant goes back** (`canHopAlone`, caracAL only). `hopAlone` runs
+    `deploy(null, SR_<home>)` without shutting anyone down, so the fighters stay on the Horseman.
+    It first stores their realm in `PARTY_AWAY_LS_KEY`. While that key is set, `deployCharacters`
+    does nothing. Otherwise the merchant's home `dynamicParty` preset would shut down the fighters
+    abroad, or deploy missing ones to his realm. A `deploy(id, null)` goes to the *sender's* realm
+    (`m.realm || char_block.realm` in CharacterCoordinator.js).
+  - The party-away block sits **above** the Witch hold, so the fighters are managed while he waits
+    to brew. If there is no exempt target, or it is on his own realm, `recallParty` shuts them down.
+    The key is cleared, and `deployCharacters` brings home's roster back within 30s. If the target is
+    on another realm while the round still runs here, `sendPartyTo` sends **that realm's** roster
+    there: `getRealmRoster` resolves `DYNAMIC_PARTY_PRESETS[type]` for the target realm (EUII ranger2,
+    EUI ranger1, EUIII/EUIV the default warrior, ASIA rogue). It shuts down configured characters
+    outside it and deploys the members with `deploy(id, SR_<realm>, script)`, 1s apart, while the
+    merchant stays home. Preset functions write `RANGER`/`HEALER`, so `getRealmRoster` puts the
+    merchant's own values back.
+  - **After brewing** (the round no longer holds): if the exempt target is on the fighters' realm, he
+    hops there alone and clears the key. His `dynamicParty` there picks the same preset, so the
+    roster matches. If it is on another realm, he does a normal full hop, which clears the key and
+    redeploys everyone there.
+  - Fatigue only counts non-merchant siblings, so the split costs nothing there, and the server's
+    brew has no fatigue or hop-sickness gate (`witch_cipher_brew`; checked 2026-10-26). Under
+    native CODE the hop owner just hops home as before.
+  Once the season ends there is no exempt target, so none of this runs.
 
 `pickWitchMix` fallback (2026-10-22): when no affordable mix could still be the answer (or after
 the day's crack), it brews the affordable *untried* mix with the most expected right places,

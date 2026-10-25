@@ -54,6 +54,9 @@ const HOME_SERVER = {
 /** Published by server_hop_utilities.25.js */
 const HOME_WINDOW_LS_KEY = "homeWindow";
 
+/** The realm the fighters were left on while the merchant brews at home */
+const PARTY_AWAY_LS_KEY = "partyAwayRealm";
+
 /** Published home window shelf life */
 const HOME_WINDOW_STALE_MS = 60 * 1000;
 
@@ -2324,6 +2327,9 @@ async function deployCharacters() {
   const allCharacters = getMyCharacters();
 
   if (parent.caracAL && caracALconfig.characters[character.name].enabled) {
+    // The fighters were left abroad on purpose; the hop loop brings them back
+    if (get(PARTY_AWAY_LS_KEY)) return;
+
     if (character.ctype === "merchant" && parent.caracAL.siblings.length)
       parent.caracAL.siblings
         .filter((id) => id !== character.name && !partyMems.includes(id))
