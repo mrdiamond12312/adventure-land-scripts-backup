@@ -1445,7 +1445,7 @@ function calculateRangerItems(target) {
       ? "rabbitsfoot"
       : feelingWise
       ? "talkingskull"
-      : "orbofdex",
+      : findMaxLevelItem('cave_loaded_die') !== -1 ? "orbofdex",
     amulet: feelingWise ? "spookyamulet" : "dexamulet",
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
@@ -1592,7 +1592,7 @@ function calculateRogueItems(target) {
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
     amulet: feelingLucky ? "spookyamulet" : "dexamulet",
-    orb: feelingLucky ? "rabbitsfoot" : "orbofdex",
+    orb: feelingLucky ? "rabbitsfoot" : "cave_loaded_die",
     chest: "wattire",
     pants: feelingLucky ? "wbreeches" : "fallen",
     belt: "dexbelt",

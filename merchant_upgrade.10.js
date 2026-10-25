@@ -10,7 +10,7 @@ const KEEP_THRESHOLD = {
   firestars: 12,
   harbringer: 12,
   oozingterror: 12,
-  pouchbow: 12,
+  pouchbow: 4,
   daggerofthedead: 16,
   bowofthedead: 16,
   froststaff: 8,
