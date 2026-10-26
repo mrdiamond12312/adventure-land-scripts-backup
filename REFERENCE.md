@@ -4060,14 +4060,35 @@ party (e.g. Earth) are still taken by agitate, so they still block it: we let hi
   `G.monsters[].hp`. Live check at 17:0x UTC: ASIAI 93%, ASIAII 47%, so it picks ASIAII. A
   nearly dead one may die mid-hop, and the next tick picks the next live one. The hop loop goes
   to `getExemptHopTarget` whenever it is another realm, even off a live one here, with no margin
-  (the user's call). Home gets no preference (2026-10-25, the user's call): a home Horseman is
-  ranked by hp like any other, so the party no longer sits home on him while a lower-hp one rides
-  elsewhere, and is not pulled home off a foreign one. Two Horsemen near the
+  (the user's call). **Home comes first** (2026-10-26, the user's call, reverting 2026-10-25's
+  hp-only rank): a live home Horseman beats any foreign one and pulls the party home off one, and
+  hp left only ranks the foreign ones. Two foreign Horsemen near the
   same hp can bounce the party, since each hop costs ~30s+ of riding. "Live here" alone only holds
   when realm data is missing.
   Realms in one region share a clock, so killing one Horseman often leaves a sibling realm's still
   riding. Under the old 15% hp floor that one was likely skipped, so the loop fell through to the
   home window (Mr. Green's respawn) instead.
+- **The merchant fights the Horseman only at home** (2026-10-26, the user's call). His `horseman`
+  `shouldJoin` in `merchantStrategies` (slot 100) checks `isAtHomeServer()`. He still hops with the
+  party. Abroad, hop sickness leaves his share, and so his drops, negligible. Meanwhile a same-owner
+  merchant within 600px of a fighter (same map only) costs every cooperative kill tracker score
+  (`calculate_monster_score`: −0.2/2, another −0.1/2 when he is in the party). That touches only
+  `stats.monsters_diff`, not drops or shares, and it applies at home too.
+- **Witch's Parcel sources** (server repo + live `G` v18183, checked 2026-10-26):
+  - Gargoyle, row weight 10, 1 per pass, 12 rounds a day per realm. Horseman, weight 10 for 5 per
+    pass. Trick or Treat, 10% of treats plus every 10th account-wide knock stamp, about 2.4 a day.
+    Witch's Cipher (live `payout: {right: 1, crack: 50}`, the 50 once per account a day; the repo
+    still has `fits: 1, crack: 4`). The Witch's craft takes 5 of each ingredient and 10k gold.
+  - Cooperative rows roll per recipient at `10 × share × luckm` per pass (`shouldItemDrop`, capped
+    at one per pass), with `1 + floor(qualifying / 10)` passes, where `share` is
+    `points^0.65 / total`. So with equal shares the crowd size cancels out. Points
+    (`add_coop_points`) come from damage dealt, healing ×1.8 (only on allies already on that
+    monster), and damage taken ×0.25. They are **×5 on your home** realm without realm fatigue and
+    **÷4 under hop sickness**, which also takes −80 luck. A foreign Horseman therefore pays roughly
+    15× fewer parcels than a home one, which is why home comes first. Below a 0.0025 share there is
+    no kill credit at all.
+  - Graveyard wave points carry over to the Gargoyle (`halloween_events.js`), so area-damage
+    classes score best there. In a fast Horseman burst a priest heals little and scores lowest.
 - **Graveyard Rising** (every 2h at :30, spookytown): `fightGraveyard` sits right below Franky
   for the waves. Once the Gargoyle wakes (`server.status.graveyard.gargoyle`), `fightGargoyle`
   runs the same fight from above the Mr. Pumpkin/Mr. Green group, standing aside while Ice Golem
@@ -4273,20 +4294,21 @@ one softened below him does.
 
 ## Horseman party, ASIA, and leaving a foreign gathering (2026-10-22)
 
-- `DYNAMIC_PARTY_PRESETS.horseman`: warrior + priest with ranger2 on EUII, ranger1 on EUI/USI/USII,
-  rogue + mage on ASIAI/ASIAII (`horsemanAsiaParty`), and
-  the mage anywhere else. `PRESET_FIRST_BOSSES` puts his preset ahead of the HP-ranked
+- `DYNAMIC_PARTY_PRESETS.horseman`: rogue + mage + priest on every realm (2026-10-26, the user's
+  call; it was per-realm ranger/warrior presets, with this one on ASIA only). The rogue's `stack`
+  debuff sits on the monster with no owner (`target.s.stack`, +1 damage per rogue hit up to
+  `G.skills.stack.max` 2000, 10s), so on a crowded Horseman other players' rogues build it for ours.
+  `PRESET_FIRST_BOSSES` puts his preset ahead of the HP-ranked
   Mr. Pumpkin/Mr. Green pick, which would otherwise win all season.
 - The Horseman hop (`getExemptHopTarget`) also reaches `ignoreServer` realms (ASIAI, ASIAII) via
   `isReachableRealm(candidate, true)`. Every other boss still skips them.
 - Brewing is home-only, so once a foreign realm's round reaches brewing, the hop loop goes
   straight home. That comes after the Horseman and gather-elsewhere checks, so a live Horseman
   or a fresh gathering still wins.
-- USI and USII also run the Ranger1 Horseman party (`horsemanRanger1Party`). Since 2026-10-25 every Horseman
-  preset has the mage, so he can magiport the party in on realms that kill the Horseman within a
-  minute. The ranger presets dropped the warrior instead (the user's call), and with no warrior
-  `assignRoles` makes the priest tank. A per-server preset
-  value must be an array or function: `getPresetMembers` resolves a string only at the top level.
+- The Horseman preset keeps the mage (since 2026-10-25), so he can magiport the party in on realms
+  that kill the Horseman within a minute. With no warrior, `assignRoles` makes the priest tank. A
+  per-server preset value must be an array or function: `getPresetMembers` resolves a string only
+  at the top level.
 - `BOSS_DRAG_ROUTES.horseman` uses Mr. Pumpkin's own spot (halloween -243,680, between the xscorpion
   and minimush spawns) and, like him, has no `releaseAtSpot`: the priest stays tanker and kites
   around the spot, so both bosses are fought in one place. The Horseman spawns among the north-west
@@ -4304,8 +4326,9 @@ one softened below him does.
   `BOSS_DRAG_ROUTES` with `mrpumpkin` first. Now `SIMPLE_BOSSES.horseman.isPinned` pins him, so
   every class's pick keeps him (Jack-o Walkers still come first, unpinned), and his drag route comes
   before Mr. Pumpkin's.
-- ~~Home comes first for the Horseman~~ — superseded 2026-10-25: `getExemptHopTarget` ranks every
-  realm, home included, by hp left alone (see the Halloween events section).
+- **Home comes first for the Horseman** (restored 2026-10-26, the user's call). The 2026-10-25
+  hp-only ranking chased foreign rides for parcels that hardly ever drop there; see "Witch's Parcel
+  sources" in the Halloween events section.
 - **Skipping home's gathering for the EU Horseman (2026-10-26, temporary, the user's call).** The
   live list has 13 realms, 11 of them PvE: US I–V ride at 05:00 UTC, ASIA I–II at 17:00, EU I–IV at
   23:00. That makes 11 Horsemen a day at most. Home (USIV, UTC−5) starts its 18:00 round at 23:00

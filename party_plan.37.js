@@ -231,33 +231,10 @@ async function fitPartyRoster(plan) {
 }
 
 // Party presets
-function horsemanRanger1Party() {
-  RANGER = RANGER1;
-  HEALER = PRIEST;
-  return [RANGER1, MAGE, PRIEST];
-}
-
-function horsemanAsiaParty() {
-  HEALER = PRIEST;
-  return [ROGUE, MAGE, PRIEST];
-}
-
 const DYNAMIC_PARTY_PRESETS = {
-  horseman: {
-    EUII: () => {
-      RANGER = RANGER2;
-      HEALER = PRIEST;
-      return [RANGER2, MAGE, PRIEST];
-    },
-    EUI: horsemanRanger1Party,
-    USI: horsemanRanger1Party,
-    USII: horsemanRanger1Party,
-    ASIAI: horsemanAsiaParty,
-    ASIAII: horsemanAsiaParty,
-    default: () => {
-      HEALER = PRIEST;
-      return [WARRIOR, MAGE, PRIEST];
-    },
+  horseman: () => {
+    HEALER = PRIEST;
+    return [ROGUE, MAGE, PRIEST];
   },
   mrgreen: () => {
     HEALER = PRIEST;

@@ -177,15 +177,21 @@ function hasEventWorthStayingFor() {
   return Boolean(brawling || liveHere);
 }
 
-/** @returns {Object|undefined} the live fatigue-exempt boss with the least hp left */
+/** @returns {Object|undefined} the live fatigue-exempt boss, home first, then least hp left */
 function getExemptHopTarget() {
+  const awayFromHome = (candidate) =>
+    realmOf(candidate) === getHomeServer() ? 0 : 1;
   const hpFraction = ({ type, hp, max_hp = G.monsters[type].hp }) =>
     (hp ?? max_hp) / max_hp;
 
   return getRealmData()
     ?.query({ types: fatigueExemptBosses })
     .filter((candidate) => isReachableRealm(candidate, true))
-    .sort((lhs, rhs) => hpFraction(lhs) - hpFraction(rhs))[0];
+    .sort(
+      (lhs, rhs) =>
+        awayFromHome(lhs) - awayFromHome(rhs) ||
+        hpFraction(lhs) - hpFraction(rhs),
+    )[0];
 }
 
 /** Foreign events worth landing early for, so hop sickness wears off before they start */

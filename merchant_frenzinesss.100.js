@@ -144,7 +144,7 @@ const bossConfigs = {
     },
   },
   horseman: {
-    shouldJoin: () => isEventTanked("horseman"),
+    shouldJoin: () => isAtHomeServer() && isEventTanked("horseman"),
     shouldAttack: isSafeToHit,
     strategy: async () => {
       let horsemanInstance = get_nearest_monster({ type: "horseman" });
