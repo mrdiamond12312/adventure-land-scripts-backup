@@ -38,7 +38,7 @@ const isAttackReady = () =>
  * @returns {Promise}
  */
 function restoreRogueWeapons() {
-  const { mainhand, offhand } = calculateRogueItems(get_target());
+  const { mainhand, offhand } = calculateRogueItemsCached(get_target());
   return equipBatch(
     { mainhand, offhand },
     { preventKeySnatch: false, preventPenaltizeNextAttack: false },
@@ -173,12 +173,40 @@ function getFollowUpAttackSkill() {
 /** A follow-up attack is sent and unanswered; both the action and skill loop cast it */
 let isFollowUpInFlight = false;
 
+const damageCastMpReserve = () => G.skills["rspeed"].mp * 3;
+
+function getDamageSkills() {
+  return [getFollowUpAttackSkill(), "mentalburst"].filter(
+    (skill) => skill && meetsRequirements(skill),
+  );
+}
+
+function damagePerMp(skill, target) {
+  const restore = gearAbilityWith({}, "restore_mp");
+  const cost = castMpCost(G.skills[skill].mp, character, restore, target);
+  return (
+    (rogueHitDamage(skill, character, target) *
+      rogueLandChance(skill, character, target)) /
+    Math.max(1, cost)
+  );
+}
+
+/** Mp a damage cast leaves: the reserve plus room for each skill doing more per mp */
+function damageCastMpFloor(skill, target) {
+  const ownRate = damagePerMp(skill, target);
+  return getDamageSkills()
+    .filter((other) => other !== skill && damagePerMp(other, target) > ownRate)
+    .reduce((sum, other) => sum + G.skills[other].mp, damageCastMpReserve());
+}
+
 /**
  * @param {Object} [target]
  * @returns {string|undefined} the follow-up attack to cast at the target now, if any
  */
 function getFollowUp(target) {
+  const skill = getFollowUpAttackSkill();
   if (
+    !skill ||
     !target ||
     isFollowUpInFlight ||
     !inRange(target) ||
@@ -186,10 +214,63 @@ function getFollowUp(target) {
     ms_to_next_skill("quickstab") !== 0 ||
     character.s.penalty_cd ||
     unansweredPenaltyMs > 0 ||
-    character.mp <= G.skills["rspeed"].mp * 3
+    character.mp <= damageCastMpFloor(skill, target)
   )
     return undefined;
-  return getFollowUpAttackSkill();
+  return skill;
+}
+
+/** A kill refunds the mob's hp as mp */
+function isMentalBurstKill(mob) {
+  const hpLeft = getHpAfterPending(mob);
+  return (
+    hpLeft > 0 &&
+    hpLeft <=
+      rogueHitDamage("mentalburst", character, mob, { roll: MIN_DAMAGE_ROLL })
+  );
+}
+
+function getMentalBurstKill() {
+  return Object.values(parent.entities)
+    .filter(
+      (mob) =>
+        mob.type === "monster" &&
+        !mob.dead &&
+        !mob.cooperative &&
+        !mob["1hp"] &&
+        !isCaveFriendly(mob) &&
+        (isMonsterEngaged(mob) || isHarmlessMob(mob)) &&
+        is_in_range(mob, "mentalburst") &&
+        shouldAttack(mob) &&
+        isMentalBurstKill(mob),
+    )
+    .sort((lhs, rhs) => getHpAfterPending(rhs) - getHpAfterPending(lhs))[0];
+}
+
+/** A kill for the refund, else the target */
+function getMentalBurstTarget() {
+  if (
+    !meetsRequirements("mentalburst") ||
+    ms_to_next_skill("mentalburst") !== 0 ||
+    character.s.penalty_cd ||
+    unansweredPenaltyMs > 0 ||
+    character.mp < G.skills["mentalburst"].mp
+  )
+    return undefined;
+
+  const kill = getMentalBurstKill();
+  if (kill) return kill;
+
+  const target = get_target();
+  if (
+    target?.type !== "monster" ||
+    target.dead ||
+    !is_in_range(target, "mentalburst") ||
+    !shouldAttack(target) ||
+    character.mp <= damageCastMpFloor("mentalburst", target)
+  )
+    return undefined;
+  return target;
 }
 
 /**
@@ -228,6 +309,7 @@ function startSkillLoops() {
   // it approved and cast reuses it instead of recomputing the scans.
   let pendingRspeedBuffee = null;
   let pendingFollowUpSkill = undefined;
+  let pendingBurstTarget = undefined;
 
   runActionLoop(getRogueCast);
 
@@ -275,6 +357,15 @@ function startSkillLoops() {
       );
     },
     cast: () => castFollowUp(pendingFollowUpSkill, get_target()),
+  });
+
+  runSkillLoop({
+    skill: "mentalburst",
+    canUse: () => {
+      pendingBurstTarget = getMentalBurstTarget();
+      return pendingBurstTarget != null;
+    },
+    cast: () => use_skill("mentalburst", pendingBurstTarget),
   });
 }
 

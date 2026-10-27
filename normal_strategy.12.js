@@ -13,7 +13,7 @@ function equipClassGear(target) {
     case "ranger":
       return equipRangerItems(target);
     case "rogue":
-      return equipBatch(calculateRogueItems(target));
+      return equipBatch(calculateRogueItemsCached(target));
     case "priest":
       return equipBatch(calculatePriestItems(target));
   }

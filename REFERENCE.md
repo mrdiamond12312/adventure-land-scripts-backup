@@ -4571,3 +4571,41 @@ bank). If he still isn't out (mid-move, a drag), the sale is skipped rather than
 retrieved bank copy in one go. It used to sell after each single retrieve. Stub-tested: bag
 blade + bow sold, wand + staff retrieved, one exit, both sold, none refused. The bank loop's
 `bankStoreRoutine`/`stackBank` after the purge walk back in on their own.
+
+## Rogue gear by fight model (`calculateRogueItems`, 2026-10-28)
+
+Server facts (upstream `server.js`, live `G` 18183):
+
+- Hit = `(attack × skill multiplier × crit + stack) × defense`. Crit is `2 + critdamage/100`, only on
+  `procs` skills (attack, quickstab). The stack (+1 per rogue hit, max 2000, 10s) is flat, after the
+  crit, and lands on every rogue hit, quickpunch and mentalburst included.
+- Attack `mp_cost` gains `crit × 1.25 + lifesteal × 1.5 + manasteal / 5 + apiercing / 15`
+  (`MP_COST_PER_STAT`, now in `projectStatsWith`, so the priest heal pick sees it too), plus an item's
+  flat `mp_cost` (server `a_mp_cost`: tshirt8, mpxamulet, mpxbelt −5, ornamentstaff −40), floored at 1.
+  `mp_reduction` (capped at 80) then cuts every cast in `consume_mp`, attacks included.
+- `output` scales attack (oxhelmet +1). A hit lands past our `miss`, the target's `avoidance` and,
+  for physical hits only (`defense == "armor"`), its `evasion`; mentalburst skips evasion. A dodged hit
+  adds no stack and lights no burn (`rogueLandChance`).
+- Already in `projectStatsWith`: dex and int frequency (`int / 1575`), dex attack. Max mp, speed and
+  str don't change rogue damage; miss is only on elixirs, and explosion only on quivers.
+- `restore_mp` (gnomecap): chance `attr0`, ×5 on a humanoid but only for skills (attacks pass no
+  target to `consume_mp`), capped through `attr1`. A hit refunds 2× the cost.
+- Manasteal is capped by the target's own mp. Mentalburst (int 64) refunds the hp a kill took.
+- Burn chance sums over both hands. A stars mainhand with a non-stars offhand divides item attack
+  by 3, so stars mainhand only pairs with stars, and has no quickstab/quickpunch.
+- Fury set: only the tier reached applies (4 pieces: +32 apiercing), as `gearStatDelta` models.
+
+The model (`rogueFightModel`): mp income (potions, manasteal) pays attacks first, then the follow-up
+and mentalburst by damage per mp, each up to its cooldown. Max mp is ignored: it doesn't refill
+anything. Hits are on the average stack over the next 30s of the fight or the target's remaining life,
+so hit rate is credited for building stack. The burn is the cap of a full crit attack (`burnIntensityCap`),
+kept up by `1 − e^(−5s × procs/s)`.
+
+On a boss (cooperative or `PRIORITY_MOB_IDS`) a burn weapon is always in hand. While the boss burn is
+under 90% of what the fuel pick can light, gear is scored on that cap × the chance crit procs reach it
+within 30s; otherwise on damage per second. Weapons are picked as pairs (higher copy in the mainhand),
+then the other slots greedily with the pair in hand. A greedy slot never sees a full set swap, only
+the loss of one piece.
+
+Not modelled: invis's 1.25×, sugarrush, mentalburst kill refunds (cast opportunistically by
+`getMentalBurstKill`, the score doesn't count them), mentalburst not proccing burn in the mp split.

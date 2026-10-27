@@ -481,7 +481,14 @@ const PROJECTED_STATS = [
   "attack",
   "firesistance",
   "mp_reduction",
+  "crit",
+  "critdamage",
+  "lifesteal",
+  "manasteal",
+  "mp_cost",
+  "output",
 ];
+const MP_COST_PER_STAT = { crit: 1.25, lifesteal: 1.5, manasteal: 0.2 };
 
 const BURN_DPS_PER_INTENSITY = 1000 / 210 / 5;
 const BURN_SECONDS = 5;
@@ -597,15 +604,30 @@ function projectStatsWith(picks) {
       dexFrequency(dex) -
       dexFrequency(character.dex) +
       stats.int / 1575,
-    attack: character.attack + attackGain,
+    attack:
+      ((character.attack + attackGain) *
+        ((character.output ?? 100) + stats.output)) /
+      (character.output ?? 100),
     heal: character.heal ? character.heal + attackGain : 0,
     firesistance: wornStat("firesistance") + stats.firesistance,
-    mp_cost:
+    int,
+    crit: (character.crit ?? 0) + stats.crit,
+    critdamage: (character.critdamage ?? 0) + stats.critdamage,
+    lifesteal: (character.lifesteal ?? 0) + stats.lifesteal,
+    manasteal: (character.manasteal ?? 0) + stats.manasteal,
+    mp_cost: Math.max(
+      1,
       character.mp_cost +
-      (character.damage_type === "physical"
-        ? stats.apiercing
-        : stats.rpiercing) /
-        15,
+        stats.mp_cost +
+        (character.damage_type === "physical"
+          ? stats.apiercing
+          : stats.rpiercing) /
+          15 +
+        Object.entries(MP_COST_PER_STAT).reduce(
+          (sum, [stat, cost]) => sum + stats[stat] * cost,
+          0,
+        ),
+    ),
     mp_reduction: Math.min(
       MAX_MP_REDUCTION,
       (character.mp_reduction ?? 0) + stats.mp_reduction,
@@ -693,9 +715,10 @@ function fireballDamage(mob, target) {
 
 /**
  * @param {string[]} slots
- * @param {(projected: Object) => number} score - lower is better
+ * @param {(projected: Object, picks: Object<string, Object>) => number} score - lower is better
  * @param {number} minGain - share a challenger must beat the incumbent by
  * @param {Object<string, string>} [incumbents] - slot → item, the worn gear by default
+ * @param {Object<string, Object>} [base] - slot → item_info already chosen outside `slots`
  * @returns {Object<string, string>} slot → item with the lowest `score`
  */
 function pickGearByScore(
@@ -705,11 +728,14 @@ function pickGearByScore(
   incumbents = Object.fromEntries(
     slots.map((slot) => [slot, character.slots[slot]?.name]),
   ),
+  base = {},
 ) {
   const copies = getGearCopies(slots);
-  const picks = {};
-  const scoreWith = (slot, info) =>
-    score({ ...character, ...projectStatsWith({ ...picks, [slot]: info }) });
+  const picks = { ...base };
+  const scoreWith = (slot, info) => {
+    const all = { ...picks, [slot]: info };
+    return score({ ...character, ...projectStatsWith(all) }, all);
+  };
 
   const gear = {};
   for (const slot of slots) {
@@ -1588,59 +1614,349 @@ function calculatePriestItems(target) {
   };
 }
 
-function calculateRogueItems(target) {
-  const feelingLucky = shouldWearLuckGear();
-  const fieryWeapon = "firestars";
+/** @returns {boolean} whether the stats meet the skill's requirements */
+function meetsRequirements(skill, stats = character) {
+  return Object.entries(G.skills[skill]?.requirements ?? {}).every(
+    ([stat, min]) => (stats[stat] ?? 0) >= min,
+  );
+}
 
-  const baseItems = {
-    helmet: feelingLucky ? "wcap" : "fury",
-    mainhand: "daggerofthedead",
-    offhand: "daggerofthedead",
-    shoes: feelingLucky ? "wshoes" : "wingedboots",
-    gloves: feelingLucky ? "wgloves" : "supermittens",
-    amulet: feelingLucky ? "spookyamulet" : "dexamulet",
-    orb: feelingLucky ? "rabbitsfoot" : "cave_loaded_die",
-    chest: "wattire",
-    pants: feelingLucky ? "wbreeches" : "fallen",
-    belt: "dexbelt",
-    earring1: feelingLucky ? "cloverstud" : "molesteeth",
-    earring2: feelingLucky ? "cloverstud" : "dexearring",
-    ring1: "suckerpunch",
-    ring2: "suckerpunch",
+/** @returns {Object<string, Object>} slot → item_info of the worn gear */
+function getWornGearInfos() {
+  return Object.fromEntries(
+    getGearSlots().map((slot) => [slot, item_info(character.slots[slot])]),
+  );
+}
+
+/** @returns {{attr0: number, attr1: number}} the ability summed over the gear with `picks` worn */
+function gearAbilityWith(picks, ability, worn = getWornGearInfos()) {
+  const total = { attr0: 0, attr1: 0 };
+  for (const slot of Object.keys(worn)) {
+    const info = slot in picks ? picks[slot] : worn[slot];
+    if (info?.ability !== ability) continue;
+    total.attr0 += info.attr0 ?? 0;
+    total.attr1 += info.attr1 ?? 0;
+  }
+  return total;
+}
+
+const critMultiplier = (stats) => 2 + (stats.critdamage ?? 0) / 100;
+
+const averageCritFactor = (stats) =>
+  1 + (Math.min(stats.crit ?? 0, 100) / 100) * (critMultiplier(stats) - 1);
+
+/** @returns {number} one rogue hit: (attack × crit + stack) × defense */
+function rogueHitDamage(
+  skill,
+  stats,
+  target,
+  {
+    crit,
+    roll = 1,
+    stack = Math.min((target.s?.stack?.s ?? 0) + 1, G.skills.stack.max),
+  } = {},
+) {
+  const info = G.skills[skill];
+  const critScale = info.procs ? crit ?? averageCritFactor(stats) : 1;
+  return (
+    (stats.attack * (info.damage_multiplier ?? 1) * critScale * roll + stack) *
+    mitigation(stats, target, { damageType: info.damage_type })
+  );
+}
+
+/** @returns {number} chance a hit lands: our miss, the target's avoidance, and its evasion on physical hits */
+function rogueLandChance(skill, stats, target) {
+  const def = G.monsters[target.mtype] ?? {};
+  const isPhysical =
+    (G.skills[skill].damage_type ?? damageTypeOf(stats)) === "physical";
+  return (
+    (1 - Math.max(0, stats.miss ?? 0) / 100) *
+    (1 - (target.avoidance ?? def.avoidance ?? 0) / 100) *
+    (isPhysical ? 1 - (target.evasion ?? def.evasion ?? 0) / 100 : 1)
+  );
+}
+
+/** @returns {number} chance a cast refunds mp, per server consume_mp (no target for attacks) */
+function restoreMpChance(restore, target) {
+  if (!restore?.attr0) return 0;
+  const mult = target && G.monsters[target.mtype]?.humanoid ? 5 : 1;
+  const chance = restore.attr0 * mult;
+  const capped = restore.attr1
+    ? Math.max(chance - restore.attr1 * mult, Math.min(20, chance))
+    : chance;
+  return capped / 100;
+}
+
+/** @returns {number} average mp a cast takes */
+function castMpCost(mp, stats, restore, target) {
+  const chance = restoreMpChance(restore, target);
+  return (
+    (1 - chance) * mp * (1 - (stats.mp_reduction ?? 0) / 100) -
+    chance * 2 * mp
+  );
+}
+
+const ROGUE_GEAR_SWAP_MIN_GAIN = 0.03;
+const BURN_FUEL_HORIZON_S = 30;
+const BURN_REFUEL_SHARE = 0.9;
+const MANASTEAL_HORIZON_S = 10;
+const STACK_HORIZON_S = 30;
+const MIN_DAMAGE_ROLL = 0.9;
+const ROGUE_SKIPPED_WEAPONS = ["candycanesword"];
+const ROGUE_WEAPON_SLOTS = ["mainhand", "offhand"];
+const ROGUE_WEAPON_SLOT = /^(mainhand|offhand)$/;
+
+function fitsRogueHand(info, slot) {
+  if (info.type !== "weapon") return false;
+  if (info.class && !info.class.includes(character.ctype)) return false;
+  return info.wtype in (G.classes[character.ctype][slot] ?? {});
+}
+
+const handWith = (picks, worn, slot) =>
+  (slot in picks ? picks[slot] : worn[slot]) ?? {};
+
+const followUpFor = (mainhand) =>
+  ["quickstab", "quickpunch"].find(
+    (skill) => G.skills[skill].wtype === mainhand?.wtype,
+  );
+
+/** Cast rates under the mp income, hits on the stack built over the horizon, and the burn */
+function rogueFightModel(projected, picks, target, worn) {
+  const mainhand = handWith(picks, worn, "mainhand");
+  const wornModifier = classWeaponModifier(worn.mainhand).modifier;
+  const modifier = classWeaponModifier(mainhand).modifier;
+  const frequency =
+    projected.frequency +
+    (((modifier.frequency ?? 0) - (wornModifier.frequency ?? 0)) / 100) *
+      conditionFrequencyScale(character);
+  const restore = gearAbilityWith(picks, "restore_mp", worn);
+
+  const attackHit = rogueHitDamage("attack", projected, target);
+  const targetMp = target.mp ?? 0;
+  const income =
+    getMpIncome() +
+    Math.min(
+      (frequency * attackHit * (projected.manasteal ?? 0)) / 100,
+      targetMp / MANASTEAL_HORIZON_S,
+    );
+
+  const attackCost = castMpCost(projected.mp_cost, projected, restore);
+  const rates = {
+    attack: attackCost > 0 ? Math.min(frequency, income / attackCost) : frequency,
   };
+  let budget = income - rates.attack * attackCost;
 
-  if (!target) return baseItems;
+  const skills = [followUpFor(mainhand), "mentalburst"]
+    .filter((skill) => skill && meetsRequirements(skill, projected))
+    .map((skill) => ({
+      skill,
+      hit: rogueHitDamage(skill, projected, target),
+      landed:
+        rogueHitDamage(skill, projected, target) *
+        rogueLandChance(skill, projected, target),
+      cost: castMpCost(G.skills[skill].mp, projected, restore, target),
+    }))
+    .sort((lhs, rhs) => rhs.landed / rhs.cost - lhs.landed / lhs.cost);
+  for (const { skill, cost } of skills) {
+    const maxRate = 1000 / G.skills[skill].cooldown;
+    rates[skill] =
+      cost > 0 ? Math.min(maxRate, Math.max(0, budget) / cost) : maxRate;
+    budget -= rates[skill] * cost;
+  }
 
-  const targetStacks = target.s?.stack?.s ?? 0;
-  const fieryWeaponSlot = locate_item(fieryWeapon);
+  // A dodge adds no stack and lights no burn
+  const landed = Object.fromEntries(
+    Object.keys(rates).map((skill) => [
+      skill,
+      rates[skill] * rogueLandChance(skill, projected, target),
+    ]),
+  );
 
-  const characterFireStars =
-    fieryWeaponSlot !== -1
-      ? character.items[fieryWeaponSlot]
-      : character.slots.offhand?.name === fieryWeapon
-      ? character.slots.offhand
-      : undefined;
+  const hitsNow = { attack: attackHit };
+  for (const { skill, hit } of skills) hitsNow[skill] = hit;
+  const hitRate = Object.values(landed).reduce((sum, rate) => sum + rate, 0);
+  const dpsNow = Object.keys(landed).reduce(
+    (sum, skill) => sum + landed[skill] * hitsNow[skill],
+    0,
+  );
+  const fightS = Math.min(
+    STACK_HORIZON_S,
+    dpsNow > 0 ? (target.hp ?? 0) / dpsNow : 0,
+  );
+  const stack = Math.min(
+    G.skills.stack.max,
+    (target.s?.stack?.s ?? 0) + 1 + (hitRate * fightS) / 2,
+  );
+  const hits = Object.fromEntries(
+    Object.keys(rates).map((skill) => [
+      skill,
+      rogueHitDamage(skill, projected, target, { stack }),
+    ]),
+  );
 
-  const equipItemAttackOffset =
-    (item_info(character.slots.offhand)?.attack ?? 0) -
-    (item_info(characterFireStars)?.attack ?? 0);
-
-  const rogueBurnDmg = characterFireStars
+  const burn = gearAbilityWith(picks, "burn", worn);
+  const burnChance =
+    (burn.attr0 * (G.maps[character.map]?.burn_multiplier ?? 1)) / 100;
+  const procRate = Object.keys(landed)
+    .filter((skill) => G.skills[skill].procs)
+    .reduce((sum, skill) => sum + landed[skill], 0);
+  const burnCap = burnChance
     ? burnIntensityCap(
-        mitigation(character, target) *
-          (character.attack - equipItemAttackOffset + targetStacks) *
-          0.9,
+        rogueHitDamage("attack", projected, target, {
+          crit: projected.crit > 0 ? critMultiplier(projected) : 1,
+          roll: MIN_DAMAGE_ROLL,
+          stack,
+        }),
         target.firesistance,
       )
     : 0;
 
-  const shouldEquipFireStar =
-    rogueBurnDmg > (target.s?.burned?.intensity ?? 0) || target.cooperative;
-
   return {
-    ...baseItems,
-    offhand: shouldEquipFireStar ? fieryWeapon : "daggerofthedead",
+    rates,
+    landed,
+    hits,
+    stack,
+    burnCap,
+    burnProcRate: procRate * burnChance,
+    critProcRate: procRate * burnChance * (Math.min(projected.crit, 100) / 100),
   };
+}
+
+function rogueDamagePerSecond(model) {
+  const hits = Object.keys(model.landed).reduce(
+    (sum, skill) => sum + model.landed[skill] * model.hits[skill],
+    0,
+  );
+  const burnUptime = 1 - Math.exp(-BURN_SECONDS * model.burnProcRate);
+  return hits + model.burnCap * BURN_DPS_PER_INTENSITY * burnUptime;
+}
+
+function rogueFuelScore(model) {
+  return (
+    model.burnCap * (1 - Math.exp(-BURN_FUEL_HORIZON_S * model.critProcRate))
+  );
+}
+
+const lastRoguePicks = { damage: {}, fuel: {} };
+
+/** Best weapon pair; a stars mainhand pairs only with stars (server cuts item attack to a third) */
+function pickRogueWeapons(score, needsBurn, incumbents) {
+  const copies = getGearCopies(ROGUE_WEAPON_SLOTS);
+  const names = Object.keys(copies).filter(
+    (name) => !ROGUE_SKIPPED_WEAPONS.includes(name),
+  );
+  const pairs = [];
+  for (const mainName of names) {
+    const mainhand = copies[mainName][0];
+    if (!fitsRogueHand(mainhand, "mainhand")) continue;
+    for (const offName of names) {
+      const offhand = copies[offName][offName === mainName ? 1 : 0];
+      if (!offhand || !fitsRogueHand(offhand, "offhand")) continue;
+      if (mainhand.wtype === "stars" && offhand.wtype !== "stars") continue;
+      if (needsBurn && mainhand.ability !== "burn" && offhand.ability !== "burn")
+        continue;
+      const picks = { mainhand, offhand };
+      pairs.push({
+        gear: { mainhand: mainName, offhand: offName },
+        picks,
+        score: score({ ...character, ...projectStatsWith(picks) }, picks),
+      });
+    }
+  }
+  if (!pairs.length) return undefined;
+
+  pairs.sort((lhs, rhs) => lhs.score - rhs.score);
+  const incumbent = pairs.find(
+    ({ gear }) =>
+      gear.mainhand === incumbents.mainhand &&
+      gear.offhand === incumbents.offhand,
+  );
+  return incumbent &&
+    pairs[0].score >= incumbent.score * (1 - ROGUE_GEAR_SWAP_MIN_GAIN)
+    ? incumbent
+    : pairs[0];
+}
+
+/** @returns {{gear: Object<string, string>, model: Object}} the weapon pair, then the rest */
+function pickRogueGear(target, kind, needsBurn) {
+  const worn = getWornGearInfos();
+  const value = kind === "fuel" ? rogueFuelScore : rogueDamagePerSecond;
+  const score = (projected, picks) => {
+    const result = value(rogueFightModel(projected, picks, target, worn));
+    return result > 0 ? 1 / result : Infinity;
+  };
+
+  const incumbents = {
+    ...Object.fromEntries(
+      getGearSlots().map((slot) => [slot, character.slots[slot]?.name]),
+    ),
+    ...lastRoguePicks[kind],
+  };
+  const weapons = pickRogueWeapons(score, needsBurn, incumbents);
+  const rest = pickGearByScore(
+    getGearSlots(ROGUE_WEAPON_SLOT),
+    score,
+    ROGUE_GEAR_SWAP_MIN_GAIN,
+    incumbents,
+    weapons?.picks,
+  );
+
+  const gear = { ...rest, ...weapons?.gear };
+  lastRoguePicks[kind] = gear;
+
+  const picks = { ...weapons?.picks };
+  const copies = getGearCopies(getGearSlots(ROGUE_WEAPON_SLOT));
+  for (const [slot, name] of Object.entries(rest))
+    picks[slot] = copies[name]?.shift();
+  const projected = { ...character, ...projectStatsWith(picks) };
+  return { gear, model: rogueFightModel(projected, picks, target, worn) };
+}
+
+const isRogueBurnTarget = (target) =>
+  !!target &&
+  (!!target.cooperative || PRIORITY_MOB_IDS.includes(target.mtype));
+
+const ROGUE_GEAR_REUSE_MS = 500;
+let lastRogueGear = { id: undefined, at: 0, gear: {} };
+
+/** calculateRogueItems, reused briefly on the same target */
+function calculateRogueItemsCached(target) {
+  const now = Date.now();
+  if (
+    lastRogueGear.id !== target?.id ||
+    now - lastRogueGear.at > ROGUE_GEAR_REUSE_MS
+  )
+    lastRogueGear = {
+      id: target?.id,
+      at: now,
+      gear: calculateRogueItems(target),
+    };
+  return { ...lastRogueGear.gear };
+}
+
+/** Damage gear, fuel gear on a boss under our burn, luck/xp gear on top but the weapons */
+function calculateRogueItems(target) {
+  const statGear = shouldWearLuckGear()
+    ? pickStatGear("luck")
+    : shouldWearExpGear()
+    ? pickStatGear("xp")
+    : {};
+  for (const slot of ROGUE_WEAPON_SLOTS) delete statGear[slot];
+
+  if (!target || target.type !== "monster")
+    return { ...lastRoguePicks.damage, ...statGear };
+
+  const needsBurn = isRogueBurnTarget(target);
+  let { gear } = pickRogueGear(target, "damage", needsBurn);
+  if (needsBurn) {
+    const fuel = pickRogueGear(target, "fuel", true);
+    if (
+      (target.s?.burned?.intensity ?? 0) <
+      BURN_REFUEL_SHARE * fuel.model.burnCap
+    )
+      gear = fuel.gear;
+  }
+  return { ...gear, ...statGear };
 }
 
 // What the merchant shoots with, whenever it shoots at all
@@ -2061,25 +2377,39 @@ function buildEquipPromises(suggestedItems, options) {
     promises.push(sendUnequip("offhand"));
   }
 
-  const usedCounts = {};
+  // The higher copy of a weapon in both hands goes in the mainhand
+  const heldMainhand = getServerSlot("mainhand");
+  const heldOffhand = getServerSlot("offhand");
+  if (
+    suggestedItems.mainhand &&
+    suggestedItems.offhand === suggestedItems.mainhand &&
+    heldMainhand?.name === suggestedItems.mainhand &&
+    heldOffhand?.name === suggestedItems.mainhand &&
+    (heldOffhand.level ?? 0) > (heldMainhand.level ?? 0)
+  ) {
+    promises.push(sendUnequip("offhand"));
+    delete suggestedItems.offhand;
+  }
 
-  const wantedEquips = Object.keys(suggestedItems)
-    .filter((slot) => {
-      const wanted = suggestedItems[slot];
-      const current = getServerSlot(slot);
-      return (
-        wanted &&
-        (wanted !== current?.name ||
-          getServerItem(findMaxLevelItem(wanted))?.level > current?.level)
-      );
-    })
-    .map((slot) => {
-      const id = suggestedItems[slot];
-      const count = usedCounts[id] || 0;
-      usedCounts[id] = count + 1;
-      return { slot, num: findMaxLevelItem(id, count) };
-    })
-    .filter((equipInfo) => equipInfo.num >= 0);
+  const usedCounts = {};
+  const wantedEquips = [];
+  for (const slot of Object.keys(suggestedItems).sort(
+    (lhs, rhs) => (rhs === "mainhand") - (lhs === "mainhand"),
+  )) {
+    const wanted = suggestedItems[slot];
+    if (!wanted) continue;
+    const current = getServerSlot(slot);
+    const count = usedCounts[wanted] ?? 0;
+    const num = findMaxLevelItem(wanted, count);
+    if (
+      num < 0 ||
+      (wanted === current?.name &&
+        !((getServerItem(num)?.level ?? 0) > (current.level ?? 0)))
+    )
+      continue;
+    usedCounts[wanted] = count + 1;
+    wantedEquips.push({ slot, num });
+  }
 
   // The server refuses an offhand under a two-handed mainhand
   const mainhandEquip = wantedEquips.find(({ slot }) => slot === "mainhand");
