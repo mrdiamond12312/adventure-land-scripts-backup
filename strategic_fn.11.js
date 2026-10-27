@@ -3,8 +3,6 @@ const BLAST_DIVISOR = 3.6;
 const BLAST_RADIUS = getMaxBlastRadius() || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
 const MAX_MOB_DPS = 2500;
-// Sleeping mobs a single cburst must wake to be worth the mp
-const CBURST_MIN_BATCH = 3;
 const EQUIP_PENALTY_MS = 120;
 const SHIFT_PENALTY_MS = 240;
 // Attack periods a budget-trimmed swap may wait before it is allowed to cost a shot
@@ -372,8 +370,6 @@ const DANGEROUS_MOB_DAMAGE = 600;
 const FORMIDABLE_MOB_DAMAGE = 1100;
 const TRIVIAL_MOB_MAX_HP = 2000;
 const SHOT_DAMAGE_MARGIN = 0.9;
-// Cleave rolls 0.1 to 0.9 of the weapon's damage per hit — this is the midpoint
-const CLEAVE_ONE_HIT_MULTIPLIER = 0.5;
 
 // Mob weakness
 function isDyingToOurShot(mob, multiplier = 1) {
@@ -449,8 +445,14 @@ function shouldWearExpGear() {
 }
 
 // Gear scoring
+
+/** item → item_info, shared while withItemInfoMemo runs; var since item_info runs at load */
+var itemInfoMemo = null;
+
 function item_info(item) {
   if (!item) return undefined;
+  const memo = itemInfoMemo?.get(item);
+  if (memo) return memo;
 
   const baseInfo = parent.G.items[item.name];
   if (!baseInfo) return undefined;
@@ -459,7 +461,20 @@ function item_info(item) {
     class: character.ctype,
     map: character.map,
   });
-  return { ...baseInfo, ...itemProperties };
+  const info = { ...baseInfo, ...itemProperties };
+  itemInfoMemo?.set(item, info);
+  return info;
+}
+
+/** Runs `pick` with item_info shared per item, so nothing in it may mutate an info */
+function withItemInfoMemo(pick) {
+  if (itemInfoMemo) return pick();
+  itemInfoMemo = new Map();
+  try {
+    return pick();
+  } finally {
+    itemInfoMemo = null;
+  }
 }
 
 /** Server stat caps */
@@ -633,6 +648,56 @@ function projectStatsWith(picks) {
       (character.mp_reduction ?? 0) + stats.mp_reduction,
     ),
   };
+}
+
+const MIN_DAMAGE_ROLL = 0.9;
+const MANASTEAL_HORIZON_S = 10;
+
+/** @returns {Object<string, Object>} slot → item_info of the worn gear */
+function getWornGearInfos() {
+  return Object.fromEntries(
+    getGearSlots().map((slot) => [slot, item_info(character.slots[slot])]),
+  );
+}
+
+const handWith = (picks, worn, slot) =>
+  (slot in picks ? picks[slot] : worn[slot]) ?? {};
+
+/** @returns {{attr0: number, attr1: number}} the ability summed over the gear with `picks` worn */
+function gearAbilityWith(picks, ability, worn = getWornGearInfos()) {
+  const total = { attr0: 0, attr1: 0 };
+  for (const slot of Object.keys(worn)) {
+    const info = slot in picks ? picks[slot] : worn[slot];
+    if (info?.ability !== ability) continue;
+    total.attr0 += info.attr0 ?? 0;
+    total.attr1 += info.attr1 ?? 0;
+  }
+  return total;
+}
+
+const critMultiplier = (stats) => 2 + (stats.critdamage ?? 0) / 100;
+
+const averageCritFactor = (stats) =>
+  1 + (Math.min(stats.crit ?? 0, 100) / 100) * (critMultiplier(stats) - 1);
+
+/** @returns {number} chance a cast refunds mp, per server consume_mp (no target for attacks) */
+function restoreMpChance(restore, target) {
+  if (!restore?.attr0) return 0;
+  const mult = target && G.monsters[target.mtype]?.humanoid ? 5 : 1;
+  const chance = restore.attr0 * mult;
+  const capped = restore.attr1
+    ? Math.max(chance - restore.attr1 * mult, Math.min(20, chance))
+    : chance;
+  return capped / 100;
+}
+
+/** @returns {number} average mp a cast takes */
+function castMpCost(mp, stats, restore, target) {
+  const chance = restoreMpChance(restore, target);
+  return (
+    (1 - chance) * mp * (1 - (stats.mp_reduction ?? 0) / 100) -
+    chance * 2 * mp
+  );
 }
 
 function fitsSlot(info, slot) {
@@ -872,9 +937,6 @@ function pickFireballGear(mob) {
   );
 }
 
-// Class Items logic
-const MAGE_WEAK_MOB_TYPES = ["pinkgoo", "snowman", "wabbit", "crab"];
-
 /**
  * Owned items passing `matches`, best first — the bag plus whatever is
  * equipped, whose `num` is -1 since it has no inventory slot.
@@ -906,9 +968,6 @@ function getOwnedItemInfo(id) {
   return findOwnedItems((entry) => entry.name === id)[0]?.info;
 }
 
-const MAGE_SHOOTER = "firestaff";
-const MAGE_OFFHAND = "wbook1";
-
 /** @returns {{modifier: Object, doublehand: boolean}} */
 function classWeaponModifier(info) {
   const classData = G.classes[character.ctype];
@@ -920,12 +979,6 @@ function classWeaponModifier(info) {
 }
 
 const MP_POTIONS = ["mpot1", "mpot0"];
-const MAGE_MP_HORIZON_S = 10;
-const MAGE_RESERVED_BLINKS = 2;
-
-/** @returns {number} mp the mage's weapon choice leaves alone: a magiport and his blinks */
-const mageMpReserve = () =>
-  G.skills["magiport"].mp + MAGE_RESERVED_BLINKS * G.skills["blink"].mp;
 
 /** @returns {number} mp per second our potions, or regen without one, restore */
 function getMpIncome() {
@@ -938,276 +991,6 @@ function getMpIncome() {
     (potion ? 1 : G.skills.regen_mp.cooldown_multiplier);
 
   return mp / (cooldownMs / 1000);
-}
-
-/** @returns {number} mp per second the mage can spend on attacks */
-function getMageAttackMpBudget() {
-  const spare = Math.max(0, character.mp - mageMpReserve());
-  return getMpIncome() + spare / MAGE_MP_HORIZON_S;
-}
-
-/** @returns {Object[]} owned mage weapons, best first */
-function rankMageWeapons(target) {
-  if (!target) return [];
-
-  const classData = G.classes[character.ctype];
-  const current = character.slots.mainhand;
-  const currentInfo = current ? item_info(current) : {};
-  const currentMod = classWeaponModifier(currentInfo).modifier;
-  const offhand = character.slots.offhand;
-  const offhandInfo =
-    (offhand ? item_info(offhand) : getOwnedItemInfo(MAGE_OFFHAND)) ?? {};
-  const mainStat = classData.main_stat;
-  const statMultiplier = rawAttackMultiplier() + 1;
-  const baseFrequency = character.frequency;
-  const deltaScale = conditionFrequencyScale(character);
-  const mpBudget = getMageAttackMpBudget();
-
-  const clusters = new Map();
-  const clusterOf = (mob, radius) => {
-    const key = `${mob.id}:${Math.round(radius)}`;
-    if (!clusters.has(key))
-      clusters.set(key, numberOfMonsterAroundTarget(mob, radius));
-    return clusters.get(key);
-  };
-
-  const damagePerSecond = (info) => {
-    const { modifier, doublehand } = classWeaponModifier(info);
-    const frequency =
-      baseFrequency +
-      (((info.frequency ?? 0) +
-        (modifier.frequency ?? 0) -
-        (currentInfo.frequency ?? 0) -
-        (currentMod.frequency ?? 0)) /
-        100) *
-        deltaScale;
-
-    const offhandSign = (doublehand ? 0 : 1) - (offhand ? 1 : 0);
-    const statRatio =
-      (statMultiplier + (offhandSign * (offhandInfo[mainStat] ?? 0)) / 20) /
-      statMultiplier;
-
-    const mpPerShot = Math.max(
-      1,
-      character.mp_cost +
-        (info.mp_cost ?? 0) +
-        (modifier.mp_cost ?? 0) -
-        (currentInfo.mp_cost ?? 0) -
-        (currentMod.mp_cost ?? 0),
-    );
-    const affordable = Math.min(1, mpBudget / (mpPerShot * frequency));
-
-    return (
-      affordable *
-      frequency *
-      statRatio *
-      explosionScore(
-        {
-          ...info,
-          attack: (info.attack ?? 0) + offhandSign * (offhandInfo.attack ?? 0),
-          explosion_delta: splashOf(info) - splashOf(currentInfo),
-          crit_delta: (info.crit ?? 0) - (currentInfo.crit ?? 0),
-        },
-        [target],
-        clusterOf,
-      )
-    );
-  };
-
-  return findOwnedItems(
-    (entry) =>
-      !!(
-        classData.mainhand?.[entry.info?.wtype] ||
-        classData.doublehand?.[entry.info?.wtype]
-      ),
-    (entry) => damagePerSecond(entry.info),
-  ).map((entry) => ({
-    ...entry,
-    doublehand: classWeaponModifier(entry.info).doublehand,
-  }));
-}
-
-function getMageMainhand(currentTarget, blasterAllowed) {
-  if (character.map === "crypt" && !currentTarget?.s?.frozen)
-    return "froststaff";
-
-  const ranked = rankMageWeapons(currentTarget);
-  const blasterWins = blasterAllowed && !!ranked[0]?.doublehand;
-
-  const isWeakMobType = MAGE_WEAK_MOB_TYPES.includes(currentTarget?.mtype);
-
-  // Pinkie is worth its lost attack only when it still kills in one cast
-  const pinkieInfo = getOwnedItemInfo("pinkie");
-  const pinkieOneShots =
-    !!pinkieInfo &&
-    !!currentTarget &&
-    canOneShotWithWeapon(pinkieInfo, [currentTarget]) &&
-    !blasterWins;
-
-  if (isWeakMobType || pinkieOneShots) return "pinkie";
-
-  const best = ranked.find((weapon) => blasterAllowed || !weapon.doublehand);
-  return best?.name ?? character.slots.mainhand?.name ?? MAGE_SHOOTER;
-}
-
-function calculateMageItems() {
-  const currentTarget = get_target();
-  const incomingMp =
-    ms_to_next_skill("use_mp") < ms_to_next_skill("attack") ? 500 : 0;
-  const blasterAllowed =
-    currentStrategy === usePullStrategies &&
-    !currentTarget?.["1hp"] &&
-    numberOfMonsterAroundTarget(currentTarget) >=
-      TARGET_TO_SWITCH_TO_BLASTER_WEAPON &&
-    character.mp + incomingMp > mageMpReserve();
-
-  const feelingLucky = shouldWearLuckGear();
-  const feelingWise = shouldWearExpGear();
-
-  const mainhand = getMageMainhand(currentTarget, blasterAllowed);
-
-  const items = {
-    mainhand,
-    offhand: classWeaponModifier(item_info({ name: mainhand })).doublehand
-      ? undefined
-      : MAGE_OFFHAND,
-    helmet: feelingLucky ? "wcap" : "gphelmet",
-    chest: "wattire",
-    pants: feelingLucky ? "wbreeches" : "starkillers",
-    shoes: feelingLucky ? "wshoes" : "wingedboots",
-    gloves: feelingLucky ? "wgloves" : "supermittens",
-    belt: "intbelt",
-    cape: "horsecapeg",
-    orb: feelingLucky
-      ? "rabbitsfoot"
-      : feelingWise
-      ? "talkingskull"
-      : // : currentTarget && (currentTarget.resistance ?? 0) < 400
-        // ? "cave_loaded_die"
-        "jacko",
-    ring1: "glacierseal",
-    ring2: "cring",
-    amulet: feelingWise ? "spookyamulet" : "intamulet",
-    earring1: feelingLucky ? "cloverstud" : "cearring",
-    earring2: feelingLucky ? "cloverstud" : "mummyhex",
-  };
-
-  return wantsMidasGear() ? { ...items, ...MIDAS_GEAR } : items;
-}
-
-const STUN_FOCUS_LIST = ["crabxx", "grinch"];
-const WARRIOR_WEAK_MOB_TYPES = ["pinkgoo", "snowman", "wabbit"];
-
-function getWarriorHelmet(feelingLucky) {
-  if (feelingLucky) return "oxhelmet";
-  if (character.map === "crypt") return "xhelmet";
-  return "fury";
-}
-
-function getWarriorMainhand(currentTarget, shouldUseBlaster) {
-  if (currentStrategy === usePullStrategies && shouldUseBlaster)
-    return "vhammer";
-  if (currentTarget && STUN_FOCUS_LIST.includes(currentTarget.mtype))
-    return "xmace";
-  return "fireblade";
-}
-
-function getWarriorOffhand(shouldUseBlaster, feelingLucky) {
-  const hasA2InCrypt =
-    character.map === "crypt" &&
-    Object.values(parent.entities).some(
-      (mob) => mob.target === character.name && mob.mtype === "a2",
-    );
-
-  if (hasA2InCrypt || feelingLucky) return "mshield";
-  if (currentStrategy === usePullStrategies && shouldUseBlaster)
-    return "ololipop";
-  return "fireblade";
-}
-
-function getWarriorAmulet(feelingLucky, isTanker) {
-  if (feelingLucky) return "spookyamulet";
-
-  const isBeingTargetedByMonster = Object.values(parent.entities)
-    .filter((entity) => entity.type === "monster")
-    .some((mob) => mob.target === character.name);
-
-  if ((isTanker && isBeingTargetedByMonster) || character.map === "crypt")
-    return "snring";
-  return "stramulet";
-}
-
-function getWarriorChest(feelingLucky, isTanker) {
-  if (feelingLucky) return "cdragon";
-  if (character.map === "crypt" || isTanker) return "vattire";
-  return "coat1";
-}
-
-function calculateWarriorItems() {
-  const currentTarget = get_target();
-  const shouldUseBlaster =
-    numberOfMonsterAroundTarget(currentTarget) >=
-      TARGET_TO_SWITCH_TO_BLASTER_WEAPON && !currentTarget?.["1hp"];
-
-  const feelingLucky = shouldWearLuckGear();
-  const feelingWise = shouldWearExpGear();
-  const isTanker =
-    isAssignedAsTanker() && avgDmgTaken(character, "physical") > 300;
-
-  if (currentTarget && WARRIOR_WEAK_MOB_TYPES.includes(currentTarget.mtype)) {
-    return {
-      mainhand: "rapier",
-      offhand: undefined,
-      orb: "rabbitsfoot",
-      amulet: "spookyamulet",
-      chest: "cdragon",
-      helmet: "oxhelmet",
-    };
-  }
-
-  return {
-    helmet: getWarriorHelmet(feelingLucky),
-    mainhand: getWarriorMainhand(currentTarget, shouldUseBlaster),
-    offhand: getWarriorOffhand(shouldUseBlaster, feelingLucky),
-    amulet: getWarriorAmulet(feelingLucky, isTanker),
-    orb: feelingLucky
-      ? "rabbitsfoot"
-      : feelingWise
-      ? "talkingskull"
-      : // : "orbofstr"
-        "cave_loaded_die",
-    chest: getWarriorChest(feelingLucky, isTanker),
-    // pants: isTanker ? "frankypants" : "fallen",
-    pants: "fallen",
-    belt: "strbelt",
-    ring1: currentTarget?.armor > 49 ? "suckerpunch" : "strring",
-    ring2: currentTarget?.armor > 49 ? "suckerpunch" : "strring",
-    earring1: feelingLucky ? "cloverstud" : "cearring",
-    earring2: feelingLucky ? "cloverstud" : "cearring",
-  };
-}
-
-const RANGER_INV_ITEMS = {
-  poucher: "pouchbow",
-  fireBow: "firebow",
-  crossBow: "crossbow",
-  cupid: "cupid",
-};
-
-/**
- * Party members in cupid range that want a heal (empty while feared).
- * @param {Object[]} [playersToHeal] - candidates, defaults to getPlayersToHeal()
- * @returns {Object[]} the healees
- */
-function getCupidHealees(playersToHeal = getPlayersToHeal()) {
-  if (character.fear) return [];
-
-  const characterRange = character.range + character.xrange;
-  return playersToHeal.filter(
-    (player) =>
-      player.name !== character.name &&
-      distance(player, character) < characterRange,
-  );
 }
 
 /** @returns {number} the item's explosion or blast */
@@ -1277,242 +1060,6 @@ function explosionScore(
   return score * critRate;
 }
 
-/**
- * Best-scoring bow to splash with, over every bow carried plus the one in hand.
- * @param {Object[]} targets - the mobs about to be shot
- * @returns {string} the bow's name
- */
-function chooseBowForSplashing(targets) {
-  const currentBow = character.slots.mainhand;
-  const currentInfo = currentBow ? item_info(currentBow) : undefined;
-  const currentExplosion = splashOf(currentInfo);
-  const currentCrit = currentInfo?.crit ?? 0;
-
-  // Bows sharing a radius share their cluster counts, for this call only
-  const clusters = new Map();
-  const clusterOf = (mob, radius) => {
-    const key = `${mob.id}:${Math.round(radius)}`;
-    if (!clusters.has(key))
-      clusters.set(key, numberOfMonsterAroundTarget(mob, radius));
-    return clusters.get(key);
-  };
-
-  const best = findOwnedItems(
-    (entry) =>
-      ["bow", "crossbow"].includes(entry.info?.wtype) &&
-      entry.name !== RANGER_INV_ITEMS.cupid,
-    (entry) =>
-      explosionScore(
-        {
-          ...entry.info,
-          explosion_delta: splashOf(entry.info) - currentExplosion,
-          crit_delta: (entry.info.crit ?? 0) - currentCrit,
-        },
-        targets,
-        clusterOf,
-      ),
-  )[0];
-
-  return best?.name ?? RANGER_INV_ITEMS.fireBow;
-}
-
-/**
- * Whether waking `mob` with a splash is acceptable: it barely scratches us, or
- * the same splash kills it outright.
- * @param {Object} mob - the unaggroed bystander in the blast
- * @returns {boolean}
- */
-function isNegligibleMob(mob) {
-  return (
-    isHarmlessMob(mob) ||
-    isDyingToOurShot(mob, (character.explosion ?? 0) / 100)
-  );
-}
-
-/**
- * Whether firing at `mob` is safe once splash is accounted for.
- * @param {Object} mob - the intended target
- * @param {number} [splashRadius] - blast radius to test; 0 means no splash
- * @returns {boolean}
- */
-function isSafeToShoot(mob, splashRadius = getSplashRadius(0)) {
-  if (!shouldAttack(mob)) return false;
-  // A watchout mob nobody holds yet is ours the moment we touch it
-  if (!mob?.target && hasWatchoutAbility(mob)) return false;
-  if (!splashRadius) return true;
-
-  return !hasUntargetedMonsterAround(
-    mob,
-    splashRadius,
-    (bystander) => hasWatchoutAbility(bystander) || !isNegligibleMob(bystander),
-  );
-}
-
-/**
- * @param {Object|Object[]} [target] - forwarded to calculateRangerItems
- * @returns {Promise} the gear swap, forced while holding cupid
- */
-function equipRangerItems(target) {
-  const isHoldingCupid =
-    character.slots.mainhand?.name === RANGER_INV_ITEMS.cupid;
-  return equipBatch(calculateRangerItems(target), {
-    preventPenaltizeNextAttack: !isHoldingCupid,
-    preventKeySnatch: !isHoldingCupid,
-  });
-}
-
-function calculateRangerItems(target) {
-  const targets = !target ? [] : Array.isArray(target) ? target : [target];
-  const feelingLucky = shouldWearLuckGear();
-  const feelingWise = shouldWearExpGear();
-  const someTargetCooperative = targets.some((mob) => mob.cooperative);
-
-  // Judge splash safety against the radius we *would* have, not the one we have
-  // now, or picking up the poucher would immediately make itself unsafe.
-  const prospectiveSplashRadius = getSplashRadius();
-  const targetsAreSafeToSplash = targets
-    .filter((entity) => entity.type === "monster")
-    .every((mob) => isSafeToShoot(mob, prospectiveSplashRadius));
-
-  let mainhand = getServerSlot("mainhand")?.name;
-
-  // Cupid outranks every bow: the strategy hands it over whenever someone wants
-  // a heal, and the ranger keeps shooting mobs until it is actually in hand.
-  const cupidAvailable =
-    findMaxLevelItem(RANGER_INV_ITEMS.cupid) !== -1 ||
-    mainhand === RANGER_INV_ITEMS.cupid;
-
-  if (!mainhand) mainhand = RANGER_INV_ITEMS.fireBow;
-
-  if (cupidAvailable && getCupidHealees().length) {
-    mainhand = RANGER_INV_ITEMS.cupid;
-  } else if (targets.length) {
-    const canSplash =
-      currentStrategy === usePullStrategies &&
-      targets.some(
-        (mob) =>
-          (mob.cluster_count ??
-            numberOfMonsterAroundTarget(mob, getSplashRadius())) >=
-          TARGET_TO_SWITCH_TO_BLASTER_WEAPON,
-      );
-
-    if (canSplash) {
-      mainhand = chooseBowForSplashing(targets);
-    } else if (someTargetCooperative) {
-      mainhand = RANGER_INV_ITEMS.fireBow;
-    } else {
-      const current = character.slots.mainhand;
-      const currentInfo = current ? item_info(current) : { attack: 0 };
-
-      const rangedWeapons = character.items
-        .map((item, slot) => {
-          if (!item) return null;
-
-          const info = item_info(item);
-          if (
-            !["bow", "crossbow"].includes(info.wtype) ||
-            item.name === "cupid" ||
-            // Keep hands off the poucher when the blast would wake a fresh mob
-            (!targetsAreSafeToSplash && item.name === RANGER_INV_ITEMS.poucher)
-          )
-            return null;
-
-          return {
-            slot,
-            name: item.name,
-            info,
-            attackDelta: info.attack - currentInfo.attack,
-            rangeDelta: info.range - (currentInfo.range || 0),
-          };
-        })
-        .filter(Boolean);
-
-      if (current) {
-        const info = item_info(current);
-        if (
-          ["bow", "crossbow"].includes(info.wtype) &&
-          current.name !== "cupid"
-        ) {
-          rangedWeapons.push({
-            slot: "mainhand",
-            name: current.name,
-            info,
-            attackDelta: 0,
-            rangeDelta: 0,
-          });
-        }
-      }
-
-      rangedWeapons.sort((lhs, rhs) => {
-        if (lhs.info.wtype !== rhs.info.wtype) {
-          return lhs.info.wtype === "crossbow" ? 1 : -1;
-        }
-        return (
-          rhs.rangeDelta - lhs.rangeDelta || lhs.attackDelta - rhs.attackDelta
-        );
-      });
-
-      const oneShotWeapon = rangedWeapons.find((weapon) =>
-        canOneShotWithWeapon(weapon.info, targets),
-      );
-      mainhand = oneShotWeapon ? oneShotWeapon.name : RANGER_INV_ITEMS.fireBow;
-    }
-  }
-
-  return {
-    helmet: feelingLucky ? "wcap" : "fury",
-    mainhand,
-    offhand:
-      !targetsAreSafeToSplash ||
-      targets.some((entity) => haveFormidableMonsterAroundTarget(entity))
-        ? "t2quiver"
-        : "alloyquiver",
-    orb: feelingLucky
-      ? "rabbitsfoot"
-      : feelingWise
-      ? "talkingskull"
-      : getOwnedItemInfo("cave_loaded_die")
-      ? "cave_loaded_die"
-      : "orbofdex",
-    amulet: feelingWise ? "spookyamulet" : "dexamulet",
-    shoes: feelingLucky ? "wshoes" : "wingedboots",
-    gloves: feelingLucky ? "wgloves" : "supermittens",
-    belt: "dexbelt",
-    earring1: feelingLucky ? "cloverstud" : "dexearring",
-    earring2: feelingLucky
-      ? "cloverstud"
-      : character.name === RANGER2
-      ? "molesteeth"
-      : "dexearring",
-  };
-}
-
-/** Below this hp share the priest skips luck gear */
-const PRIEST_LUCK_MIN_HP_RATIO = 0.5;
-/** Party volleys that count as a quick kill */
-const PRIEST_EXP_KILL_VOLLEYS = 2;
-const PRIEST_DEFAULT_GEAR = {
-  gloves: "supermittens",
-  belt: "intbelt",
-  ring1: "zapper",
-  ring2: "zapper",
-  cape: "angelwings",
-  earring1: "cearring",
-  earring2: "cearring",
-};
-
-let priestLastHealGearAt = 0;
-
-function isPriestInHealGraceWindow(target) {
-  if (target && target.type !== "monster") {
-    priestLastHealGearAt = Date.now();
-    return true;
-  }
-
-  const graceMs = 1000 / character.frequency;
-  return Date.now() - priestLastHealGearAt < graceMs;
-}
-
 /** @returns {boolean} whether the target is a ghost with no heal landed or in the air */
 function isUnhealedGhost(target) {
   return (
@@ -1520,593 +1067,6 @@ function isUnhealedGhost(target) {
     !target.s?.healed &&
     !projectileManager?.hasIncoming(target.id, "heal")
   );
-}
-
-function isPriestInDanger() {
-  return (
-    !!character.s.burned ||
-    character.hp < character.max_hp * PRIEST_LUCK_MIN_HP_RATIO
-  );
-}
-
-function isPartyQuickKilling(mob) {
-  if (!mob) return false;
-
-  const volley = partyMems
-    .map((name) => get_player(name))
-    .filter(Boolean)
-    .reduce((sum, member) => sum + member.attack * mitigation(member, mob), 0);
-  return mob.max_hp <= volley * PRIEST_EXP_KILL_VOLLEYS;
-}
-
-function getPriestMainhand(target, currentTarget, statGear) {
-  if (isUnhealedGhost(target)) return "pinkie";
-  if (isPriestInHealGraceWindow(target)) return "lmace";
-
-  if (character.map === "crypt") {
-    return currentTarget?.s?.frozen ? "lmace" : "froststaff";
-  }
-
-  return statGear.mainhand ?? "firestaff";
-}
-
-function getPriestOffhand(mainhand, tankGear, statGear, healGear) {
-  const wtype = G.items[mainhand]?.wtype;
-  if (G.classes[character.ctype].doublehand?.[wtype]) return undefined;
-  if (statGear.offhand) return statGear.offhand;
-  return tankGear.offhand ?? healGear.offhand ?? "exoarm";
-}
-
-function getPriestOrb(target, tankGear, statGear, healGear) {
-  if (statGear.orb) return statGear.orb;
-  if (isPriestInHealGraceWindow(target)) return healGear.orb ?? "jacko";
-  return tankGear.orb ?? "test_orb";
-}
-
-function getPriestAmulet(tankGear, statGear, healGear) {
-  if (statGear.amulet) return statGear.amulet;
-
-  // Re-equip sanguine to (re)apply its aura
-  const haveSanguine =
-    locate_item("sanguine") !== -1 ||
-    character.slots.amulet?.name === "sanguine";
-  if (
-    haveSanguine &&
-    (!character.s.sanguine || character.s.sanguine.ms < 10000)
-  ) {
-    return "sanguine";
-  }
-
-  return tankGear.amulet ?? healGear.amulet ?? "intamulet";
-}
-
-function calculatePriestItems(target) {
-  const currentTarget = get_targeted_monster();
-  const isTanking = isAssignedAsTanker();
-  const fireball = getImminentFireball();
-  const tankGear = fireball
-    ? pickFireballGear(fireball)
-    : isTanking
-    ? pickTankGear()
-    : {};
-  const feelingLucky = !fireball && shouldWearLuckGear() && !isPriestInDanger();
-  const feelingWise =
-    !fireball &&
-    !isTanking &&
-    (shouldWearExpGear() || isPartyQuickKilling(currentTarget));
-  const statGear = feelingLucky
-    ? pickStatGear("luck")
-    : feelingWise
-    ? pickStatGear("xp")
-    : {};
-  const healGear = fireball ? {} : pickHealGear(PRIEST_DEFAULT_GEAR);
-
-  const mainhand = getPriestMainhand(target, currentTarget, statGear);
-  return {
-    ...PRIEST_DEFAULT_GEAR,
-    ...healGear,
-    ...tankGear,
-    ...statGear,
-    mainhand,
-    offhand: getPriestOffhand(mainhand, tankGear, statGear, healGear),
-    orb: getPriestOrb(target, tankGear, statGear, healGear),
-    amulet: getPriestAmulet(tankGear, statGear, healGear),
-  };
-}
-
-/** @returns {boolean} whether the stats meet the skill's requirements */
-function meetsRequirements(skill, stats = character) {
-  return Object.entries(G.skills[skill]?.requirements ?? {}).every(
-    ([stat, min]) => (stats[stat] ?? 0) >= min,
-  );
-}
-
-/** @returns {Object<string, Object>} slot → item_info of the worn gear */
-function getWornGearInfos() {
-  return Object.fromEntries(
-    getGearSlots().map((slot) => [slot, item_info(character.slots[slot])]),
-  );
-}
-
-/** @returns {{attr0: number, attr1: number}} the ability summed over the gear with `picks` worn */
-function gearAbilityWith(picks, ability, worn = getWornGearInfos()) {
-  const total = { attr0: 0, attr1: 0 };
-  for (const slot of Object.keys(worn)) {
-    const info = slot in picks ? picks[slot] : worn[slot];
-    if (info?.ability !== ability) continue;
-    total.attr0 += info.attr0 ?? 0;
-    total.attr1 += info.attr1 ?? 0;
-  }
-  return total;
-}
-
-const critMultiplier = (stats) => 2 + (stats.critdamage ?? 0) / 100;
-
-const averageCritFactor = (stats) =>
-  1 + (Math.min(stats.crit ?? 0, 100) / 100) * (critMultiplier(stats) - 1);
-
-/** @returns {number} one rogue hit: (attack × crit + stack) × defense */
-function rogueHitDamage(
-  skill,
-  stats,
-  target,
-  {
-    crit,
-    roll = 1,
-    stack = Math.min((target.s?.stack?.s ?? 0) + 1, G.skills.stack.max),
-  } = {},
-) {
-  const info = G.skills[skill];
-  const critScale = info.procs ? crit ?? averageCritFactor(stats) : 1;
-  return (
-    (stats.attack * (info.damage_multiplier ?? 1) * critScale * roll + stack) *
-    mitigation(stats, target, { damageType: info.damage_type })
-  );
-}
-
-/** @returns {number} chance a hit lands: our miss, the target's avoidance, and its evasion on physical hits */
-function rogueLandChance(skill, stats, target) {
-  const def = G.monsters[target.mtype] ?? {};
-  const isPhysical =
-    (G.skills[skill].damage_type ?? damageTypeOf(stats)) === "physical";
-  return (
-    (1 - Math.max(0, stats.miss ?? 0) / 100) *
-    (1 - (target.avoidance ?? def.avoidance ?? 0) / 100) *
-    (isPhysical ? 1 - (target.evasion ?? def.evasion ?? 0) / 100 : 1)
-  );
-}
-
-/** @returns {number} chance a cast refunds mp, per server consume_mp (no target for attacks) */
-function restoreMpChance(restore, target) {
-  if (!restore?.attr0) return 0;
-  const mult = target && G.monsters[target.mtype]?.humanoid ? 5 : 1;
-  const chance = restore.attr0 * mult;
-  const capped = restore.attr1
-    ? Math.max(chance - restore.attr1 * mult, Math.min(20, chance))
-    : chance;
-  return capped / 100;
-}
-
-/** @returns {number} average mp a cast takes */
-function castMpCost(mp, stats, restore, target) {
-  const chance = restoreMpChance(restore, target);
-  return (
-    (1 - chance) * mp * (1 - (stats.mp_reduction ?? 0) / 100) -
-    chance * 2 * mp
-  );
-}
-
-const ROGUE_GEAR_SWAP_MIN_GAIN = 0.03;
-const BURN_FUEL_HORIZON_S = 30;
-const BURN_REFUEL_SHARE = 0.9;
-const MANASTEAL_HORIZON_S = 10;
-const STACK_HORIZON_S = 30;
-const MIN_DAMAGE_ROLL = 0.9;
-const ROGUE_SKIPPED_WEAPONS = ["candycanesword"];
-const ROGUE_WEAPON_SLOTS = ["mainhand", "offhand"];
-const ROGUE_WEAPON_SLOT = /^(mainhand|offhand)$/;
-
-function fitsRogueHand(info, slot) {
-  if (info.type !== "weapon") return false;
-  if (info.class && !info.class.includes(character.ctype)) return false;
-  return info.wtype in (G.classes[character.ctype][slot] ?? {});
-}
-
-const handWith = (picks, worn, slot) =>
-  (slot in picks ? picks[slot] : worn[slot]) ?? {};
-
-const followUpFor = (mainhand) =>
-  ["quickstab", "quickpunch"].find(
-    (skill) => G.skills[skill].wtype === mainhand?.wtype,
-  );
-
-/** Cast rates under the mp income, hits on the stack built over the horizon, and the burn */
-function rogueFightModel(projected, picks, target, worn) {
-  const mainhand = handWith(picks, worn, "mainhand");
-  const wornModifier = classWeaponModifier(worn.mainhand).modifier;
-  const modifier = classWeaponModifier(mainhand).modifier;
-  const frequency =
-    projected.frequency +
-    (((modifier.frequency ?? 0) - (wornModifier.frequency ?? 0)) / 100) *
-      conditionFrequencyScale(character);
-  const restore = gearAbilityWith(picks, "restore_mp", worn);
-
-  const attackHit = rogueHitDamage("attack", projected, target);
-  const targetMp = target.mp ?? 0;
-  const income =
-    getMpIncome() +
-    Math.min(
-      (frequency * attackHit * (projected.manasteal ?? 0)) / 100,
-      targetMp / MANASTEAL_HORIZON_S,
-    );
-
-  const attackCost = castMpCost(projected.mp_cost, projected, restore);
-  const rates = {
-    attack: attackCost > 0 ? Math.min(frequency, income / attackCost) : frequency,
-  };
-  let budget = income - rates.attack * attackCost;
-
-  const skills = [followUpFor(mainhand), "mentalburst"]
-    .filter((skill) => skill && meetsRequirements(skill, projected))
-    .map((skill) => ({
-      skill,
-      hit: rogueHitDamage(skill, projected, target),
-      landed:
-        rogueHitDamage(skill, projected, target) *
-        rogueLandChance(skill, projected, target),
-      cost: castMpCost(G.skills[skill].mp, projected, restore, target),
-    }))
-    .sort((lhs, rhs) => rhs.landed / rhs.cost - lhs.landed / lhs.cost);
-  for (const { skill, cost } of skills) {
-    const maxRate = 1000 / G.skills[skill].cooldown;
-    rates[skill] =
-      cost > 0 ? Math.min(maxRate, Math.max(0, budget) / cost) : maxRate;
-    budget -= rates[skill] * cost;
-  }
-
-  // A dodge adds no stack and lights no burn
-  const landed = Object.fromEntries(
-    Object.keys(rates).map((skill) => [
-      skill,
-      rates[skill] * rogueLandChance(skill, projected, target),
-    ]),
-  );
-
-  const hitsNow = { attack: attackHit };
-  for (const { skill, hit } of skills) hitsNow[skill] = hit;
-  const hitRate = Object.values(landed).reduce((sum, rate) => sum + rate, 0);
-  const dpsNow = Object.keys(landed).reduce(
-    (sum, skill) => sum + landed[skill] * hitsNow[skill],
-    0,
-  );
-  const fightS = Math.min(
-    STACK_HORIZON_S,
-    dpsNow > 0 ? (target.hp ?? 0) / dpsNow : 0,
-  );
-  const stack = Math.min(
-    G.skills.stack.max,
-    (target.s?.stack?.s ?? 0) + 1 + (hitRate * fightS) / 2,
-  );
-  const hits = Object.fromEntries(
-    Object.keys(rates).map((skill) => [
-      skill,
-      rogueHitDamage(skill, projected, target, { stack }),
-    ]),
-  );
-
-  const burn = gearAbilityWith(picks, "burn", worn);
-  const burnChance =
-    (burn.attr0 * (G.maps[character.map]?.burn_multiplier ?? 1)) / 100;
-  const procRate = Object.keys(landed)
-    .filter((skill) => G.skills[skill].procs)
-    .reduce((sum, skill) => sum + landed[skill], 0);
-  const burnCap = burnChance
-    ? burnIntensityCap(
-        rogueHitDamage("attack", projected, target, {
-          crit: projected.crit > 0 ? critMultiplier(projected) : 1,
-          roll: MIN_DAMAGE_ROLL,
-          stack,
-        }),
-        target.firesistance,
-      )
-    : 0;
-
-  return {
-    rates,
-    landed,
-    hits,
-    stack,
-    burnCap,
-    burnProcRate: procRate * burnChance,
-    critProcRate: procRate * burnChance * (Math.min(projected.crit, 100) / 100),
-  };
-}
-
-function rogueDamagePerSecond(model) {
-  const hits = Object.keys(model.landed).reduce(
-    (sum, skill) => sum + model.landed[skill] * model.hits[skill],
-    0,
-  );
-  const burnUptime = 1 - Math.exp(-BURN_SECONDS * model.burnProcRate);
-  return hits + model.burnCap * BURN_DPS_PER_INTENSITY * burnUptime;
-}
-
-function rogueFuelScore(model) {
-  return (
-    model.burnCap * (1 - Math.exp(-BURN_FUEL_HORIZON_S * model.critProcRate))
-  );
-}
-
-const lastRoguePicks = { damage: {}, fuel: {} };
-
-/** Best weapon pair; a stars mainhand pairs only with stars (server cuts item attack to a third) */
-function pickRogueWeapons(score, needsBurn, incumbents) {
-  const copies = getGearCopies(ROGUE_WEAPON_SLOTS);
-  const names = Object.keys(copies).filter(
-    (name) => !ROGUE_SKIPPED_WEAPONS.includes(name),
-  );
-  const pairs = [];
-  for (const mainName of names) {
-    const mainhand = copies[mainName][0];
-    if (!fitsRogueHand(mainhand, "mainhand")) continue;
-    for (const offName of names) {
-      const offhand = copies[offName][offName === mainName ? 1 : 0];
-      if (!offhand || !fitsRogueHand(offhand, "offhand")) continue;
-      if (mainhand.wtype === "stars" && offhand.wtype !== "stars") continue;
-      if (needsBurn && mainhand.ability !== "burn" && offhand.ability !== "burn")
-        continue;
-      const picks = { mainhand, offhand };
-      pairs.push({
-        gear: { mainhand: mainName, offhand: offName },
-        picks,
-        score: score({ ...character, ...projectStatsWith(picks) }, picks),
-      });
-    }
-  }
-  if (!pairs.length) return undefined;
-
-  pairs.sort((lhs, rhs) => lhs.score - rhs.score);
-  const incumbent = pairs.find(
-    ({ gear }) =>
-      gear.mainhand === incumbents.mainhand &&
-      gear.offhand === incumbents.offhand,
-  );
-  return incumbent &&
-    pairs[0].score >= incumbent.score * (1 - ROGUE_GEAR_SWAP_MIN_GAIN)
-    ? incumbent
-    : pairs[0];
-}
-
-/** @returns {{gear: Object<string, string>, model: Object}} the weapon pair, then the rest */
-function pickRogueGear(target, kind, needsBurn) {
-  const worn = getWornGearInfos();
-  const value = kind === "fuel" ? rogueFuelScore : rogueDamagePerSecond;
-  const score = (projected, picks) => {
-    const result = value(rogueFightModel(projected, picks, target, worn));
-    return result > 0 ? 1 / result : Infinity;
-  };
-
-  const incumbents = {
-    ...Object.fromEntries(
-      getGearSlots().map((slot) => [slot, character.slots[slot]?.name]),
-    ),
-    ...lastRoguePicks[kind],
-  };
-  const weapons = pickRogueWeapons(score, needsBurn, incumbents);
-  const rest = pickGearByScore(
-    getGearSlots(ROGUE_WEAPON_SLOT),
-    score,
-    ROGUE_GEAR_SWAP_MIN_GAIN,
-    incumbents,
-    weapons?.picks,
-  );
-
-  const gear = { ...rest, ...weapons?.gear };
-  lastRoguePicks[kind] = gear;
-
-  const picks = { ...weapons?.picks };
-  const copies = getGearCopies(getGearSlots(ROGUE_WEAPON_SLOT));
-  for (const [slot, name] of Object.entries(rest))
-    picks[slot] = copies[name]?.shift();
-  const projected = { ...character, ...projectStatsWith(picks) };
-  return { gear, model: rogueFightModel(projected, picks, target, worn) };
-}
-
-const isRogueBurnTarget = (target) =>
-  !!target &&
-  (!!target.cooperative || PRIORITY_MOB_IDS.includes(target.mtype));
-
-const ROGUE_GEAR_REUSE_MS = 500;
-let lastRogueGear = { id: undefined, at: 0, gear: {} };
-
-/** calculateRogueItems, reused briefly on the same target */
-function calculateRogueItemsCached(target) {
-  const now = Date.now();
-  if (
-    lastRogueGear.id !== target?.id ||
-    now - lastRogueGear.at > ROGUE_GEAR_REUSE_MS
-  )
-    lastRogueGear = {
-      id: target?.id,
-      at: now,
-      gear: calculateRogueItems(target),
-    };
-  return { ...lastRogueGear.gear };
-}
-
-/** Damage gear, fuel gear on a boss under our burn, luck/xp gear on top but the weapons */
-function calculateRogueItems(target) {
-  const statGear = shouldWearLuckGear()
-    ? pickStatGear("luck")
-    : shouldWearExpGear()
-    ? pickStatGear("xp")
-    : {};
-  for (const slot of ROGUE_WEAPON_SLOTS) delete statGear[slot];
-
-  if (!target || target.type !== "monster")
-    return { ...lastRoguePicks.damage, ...statGear };
-
-  const needsBurn = isRogueBurnTarget(target);
-  let { gear } = pickRogueGear(target, "damage", needsBurn);
-  if (needsBurn) {
-    const fuel = pickRogueGear(target, "fuel", true);
-    if (
-      (target.s?.burned?.intensity ?? 0) <
-      BURN_REFUEL_SHARE * fuel.model.burnCap
-    )
-      gear = fuel.gear;
-  }
-  return { ...gear, ...statGear };
-}
-
-// What the merchant shoots with, whenever it shoots at all
-const ATTACK_WEAPON = "dartgun";
-// Only a fallback for the bank trip: everything else takes getBestQuiver
-const ATTACK_OFFHAND = "t2quiver";
-// How much of xrange the merchant lets itself aim with
-const ATTACK_XRANGE_RATE = 0.8;
-// Best reach seen so far — see getAttackWeaponReach
-var maxAttackWeaponRange = 0;
-
-/** @returns {Object[]} everything equipped or in the bag */
-function getCarriedItems() {
-  return [
-    character.slots.mainhand,
-    character.slots.offhand,
-    ...character.items,
-  ].filter(Boolean);
-}
-
-/**
- * Longest-ranged quiver we are carrying, dex breaking a tie.
- * @returns {{name: string, range: number, dex: number}|undefined}
- */
-function getBestQuiver() {
-  let best;
-
-  for (const item of getCarriedItems()) {
-    const info = item_info(item);
-    if ((info?.wtype ?? info?.type) !== "quiver") continue;
-
-    const range = info.range ?? 0;
-    const dex = info.dex ?? 0;
-    if (!range) continue;
-
-    // getCarriedItems lists the equipped copy first, so range alone let it hold
-    // every tie against a better twin forever
-    if (!best || range > best.range || (range === best.range && dex > best.dex))
-      best = { name: item.name, range, dex };
-  }
-
-  return best;
-}
-
-/**
- * Reach the dartgun would give us: the gun itself plus the best quiver's delta.
- */
-function getMaxAttackWeaponRange() {
-  const dartgunRange = getCarriedItems()
-    .filter((item) => item.name === ATTACK_WEAPON)
-    .reduce((best, item) => Math.max(best, item_info(item)?.range ?? 0), 0);
-
-  if (!dartgunRange) return 0;
-
-  return dartgunRange + (getBestQuiver()?.range ?? 0);
-}
-
-/**
- * How far the merchant can shoot *once geared*
- * @returns {number}
- */
-function getAttackWeaponReach() {
-  maxAttackWeaponRange =
-    character.slots.mainhand?.name === ATTACK_WEAPON
-      ? character.range
-      : Math.max(maxAttackWeaponRange, getMaxAttackWeaponRange());
-
-  if (!maxAttackWeaponRange) return 0;
-
-  return maxAttackWeaponRange + character.xrange * ATTACK_XRANGE_RATE;
-}
-
-/** Luck outranks the quiver's range: whatever we're shooting is nearly dead anyway */
-function getMerchantOffhand(isArmed, feelingLucky) {
-  if (feelingLucky) return "mshield";
-  if (!isArmed) return "wbookhs";
-  return getBestQuiver()?.name ?? ATTACK_OFFHAND;
-}
-
-function getMerchantAmulet(feelingLucky, isBusy) {
-  if (feelingLucky) return "spookyamulet";
-  return isBusy ? "t2intamulet" : "warmscarf";
-}
-
-/**
- * The three questions the merchant gear table branches on.
- * @returns {{isArmed: boolean, feelingLucky: boolean, isBusy: boolean}}
- */
-function getMerchantGearState() {
-  return {
-    isArmed: shouldHoldAttackWeapon(),
-    feelingLucky: shouldWearLuckGear(),
-    isBusy: isLuring() || isOnDuty(DUTY.EVENT),
-  };
-}
-
-/**
- * Merchant-only
- * @param {{isArmed: boolean, feelingLucky: boolean, isBusy: boolean}} [state]
- *  defaults to what we are actually doing — pass a state to ask what some other
- *  situation would want
- */
-function calculateMerchantEquipments(state = getMerchantGearState()) {
-  const { isArmed, feelingLucky, isBusy } = state;
-
-  return {
-    helmet: isBusy ? "xhelmet" : "partyhat",
-    // Dartgun keeps us out of the boss' melee range while still landing hits
-    mainhand: isArmed ? ATTACK_WEAPON : "broom",
-    offhand: getMerchantOffhand(isArmed, feelingLucky),
-    amulet: getMerchantAmulet(feelingLucky, isBusy),
-    // scareAwayMobs re-equips jacko itself when something actually aggroes us
-    orb: feelingLucky ? "rabbitsfoot" : "jacko",
-    chest: "tshirt4",
-    pants: "pants",
-    ring1: "canopener",
-    ring2: isBusy ? "armorring" : "dexring",
-    shoes: "eslippers",
-    gloves: "gloves1",
-    belt: "sbelt",
-    earring1: feelingLucky ? "cloverstud" : "dexearring",
-    earring2: feelingLucky ? "cloverstud" : "dexearring",
-  };
-}
-
-/**
- * Carried but never in the table above: a skill swaps these in on demand, so
- * the bag has to hold one even though no equipment state asks for it.
- * @type {string[]}
- */
-const MERCHANT_CARRIED_EXTRAS = ["orboftemporal"];
-
-/**
- * Every item calculateMerchantEquipments can ask for
- * @returns {Set<string>}
- */
-function getMerchantGearNames() {
-  const names = new Set(MERCHANT_CARRIED_EXTRAS);
-
-  for (let state = 0; state < 8; state++) {
-    const equipments = calculateMerchantEquipments({
-      isArmed: !!(state & 1),
-      feelingLucky: !!(state & 2),
-      isBusy: !!(state & 4),
-    });
-
-    for (const name of Object.values(equipments)) names.add(name);
-  }
-
-  return names;
 }
 
 function calculateBestItems(characterClass = character.ctype) {
@@ -2963,286 +1923,6 @@ function assignRoles() {
 
 function isAssignedAsTanker() {
   return character.name === TANKER;
-}
-
-function getMonstersToCBurst() {
-  const partyHealer = get_entity(HEALER) ?? get_entity(RANGER);
-  const partyTanker = get_entity(TANKER);
-
-  if (!partyHealer || !partyTanker) return [];
-
-  const healerHealPerSecond = healerHps(partyHealer);
-  const MAX_SAFE_DPS = healerHealPerSecond * 0.95;
-  const NEW_MOB_DMG_LIMIT = healerHealPerSecond * 0.9;
-
-  const eligibleMobs = Object.values(parent.entities)
-    .filter(
-      (mob) =>
-        mob.type === "monster" &&
-        is_in_range(mob, "cburst") &&
-        !MELEE_IGNORE_LIST.includes(mob.mtype) &&
-        calculateDamage(mob, partyTanker) < MAX_MOB_DPS &&
-        mob.range < character.range - 20 &&
-        !WATCHOUT_ABILITIES.some((skill) =>
-          Object.keys(mob.abilities ?? {}).includes(skill),
-        ),
-    )
-    .sort((lhs, rhs) => distance(character, rhs) - distance(character, lhs));
-
-  const selectedMobs = [];
-  let currentPartyDmgRecieved = avgPartyDmgTaken(partyMems);
-  const tankerMobs = listOfMonsterAttacking(partyTanker);
-
-  for (const mob of eligibleMobs) {
-    if (currentPartyDmgRecieved >= MAX_SAFE_DPS) break;
-
-    const projectedDmg =
-      currentPartyDmgRecieved -
-      totalMobDps(tankerMobs, partyTanker) +
-      totalMobDps([...tankerMobs, mob], partyTanker);
-
-    if (
-      is_in_range(mob, "cburst") &&
-      !mob.target &&
-      projectedDmg < NEW_MOB_DMG_LIMIT
-    ) {
-      selectedMobs.push(mob);
-      tankerMobs.push(mob);
-      currentPartyDmgRecieved = projectedDmg;
-    }
-  }
-
-  return selectedMobs.map((mob) => [mob, 2]);
-}
-
-/**
- * Hardest-hitting owned weapon cleave can actually be swung with, the mainhand
- * included — `num` is -1 when it is the one already equipped.
- * @returns {{num: number, info: Object}|undefined} the weapon, or undefined
- */
-function getCleaveWeapon() {
-  return findOwnedItems((entry) =>
-    G.skills.cleave.wtype.includes(entry.info?.wtype),
-  )[0];
-}
-
-/**
- * @param {number} slots - equipment slots the swap changes
- * @returns {boolean} whether the swap clears before the next attack
- */
-function canAffordSwap(slots) {
-  const targetedMonster = get_targeted_monster();
-
-  // Moving or out of range means no auto-attack is pending to protect
-  const isAutoAttacking =
-    !smart.moving &&
-    !isAdvanceSmartMoving &&
-    !!targetedMonster &&
-    distance(character, targetedMonster) <= character.range + character.xrange;
-
-  return (
-    !isAutoAttacking ||
-    character.ping > 1000 / character.frequency ||
-    ms_to_next_skill("attack") > slots * EQUIP_PENALTY_MS + character.ping / 2
-  );
-}
-
-/**
- * Every check cleave makes before it swings, its cooldown and in-flight locks aside.
- * @param {string} strategyName - "pull" or "normal"
- * @returns {Object|undefined} the cleave weapon, when cleave would swing now
- */
-/** @returns {number} mp the warrior needs for an AOE pull, cleave or agitate alike */
-function warriorAoeMpFloor() {
-  return G.skills["cleave"].mp + 400 + surgeMpReserve();
-}
-
-function planCleave(strategyName) {
-  // Aggro at Dorr fails the cave entry
-  const isWaitingAtDorr = isPreparingCave && !character.cave;
-  if (
-    isWaitingAtDorr ||
-    !canAffordSwap(2) ||
-    character.mp < warriorAoeMpFloor() ||
-    Object.keys(character.c).length
-  )
-    return;
-
-  const mobsList = Object.values(parent.entities).filter(
-    (mob) =>
-      mob.type === "monster" &&
-      !isCaveFriendly(mob) &&
-      distance(mob, character) < G.skills["cleave"].range + character.xrange,
-  );
-
-  const cleaveWeapon = getCleaveWeapon();
-
-  if (
-    !cleaveWeapon ||
-    character.s.penalty_cd ||
-    character.cc >= 100 ||
-    mobsList.some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype)) ||
-    mobsList.length === 0
-  )
-    return;
-
-  const mobsTargetingSelf = listOfMonsterAttacking(character);
-
-  const listOfNoTargetMonsterInRange = mobsList.filter(
-    (mob) =>
-      !mob.target &&
-      !canOneShotWithWeapon(
-        cleaveWeapon.info,
-        [mob],
-        CLEAVE_ONE_HIT_MULTIPLIER,
-      ) &&
-      !isHarmlessMob(mob),
-  );
-
-  const isFeared = !hasCourageFor(
-    listOfNoTargetMonsterInRange,
-    mobsTargetingSelf,
-  );
-
-  const formidableMob = listOfNoTargetMonsterInRange.some(
-    (mob) => mob.attack * mob.frequency > MAX_MOB_DPS,
-  );
-
-  const allMobs = [...mobsTargetingSelf, ...listOfNoTargetMonsterInRange];
-  const totalDpsTaken = totalMobDps(allMobs);
-
-  const healThreshold = strategyName === "pull" ? healerHps() * 0.9 : 0;
-
-  const isSafeToAggro =
-    strategyName === "pull"
-      ? totalDpsTaken <= healThreshold ||
-        listOfNoTargetMonsterInRange.length === 0
-      : listOfNoTargetMonsterInRange.length === 0;
-
-  const hasRiskyMob = allMobs.some(
-    (mob) =>
-      MELEE_IGNORE_LIST.includes(mob.mtype) ||
-      WATCHOUT_ABILITIES.some((skill) =>
-        Object.keys(mob.abilities ?? {}).includes(skill),
-      ),
-  );
-
-  const hasBurningNonAggro = listOfNoTargetMonsterInRange.some(
-    (mob) => mob.abilities?.burn,
-  );
-
-  const isSafeToCleave =
-    isSafeToAggro &&
-    !hasRiskyMob &&
-    !hasBurningNonAggro &&
-    !isFeared &&
-    !formidableMob;
-
-  return isSafeToCleave ? cleaveWeapon : undefined;
-}
-
-/**
- * @param {Object[]} mobs - mobs agitate would pull onto us
- * @returns {Object[]} the ones the cleave about to swing won't aggro anyway
- */
-function mobsLeftAfterCleave(mobs) {
-  const isCleaveSwinging =
-    mobs.length > 0 &&
-    character.ctype === "warrior" &&
-    ms_to_next_skill("cleave") < character.ping &&
-    !!planCleave(currentStrategy === usePullStrategies ? "pull" : "normal");
-  if (!isCleaveSwinging) return mobs;
-
-  const cleaveRange = G.skills["cleave"].range + character.xrange;
-  return mobs.filter(
-    (mob) =>
-      mob.target ||
-      isCaveFriendly(mob) ||
-      distance(mob, character) >= cleaveRange,
-  );
-}
-
-let isCleaving = false;
-async function warriorCleave(strategyName) {
-  if (is_on_cooldown("cleave") || isCleaving || isEquipingItems) return;
-
-  const cleaveWeapon = planCleave(strategyName);
-  if (!cleaveWeapon) return;
-
-  isCleaving = true;
-  isEquipingItems = true;
-
-  const cleaveSet = [];
-  if (cleaveWeapon.num >= 0)
-    cleaveSet.push({ num: cleaveWeapon.num, slot: "mainhand" });
-
-  const mpxAmulet = findMaxLevelItem("mpxamulet");
-  if (mpxAmulet >= 0 && canAffordSwap(3))
-    cleaveSet.push({ num: mpxAmulet, slot: "amulet" });
-
-  const restoreItems = calculateWarriorItems();
-  return Promise.allSettled([
-    Promise.all([
-      getServerSlot("offhand") ? sendUnequip("offhand") : undefined,
-      cleaveSet.length ? sendEquips(cleaveSet) : undefined,
-    ]),
-    withTimeout(use_skill("cleave"), 2500),
-    // Cleave procs sugarcane off whatever the server sees equipped when it
-    // runs, so swap back right away instead of waiting on use_skill
-    equipBatch(restoreItems, { preventKeySnatch: false }),
-  ]).finally(() => {
-    isCleaving = false;
-    isEquipingItems = false;
-    // equipBatch bails while penalty_cd is up, so retry the restore at the
-    // earliest moment it can actually equip
-    setTimeout(
-      () => equipBatch(calculateWarriorItems()),
-      character.s.penalty_cd?.ms ?? 0,
-    );
-  });
-}
-
-let isStomping = false;
-async function warriorStomp() {
-  const monstersInStompRange = Object.values(parent.entities).filter(
-    (mob) =>
-      mob.type === "monster" &&
-      distance(mob, character) < G.skills["stomp"].range,
-  );
-
-  if (
-    character.mp < G.skills["stomp"].mp ||
-    is_on_cooldown("stomp") ||
-    monstersInStompRange.length === 0 ||
-    isStomping
-  )
-    return;
-
-  isStomping = true;
-
-  const promises = [];
-  const restoreItems = calculateWarriorItems();
-
-  promises.push(
-    equipBatch(
-      { mainhand: "basher", offhand: undefined },
-      { preventPenaltizeNextAttack: false, preventKeySnatch: false },
-    ),
-    use_skill("stomp"),
-    // Same trick as cleave: the basher only has to be on when the server runs
-    // stomp, so restore without waiting for the swap or the skill to resolve
-    equipBatch(restoreItems, { preventKeySnatch: false }),
-  );
-
-  return Promise.allSettled(promises).finally(() => {
-    isStomping = false;
-    // equipBatch bails while penalty_cd is up, so retry the restore at the
-    // earliest moment it can actually equip
-    setTimeout(
-      () => equipBatch(calculateWarriorItems()),
-      character.s.penalty_cd?.ms ?? 0,
-    );
-  });
 }
 
 /** Serializes shelters so a slow swap can't send a second one */
@@ -4190,4 +2870,23 @@ class ProjectileManagement {
 
 if (typeof projectileManager === "undefined" && parent.socket) {
   var projectileManager = new ProjectileManagement(parent.socket);
+}
+
+// Class gear and skills
+if (parent.caracAL) {
+  parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/mage_strat.38.js",
+    "adventure-land-scripts-backup/warrior_strat.39.js",
+    "adventure-land-scripts-backup/ranger_strat.40.js",
+    "adventure-land-scripts-backup/priest_strat.41.js",
+    "adventure-land-scripts-backup/rogue_strat.42.js",
+    "adventure-land-scripts-backup/merchant_gear.43.js",
+  ]);
+} else {
+  load_code(38);
+  load_code(39);
+  load_code(40);
+  load_code(41);
+  load_code(42);
+  load_code(43);
 }

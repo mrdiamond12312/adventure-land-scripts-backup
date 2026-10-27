@@ -45,7 +45,7 @@ async function usePullSkills() {
       if (mobsToCBurst.length >= CBURST_MIN_BATCH) {
         promises.push(
           use_skill("cburst", mobsToCBurst).then(() =>
-            reduce_cooldown("cburst", -6000),
+            reduce_cooldown("cburst", -CBURST_COOLDOWN_PAD_MS),
           ),
         );
       }

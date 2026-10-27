@@ -279,3 +279,29 @@
 
 //   await catchPromise;
 // }
+
+
+// Retired from basic_function.7.js (2026-10-28): unused anywhere
+// var buffThreshold = 0.7;
+// var maxUpgrade = 7;
+// var maxCompound = 3;
+// function arrayShuffle(array) {
+//   let currentIndex = array.length;
+//
+//   // While there remain elements to shuffle...
+//   while (currentIndex != 0) {
+//     // Pick a remaining element...
+//     let randomIndex = Math.floor(Math.random() * currentIndex);
+//     currentIndex--;
+//
+//     // And swap it with the current element.
+//     [array[currentIndex], array[randomIndex]] = [
+//       array[randomIndex],
+//       array[currentIndex],
+//     ];
+//   }
+// }
+// function extraDistanceWithinHitbox(target) {
+//   if (!target) return 0;
+//   return Math.min(get_height(target) / 2, get_width(target) / 2) / 2;
+// }

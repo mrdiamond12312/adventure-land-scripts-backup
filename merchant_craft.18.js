@@ -1,5 +1,22 @@
 // Crafting: the level targets pending recipes register, and craft() itself.
 
+// Merch boundary
+const BUYABLE = [
+  "helmet",
+  "shoes",
+  "gloves",
+  "pants",
+  "coat",
+  "blade",
+  "claw",
+  "staff",
+  "bow",
+  "wshield",
+  "wand",
+  "mace",
+  "wbasher",
+];
+
 /**
  * Ingredients pending crafts need, as name -> { [level]: quantity }.
  * A level 0 entry is a reservation — the pickaxe wants a plain staff, so one has

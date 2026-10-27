@@ -1,5 +1,138 @@
 // Bank storage: floors, retrieval, the store/retrieve cycle and the data sync.
 
+var IGNORE = [
+  "staff",
+  "blade",
+  "hpot0",
+  "mpot0",
+  "cscroll0",
+  "cscroll1",
+  "cscroll2",
+  "scroll0",
+  "scroll1",
+  "stand0",
+  "pickaxe",
+  "rod",
+  "tracker",
+  "sword",
+  "orboffire",
+  "orboffrost",
+  "orbofplague",
+  "orbofresolve",
+  "snring",
+  // "bowofthedead",
+  // "daggerofthedead",
+  // "maceofthedead",
+  // "pmaceofthedead",
+  // "staffofthedead",
+  // "swordofthedead",
+  "supermittens",
+
+  // "horsecapeg",
+  // "throwingstars",
+  "computer",
+  "ancientcomputer",
+
+  // avoid for manually upgrade/compound
+  "northstar",
+  "fury",
+  "starkillers",
+
+  // avoid upgrading for selling
+  "cape",
+  "carrotsword",
+  "xgloves",
+
+  // lucky slot probe item, merchant_lucky_slot_finder.30.js
+  "helmet",
+];
+
+/** Equipables banked anyway: ignored ones that would never leave the bag, and fodder not kept to compound */
+const STORE_ABLE = [
+  "orboffire",
+  "orboffrost",
+  "orbofplague",
+  "orbofresolve",
+  "fury",
+  "snring",
+  "starkillers",
+  "northstar",
+  "lostearring",
+  "orba",
+  "orbofstr",
+  "orbofdex",
+  "orboftemporal",
+];
+
+const SALE_ABLE = [
+  "smoke",
+  "vgloves",
+  "mcape",
+  "santasbelt",
+  "mushroomstaff",
+  "slimestaff",
+  "fieldgen0",
+  "snowball",
+  "carrotsword",
+  // "wshoes",
+  "wgloves",
+  "wbreeches",
+  "cclaw",
+  "dagger",
+  "rednose",
+  "iceskates",
+  "stinger",
+  // armorring/resistancering eat vitring +2
+  "vitring",
+  // "vitearring",
+  "harmor",
+  "hammer",
+  "basher",
+  "skullamulet",
+  "stinger",
+  "lantern",
+  "hpbelt",
+  "hpamulet",
+  "phelmet",
+  "ringsj",
+  "hhelmet",
+  "hgloves",
+  "harmor",
+  "hpants",
+  // "glolipop",
+  "hboots",
+  "sword",
+  "spear",
+  "cape",
+  // Easter's loots
+  // "eears",
+  "eslippers",
+  "epyjamas",
+
+  //Christmas loots
+  // "xmashat",
+  // "xmassweater",
+  // "xmaspants",
+  // "warmscarf",
+
+  // Sell and replace by crypt's loots
+  "intearring",
+  "strearring",
+  // "dexring",
+  // "intring",
+  // "dexamulet",
+  // "stramulet",
+
+  // Halloween temp for gold
+  // "bowofthedead",
+  // "daggerofthedead",
+  "pmaceofthedead",
+  "maceofthedead",
+  "staffofthedead",
+  "swordofthedead",
+  "throwingstars",
+];
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------

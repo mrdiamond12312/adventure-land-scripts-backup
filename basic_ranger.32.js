@@ -57,7 +57,7 @@ const shouldPiercingShot = (target) =>
 // --- Decide: one plan drives both the gear loop and the shot ---
 
 /** @returns {boolean} whether cupid is the equipped mainhand */
-// Literal, not RANGER_INV_ITEMS.cupid: strategic_fn.11.js may not be loaded yet
+// Literal, not RANGER_INV_ITEMS.cupid: ranger_strat.40.js may not be loaded yet
 // on the first mainLoop tick.
 const isCupidEquipped = () => character.slots.mainhand?.name === "cupid";
 

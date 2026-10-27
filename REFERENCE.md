@@ -4,7 +4,7 @@ Design notes on non-obvious behavior in this repo — the "why", not the "what" 
 says what). Add to this file when a piece of logic embeds a strategy/decision that isn't obvious
 from reading it cold.
 
-## Kiting strategy (`hitAndRun`, basic_function.7.js)
+## Kiting strategy (`hitAndRun`, basic_function_kiting.47.js)
 
 `hitAndRun` is the self-rescheduling movement loop every fighter runs while in combat. Baseline
 behavior plus three deliberate overrides:
@@ -931,18 +931,54 @@ Findings from the "warrior attacks slower than his frequency" session (2026-07-2
   field from anything in slots/inventory, not the currently-equipped blast.
 - Splash is `explosion` on physical classes and `blast` on magical ones; `splashOf(info)` and
   `explosionScore` read either, so the ranger's bow scorer also serves the mage.
-- The mage's mainhand (`rankMageWeapons`) is a per-second score over every owned mage weapon, not
-  a mob count. Froststaff (crypt) and pinkie (one-shot) are ranked too, but their rules still
-  take precedence over the score. Doublehands stay pull-strategy-only, behind the mp floor and a
-  cluster of at least `TARGET_TO_SWITCH_TO_BLASTER_WEAPON`: on a lone mob splash scores 0, but the
-  tier-3 gstaff still out-attacks the firestaff (its burn is `attr0: 2` +0.5/level, a few % of
-  attack), so the score alone picked the blaster for 1 mob. Two things only the score sees:
-  `G.classes.mage.doublehand.great_staff` carries
-  `frequency: -10` (item/class `frequency` points are /100 of `character.frequency`), and a
-  doublehand drops `wbook1`, whose attack and int are lost. The offhand term is signed against
-  what is worn now, so while holding the gstaff the firestaff is credited for regaining the book.
-  The same class entry has `mp_cost: +160` per shot, which is what drains mp toward the
-  magiport+blink floor; the score ignores mp, the floor check in `calculateMageItems` owns it.
+- The mage's gear (`pickMageGear`, 2026-10-28) scores every owned weapon with the rest of the gear
+  picked around it, by `mageFightModel`: shots per second capped by the mp budget, times what a
+  shot lands. See "Mage gear under the mp budget" below.
+
+## Mage gear under the mp budget (`mageFightModel`, 2026-10-28)
+
+Server formulas (upstream `server.js` `calculate_player_stats`, `server_functions.js` `consume_mp`):
+
+- `mp_cost = class mp_cost × (1 + min(level, 80)/10) + item and class-weapon mp_cost + crit×1.25 +
+  lifesteal×1.5 + manasteal/5 + piercing/15`. Only the class base is level-scaled: the mage's 5
+  becomes 45, while gstaff's `great_staff` +160 and the wand's −18 are flat. A level-96 mage
+  reported 247 against 240 from this, which is unexplained (the live server runs ahead of upstream).
+- `consume_mp` takes `mp × (1 − mp_reduction/100)` for attacks and skills alike, or, at
+  `restore_mp` attr0 % (×5 against a humanoid, skills only), refunds `2 × mp` instead.
+  `castMpCost` models both; `mageMpReserve` scales the magiport + blink reserve by mp_reduction too.
+- Self-energize is mp-neutral: the server moves mp from the mage to himself. Its `energized`
+  +80 frequency for 0.8s per 4s cooldown is about +0.16 shots/s, and only counts when not mp-bound.
+- `1hp` mobs take 1 per hit, 2 on a crit, and 1 per splash hit. `avoidance` is rolled by the main
+  target and again by every splashed mob; a miss still costs mp. `reflection` bounces magical
+  hits. `evasion` blocks physical hits only, so it doesn't touch the mage.
+- Splash: `o_attack × damage_multiplier(splashed resistance) × blast/100`, where `o_attack` is the
+  main hit after its own mitigation, crit and incdmgamp. Piercing raises splash only through the
+  main hit.
+
+Choices the model makes:
+
+- The budget is potion income, plus spare mp above the reserve over 10s, plus manasteal, minus
+  cburst (pull mode, 80 per 6.24s) and reflection (540 per 30s, while the party takes magical
+  damage). Shots are `min(frequency, budget / cost per shot)`.
+- Hits are capped at the mob's max hp, so overkill earns nothing. A burn counts only when a
+  minimum roll leaves the mob alive: crabs were picking the firestaff on uncapped burn.
+- With avoidance the objective is landed hits per second, not damage; the user prefers pinkie
+  there for the extra attempts. That and the overkill cap replace `MAGE_WEAK_MOB_TYPES` and
+  `pinkieOneShots`.
+- mummyhex's `hexed` (+20% damage taken, 5s, attr0 % per landed hit) adds
+  `0.2 × uptime` unless the mob is already hexed or cursed.
+- Crypt: froststaff while the target isn't frozen; frozen and single-target, firestaff or
+  froststaff only (user's call); a cluster gets the full scoring.
+- The blaster stays behind `blasterAllowed` (pull mode, cluster ≥ 2, mp above the reserve). The
+  cluster rule is safety: `numberOfMonsterAroundTarget` returns 0 when the splash would pull an
+  idle mob. The mp floor is 4100 on a 7150 max-mp mage, so below 57% mp he has no blaster at all,
+  which is most of "the blaster gets dropped".
+- Results with level-96 gear at 250 mp/s (mpot1 only): one target, firestaff + wbook1 beats the
+  blaster by about 18%, because the blaster affords 1.01 of its 1.33 shots/s. From 2 mobs the
+  blaster wins. mpxbelt + mpxamulet would sustain it at 1.30/s.
+- `item_info` copies the whole `G` entry, and a pick calls it thousands of times (~90ms).
+  `withItemInfoMemo` shares one info per item object for the duration of one pick (~35ms). The memo
+  is a `var` because `BLAST_RADIUS` calls `item_info` at load, before a `let` would be initialised.
 
 ## Mitigation (`mitigation` / `healMitigation`)
 
@@ -1016,7 +1052,7 @@ server round-trip exceeds the attack cooldown holds the whole loop and the attac
 per class (mage, priest, warrior so far; archer/ranger/rogue still to do).
 
 **The fix — one loop per skill, keyed on that skill's own cooldown.** `runSkillLoop({ skill,
-canUse, cast, floorMs, timeoutMs })` (basic_function.7.js) drives a single skill, independent of
+canUse, cast, floorMs, timeoutMs })` (basic_function_loop.45.js) drives a single skill, independent of
 the attack loop and of every other skill:
 - Reschedules on `Math.max(ms_to_next_skill(skill), floorMs)` — wakes exactly when the skill is
   ready again. `floorMs` guards two cases: (a) the skill is off-cooldown but `canUse` is false
@@ -1260,7 +1296,7 @@ slot happened to differ.
 ## `smartmoveDebug` must be passed as an option, not just set (debugged 2026-08-25)
 
 `smartmoveDebug` is the exemption from that `isMovingControlled` gate: the three kite-internal
-smart moves in basic_function.7.js (the franky/nerfedmummy corner anchor in `resolveKiteTarget`,
+smart moves in basic_function_kiting.47.js (the franky/nerfedmummy corner anchor in `resolveKiteTarget`,
 the tanker's path-around-an-obstacle in `resolveDestination`, the stuck-while-kiting nudge) are
 *repositioning inside a fight*, not travel, so the main loop and the skill loops must keep running
 through them.
@@ -1391,7 +1427,7 @@ if (!report || Date.now() - report.time >= ENT_FIELD_STALE_MS) return true; // a
 
 **Ownership.** The count was written only by `basic_mage.4.js`, behind a `max_mp > magiport * 1.5`
 guard — so swapping the mage out of the party meant nobody ever wrote it again. It now lives in
-`publishEntFieldReport()` (basic_function.7.js), called from the mage's and ranger's `mainLoop`
+`publishEntFieldReport()` (basic_function_events.53.js), called from the mage's and ranger's `mainLoop`
 (per-tick, not an interval — 2s was too stale). Any class can report; `mageLocation` stays
 mage-only because its other consumers (`advance_smart_move.20.js`, `strategic_smart_move.21.js`)
 genuinely need magiport.
@@ -1647,8 +1683,8 @@ rather than fought through.
   comes back on its own the moment nothing is in reach, via whoever next runs the calc (the main
   loop's `character.moving && character.stand` branch, or `advanceSmartMove`'s direct equip).
 - **The merchant wears the luck set too**, off the same `shouldWearLuckGear()` the fighters use.
-  That is why `calculateMerchantEquipments` now lives in strategic_fn.11.js beside the other
-  `calculate*Items` (and in `calculateBestItems`) rather than in basic_merchant.5.js — slot 11 is
+  That is why `calculateMerchantEquipments` lives in merchant_gear.43.js, loaded by slot 11, beside the
+  other class files (and in `calculateBestItems`) rather than in basic_merchant.5.js — slot 11 is
   loaded for merchants, 12/13 are not. The gear/range primitives it needs (`ATTACK_*`,
   `getCarriedItems`, `getBestQuiver`, `getMaxAttackWeaponRange`, `getAttackWeaponReach`) moved
   there with it, next to `findMaxLevelItem`/`getMaxBlastRadius` where gear selection already
@@ -2320,7 +2356,7 @@ left) is the shared estimate the growth tracker uses too. earthiverse's `prevent
 a target from the other bots' views when one bot can one-shot it; here every bot already sees the
 others' projectiles through `action`, which covers the same ground a ping later.
 
-## The mage's weapon pays for its own shots (`rankMageWeapons`, strategic_fn.11.js, 2026-10-18)
+## The mage's weapon pays for its own shots (`rankMageWeapons`, mage_strat.38.js, 2026-10-18)
 
 The mage spends mp on his basic attack, and `great_staff` (gstaff, sparkstaff) adds +160
 `mp_cost` per attack on top of the class's 5. Each weapon's dps is scaled by the share of its shots
@@ -2508,7 +2544,7 @@ answers `mismatch` or `no_item` (see the `upgrade` contract), and both call site
 `.catch(() => {})`. So the observable symptom was upgrade/compound throughput quietly stalling,
 with nothing in the logs.
 
-The guard is a reader/writer lock in one number (basic_function.7.js, 2026-09-28; it used to be
+The guard is a reader/writer lock in one number (basic_function_trips.46.js, 2026-09-28; it used to be
 the `isSortingInventory` flag plus the `pendingItemMutations` count):
 
 - `inventoryLock` is `-1` while `sortInv` swaps, `n` while `n` routines hold slots they picked,
@@ -3563,7 +3599,7 @@ while `character.c.town`. That covers the gear loops and the other mid-trip equi
 the `whileMoving` surge drain) and midas looting; scare and surge also skip their own skill then.
 `sendEquips`/`sendUnequip` callers (candy swap, cleave, broom) already skip any channel.
 
-## Midas loot as a trip sets off (`lootBeforeTrip`, basic_function.7.js, 2026-10-13)
+## Midas loot as a trip sets off (`lootBeforeTrip`, basic_function_loot.48.js, 2026-10-13)
 
 Standing still, the Midas user only loots once `midasLootingThreshold` chests (15) are in view, in
 Midas gear; travelling, `midasLooting` opens everything in reach at once in whatever is worn, so the
@@ -3901,7 +3937,7 @@ correction or, when the correction came first, cut an already correct cooldown a
 `cooldown` rejection. The same correction is what used to wipe the ping shave after a candy
 swap-back, and the listener now leads it with no extra call.
 
-## One respawn per death (`respawnWhenReady`, basic_function.7.js, 2026-10-17)
+## One respawn per death (`respawnWhenReady`, basic_function_loot.48.js, 2026-10-17)
 
 Every class loop used to call `respawn()` on each tick while `character.rip`, and the server
 answers each early one with `cant_respawn {ms}` until its `rip_time` (12s) has passed, so a death
@@ -4107,7 +4143,7 @@ party (e.g. Earth) are still taken by agitate, so they still block it: we let hi
   special mobs and farming. It knocks on home-realm doors from 03:00 realm time and stands aside
   while a cave run or gathering is underway. Events outrank it: an account only has 14 knocks a
   day, too few to hold up a fight for. The door helpers and the one-step `knockNextDoor` live in
-  basic_function.7.js so the merchant shares them. His `knockTrickOrTreatDoors`
+  basic_function_events.53.js so the merchant shares them. His `knockTrickOrTreatDoors`
   (merchant_frenzinesss.100.js) runs last among his strategies, under the ERRAND duty like the
   anniversary visit, so `moveHome` waits between doors. It gives up the doors to any event or
   hard blocker, and stops after `KNOCK_ERRAND_MAX_STEPS` steps. A door counts as settled once knocked or
@@ -4129,7 +4165,7 @@ the drop table of 16 monsters at 0.3% per 1k HP, multiplied by luck. Per kill at
 36%, fireroamer 25%, wolfie 5.8%, spider 5.4%, ghost 3.6%. `WITCH_GATHER_SPOTS` sends each kind to
 its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, ghost/halloween.
 
-- **Plan** (`getWitchGatherPlan`, basic_function.7.js): the round is cut into 5-min slots. Each
+- **Plan** (`getWitchGatherPlan`, basic_function_events.53.js): the round is cut into 5-min slots. Each
   slot goes to the kind with the least stock that hasn't had a slot yet this round, while any kind
   is under `WITCH_MIX_STOCK` + `WITCH_ELIXIR_RESERVE` (5 + 2). Once all are, each slot goes to the
   kind with the least stock. The first character to reach a new slot writes `witchGatherPlan`, so
@@ -4278,9 +4314,9 @@ live Pumpkin outranked him whatever his hp. `dynamicParty`'s `HP_RANKED_BOSSES` 
 too, so the party preset swapped to Pumpkin's. Now all five compete on hp fraction, as the
 merchant's `getEventToJoin` always did. A fresh Pumpkin doesn't pull the party off an 80% Franky;
 one softened below him does.
-- `HP_RANKED_BOSSES` (basic_function.7.js) is `[icegolem, franky, dragold, mrpumpkin, mrgreen]`,
+- `HP_RANKED_BOSSES` (basic_function_events.53.js) is `[icegolem, franky, dragold, mrpumpkin, mrgreen]`,
   shared by the fighters and `dynamicParty`.
-- One ranking: `rankLiveBossesByHp` (basic_function.7.js, hoisted for `dynamicParty()`'s load-time
+- One ranking: `rankLiveBossesByHp` (basic_function_events.53.js, loaded before `dynamicParty()`'s load-time
   call) sorts the live ones by `server.status` hp / `max_hp`, falling back to `G.monsters[].hp`,
   and to full when hp is missing. Fighters and the party preset both read it, so the preset
   always matches the boss being fought. `dynamicParty` used to divide by `G.monsters[].hp` alone.
@@ -4412,7 +4448,7 @@ and publishes it. The others carry it out. Every character loads the file.
     roster doesn't want it.
 - The presets live here too: `DYNAMIC_PARTY_PRESETS`, `getPresetMembers`, `PRESET_FIRST_BOSSES`,
   the witch-slot pick, and `pickPartyMembers(status, realm)`. `HP_RANKED_BOSSES` and
-  `rankLiveBossesByHp(names, status)` stay in basic_function.7.js, because the fights use them too.
+  `rankLiveBossesByHp(names, status)` stay in basic_function_events.53.js, because the fights use them too.
   So does the load-time `dynamicParty()` call: slot 37 loads before that `const`, so calling it
   from 37's top level would hit its TDZ.
 - Native needs slot 37 filled in the CODE editor, like every other `load_code` target.
@@ -4449,11 +4485,11 @@ Parcels). With just 3 random mixes from others on the board first, both crack ab
 from ≤ N candidates, ours cracks 99–100% for: N=8, 2.0 mixes; N=32, 2.8; N=64, 3.2.
 
 - **Earlier rounds call him in only as the board narrows (2026-10-24).** `canBrewWitchCipher`
-  (basic_function.7.js) is eligibility: realm, live round, from `WITCH_STAGE_LEAD_MS` before
+  (basic_function_events.53.js) is eligibility: realm, live round, from `WITCH_STAGE_LEAD_MS` before
   `gather_end`, mixes left, stock. It still keeps the four kinds in the bag
   (`isHeldForWitchBrew`) and holds the hop loop. `isWitchBrewDue` decides whether brewing takes
   the merchant: always in the day's last round (`isLastWitchRoundOfDay`, also in
-  basic_function.7.js), and in an earlier round only once `possible` ≤ `WITCH_APPROACH_POSSIBLE`
+  basic_function_events.53.js), and in an earlier round only once `possible` ≤ `WITCH_APPROACH_POSSIBLE`
   (128). `attendWitchGathering` and `brewWitchCipher` both read it. Otherwise he stays with the
   gathering party, and then the `WITCH` duty is released for his normal loop. Parking him at the
   Witch for the whole 06:00 window (old) cost about 12 idle minutes. Not brewing in that round

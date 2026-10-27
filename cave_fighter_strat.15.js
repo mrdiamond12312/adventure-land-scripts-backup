@@ -1,5 +1,17 @@
 // Cave of Many Dreams fighter strategy
 
+/** Published home window shelf life */
+const HOME_WINDOW_STALE_MS = 60 * 1000;
+
+/** @returns {number} ms to the published home window, Infinity when unknown */
+function msUntilPublishedHomeWindow() {
+  const published = get(HOME_WINDOW_LS_KEY);
+  if (!Number.isFinite(published?.at)) return Infinity;
+  if (Date.now() - published.checkedAt > HOME_WINDOW_STALE_MS) return Infinity;
+
+  return published.at - Date.now();
+}
+
 // Entry
 
 /** Where Dorr stands */

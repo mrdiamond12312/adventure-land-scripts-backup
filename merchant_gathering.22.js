@@ -1,5 +1,12 @@
 // Gathering: fishing, mining and dismantling, plus the gear they need.
 
+const DISMANTLE_LIST = [
+  // "maceofthedead",
+  // "pmaceofthedead",
+  // "staffofthedead",
+  // "swordofthedead",
+];
+
 /**
  * Bag slots a trip needs free before it sets off. It has to clear the ceiling
  * freeBagSlotForWork sells up to, or a trip takes the slot the purge just

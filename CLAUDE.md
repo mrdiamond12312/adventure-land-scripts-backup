@@ -71,9 +71,35 @@ shared library pulled in transitively.
 ```
 basic_function.7.js          [SHARED — the core library]
   loaded by every fighter entry script AND merchant_upgrade.10.js;
-  itself loads, based on class/config:
-    strategic_fn.11.js           combat math: damage/heal calc, heal targeting, item_info and gear
-                                 scoring/selection, cleave/blast targeting
+  holds the hand-edited config, the party/server helpers, fight-target selection, and every
+  piece of code that runs at load (slot loads, loop kick-offs, setIntervals), in order.
+  Right after the config it loads its parts, definitions only, so everything below can use them:
+    basic_function_loop.45.js    withTimeout/waitUntil/sleep, ms_to_next_skill, getLoopInterval,
+                                 runSkillLoop, the potion loop, cosmetic skills
+    basic_function_trips.46.js   strategy-chain trips, advanceSmartMove, the inventory lock, sortInv
+    basic_function_kiting.47.js  getTarget, boss drag routes, kite/orbit movement (hitAndRun)
+    basic_function_loot.48.js    respawn and harakiri, potion stock, chests and midas looting
+    basic_function_events.53.js  live events, rogue/ent-field deploys, boss HP ranking, crabxx,
+                                 anniversary, Witch's Cipher, trick-or-treat (shared by fighters
+                                 and the merchant, so not in daily_event_fighter_strat.26.js)
+  A part never runs code at load: a definition moved below a slot load would vanish for any
+  file that slot pulls in. Merchant-only item lists live in their merchant modules
+  (STORE_ABLE/SALE_ABLE/IGNORE in 17, BUYABLE in 18, DISMANTLE_LIST in 22).
+  Then, based on class/config, it loads:
+    strategic_fn.11.js           the shared core: damage/heal calc, mitigation, heal targeting,
+                                 item_info and gear scoring (pickGearByScore, tank/heal/stat picks),
+                                 equipBatch and the candy swap, party roles, attack-loop helpers,
+                                 temporal surge; calculateBestItems dispatches to the class files,
+                                 which it loads, all six, at its bottom:
+      mage_strat.38.js             weapon + gear scored together under the mp budget, cburst targeting
+      warrior_strat.39.js          warrior gear, cleave planning, stomp
+      ranger_strat.40.js           cupid, bow choice for splashing, splash safety, ranger gear
+      priest_strat.41.js           priest gear rules over the heal and tank picks
+      rogue_strat.42.js            the rogue fight model and its damage / boss-burn gear picks
+      merchant_gear.43.js          dartgun reach, best quiver, merchant gear
+                                 Cross-class references are only inside function bodies; helpers
+                                 more than one class uses (burnIntensityCap, explosionScore,
+                                 getMpIncome, useShelter, ...) stay in the core
     normal_strategy.12.js        \_ farming strategy variants, swapped via
     pull_strategy.13.js          /  changeToPullStrategies()/changeToNormalStrategies()
     growth_tracker.34.js         `grow` spawn groups: permanent vs temp spawns and group live counts;
