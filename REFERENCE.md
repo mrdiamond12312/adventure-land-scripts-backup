@@ -979,6 +979,15 @@ Choices the model makes:
 - `item_info` copies the whole `G` entry, and a pick calls it thousands of times (~90ms).
   `withItemInfoMemo` shares one info per item object for the duration of one pick (~35ms). The memo
   is a `var` because `BLAST_RADIUS` calls `item_info` at load, before a `let` would be initialised.
+  Nothing in a gear pick may mutate an info it gets back; the ranger spreads into new objects, so
+  it would be safe to wrap too.
+- Gear CPU, checked 2026-10-28 on a 2-core Oracle A1 VM (4 characters at 138% of 200% on average).
+  The priest re-picked on every gear tick with no cache: 23ms healing and 45ms tanking per call on
+  an i7-10750H. Now `getPriestGearPicks` reuses the tank, fireball, stat and heal picks for 500ms,
+  keyed on the imminent fireball's id, tanking, luck and exp mode, so a fireball swaps
+  immediately. A fresh pick costs 9ms healing and 19ms tanking; a reused one 0.04ms. The cheap
+  time-based rules (heal grace window, ghost pinkie, sanguine re-equip) still run every tick. The
+  rogue's 500ms cache now runs under the memo too. The warrior's gear is mostly hard-coded and cheap.
 
 ## Mitigation (`mitigation` / `healMitigation`)
 

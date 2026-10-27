@@ -266,7 +266,7 @@ function calculateRogueItemsCached(target) {
     lastRogueGear = {
       id: target?.id,
       at: now,
-      gear: calculateRogueItems(target),
+      gear: withItemInfoMemo(() => calculateRogueItems(target)),
     };
   return { ...lastRogueGear.gear };
 }

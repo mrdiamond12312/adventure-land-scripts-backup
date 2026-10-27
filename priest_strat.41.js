@@ -84,26 +84,51 @@ function getPriestAmulet(tankGear, statGear, healGear) {
   return tankGear.amulet ?? healGear.amulet ?? "intamulet";
 }
 
+const PRIEST_GEAR_REUSE_MS = 500;
+let lastPriestPicks = { key: undefined, at: 0, picks: undefined };
+
+/** The tank, stat and heal picks, reused briefly while the fireball and modes hold */
+function getPriestGearPicks(fireball, isTanking, feelingLucky, feelingWise) {
+  const now = Date.now();
+  const key = `${fireball?.id}:${isTanking}:${feelingLucky}:${feelingWise}`;
+  if (
+    lastPriestPicks.key === key &&
+    now - lastPriestPicks.at <= PRIEST_GEAR_REUSE_MS
+  )
+    return lastPriestPicks.picks;
+
+  const picks = withItemInfoMemo(() => ({
+    tankGear: fireball
+      ? pickFireballGear(fireball)
+      : isTanking
+      ? pickTankGear()
+      : {},
+    statGear: feelingLucky
+      ? pickStatGear("luck")
+      : feelingWise
+      ? pickStatGear("xp")
+      : {},
+    healGear: fireball ? {} : pickHealGear(PRIEST_DEFAULT_GEAR),
+  }));
+  lastPriestPicks = { key, at: now, picks };
+  return picks;
+}
+
 function calculatePriestItems(target) {
   const currentTarget = get_targeted_monster();
   const isTanking = isAssignedAsTanker();
   const fireball = getImminentFireball();
-  const tankGear = fireball
-    ? pickFireballGear(fireball)
-    : isTanking
-    ? pickTankGear()
-    : {};
   const feelingLucky = !fireball && shouldWearLuckGear() && !isPriestInDanger();
   const feelingWise =
     !fireball &&
     !isTanking &&
     (shouldWearExpGear() || isPartyQuickKilling(currentTarget));
-  const statGear = feelingLucky
-    ? pickStatGear("luck")
-    : feelingWise
-    ? pickStatGear("xp")
-    : {};
-  const healGear = fireball ? {} : pickHealGear(PRIEST_DEFAULT_GEAR);
+  const { tankGear, statGear, healGear } = getPriestGearPicks(
+    fireball,
+    isTanking,
+    feelingLucky,
+    feelingWise,
+  );
 
   const mainhand = getPriestMainhand(target, currentTarget, statGear);
   return {
