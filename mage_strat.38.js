@@ -151,7 +151,7 @@ function mageFightModel(projected, picks, target, worn, context) {
   };
 }
 
-/** Slot → item the last mage pick chose, the incumbent of the next one */
+/** Slot → damage item the mage picks last chose, luck/xp gear left out; the next pick's incumbents */
 let lastMagePicks = {};
 
 /**
@@ -187,9 +187,15 @@ function pickMageGear(target, blasterAllowed, fixed) {
   for (const [slot, name] of Object.entries(fixed))
     fixedInfos[slot] = fixedCopies[name]?.shift();
 
+  // Worn luck/xp gear is no incumbent: it was put on for another mode
   const incumbents = {
     ...Object.fromEntries(
-      getGearSlots().map((slot) => [slot, character.slots[slot]?.name]),
+      getGearSlots().map((slot) => [
+        slot,
+        worn[slot]?.luck > 0 || worn[slot]?.xp > 0
+          ? undefined
+          : character.slots[slot]?.name,
+      ]),
     ),
     ...lastMagePicks,
   };
@@ -235,7 +241,6 @@ function pickMageGear(target, blasterAllowed, fixed) {
     return {
       gear: {
         ...rest,
-        ...fixed,
         mainhand: name,
         ...(doublehand && { offhand: undefined }),
       },
@@ -253,8 +258,8 @@ function pickMageGear(target, blasterAllowed, fixed) {
     loadouts[0].score >= incumbent.score * (1 - MAGE_GEAR_SWAP_MIN_GAIN)
       ? incumbent
       : loadouts[0];
-  lastMagePicks = choice.gear;
-  return choice.gear;
+  lastMagePicks = { ...lastMagePicks, ...choice.gear };
+  return { ...choice.gear, ...fixed };
 }
 
 let lastMageGear = { key: undefined, at: 0, gear: {} };

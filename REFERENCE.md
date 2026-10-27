@@ -967,6 +967,10 @@ Choices the model makes:
   `pinkieOneShots`.
 - mummyhex's `hexed` (+20% damage taken, 5s, attr0 % per landed hit) adds
   `0.2 × uptime` unless the mob is already hexed or cursed.
+- Luck/xp gear is laid over the damage pick, never stored in `lastMagePicks` and never an
+  incumbent when worn. Otherwise the swap margin kept it on after the luck window: cloverstud and
+  ecape (+1 luck) each trail the damage piece by under 3%, so they stuck through the next boss.
+  Found 2026-10-28 on mrpumpkin, whose luck window is only its last 300k of 36M hp.
 - Crypt: froststaff while the target isn't frozen; frozen and single-target, firestaff or
   froststaff only (user's call); a cluster gets the full scoring.
 - The blaster stays behind `blasterAllowed` (pull mode, cluster ≥ 2, mp above the reserve). The

@@ -38,7 +38,7 @@ function rogueLandChance(skill, stats, target) {
   );
 }
 
-const ROGUE_GEAR_SWAP_MIN_GAIN = 0.03;
+const ROGUE_GEAR_SWAP_MIN_GAIN = 0.01;
 const BURN_FUEL_HORIZON_S = 30;
 const BURN_REFUEL_SHARE = 0.9;
 const STACK_HORIZON_S = 30;
