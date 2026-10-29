@@ -2697,6 +2697,24 @@ Ordering within the shortlist is plain `distance`. A pathfinder-measured sort wa
 it cost a `getPath` per candidate on a loop that idles at ~2ms, and the shortlist is three objectives
 in one room-and-corridor floor, where the straight line ranks them the same way often enough.
 
+### Objective rooms on the way get cleared (2026-10-29)
+
+Away from the next required objective, the party used to hold: hit only awake mobs in reach and
+keep walking, so a pending room the path crossed was left for a second trip, or for good if it was
+optional. Now standing inside the bounds of any pending objective's room (`getPassingCaveObjective`,
+by the objective's point, so it needs no room-id mapping) lifts the hold, and the walk's
+`stopWatcher` (`isPassingCaveFight`) cuts the smart move as soon as that room has a mob to hit.
+Once the room has nothing left to hit, the walk resumes toward the real destination.
+
+This does not undo "depth over farms": a farm is never *chosen* as a destination over the stairs,
+it only gets fought while we are standing in it. That stays bounded, because a farm has three packs
+and a refused wave just means no target, so the walk moves on. Shops are excluded, since an
+unsettled one waits up to `CAVE_SHOP_WAIT_MS` and is already a destination of its own. Escort walks
+keep their own watcher and don't stop for rooms.
+
+A walk stopped by its watcher rejects natively. The walk's two fallback `catch`es now return when
+the watcher still holds, so a deliberate stop no longer logs "walk refused" and retries twice.
+
 ### A merchant room reports done only once it sells (checked against the server, 2026-10-11)
 
 `cave_snapshot` (`node/logic/cave_of_many_dreams.js`) sends `done: !!r.stock?.sold` for any room

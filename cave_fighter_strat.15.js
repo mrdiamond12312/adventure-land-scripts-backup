@@ -20,6 +20,9 @@ const DORR_SPOT = { map: "main", x: 816, y: 1200 };
 /** How close to Dorr everyone must stand to enter */
 const DORR_SLACK = 80;
 
+/** The only party a fresh run starts with */
+const CAVE_PARTY = [WARRIOR, PRIEST, MAGE];
+
 /** How long a daily-visit answer is trusted */
 const CAVE_VISIT_TTL_MS = 60 * 1000;
 
@@ -262,6 +265,17 @@ async function getCaveVisit() {
   return caveState.visit;
 }
 
+/**
+ * @param {string[]} names
+ * @returns {boolean} whether names are exactly the cave party
+ */
+function isCaveParty(names) {
+  return (
+    names.length === CAVE_PARTY.length &&
+    CAVE_PARTY.every((name) => names.includes(name))
+  );
+}
+
 /** @returns {boolean} whether the whole party is at Dorr */
 function isPartyAtDorr() {
   return partyMems.every((name) => {
@@ -294,12 +308,7 @@ async function enterCave(resuming) {
     if (!isPartyAtDorr())
       return caveLog("at Dorr, waiting on the party");
 
-    const outsiders = parent.party_list.filter(
-      (name) => !partyMems.includes(name),
-    );
-    if (outsiders.length) return caveLog("entry held: outsiders", outsiders);
-
-    if (parent.party_list.length !== partyMems.length)
+    if (!isCaveParty(parent.party_list))
       return caveLog("entry held: party", parent.party_list);
   }
 
@@ -824,6 +833,28 @@ function getNextRequiredCaveObjective(pending) {
 }
 
 /**
+ * The unfinished objective whose room we are walking through, shops aside.
+ * @param {object[]} pending
+ * @returns {object|undefined}
+ */
+function getPassingCaveObjective(pending) {
+  const room = getCaveRoom(character);
+  if (!room) return undefined;
+
+  return pending.find(
+    (objective) =>
+      !isCaveShopObjective(objective) && isInCaveBounds(objective, room.bounds),
+  );
+}
+
+/** @returns {boolean} whether an objective room we are passing has mobs to clear */
+function isPassingCaveFight() {
+  return Boolean(
+    getPassingCaveObjective(getPendingCaveObjectives()) && getCaveTarget(),
+  );
+}
+
+/**
  * Whether we are away from that objective.
  * @param {object} [objective]
  * @returns {boolean}
@@ -950,13 +981,13 @@ async function walkToCaveDestination(
 
     caveRun.walkedAt = Date.now();
 
-    // Stop if the escort falls behind
+    // Stop if the escort falls behind, else to clear an objective room on the way
     const stopWatcher = destination.escort
       ? () => {
           const escort = parent.entities[destination.escort];
           return !escort || distance(character, escort) > CAVE_ESCORT_LEASH;
         }
-      : undefined;
+      : isPassingCaveFight;
 
     // No town, magiport or blink in a run
     const walkOptions = {
@@ -970,6 +1001,9 @@ async function walkToCaveDestination(
 
     await advanceSmartMove(to, walkOptions)
       .catch((error) => {
+        // Stopped by the watcher, not refused
+        if (stopWatcher?.()) return;
+
         caveLog("walk refused", {
           to: destination.name ?? destination.id,
           why: caveWhy(error),
@@ -981,6 +1015,8 @@ async function walkToCaveDestination(
         });
       })
       .catch(async (error) => {
+        if (stopWatcher?.()) return;
+
         caveLog("slow walk refused", {
           to: destination.name ?? destination.id,
           why: caveWhy(error),
@@ -1135,10 +1171,11 @@ async function fightCaveRun() {
 
   const pending = getPendingCaveObjectives();
 
-  // Only hit what is in reach while walking
+  // Only hit what is in reach while walking, unless passing an objective room
   const holding =
-    isCaveFloorDone(pending) ||
-    isAwayFromCaveObjective(getNextRequiredCaveObjective(pending));
+    !getPassingCaveObjective(pending) &&
+    (isCaveFloorDone(pending) ||
+      isAwayFromCaveObjective(getNextRequiredCaveObjective(pending)));
 
   const target = holding ? getCaveTargetInReach() : getCaveTarget();
   if (target && !holding) return engage(target);
@@ -1248,6 +1285,8 @@ async function useCaveRunStrategy() {
  */
 async function useCaveEntryStrategy() {
   if (!hasCaveApi() || isInCave()) return undefined;
+
+  if (!isCaveParty(partyMems)) return caveLog("skipped: party", partyMems);
 
   return approachCave();
 }
