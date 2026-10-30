@@ -2601,12 +2601,24 @@ once a pile had already climbed a level — the opposite of what a keep threshol
 
 `isRareItem` answers "is this worth a primling", nothing more, and it is *also* forced false for a
 targeted climb. Gating the threshold on it therefore conflated three questions. The check now keys
-off `!targeted`, matching `upgradeInv`'s `haveEnoughToSpare`, which never had the rare condition.
+off `!targeted`, matching `upgradeInv`'s gate, which never had the rare condition.
 
 The `+ 3` is the difference from the upgrade side: an upgrade risks one copy, a compound spends
 three for one, so the pile has to clear the threshold *by a set* or the compound lands under it.
 (The old `getKeepThreshold(itemName) + 3 ?? 5` fallback was dead — `+` binds tighter than `??`, and
 `getKeepThreshold` already defaults to 2.)
+
+### The keep gate counts copies at or above the level (`canSpareUpgrade`, 2026-10-30)
+
+The gate used to key off `itemsHighestLevel`: any copy below the line's highest level always
+climbed, and only copies *at* the highest needed `quantity > keep`. One `+9` pouchbow in the bank
+then dragged every new batch toward `+9`, whatever its size. Now a copy at level L upgrades only
+while more than `keep` copies of the line (bag and bank, `countKeyAtOrAbove`) sit at L or above,
+and a compound set needs `keep + 3` (`canSpareCompound`). A batch climbs one level at a time from
+the bottom (`findAndUpgrade` already takes the lowest copy, and pulls take the lowest bank copies
+past the top `keep`), stopping once its survivors fall to `keep`. A pile with no outlier behaves
+as before. `bankStoreRoutine` stores a bag copy the gate blocks instead of holding it as fodder;
+targeted craft climbs skip the gate as before.
 
 ### `map` before `every`
 

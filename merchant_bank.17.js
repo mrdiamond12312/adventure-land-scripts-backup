@@ -811,6 +811,12 @@ async function runBankStoreRoutine(forced) {
 
       const itemKey = getItemKey(item);
       const isEquipable = info.compound || info.upgrade;
+      const isWorkable =
+        isFodder &&
+        (info.compound ? canSpareCompound : canSpareUpgrade)(
+          itemKey,
+          item.level ?? 0,
+        );
 
       if (craftSurplus.has(index)) return true;
 
@@ -825,7 +831,7 @@ async function runBankStoreRoutine(forced) {
 
       return (
         (!shouldIgnore &&
-          (isRare || (isEquipable && (forced || isHighLevel || !isFodder)))) ||
+          (isRare || (isEquipable && (forced || isHighLevel || !isWorkable)))) ||
         (!isEquipable && !isBagSupply(item)) ||
         isStoreable ||
         lastRetrieved.has(itemKey)

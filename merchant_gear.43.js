@@ -114,7 +114,7 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
     chest: "tshirt4",
     pants: "pants",
     ring1: "canopener",
-    ring2: isBusy ? "armorring" : "dexring",
+    ring2: isBusy ? "armorring" : "canopener",
     shoes: "eslippers",
     gloves: "gloves1",
     belt: "sbelt",

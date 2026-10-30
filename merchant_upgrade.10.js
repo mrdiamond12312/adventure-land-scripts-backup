@@ -20,8 +20,11 @@ const KEEP_THRESHOLD = {
   glolipop: 12,
   fallen: 16,
 
+
   // new stuffs!
   cloverstud: 12,
+  horsemanpumpkin: 7,
+  handofmidas: 7,
 
   // lifted later
   fury: 32,
@@ -117,6 +120,38 @@ function countBagKeyAtLevel(itemKey, level) {
       matchesItemKey(item, itemKey) &&
       (item.level ?? 0) === level,
   ).length;
+}
+
+/**
+ * @param {string} itemKey - see getItemKey
+ * @param {number} level
+ * @returns {number} bag and bank copies of the line at `level` or above
+ */
+function countKeyAtOrAbove(itemKey, level) {
+  return [
+    ...character.items,
+    ...getItemBankSlots(getKeyName(itemKey), true, true),
+  ].filter(
+    (item) => matchesItemKey(item, itemKey) && (item.level ?? 0) >= level,
+  ).length;
+}
+
+/**
+ * @param {string} itemKey - see getItemKey
+ * @param {number} level
+ * @returns {boolean} whether the line can risk a copy at `level` on an upgrade
+ */
+function canSpareUpgrade(itemKey, level) {
+  return countKeyAtOrAbove(itemKey, level) > getKeepThreshold(itemKey);
+}
+
+/**
+ * @param {string} itemKey - see getItemKey
+ * @param {number} level
+ * @returns {boolean} whether the line can spend a set at `level` on a compound
+ */
+function canSpareCompound(itemKey, level) {
+  return countKeyAtOrAbove(itemKey, level) >= getKeepThreshold(itemKey) + 3;
 }
 
 /**
@@ -549,17 +584,7 @@ async function findAndCompound() {
           : itemInfo.grades[0] + 2);
     const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
 
-    // Skip if we don't have enough of this item yet: a compound burns three of
-    // the pile for one, so the tail has to survive it
-    const highestLevel = itemsHighestLevel[itemKey];
-    if (
-      !targeted &&
-      highestLevel &&
-      highestLevel.quantity < getKeepThreshold(itemKey) + 3 &&
-      itemLevel === highestLevel.level
-    ) {
-      continue;
-    }
+    if (!targeted && !canSpareCompound(itemKey, itemLevel)) continue;
 
     const scrollSlot = await ensureScroll(`cscroll${itemGrade}`, itemGrade);
     if (scrollSlot === -1) {
@@ -639,17 +664,7 @@ async function findAndUpgrade() {
     const itemKey = getItemKey(item);
     const highestLevel = itemsHighestLevel[itemKey];
 
-    if (!targeted) {
-      const overLeveled =
-        // (item.level > maxUpgrade || itemGrade >= 2) &&
-        item.level >= (highestLevel?.level ?? 0);
-      const haveEnoughToSpare =
-        highestLevel &&
-        highestLevel.quantity > getKeepThreshold(itemKey) &&
-        item.level === highestLevel.level;
-
-      if (overLeveled && !haveEnoughToSpare) continue;
-    }
+    if (!targeted && !canSpareUpgrade(itemKey, itemLevel)) continue;
 
     if ((targeted && !selectedTargeted) || item.level < lowestLevel) {
       lowestLevel = item.level;
