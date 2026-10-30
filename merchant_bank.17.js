@@ -585,40 +585,41 @@ function pickStorableIndices(indices, capacity) {
 // ---------------------------------------------------------------------------
 
 /**
- * Pulls one copy of every item calculateMerchantEquipments can ask for out of
- * the bank: locked first, then highest level. Only the swap that matches our
- * current state ever gets equipped, but the pieces for the others have to be in
- * the bag already — a swap mid-lure or mid-boss can't wait for a bank trip.
+ * Pulls every item calculateMerchantEquipments can ask for out of the bank, as
+ * many copies as one state wears: locked first, then highest level. Only the
+ * swap that matches our current state ever gets equipped, but the pieces for
+ * the others have to be in the bag already — a swap mid-lure or mid-boss can't
+ * wait for a bank trip.
  * @returns {Promise<void>}
  */
 async function retrieveMerchantGear() {
   if (character.ctype !== "merchant" || !bankCache) return;
 
-  const carried = new Set(
-    [
-      ...Object.entries(character.slots)
-        .filter(([slot]) => !slot.startsWith("trade"))
-        .map(([, item]) => item),
-      ...character.items,
-    ]
-      .filter(Boolean)
-      .map((item) => item.name),
-  );
+  const carried = {};
+  for (const item of [
+    ...Object.entries(character.slots)
+      .filter(([slot]) => !slot.startsWith("trade"))
+      .map(([, item]) => item),
+    ...character.items,
+  ])
+    if (item) carried[item.name] = (carried[item.name] ?? 0) + 1;
 
   const targets = [];
-  for (const name of getMerchantGearNames()) {
-    if (carried.has(name)) continue;
+  for (const [name, count] of getMerchantGearCounts()) {
+    const missing = count - (carried[name] ?? 0);
+    if (missing <= 0) continue;
 
     // A locked copy is the one set aside for us on purpose; level only breaks ties
     const best = getItemBankSlots(name, true, true)
+      .filter((slot) => slot.floor)
       .sort(
         (lhs, rhs) =>
-          (lhs.l ? 1 : 0) - (rhs.l ? 1 : 0) ||
-          (lhs.level ?? 0) - (rhs.level ?? 0),
+          (rhs.l ? 1 : 0) - (lhs.l ? 1 : 0) ||
+          (rhs.level ?? 0) - (lhs.level ?? 0),
       )
-      .pop();
+      .slice(0, missing);
 
-    if (best?.floor) targets.push(best);
+    targets.push(...best);
   }
 
   // Retrieved by pack/slot, not by name+level: a same-level unlocked twin would
@@ -628,45 +629,35 @@ async function retrieveMerchantGear() {
   );
 }
 
-/** @returns {Object<string, number>} best level worn, per item name */
-function getEquippedLevels() {
-  const levels = {};
-
-  for (const slot in character.slots) {
-    const item = character.slots[slot];
-    if (!item) continue;
-
-    const level = item.level ?? 0;
-    if (level > (levels[item.name] ?? -1)) levels[item.name] = level;
-  }
-
-  return levels;
-}
-
 /**
- * Inventory indices holding the copy of each merchant-gear item we keep — the
- * highest level one, and only when nothing worn already beats it. Spares stay
- * bankable, so the upgrade rotation still gets them and only what a swap would
- * reach for is pinned to the bag.
+ * Inventory indices holding the copies of each merchant-gear item we keep: the
+ * bag copies among the highest `count` of worn and bag together, worn first on
+ * a tie. Spares stay bankable, so the upgrade rotation still gets them and only
+ * what a swap would reach for is pinned to the bag.
  * @returns {Set<number>}
  */
 function getMerchantGearKeepIndices() {
   if (character.ctype !== "merchant") return new Set();
 
-  const gear = getMerchantGearNames();
-  const worn = getEquippedLevels();
-  const keepers = {};
-
+  const gear = getMerchantGearCounts();
+  const copies = {};
+  for (const slot in character.slots) {
+    const item = character.slots[slot];
+    if (!item || slot.startsWith("trade") || !gear.has(item.name)) continue;
+    (copies[item.name] ??= []).push({ level: item.level ?? 0, worn: true });
+  }
   character.items.forEach((item, index) => {
     if (!item || !gear.has(item.name)) return;
-    const level = item.level ?? 0;
-    // A copy already worn at this level or better needs no spare in the bag
-    if (level <= (worn[item.name] ?? -1)) return;
-    if (level <= (keepers[item.name]?.level ?? -1)) return;
-    keepers[item.name] = { level, index };
+    (copies[item.name] ??= []).push({ level: item.level ?? 0, index });
   });
 
-  return new Set(Object.values(keepers).map((keeper) => keeper.index));
+  const keep = new Set();
+  for (const [name, list] of Object.entries(copies))
+    list
+      .sort((lhs, rhs) => rhs.level - lhs.level || !!rhs.worn - !!lhs.worn)
+      .slice(0, gear.get(name))
+      .forEach((copy) => !copy.worn && keep.add(copy.index));
+  return keep;
 }
 
 // ---------------------------------------------------------------------------
@@ -925,7 +916,7 @@ function isPurgeCandidate(item) {
   const def = G.items[item.name];
   if (!def?.upgrade && !def?.compound) return false;
   return (
-    !isCraftIngredient(item.name) && !getMerchantGearNames().has(item.name)
+    !isCraftIngredient(item.name) && !getMerchantGearCounts().has(item.name)
   );
 }
 

@@ -1709,9 +1709,9 @@ rather than fought through.
   `scareAwayMobs` re-equips it itself before casting.
 - **The bank trip stocks every branch, not the current one.** A swap happens mid-lure or mid-boss,
   where walking to the bank for the missing piece is not an option, so `retrieveMerchantGear`
-  (merchant_bank.17.js, run from `bankLoop` while the duty is held) pulls one copy of the whole
-  table. The union comes from `getMerchantGearNames`, which *evaluates*
-  `calculateMerchantEquipments` over all eight states rather than listing names — which is why the
+  (merchant_bank.17.js, run from `bankLoop` while the duty is held) pulls the whole table, as many
+  copies as one state wears. The union comes from `getMerchantGearCounts`, which *evaluates*
+  `calculateMerchantEquipments` over all sixteen states rather than listing names — which is why the
   three branch inputs became an explicit `state` parameter (`getMerchantGearState` supplies the
   live one). A hand-kept list would drift the first time a slot changed. Per name it takes the
   **locked copy first**, level only breaking ties — a lock is a deliberate "this one is the
@@ -3339,6 +3339,14 @@ ask for `"pants"`, so no swap can ever need a bag copy of it — and `quiver` jo
 Keying by `item.name` rather than `getItemKey` is deliberate here: a titled copy and a plain one
 compete as one line and ties fall to bag order, which can pin the arbitrary one of two `quiver` +7s,
 but switching to the key would pin one of each instead — more slots held, not fewer.
+
+**Gear is counted in copies, not names (2026-10-31).** Both rings ask for `canopener` (ring2 wears
+the `armorring` only on `DUTY.DRAG`), and both earrings ask for `dexearring` or `cloverstud`. With a
+name set, the worn copy on ring1 made `retrieveMerchantGear` think it already had canopener, and
+`getMerchantGearKeepIndices` banked an equal-level bag copy as a spare. So ring2 never found a
+second one and kept the armorring through Mr Green. `getMerchantGearCounts` now gives the most
+copies any one state wears. Retrieval pulls the shortfall. The keep rule pins the bag copies that
+rank in the top `count` of worn plus bag; worn copies win ties, and trade slots don't count as worn.
 
 **`shouldGoChilling` and `canGather` have to agree about space.** `shouldGoChilling` read only the
 skill cooldowns and whether a rod or pickaxe sits in the bag, never inventory room, which was

@@ -83,25 +83,26 @@ function getMerchantAmulet(feelingLucky, isBusy) {
 }
 
 /**
- * The three questions the merchant gear table branches on.
- * @returns {{isArmed: boolean, feelingLucky: boolean, isBusy: boolean}}
+ * The four questions the merchant gear table branches on.
+ * @returns {{isArmed: boolean, feelingLucky: boolean, isBusy: boolean, isDraggingEnt: boolean}}
  */
 function getMerchantGearState() {
   return {
     isArmed: shouldHoldAttackWeapon(),
     feelingLucky: shouldWearLuckGear(),
     isBusy: isLuring() || isOnDuty(DUTY.EVENT),
+    isDraggingEnt: isOnDuty(DUTY.DRAG),
   };
 }
 
 /**
  * Merchant-only
- * @param {{isArmed: boolean, feelingLucky: boolean, isBusy: boolean}} [state]
+ * @param {{isArmed: boolean, feelingLucky: boolean, isBusy: boolean, isDraggingEnt: boolean}} [state]
  *  defaults to what we are actually doing — pass a state to ask what some other
  *  situation would want
  */
 function calculateMerchantEquipments(state = getMerchantGearState()) {
-  const { isArmed, feelingLucky, isBusy } = state;
+  const { isArmed, feelingLucky, isBusy, isDraggingEnt } = state;
 
   return {
     helmet: isBusy ? "xhelmet" : "partyhat",
@@ -114,7 +115,7 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
     chest: "tshirt4",
     pants: "pants",
     ring1: "canopener",
-    ring2: isBusy ? "armorring" : "canopener",
+    ring2: isDraggingEnt ? "armorring" : "canopener",
     shoes: "eslippers",
     gloves: "gloves1",
     belt: "sbelt",
@@ -131,21 +132,27 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
 const MERCHANT_CARRIED_EXTRAS = ["orboftemporal"];
 
 /**
- * Every item calculateMerchantEquipments can ask for
- * @returns {Set<string>}
+ * Every item calculateMerchantEquipments can ask for, with the most copies any
+ * one state wears at once
+ * @returns {Map<string, number>}
  */
-function getMerchantGearNames() {
-  const names = new Set(MERCHANT_CARRIED_EXTRAS);
+function getMerchantGearCounts() {
+  const counts = new Map(MERCHANT_CARRIED_EXTRAS.map((name) => [name, 1]));
 
-  for (let state = 0; state < 8; state++) {
+  for (let state = 0; state < 16; state++) {
     const equipments = calculateMerchantEquipments({
       isArmed: !!(state & 1),
       feelingLucky: !!(state & 2),
       isBusy: !!(state & 4),
+      isDraggingEnt: !!(state & 8),
     });
 
-    for (const name of Object.values(equipments)) names.add(name);
+    const stateCounts = {};
+    for (const name of Object.values(equipments))
+      stateCounts[name] = (stateCounts[name] ?? 0) + 1;
+    for (const [name, count] of Object.entries(stateCounts))
+      counts.set(name, Math.max(counts.get(name) ?? 0, count));
   }
 
-  return names;
+  return counts;
 }
