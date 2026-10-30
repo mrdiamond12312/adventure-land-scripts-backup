@@ -2407,7 +2407,11 @@ One queue and one `exchangeSomething`; the holiday turn-ins used to be a second 
   the existing stack, so a pull never adds a slot for unmarked items.
 - **`holidayNpc`: Jayson (ornament), Faith (mistletoe), Santa (candycane)** are walked to during
   `holidayseason`, computer or not; the rest of the year the same entries go to Xyn. `npc` (the
-  quest items: seashell, leather, gemfragment) is walked to only without a computer.
+  quest items: seashell, leather, gemfragment) is walked to only without a computer. The server's
+  `exchange` checks distance to `G.quests[def.quest]` when the item has a `quest`, else to Xyn
+  (`G.maps.main.exchange`), and skips the check with a computer. The holiday tokens have no
+  `quest`, so they never need their holiday npc; an `isExchangeOpen` gate that held them back out
+  of season was removed (2026-10-30).
 - **A walk takes `DUTY.ERRAND` and stays until `shouldKeepExchanging` fails** (nothing to spare,
   bag nearly full, `invJammed`, or a boss event to join). Exchanging once per trip let the tick's
   `moveHome()` walk him back after every exchange. `massexchange`/`massexchangepp` only shorten
@@ -3632,17 +3636,34 @@ the `whileMoving` surge drain) and midas looting; scare and surge also skip thei
 
 ## Midas loot as a trip sets off (`lootBeforeTrip`, basic_function_loot.48.js, 2026-10-13)
 
-Standing still, the Midas user only loots once `midasLootingThreshold` chests (15) are in view, in
-Midas gear; travelling, `midasLooting` opens everything in reach at once in whatever is worn, so the
-chests are not left behind. In the crypt the count never reaches 15 and the strategy walks between
-junctions and bosses all the time, so its boss chests almost never got the Midas bonus.
+Standing still, the Midas user only loots once `midasLootingThreshold` chests (15) are in reach, in
+Midas gear. In the crypt the count never reaches 15 and the strategy walks between junctions and
+bosses all the time, so its boss chests almost never got the Midas bonus.
 `advanceSmartMove` (both movers go through it) now calls `lootBeforeTrip` unless it is a
 `smartmoveDebug` move such as the boss drag. It forces a Midas loot (`midasLooting(true)`: Midas set
 on, then the opens) when the trip leaves the chests' reach (another map, a named place, or over
-`CHEST_OPEN_REACH`, so a strategy re-issuing its move near the spot does not trigger it), a chest is
-in reach, and no mob targets us, since the set swaps out the armour. It is not awaited, so the trip
-starts at once; the opens go out once the equip lands, while the chests are still in reach, and
-`isLooting` keeps both the travelling loot and the gear loops from cutting in.
+`CHEST_OPEN_REACH`), a chest is in reach, and no mob targets us, since the set swaps out the armour.
+It is not awaited, so the trip starts at once; `isLooting` keeps the gear loops from cutting in.
+
+### The server pays goldm only within 400 (2026-10-30)
+
+The server's `open_chest` still opens a chest past 400 (`simple_distance`, centre to centre), but
+sets `goldm = 1` and flags it `dry`; one older than 8 minutes is `stale`, also `goldm = 1`. The client
+checks no range. `CHEST_OPEN_REACH` was 800, so the Midas user opened every chest 400–800 away with
+no bonus, and the travelling branch opened everything in reach in whatever was worn. Now:
+
+- Reach is 390 by `simple_distance` (`isChestInMidasReach`): the client `distance()` is edge to edge
+  over hitboxes and reads short of the server near the line. `wantsMidasGear` and the standing
+  threshold count only chests in reach, or chests out there would hold the set on with nothing to open.
+- Travelling, a chest in reach puts the set on first; the opens wait for `midasSlotsPending()` to
+  empty, retrying each tick while in reach. Only with a mob on us or a town channel (the equip would
+  cancel it) do they go out plain.
+- `forced` means the chests are being left behind: `lootBeforeTrip`, and every hop/realm move
+  (`hopToServer`, `hopAlone`, `moveToPartyRealm`, `fitPartyRoster`, the `loot-before-hopping` cm). It
+  skips the `penalty_cd` bail (which used to drop the loot right before a hop), tries the set, then
+  opens everything: in reach first, the rest dry, since they would be lost. The other fighters, on a
+  forced call, open the chests out of every Midas user's reach without waiting for the threshold.
+- Chests out of the Midas user's reach are no longer opened by it until something forces the loot.
 
 ## Agitate and cleave share one mp floor (`warriorAoeMpFloor`, 2026-10-13)
 
@@ -4041,13 +4062,24 @@ Server rules, upstream `node/logic/cavalry.js` and `G.items.tracker.cavalry`:
 
 Oneeye (level2w, `grow` spawn of 5): 480 atk × 3/s, range 40. Its `stone` ability stones its
 target every 6.4s for 4s, **at any range**: no moving, attacking, potions or skills. Each oneeye
-runs its own timer, so 3 on us leave ~5% of the time free. That is the limit on pack size: the
-merchant tags only while every tagged one is still `CAVALRY_TAG_GAP` (210) out, calls the moment
-the pack is full or one gets inside it, and then backs away from it within `CAVALRY_ORBIT` of the
-call spot whenever it isn't stoned. `getCavalryPackSize` also caps the pack at what we survive
-in melee for a full stone plus the scare (`totalMobDps × 5s ≤ 80% hp`). Interaction has no stun
-check, so the call still goes out while stoned. When the run ends, releasing the duty lets the
-tick's `scareAwayMobs` shed whatever is left.
+runs its own timer, so 3 on us leave ~5% of the time free.
+
+Since 2026-10-30 the run takes **one** oneeye (`canHoldCavalryMob`: `totalMobDps × 5s ≤ 80% hp`).
+A pack of 2–3 kept the 80 merchant inside 150px: the old retreat stayed within 100px of the call
+spot, and every stone let a mob walk 96px in. Now:
+
+- `hasCavalryReach(getAttackWeaponReach())`, the ent drag's reach, must cover `CAVALRY_TAG_GAP`
+  (veteran_range + 30); the loop skips the run otherwise. `distance()` never exceeds the centre gap,
+  so standing at a centre gap of `reach` is always in reach.
+- `tagCavalryMob` shoots from `min(reach, CAVALRY_KITE_GAP)` until the mob targets us,
+  `clearCavalryCallGap` steps back if it is inside `CAVALRY_TAG_GAP`, then the call goes out.
+- `holdCavalryFight` keeps `CAVALRY_KITE_GAP` (150 + a stone's 96px walk + 20 = 266) from the mob,
+  within `CAVALRY_ORBIT` (280) of the call spot, so the merchant stays inside the call's 320.
+
+Nothing else moves the merchant meanwhile: `hitAndRun` only kites it on `DUTY.EVENT`, and the
+snipe, scare and stand all skip on `DUTY.CAVALRY`. Interaction has no stun check, so the call still
+goes out while stoned. When the run ends, releasing the duty lets the tick's `scareAwayMobs` shed
+whatever is left.
 
 Unverified: oneeye's chase speed (`G.monsters.oneeye.charge` is absent from upstream design data)
 and the cavalry's real damage. A rough estimate from their stats is ~200k/s against oneeye armor,

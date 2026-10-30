@@ -1,17 +1,20 @@
-// Cavalry: tag level 3+ oneeyes from range, then call the cavalry down on them.
+// Cavalry: tag one level 3+ oneeye from range, then call the cavalry down on it.
 
 /** Server cavalry rules: range, min_level, max_targets, duration, veteran_range, newcomer_level */
 const CAVALRY = G.items.tracker.cavalry;
 const CAVALRY_MOB = "oneeye";
 const CAVALRY_MAP = "level2w";
-/** Centre gap a mob keeps from the merchant while tagging, past veteran_range */
-const CAVALRY_TAG_GAP = CAVALRY.veteran_range + 60;
 /** Centre gap past veteran_range we keep other high-level players to */
 const CAVALRY_GUARD_MARGIN = 20;
-/** Furthest a tagged mob may be from us at call time, inside the call range */
-const CAVALRY_CALL_REACH = CAVALRY.range - 40;
-/** How far we retreat from the call spot, so the pack stays within its range */
-const CAVALRY_ORBIT = 100;
+/** Least centre gap we tag from; inside veteran_range we guard the mob ourselves */
+const CAVALRY_TAG_GAP = CAVALRY.veteran_range + 30;
+/** Centre gap kept after the call, a stone's walk past veteran_range */
+const CAVALRY_KITE_GAP =
+  CAVALRY.veteran_range +
+  (G.monsters[CAVALRY_MOB].speed * G.conditions.stoned.duration) / 1000 +
+  CAVALRY_GUARD_MARGIN;
+/** Furthest we kite from the call spot */
+const CAVALRY_ORBIT = CAVALRY.range - 40;
 const CAVALRY_STEP = 60;
 /** Longest the tagging may run before the call goes out */
 const CAVALRY_TAG_WINDOW_MS = 10_000;
@@ -217,22 +220,22 @@ function getCavalryTagged() {
 }
 
 /**
- * Most mobs we could outlast in melee for CAVALRY_MIN_TANK_S, up to the
- * server's target cap.
- * @param {Object[]} candidates - nearest first
- * @returns {number} 0 when not even one
+ * @param {Object} mob
+ * @returns {boolean} whether we outlast it in melee for CAVALRY_MIN_TANK_S
  */
-function getCavalryPackSize(candidates) {
-  let size = 0;
-  const cap = Math.min(CAVALRY.max_targets, candidates.length);
+function canHoldCavalryMob(mob) {
+  return (
+    totalMobDps([mob], character) * CAVALRY_MIN_TANK_S <=
+    character.hp * CAVALRY_TANK_HP_SHARE
+  );
+}
 
-  for (let n = 1; n <= cap; n++) {
-    const dps = totalMobDps(candidates.slice(0, n), character);
-    if (dps * CAVALRY_MIN_TANK_S > character.hp * CAVALRY_TANK_HP_SHARE) break;
-    size = n;
-  }
-
-  return size;
+/**
+ * @param {number} reach - from getAttackWeaponReach
+ * @returns {boolean} whether it covers CAVALRY_TAG_GAP
+ */
+function hasCavalryReach(reach) {
+  return reach >= CAVALRY_TAG_GAP;
 }
 
 /** @returns {boolean} whether we can't move, attack or use skills */
@@ -256,20 +259,21 @@ function assertCavalryAlive() {
 }
 
 /**
- * Walks to where the mob sits in reach, CAVALRY_TAG_GAP out.
+ * Walks to where the mob sits in reach, as far out as it allows.
  * @param {string} mobId
  * @param {number} reach - attack reach, as `distance()` measures it
  */
 async function positionForCavalryTag(mobId, reach) {
   let mob = parent.entities[mobId];
+  const standGap = Math.min(reach, CAVALRY_KITE_GAP);
+  const minGap = Math.max(CAVALRY_TAG_GAP, standGap - CAVALRY_STEP / 4);
 
   while (mob && !mob.target) {
     assertCavalryAlive();
 
     const gap = cavalryCentreGap(character, mob);
-    if (distance(character, mob) <= reach && gap >= CAVALRY_TAG_GAP) return;
+    if (distance(character, mob) <= reach && gap >= minGap) return;
 
-    const standGap = CAVALRY_TAG_GAP + CAVALRY_STEP / 4;
     const scale = standGap / Math.max(gap, 1);
     const standPoint = {
       x: mob.real_x + (character.real_x - mob.real_x) * scale,
@@ -290,47 +294,70 @@ async function positionForCavalryTag(mobId, reach) {
 }
 
 /**
- * Tags mobs from range until the pack is full, the first one closes in, or
- * nothing else is in reach.
- * @param {number} packSize
+ * Shoots the mob until it targets us.
+ * @param {string} mobId
  * @param {number} reach - attack reach, as `distance()` measures it
- * @returns {Promise<Object[]>} the tagged mobs
+ * @returns {Promise<Object>} the mob
  */
-async function tagCavalryPack(packSize, reach) {
+async function tagCavalryMob(mobId, reach) {
   const deadline = Date.now() + CAVALRY_TAG_WINDOW_MS;
-  const shotAt = new Set();
 
   while (Date.now() < deadline) {
     assertCavalryAlive();
 
-    const tagged = getCavalryTagged();
-    if (tagged.length >= packSize) return tagged;
-    if (tagged.some((mob) => cavalryCentreGap(character, mob) < CAVALRY_TAG_GAP))
-      return tagged;
+    const mob = parent.entities[mobId];
+    if (!mob || !isCavalryMob(mob)) throw new Error("Oneeye lost before the tag.");
+    if (mob.target === character.name) return mob;
+    if (mob.target) throw new Error("Oneeye took another target.");
 
-    if (!isCavalryDisabled() && !is_on_cooldown("attack")) {
-      const next = getCavalryCandidates().find(
-        (mob) =>
-          !shotAt.has(mob.id) &&
-          distance(character, mob) <= reach &&
-          cavalryCentreGap(character, mob) >= CAVALRY_TAG_GAP &&
-          cavalryCentreGap(character, mob) <= CAVALRY_CALL_REACH,
-      );
-
-      if (next) {
-        shotAt.add(next.id);
-        await withTimeout(attack(next), 300).catch(() => {});
-      } else if (tagged.length) return tagged;
+    if (!isCavalryDisabled()) {
+      if (
+        cavalryCentreGap(character, mob) < CAVALRY_TAG_GAP ||
+        distance(character, mob) > reach
+      )
+        await positionForCavalryTag(mobId, reach);
+      else if (!is_on_cooldown("attack"))
+        await withTimeout(attack(mob), 300).catch(() => {});
     }
 
     await sleep(CAVALRY_TICK);
   }
 
-  return getCavalryTagged();
+  throw new Error("Oneeye never took the tag.");
 }
 
 /**
- * Spot one step away that keeps the pack furthest off, within CAVALRY_ORBIT
+ * Steps away while a mob sits inside `gap`.
+ * @param {{x: number, y: number}} anchor - stays within CAVALRY_ORBIT of it
+ * @param {Object[]} mobs
+ * @param {number} gap - centre gap to keep
+ */
+function stepAwayFromCavalry(anchor, mobs, gap) {
+  if (isCavalryDisabled() || character.moving) return;
+  if (mobs.every((mob) => cavalryCentreGap(character, mob) >= gap)) return;
+
+  const step = getCavalryRetreatStep(anchor, mobs);
+  if (step) move(step.x, step.y).catch(() => {});
+}
+
+/**
+ * Backs off past CAVALRY_TAG_GAP.
+ * @param {Object} mob
+ */
+async function clearCavalryCallGap(mob) {
+  const anchor = { x: character.real_x, y: character.real_y };
+  const deadline = Date.now() + CAVALRY_TAG_WINDOW_MS;
+
+  while (cavalryCentreGap(character, mob) < CAVALRY_TAG_GAP) {
+    assertCavalryAlive();
+    if (Date.now() > deadline) throw new Error("Couldn't open a gap to call.");
+    stepAwayFromCavalry(anchor, [mob], CAVALRY_TAG_GAP);
+    await sleep(CAVALRY_TICK);
+  }
+}
+
+/**
+ * Spot one step away that keeps the mobs furthest off, within CAVALRY_ORBIT
  * of the call spot.
  * @param {{x: number, y: number}} callSpot
  * @param {Object[]} mobs
@@ -360,7 +387,7 @@ function getCavalryRetreatStep(callSpot, mobs) {
 }
 
 /**
- * Backs off between stones while the cavalry works, for the call's duration.
+ * Kites the mob for the call's duration.
  * @param {{x: number, y: number}} callSpot
  */
 async function holdCavalryFight(callSpot) {
@@ -371,13 +398,9 @@ async function holdCavalryFight(callSpot) {
 
     const tagged = getCavalryTagged();
     if (!tagged.length) return;
-    if (isCavalryInDanger()) throw new Error("Too hurt to hold the pack.");
+    if (isCavalryInDanger()) throw new Error("Too hurt to hold the oneeye.");
 
-    if (!isCavalryDisabled() && !character.moving) {
-      const step = getCavalryRetreatStep(callSpot, tagged);
-      if (step) move(step.x, step.y).catch(() => {});
-    }
-
+    stepAwayFromCavalry(callSpot, tagged, CAVALRY_KITE_GAP);
     await sleep(CAVALRY_TICK);
   }
 }
@@ -386,30 +409,33 @@ async function holdCavalryFight(callSpot) {
 async function runCavalryOneeye() {
   await ensureDartgun();
   const reach = getAttackWeaponReach();
+  if (!hasCavalryReach(reach))
+    throw new Error(`Reach ${Math.round(reach)} can't tag past veteran_range.`);
   assertCavalryAlive();
 
   await untilDoneOrDead(advanceSmartMove({ map: CAVALRY_MAP }));
   assertCavalryAlive();
 
-  const candidates = getCavalryCandidates();
-  const packSize = getCavalryPackSize(candidates);
-  if (!packSize) throw new Error("No level 3+ oneeye we could hold.");
+  const target = getCavalryCandidates().find(canHoldCavalryMob);
+  if (!target) throw new Error("No level 3+ oneeye we could hold.");
 
-  await positionForCavalryTag(candidates[0].id, reach);
-  const tagged = await tagCavalryPack(packSize, reach);
-  if (!tagged.length) throw new Error("No oneeye took the tag.");
+  await positionForCavalryTag(target.id, reach);
+  const mob = await tagCavalryMob(target.id, reach);
+  await clearCavalryCallGap(mob);
 
   const callSpot = { x: character.real_x, y: character.real_y };
   const reply = await callCavalry();
-  log(`Cavalry on ${tagged.length} oneeye: ${reply.message ?? "coming"}`);
+  log(`Cavalry on a level ${mob.level} oneeye: ${reply.message ?? "coming"}`);
 
   await holdCavalryFight(callSpot);
 }
 
 /** Scheduler, same shape as dragEnt: one run once the cooldown is up and a mob is surely ready. */
 async function cavalryOneeyeLoop() {
+  const knownReach = getAttackWeaponReach();
   if (
     !hasCavalryTracker() ||
+    (knownReach && !hasCavalryReach(knownReach)) ||
     msUntilCavalryRun() > 0 ||
     isOnDuty() ||
     isAwaitingParcel() ||

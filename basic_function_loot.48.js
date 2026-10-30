@@ -62,8 +62,8 @@ const POTION_REQUEST_AT = 200;
 const LOOTING_LIMIT = 15;
 var isLooting = false;
 
-/** How far from a chest midasLooting opens it */
-const CHEST_OPEN_REACH = 800;
+/** Farthest a chest pays the opener's goldm; past 400 the server opens it dry */
+const CHEST_OPEN_REACH = 390;
 
 const MIDAS_GEAR = {
   helmet: "wcap",
@@ -86,12 +86,35 @@ function midasLootingThreshold() {
   return LOOTING_LIMIT * modifier;
 }
 
+/**
+ * @param {object} chest
+ * @param {object} [opener]
+ * @returns {boolean} whether opening it pays the opener's goldm
+ */
+function isChestInMidasReach(chest, opener = character) {
+  return simple_distance(chest, opener) <= CHEST_OPEN_REACH;
+}
+
+/** @returns {object[]} chests whose opening pays our goldm */
+function midasChestsInReach() {
+  return Object.values(parent.chests).filter((chest) =>
+    isChestInMidasReach(chest),
+  );
+}
+
+/** @returns {boolean} whether any monster targets us */
+function isMonsterTargetingUs() {
+  return Object.values(parent.entities).some(
+    (mob) => mob.type === "monster" && mob.target === character.name,
+  );
+}
+
 /** @returns {boolean} whether to wear MIDAS_GEAR */
 function wantsMidasGear() {
   return (
     MIDAS_CHARACTER.includes(character.name) &&
     !character.cave &&
-    Object.keys(parent.chests).length >= midasLootingThreshold()
+    midasChestsInReach().length >= midasLootingThreshold()
   );
 }
 
@@ -143,18 +166,24 @@ async function lootCaveChests(chests) {
   }
 }
 
+/**
+ * Opens chests, the Midas user's in reach in MIDAS_GEAR.
+ * @param {boolean} [forced] - the chests are being left behind
+ */
 async function midasLooting(forced = false) {
   const chests = Object.values(parent.chests);
 
   // A cave chest pays the shared purse at face value, so no gear changes it
   if (character.cave) return lootCaveChests(chests);
 
+  const isMidasUser = MIDAS_CHARACTER.includes(character.name);
+
   // Early exit: do NOT touch isLooting here
   if (
     (isLooting && !forced) ||
     !chests.length ||
     // Only the midas swap spends penalty_cd; opening a chest costs nothing
-    (character.s.penalty_cd && MIDAS_CHARACTER.includes(character.name))
+    (character.s.penalty_cd && isMidasUser && !forced)
   )
     return;
 
@@ -171,14 +200,23 @@ async function midasLooting(forced = false) {
     (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
 
   try {
-    if (MIDAS_CHARACTER.includes(character.name)) {
-      if (chests.length >= lootingThreshold || isTravelling || forced) {
-        if (!forced && !isTravelling && midasSlotsPending().length) return;
+    if (isMidasUser) {
+      const inReach = chests.filter((chest) => isChestInMidasReach(chest));
+      const isDue =
+        forced ||
+        (isTravelling
+          ? inReach.length > 0
+          : inReach.length >= lootingThreshold);
+      if (!isDue) return;
+      if (!forced && !isTravelling && midasSlotsPending().length) return;
 
-        isLooting = true;
-        shouldReset = true;
+      isLooting = true;
+      shouldReset = true;
 
-        if (forced)
+      if (inReach.length && midasSlotsPending().length) {
+        const canWearMidas =
+          !character.c.town && (forced || !isMonsterTargetingUs());
+        if (canWearMidas) {
           await withTimeout(
             equipBatch(
               { ...MIDAS_GEAR },
@@ -186,20 +224,20 @@ async function midasLooting(forced = false) {
             ),
             500,
           );
-
-        let breakFlag = lootingThreshold * 2;
-        for (const chest of chests) {
-          if (breakFlag-- <= 0) break;
-          if (distance(chest, character) <= CHEST_OPEN_REACH) {
-            promises.push(parent.open_chest(chest.id));
-          }
+          if (!forced && midasSlotsPending().length) return;
         }
       }
-    } else if (
-      !MIDAS_CHARACTER.includes(character.name) &&
-      partyMidasUsers.length
-    ) {
-      if (chests.length >= lootingThreshold && (isTravelling || forced)) {
+
+      const toOpen = forced
+        ? [...inReach, ...chests.filter((chest) => !inReach.includes(chest))]
+        : inReach;
+      let breakFlag = lootingThreshold * 2;
+      for (const chest of toOpen) {
+        if (breakFlag-- <= 0) break;
+        promises.push(parent.open_chest(chest.id));
+      }
+    } else if (partyMidasUsers.length) {
+      if (forced || (isTravelling && chests.length >= lootingThreshold)) {
         isLooting = true;
         shouldReset = true;
 
@@ -209,7 +247,7 @@ async function midasLooting(forced = false) {
 
           if (
             partyMidasUsers.every(
-              (player) => distance(chest, player) > CHEST_OPEN_REACH,
+              (player) => !isChestInMidasReach(chest, player),
             )
           ) {
             promises.push(parent.open_chest(chest.id));
@@ -245,14 +283,13 @@ function lootBeforeTrip(destination) {
   const isLeavingReach =
     typeof destination !== "object" ||
     (!!destination.map && destination.map !== character.map) ||
-    distance(character, destination) > CHEST_OPEN_REACH;
-  const isChestInReach = Object.values(parent.chests).some(
-    (chest) => distance(chest, character) <= CHEST_OPEN_REACH,
-  );
-  const isTargeted = Object.values(parent.entities).some(
-    (mob) => mob.type === "monster" && mob.target === character.name,
-  );
-  if (!isLeavingReach || !isChestInReach || isTargeted) return;
+    simple_distance(character, destination) > CHEST_OPEN_REACH;
+  if (
+    !isLeavingReach ||
+    !midasChestsInReach().length ||
+    isMonsterTargetingUs()
+  )
+    return;
 
   midasLooting(true).catch((e) => console.warn(e));
 }

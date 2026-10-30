@@ -12,7 +12,8 @@ var exchangeFetchAt = 0;
 /**
  * Exchange queue, tried in order — the first entry with enough stock wins.
  * `npc` is where to walk without a computer, only the quest items need one.
- * `holidayNpc` is walked to during holidayseason, computer or not.
+ * `holidayNpc` is walked to during holidayseason, computer or not; out of
+ * season the token goes through Xyn like the rest.
  * `keep` is held back from the bag total.
  * @type {{name: string, quantity: number, keep?: number, npc?: string, holidayNpc?: string}[]}
  */
@@ -51,12 +52,6 @@ function hasExchangeStock(entry) {
     0,
   );
   return owned >= entry.quantity + (entry.keep ?? 0);
-}
-
-/** @returns {boolean} whether this entry's npc is around to take the exchange */
-function isExchangeOpen(entry) {
-  if (entry.holidayNpc && !entry.npc) return !!server.status["holidayseason"];
-  return true;
 }
 
 /**
@@ -114,10 +109,9 @@ async function prepareExchangeSlot(entry) {
  * @returns {object|undefined}
  */
 function getActiveExchangeEntry() {
-  const open = EXCHANGE_QUEUE.filter((entry) => isExchangeOpen(entry));
   return (
-    open.find((entry) => getExchangeSlot(entry) !== -1) ??
-    open.find((entry) => hasExchangeStock(entry))
+    EXCHANGE_QUEUE.find((entry) => getExchangeSlot(entry) !== -1) ??
+    EXCHANGE_QUEUE.find((entry) => hasExchangeStock(entry))
   );
 }
 
@@ -202,10 +196,7 @@ function getExchangeStockSlots(entry) {
 /** @returns {object|undefined} the first entry only the bank can cover */
 function getExchangeEntryToFetch() {
   return EXCHANGE_QUEUE.find(
-    (entry) =>
-      isExchangeOpen(entry) &&
-      !canSpareExchange(entry) &&
-      hasExchangeStock(entry),
+    (entry) => !canSpareExchange(entry) && hasExchangeStock(entry),
   );
 }
 
@@ -245,7 +236,6 @@ async function exchangeSomething() {
   let entry;
   let slot = -1;
   for (const candidate of EXCHANGE_QUEUE) {
-    if (!isExchangeOpen(candidate)) continue;
     slot = await prepareExchangeSlot(candidate);
     if (slot === -1) continue;
     entry = candidate;
