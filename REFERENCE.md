@@ -4720,3 +4720,17 @@ the loss of one piece.
 
 Not modelled: invis's 1.25×, sugarrush, mentalburst kill refunds (cast opportunistically by
 `getMentalBurstKill`, the score doesn't count them), mentalburst not proccing burn in the mp split.
+
+**Stars handicap (2026-10-31).** The stars mainhand's +20 frequency is about 0.1–0.2 more attacks/s.
+At a 2000 stack, each extra hit is credited +2000 flat, so the model picked double stars by a hair,
+while in play it was a dps loss: no quickstab, and the stars' low item attack. `ROGUE_STARS_HANDICAP`
+(10%) cuts a stars pair's damage score in the weapon-pair pick only. The fuel pick is unhandicapped,
+because double firestars really does double the burn chance. If stars still win where they shouldn't,
+raise the handicap.
+
+**Rogue targets the focus (2026-10-31).** `aimAt` used to `change_target` the mob in reach when the
+focus was out of it. `hitAndRun` follows `get_target()`, so with a non-priority boss out of reach the
+rogue stood hitting whatever mob was on the priest. Now, like the warrior, it targets the focus and
+`getRogueCast` swings at a mob in reach on the way. While the focus is out of reach, the gear loop and
+the quickstab skill loop (both keyed on `get_target()` in range) idle. The follow-up still goes out
+with the attack in `getRogueCast`.

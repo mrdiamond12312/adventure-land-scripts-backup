@@ -103,13 +103,13 @@ function planFight(target) {
 }
 
 /**
- * Targets what to swing at, else the out-of-reach pick: hitAndRun closes the
- * gap on get_target().
+ * Targets the focus, so hitAndRun closes on it; getRogueCast swings at a mob
+ * in reach on the way.
  * @param {Object} [target]
  */
 function aimAt(target) {
-  const { focus, attackTarget } = planFight(target);
-  if (focus) change_target(attackTarget ?? focus);
+  const { focus } = planFight(target);
+  if (focus) change_target(focus);
 }
 
 /** @returns {(() => Promise)|undefined} the swing to take now, if any */

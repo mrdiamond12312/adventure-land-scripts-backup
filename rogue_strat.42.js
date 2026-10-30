@@ -39,6 +39,8 @@ function rogueLandChance(skill, stats, target) {
 }
 
 const ROGUE_GEAR_SWAP_MIN_GAIN = 0.01;
+/** Damage a stars pair gives up in the damage pick */
+const ROGUE_STARS_HANDICAP = 0.1;
 const BURN_FUEL_HORIZON_S = 30;
 const BURN_REFUEL_SHARE = 0.9;
 const STACK_HORIZON_S = 30;
@@ -177,7 +179,7 @@ function rogueFuelScore(model) {
 const lastRoguePicks = { damage: {}, fuel: {} };
 
 /** Best weapon pair; a stars mainhand pairs only with stars (server cuts item attack to a third) */
-function pickRogueWeapons(score, needsBurn, incumbents) {
+function pickRogueWeapons(score, needsBurn, incumbents, starsHandicap = 0) {
   const copies = getGearCopies(ROGUE_WEAPON_SLOTS);
   const names = Object.keys(copies).filter(
     (name) => !ROGUE_SKIPPED_WEAPONS.includes(name),
@@ -193,10 +195,13 @@ function pickRogueWeapons(score, needsBurn, incumbents) {
       if (needsBurn && mainhand.ability !== "burn" && offhand.ability !== "burn")
         continue;
       const picks = { mainhand, offhand };
+      const handicap = mainhand.wtype === "stars" ? starsHandicap : 0;
       pairs.push({
         gear: { mainhand: mainName, offhand: offName },
         picks,
-        score: score({ ...character, ...projectStatsWith(picks) }, picks),
+        score:
+          score({ ...character, ...projectStatsWith(picks) }, picks) /
+          (1 - handicap),
       });
     }
   }
@@ -229,7 +234,12 @@ function pickRogueGear(target, kind, needsBurn) {
     ),
     ...lastRoguePicks[kind],
   };
-  const weapons = pickRogueWeapons(score, needsBurn, incumbents);
+  const weapons = pickRogueWeapons(
+    score,
+    needsBurn,
+    incumbents,
+    kind === "damage" ? ROGUE_STARS_HANDICAP : 0,
+  );
   const rest = pickGearByScore(
     getGearSlots(ROGUE_WEAPON_SLOT),
     score,
