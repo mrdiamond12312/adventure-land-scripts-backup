@@ -4396,26 +4396,31 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   supply (count × hp ÷ `respawn`) is far beyond what the party can kill (spiders 540k/min, ghosts
   0.9–1.6M/min, boars 576k/min), so the party's damage is the limit, and the overstock of
   embercoal (133 vs 18–38) comes from time spent on plantoids, not a better rate. While the
-  round's `witchGatherPlan` slot is a `WITCH_RANGER_KINDS` kind (ghost only),
+  round's `witchGatherPlan` slot is a `WITCH_RANGER_KINDS` kind (spider, ghost),
   `dynamicParty` picks `witch`: the ranger (RANGER2 on EUII, RANGER1 elsewhere) replaces the
-  warrior, whose single-target swings waste the dense packs, and the priest tanks. Embercoal slots
-  keep the default party, since plantoids hit for 640. Spider and wolfie (Dark Hound) slots
-  went back to the default warrior party on 2026-11-01 at the user's request.
-- **Spot** (`getWitchGatherSpot`): `at` pins a point; `between` takes the middle of those mobs'
-  spawn centres; both are moved to a walkable point. Spider is pinned at main 1328,-80, the
-  user's pick among the spider, bigbird and scorpion spawns (their computed middle, about
-  1290,-21, was close but not the user's choice). Bigbirds and scorpions there become
-  targets only once they hit one of ours. Wolfie stands between its two winterland spawns
-  (about 90,-2033). The other kinds use their first spawn.
-- **Hold** (`isHeld`, spider and wolfie): `getHoldSpot` (basic_function_kiting.47.js) hands the
-  gather spot and its mtype to `getFarmMobOrbit` in place of `mapX`/`mapY`/`mobsToFarm` while
-  the party is on that map. The tanker then circles the spot while a mob is on it, and walks a
-  stray one back, the same way it holds the farm spawn. Ghost and plantoid slots chase as before. The preset ranks just below `cave` and
+  warrior, whose single-target swings waste the dense packs, and the priest tanks. Spiders also
+  walk slowly (speed 24), so a melee warrior loses time reaching each one. Embercoal and wolfie
+  (Dark Hound) slots keep the default warrior party: plantoids hit for 640, and wolfie went to
+  the warrior on 2026-11-01 at the user's request. The preset ranks just below `cave` and
   above Horseman, the same order `useWitchGatheringStrategy` takes, and it also stands aside for
   an open crypt. A swap costs one `deployCharacters` cycle (≤30s plus login), once per kind change.
   `isRangerWitchSlot` runs from `dynamicParty()`'s load-time call, before the witch section's
   `const`s exist, so it only touches hoisted functions (`getWitchRoundKey` is one for that reason).
   Luck was already covered: `shouldWearLuckGear` swaps in luck gear for the killing blow.
+- **Spot** (`getWitchGatherSpot`): `at` pins a point; `between` takes the middle of those mobs'
+  spawn centres; both are moved to a walkable point. Spider is pinned at main 1328,-80, the
+  user's pick among the spider, bigbird and scorpion spawns. Their computed middle, about
+  1290,-21, is not walkable (the nearest clear point is 1228,-39). Bigbirds and scorpions
+  there become targets only once they hit one of ours. Wolfie stands between its two
+  winterland spawns (about 90,-2033). The other kinds use their first spawn.
+- **Hold** (`isHeld`, spider and wolfie): `getHoldSpot` (basic_function_kiting.47.js) hands the
+  gather spot and its mtype to `getFarmMobOrbit` in place of `mapX`/`mapY`/`mobsToFarm` while
+  the party is on that map. The tanker, whichever class holds the role, then circles the spot
+  while a mob is on it and walks a stray one back, the same way it holds the farm spawn. On held
+  spots `getWitchGatherTarget` ranks mobs by distance to the spot, not to the character. A pick
+  nearest the character pulled the party deeper into the spawn with every kill, and since
+  spiders are always in sight from the spot, the walk back never triggered. Ghost and plantoid
+  slots chase as before.
 - **Merchant** (merchant_witch.36.js): `attendWitchGathering` comes first in `merchantStrategies`.
   It takes the `WITCH` duty (over an event duty) and stays within 200 of a fighter. The fighters'
   10s handoff in basic_function.7.js then sends him every ingredient, since none is on its keep

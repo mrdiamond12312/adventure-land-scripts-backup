@@ -739,8 +739,8 @@ const WITCH_GATHER_ARRIVAL_DISTANCE = 150;
 /** How near the gathering spot a mob on one of ours is worth stopping for: the spawn area plus kiting room */
 const WITCH_GATHER_DEFEND_DISTANCE = 400;
 
-/** @returns {Object|undefined} near the gathering spot, the mob on one of ours; else the targeted or nearest gathering mob */
-function getWitchGatherTarget({ mtype, spot }) {
+/** @returns {Object|undefined} near the gathering spot, the mob on one of ours; else the targeted gathering mob, else the nearest, to the spot when it is held */
+function getWitchGatherTarget({ mtype, spot, isHeld }) {
   const isAlive = (mob) => !!mob && !mob.dead && mob.type === "monster";
 
   if (distance(character, spot) <= WITCH_GATHER_DEFEND_DISTANCE) {
@@ -753,8 +753,12 @@ function getWitchGatherTarget({ mtype, spot }) {
 
   const current = get_targeted_monster();
   if (isAlive(current) && current.mtype === mtype) return current;
+  if (!isHeld) return get_nearest_monster({ type: mtype });
 
-  return get_nearest_monster({ type: mtype });
+  const center = { x: spot.x, y: spot.y };
+  return Object.values(parent.entities)
+    .filter((mob) => isAlive(mob) && mob.mtype === mtype)
+    .sort((lhs, rhs) => distance(lhs, center) - distance(rhs, center))[0];
 }
 
 /** @returns {Promise<object|undefined>} the outcome, while the Cipher is gathering */

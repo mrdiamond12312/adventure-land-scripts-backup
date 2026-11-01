@@ -265,7 +265,9 @@ async function fitPartyRoster(plan) {
   if (plan.realm !== getCurrentServer()) return moveToPartyRealm(plan);
 
   const first = fighters
-    .filter((id) => getRealmBeat(id).realm === plan.realm && members.includes(id))
+    .filter(
+      (id) => getRealmBeat(id).realm === plan.realm && members.includes(id),
+    )
     .sort()[0];
   if (first !== character.name) return;
   for (const id of missing.slice(extras.length)) {
@@ -456,7 +458,7 @@ const DYNAMIC_PARTY_PRESETS = {
 };
 
 /** Gather kinds whose mobs the ranger's multishot clears faster than the warrior */
-const WITCH_RANGER_KINDS = ["gloomfeather"];
+const WITCH_RANGER_KINDS = ["verdantspore", "gloomfeather", "frostscale"];
 
 /** @returns {boolean} whether this round's gathering slot wants the witch preset */
 function isRangerWitchSlot(status = server.status) {
