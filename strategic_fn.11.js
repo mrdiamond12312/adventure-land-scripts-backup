@@ -2436,9 +2436,12 @@ function hasTemporalOrb() {
   );
 }
 
+/** Mp kept after a surge, so the attacks right after it can still be paid */
+const SURGE_MP_PADDING = 175;
+
 /** @returns {number} mp a surge needs on hand */
 function surgeMpNeeded() {
-  return G.skills["temporalsurge"].mp;
+  return G.skills["temporalsurge"].mp + SURGE_MP_PADDING;
 }
 
 /** @returns {number} mp held back for the surge */

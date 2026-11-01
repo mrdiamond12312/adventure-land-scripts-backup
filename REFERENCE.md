@@ -3600,7 +3600,7 @@ its own: the leech check fails and `getBaitedBoss` returns nothing.
 
 Skill gates used to add a flat 1000 for temporal surge (the ranger's `SURGE_MP_OFFSET`, the
 warrior's cleave at 1720, the priest's curse at 1600, the mage's reflection at 1000), even with no orb of temporal or with surge on its 60s cooldown. They
-now add `surgeMpReserve()`, which is `surgeMpNeeded()` (the surge's 1000 cost, which is also its own gate) only when a dead mob
+now add `surgeMpReserve()`, which is `surgeMpNeeded()` (the surge's 1000 cost plus `SURGE_MP_PADDING` 175, which is also its own gate) only when a dead mob
 is queued in `pendingSurgeSpots` or the miniboss hunt owns the fight (`isHuntingSpecialMob`,
 from the `tickOwnerStrategy` that `selectFightTarget` records), we carry or wear the orb, and
 surge is off cooldown. The hunt holds the mp from the walk onward, so the pool is already there
@@ -3608,6 +3608,12 @@ at the kill. Otherwise
 it is 0. Short mp no longer counts as one of a spot's `MAX_ATTEMPTS`: `drainPendingSurges` waits
 while the reserve lets mp climb back, and drops the spot only once its respawn ETA has passed. The reserve and the surge's gate are the same number, so the skills never stop short of what the
 surge needs.
+
+**Surge padding (2026-11-01).** The gate used to be exactly 1000, so a surge at 1050 mana left the
+warrior at 50, with attacks still spending 86 each and nothing to stop them until the next drink
+(one every 2s, pushed back by any `penalty_cd`). That showed up as 0 mana at full hp. `surgeMpNeeded`
+now adds `SURGE_MP_PADDING` (175). The reserve every class holds for a pending surge grows with it,
+so cleave, agitate and the other gates keep the same headroom.
 
 The wait has to be short, because the strategy chain may walk him off (or town him out) past
 `KITE_RANGE`, which drops the spot. So `pickRestoreSkill` drinks mp while `mp < surgeMpReserve()`
