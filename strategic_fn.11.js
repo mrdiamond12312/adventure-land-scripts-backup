@@ -1431,6 +1431,17 @@ function hasLuck(item) {
   return (item_info(item)?.luck ?? 0) > 0;
 }
 
+/**
+ * @param {string[]} names - weapons a swap may ride on
+ * @returns {boolean} whether a weapon is held and every held weapon is one of `names`
+ */
+function isHoldingOnly(names) {
+  const held = [getServerSlot("mainhand"), getServerSlot("offhand")].filter(
+    Boolean,
+  );
+  return held.length > 0 && held.every(({ name }) => names.includes(name));
+}
+
 /** @returns {boolean} whether an impact swap may ride this shot at all */
 function canSwapUntilImpact() {
   return (
@@ -1516,14 +1527,11 @@ function swapUntilImpact(targetToAttack, equips, { freeSlot, restore } = {}) {
  */
 function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
   const characterAtkCycleMs = 1000 / character.frequency;
-  const mainhand = getServerSlot("mainhand");
   const offhand = getServerSlot("offhand");
   const shouldUseCandyCanes =
     canSwapUntilImpact() &&
     !character.s.sugarrush &&
-    (!swapFrom ||
-      swapFrom.includes(offhand?.name) ||
-      swapFrom.includes(mainhand?.name));
+    (!swapFrom || isHoldingOnly(swapFrom));
 
   if (!shouldUseCandyCanes) return;
 
@@ -1569,10 +1577,11 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
  * @returns {Promise|undefined} the swap promise, or undefined if not swapping
  */
 function maybePaleclawSwap(targetToAttack, { swapFrom, restore }) {
-  const isRidingWeapon =
-    swapFrom.includes(getServerSlot("mainhand")?.name) ||
-    swapFrom.includes(getServerSlot("offhand")?.name);
-  if (!canSwapUntilImpact() || character.s.frenzied || !isRidingWeapon)
+  if (
+    !canSwapUntilImpact() ||
+    character.s.frenzied ||
+    !isHoldingOnly(swapFrom)
+  )
     return;
 
   const paleclaw = findMaxLevelItem("paleclaw");

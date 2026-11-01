@@ -1440,6 +1440,14 @@ The warrior's weapons decide which swap runs. Canes ride `fireblade` / `rapier`.
 rides the pull set (`vhammer` / `ololipop`), only in pull strategy (the gate is at its
 `maybeImpactSwap` call).
 
+**Every held weapon must be on the list (`isHoldingOnly`, 2026-11-01).** The check used to pass
+when either hand matched. `equipBatch` sends the mainhand first and leaves out slots the penalty
+budget can't cover, so a set change often leaves a mixed pair for a cycle or more: vhammer plus a
+leftover fireblade. That fireblade let the canes swap in over the vhammer. On a fast cycle
+(under 600ms, so only the mainhand swaps) it repeated every shot: each restore spent the budget on
+the vhammer again, so the fireblade stayed. An empty hand is ignored, so rapier with no offhand
+still swaps. With no `swapFrom` at all (the rogue), the swap rides any weapon.
+
 **No swap takes off a luck item.** `swapUntilImpact` refuses when any slot it would change holds
 an item with luck (`hasLuck`, from `item_info`), because loot luck is rolled at the kill, which is
 the impact. That covers the canes and the paleclaw alike. It replaces the candy swap's hard-coded
