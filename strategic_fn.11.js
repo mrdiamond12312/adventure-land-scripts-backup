@@ -1426,6 +1426,11 @@ function projectileEtaMs(target) {
   );
 }
 
+/** @param {Object} [item] - an item, or just `{name}` */
+function hasLuck(item) {
+  return (item_info(item)?.luck ?? 0) > 0;
+}
+
 /** @returns {boolean} whether an impact swap may ride this shot at all */
 function canSwapUntilImpact() {
   return (
@@ -1448,6 +1453,11 @@ function canSwapUntilImpact() {
  * @returns {Promise|undefined} the swap promise, or undefined if not swapping
  */
 function swapUntilImpact(targetToAttack, equips, { freeSlot, restore } = {}) {
+  // Loot luck rolls at the kill, which is the impact
+  const swappedSlots = [...equips.map(({ slot }) => slot), freeSlot];
+  if (swappedSlots.some((slot) => slot && hasLuck(getServerSlot(slot))))
+    return;
+
   const characterAtkCycleMs = 1000 / character.frequency;
   const swapPenaltyMs = equips.length * EQUIP_PENALTY_MS;
   const restorePenaltyMs =
@@ -1513,8 +1523,7 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
     !character.s.sugarrush &&
     (!swapFrom ||
       swapFrom.includes(offhand?.name) ||
-      swapFrom.includes(mainhand?.name)) &&
-    offhand?.name !== "mshield";
+      swapFrom.includes(mainhand?.name));
 
   if (!shouldUseCandyCanes) return;
 
@@ -1556,20 +1565,14 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
  * @param {Object} targetToAttack - the entity being attacked
  * @param {Object} options
  * @param {string[]} options.swapFrom - held weapons the swap rides on
- * @param {string[]} options.amuletFrom - amulets worth swapping off
  * @param {Function} [options.restore] - re-equips the real amulet after the hold; omitted leaves it to currentStrategy
  * @returns {Promise|undefined} the swap promise, or undefined if not swapping
  */
-function maybePaleclawSwap(targetToAttack, { swapFrom, amuletFrom, restore }) {
+function maybePaleclawSwap(targetToAttack, { swapFrom, restore }) {
   const isRidingWeapon =
     swapFrom.includes(getServerSlot("mainhand")?.name) ||
     swapFrom.includes(getServerSlot("offhand")?.name);
-  if (
-    !canSwapUntilImpact() ||
-    character.s.frenzied ||
-    !isRidingWeapon ||
-    !amuletFrom.includes(getServerSlot("amulet")?.name)
-  )
+  if (!canSwapUntilImpact() || character.s.frenzied || !isRidingWeapon)
     return;
 
   const paleclaw = findMaxLevelItem("paleclaw");

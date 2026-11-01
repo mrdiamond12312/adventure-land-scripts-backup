@@ -232,6 +232,9 @@ async function oldAdvanceSmartMove(
         clearInterval(scareInterval);
         return;
       } else {
+        // Not magiportable now, so the warp vest may take the trip
+        await useWarp(props);
+
         const checkingMageMagiportInterval = setInterval(async () => {
           let mageEntityUpdate = parent.caracAL
             ? parent.caracAL.siblings.includes(MAGE)

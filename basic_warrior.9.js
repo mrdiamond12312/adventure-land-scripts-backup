@@ -162,11 +162,8 @@ function getWarriorCast() {
         maybeImpactSwap(attackTarget, {
           candy: { swapFrom: CANDY_SWAP_WEAPON_ALLOW_LIST },
           paleclaw:
-            currentStrategy === usePullStrategies
-              ? {
-                  swapFrom: PALECLAW_SWAP_WEAPON_ALLOW_LIST,
-                  amuletFrom: [PALECLAW_SWAP_FROM_AMULET],
-                }
+            currentStrategy === usePullStrategies && !isCleaveDue()
+              ? { swapFrom: PALECLAW_SWAP_WEAPON_ALLOW_LIST }
               : undefined,
         }),
       ].filter(Boolean),

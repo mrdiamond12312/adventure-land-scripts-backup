@@ -127,22 +127,32 @@ function canAffordSwap(slots) {
   );
 }
 
-/**
- * Every check cleave makes before it swings, its cooldown and in-flight locks aside.
- * @param {string} strategyName - "pull" or "normal"
- * @returns {Object|undefined} the cleave weapon, when cleave would swing now
- */
 /** @returns {number} mp the warrior needs for an AOE pull, cleave or agitate alike */
 function warriorAoeMpFloor() {
   return G.skills["cleave"].mp + 400 + surgeMpReserve();
 }
 
+/**
+ * Every check cleave makes before it swings, its cooldown and in-flight locks aside.
+ * @param {string} strategyName - "pull" or "normal"
+ * @returns {Object|undefined} the cleave weapon, when cleave would swing now
+ */
 function planCleave(strategyName) {
+  if (!canAffordSwap(2) || character.s.penalty_cd || character.cc >= 100)
+    return;
+  return getSafeCleaveWeapon(strategyName);
+}
+
+/**
+ * planCleave without its timing checks.
+ * @param {string} strategyName - "pull" or "normal"
+ * @returns {Object|undefined} the cleave weapon, when cleave is safe and worth a swing
+ */
+function getSafeCleaveWeapon(strategyName) {
   // Aggro at Dorr fails the cave entry
   const isWaitingAtDorr = isPreparingCave && !character.cave;
   if (
     isWaitingAtDorr ||
-    !canAffordSwap(2) ||
     character.mp < warriorAoeMpFloor() ||
     Object.keys(character.c).length
   )
@@ -159,8 +169,6 @@ function planCleave(strategyName) {
 
   if (
     !cleaveWeapon ||
-    character.s.penalty_cd ||
-    character.cc >= 100 ||
     mobsList.some((mob) => MELEE_IGNORE_LIST.includes(mob.mtype)) ||
     mobsList.length === 0
   )
@@ -242,17 +250,21 @@ function mobsLeftAfterCleave(mobs) {
   );
 }
 
-const PALECLAW_SWAP_FROM_AMULET = "stramulet";
+/** @returns {boolean} whether a cleave that will swing comes off cooldown before the next attack */
+function isCleaveDue() {
+  return (
+    ms_to_next_skill("cleave") < 1000 / character.frequency &&
+    !!getSafeCleaveWeapon(
+      currentStrategy === usePullStrategies ? "pull" : "normal",
+    )
+  );
+}
 
-/**
- * Whether cleave puts the paleclaw on right after the cast: each hit still in
- * flight rolls frenzy off the amulet worn when it lands.
- * @param {Object} restoreItems - the gear cleave puts back on
- * @returns {boolean}
- */
+/** @returns {boolean} whether cleave puts the paleclaw on for its hits in flight */
 function shouldPaleclawTail(restoreItems) {
   return (
-    restoreItems.amulet === PALECLAW_SWAP_FROM_AMULET &&
+    !!restoreItems.amulet &&
+    !hasLuck({ name: restoreItems.amulet }) &&
     !character.s.frenzied &&
     findMaxLevelItem("paleclaw") !== -1 &&
     Object.values(parent.entities).some((mob) => {
@@ -290,11 +302,9 @@ async function warriorCleave(strategyName) {
       cleaveSet.length ? sendEquips(cleaveSet) : undefined,
     ]),
     withTimeout(use_skill("cleave"), 2500),
-    // The penalty_cd bail on the restore keeps it on past the farthest hit
     isPaleclawTail
       ? sendEquips([{ num: findMaxLevelItem("paleclaw"), slot: "amulet" }])
       : undefined,
-    // The cleave weapon only has to be on when the server runs cleave
     equipBatch(restoreItems, { preventKeySnatch: false }),
   ]).finally(() => {
     isCleaving = false;

@@ -94,15 +94,46 @@ function markDeployed(id) {
   set(`deployedAt:${id}`, Date.now());
 }
 
+/** {id, realm, at}: the login in flight, whoever started it */
+const DEPLOY_SLOT_LS_KEY = "deploySlot";
+
+/** A login that has not beat by then is given up on */
+const DEPLOY_LOGIN_TIMEOUT_MS = 30_000;
+
+/** @returns {boolean} whether no login is in flight: the last one beat from its target realm, or timed out */
+function isDeploySlotFree() {
+  const slot = get(DEPLOY_SLOT_LS_KEY);
+  if (!slot || Date.now() - slot.at >= DEPLOY_LOGIN_TIMEOUT_MS) return true;
+  const beat = get(`${REALM_BEAT_LS_PREFIX}${slot.id}`);
+  return (
+    (beat?.at ?? 0) > slot.at && (!slot.realm || beat.realm === slot.realm)
+  );
+}
+
+/** Resolves once no login is in flight */
+async function waitForDeploySlot() {
+  while (!isDeploySlotFree()) await sleep(1000);
+}
+
 /**
- * Deploys a character under caracAL, at most once per cooldown whoever asks.
+ * @param {string} id - the character about to log in
+ * @param {string} [realm] e.g. "EUII", the realm it logs into when known
+ */
+function claimDeploySlot(id, realm) {
+  set(DEPLOY_SLOT_LS_KEY, { id, realm, at: Date.now() });
+}
+
+/**
+ * Deploys a character under caracAL, at most once per cooldown whoever asks,
+ * and only when no other login is in flight: the server confirms one at a time.
  * @param {string} id
  * @param {string} [realm] e.g. "EUII", ours when omitted
  * @returns {boolean} whether it was deployed
  */
 function deployCharacterOnce(id, realm) {
-  if (isRecentlyDeployed(id)) return false;
+  if (isRecentlyDeployed(id) || !isDeploySlotFree()) return false;
 
+  claimDeploySlot(id, realm);
   markDeployed(id);
   parent.caracAL.deploy(
     id,
@@ -111,6 +142,9 @@ function deployCharacterOnce(id, realm) {
   );
   return true;
 }
+
+/** Set while a deployCharacters pass waits its turn for the login slot */
+let isDeployingRoster = false;
 
 async function deployCharacters() {
   //// Deploy characters which arent active
@@ -140,13 +174,17 @@ async function deployCharacters() {
           parent.caracAL.shutdown(id);
         });
 
-    //the server only confirms one login at a time per account - deploying
-    //these in the same tick gets all but one rejected as characters_unconfirmed
-    for (const id of [...roster, partyMerchant].filter(
-      (id) => !parent.caracAL.siblings.includes(id),
-    )) {
-      if (deployCharacterOnce(id, id === partyMerchant ? null : realm))
-        await sleep(1000);
+    if (isDeployingRoster) return;
+    isDeployingRoster = true;
+    try {
+      for (const id of [...roster, partyMerchant]) {
+        if (parent.caracAL.siblings.includes(id)) continue;
+        await waitForDeploySlot();
+        if (!parent.caracAL.siblings.includes(id))
+          deployCharacterOnce(id, id === partyMerchant ? null : realm);
+      }
+    } finally {
+      isDeployingRoster = false;
     }
   } else if (!parent.caracAL && !character.controller) {
     const hosted = SEPARATE_MERCHANT_WINDOW
@@ -187,8 +225,11 @@ async function moveToPartyRealm(plan) {
   isMovingToPartyRealm = true;
   markDeployed(character.name);
   await midasLooting(true);
-  if (parent.caracAL) parent.caracAL.deploy(null, `SR_${plan.realm}`);
-  else change_server(plan.region, plan.id);
+  if (parent.caracAL) {
+    await waitForDeploySlot();
+    claimDeploySlot(character.name, plan.realm);
+    parent.caracAL.deploy(null, `SR_${plan.realm}`);
+  } else change_server(plan.region, plan.id);
 }
 
 /**
@@ -213,8 +254,9 @@ async function fitPartyRoster(plan) {
   const slot = extras.indexOf(character.name);
   if (slot >= 0) {
     const replacement = missing[slot];
+    // Stays on until its replacement got the login slot
+    if (replacement && !deployCharacterOnce(replacement, plan.realm)) return;
     console.warn(`Leaving the roster for ${plan.realm}`, replacement ?? "");
-    if (replacement) deployCharacterOnce(replacement, plan.realm);
     await midasLooting(true);
     parent.caracAL.shutdown();
     return;
@@ -226,8 +268,10 @@ async function fitPartyRoster(plan) {
     .filter((id) => getRealmBeat(id).realm === plan.realm && members.includes(id))
     .sort()[0];
   if (first !== character.name) return;
-  for (const id of missing.slice(extras.length))
-    if (deployCharacterOnce(id, plan.realm)) await sleep(1000);
+  for (const id of missing.slice(extras.length)) {
+    await waitForDeploySlot();
+    deployCharacterOnce(id, plan.realm);
+  }
 }
 
 // Party presets

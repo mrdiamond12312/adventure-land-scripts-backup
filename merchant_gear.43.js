@@ -129,7 +129,122 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
  * the bag has to hold one even though no equipment state asks for it.
  * @type {string[]}
  */
-const MERCHANT_CARRIED_EXTRAS = ["orboftemporal"];
+const MERCHANT_CARRIED_EXTRAS = ["orboftemporal", "warpvest"];
+
+const WARP_CONFIG = {
+  /** Same-map trips shorter than this walk: the vest regains about a charge an hour */
+  MIN_SAME_MAP_DISTANCE: 600,
+  /** Charges left on the vest for manual use */
+  RESERVED_CHARGES: 3,
+  /** Wait for the warp's landing before giving up on it */
+  ARRIVAL_TIMEOUT_MS: 3000,
+};
+
+let isWarping = false;
+
+/**
+ * Carried warp vest with a charge to spare beyond the reserved ones.
+ * @returns {number|undefined} its bag slot, -1 when it is the one worn, undefined when none qualifies
+ */
+function findSpareWarpVest() {
+  const { charge } = G.items.warpvest;
+  const hasSpareCharge = (item) =>
+    item?.name === "warpvest" &&
+    (item.charges ?? 0) >= charge * (WARP_CONFIG.RESERVED_CHARGES + 1);
+
+  if (hasSpareCharge(getServerSlot("chest"))) return -1;
+  const num = character.items.findIndex((_, i) =>
+    hasSpareCharge(getServerItem(i)),
+  );
+  return num >= 0 ? num : undefined;
+}
+
+/**
+ * Whether the server would take a warp there: never into or out of the bank,
+ * never into an instance, and far enough to be worth a charge.
+ * @param {Object} position - destination with `map`, `x`, `y`
+ * @returns {boolean}
+ */
+function canWarpTo(position) {
+  const fromMap = G.maps[character.map];
+  const toMap = G.maps[position?.map];
+  return (
+    !!toMap &&
+    !toMap.instance &&
+    !toMap.ignore &&
+    character.map !== "jail" &&
+    !!fromMap?.mount === !!toMap.mount &&
+    Number.isFinite(position.x) &&
+    Number.isFinite(position.y) &&
+    (position.map !== character.map ||
+      distance(character, position) >= WARP_CONFIG.MIN_SAME_MAP_DISTANCE)
+  );
+}
+
+/** @returns {Promise<Object>} the warp's new_map, rejecting on timeout (a dampened warp never lands) */
+function waitForWarpLanding() {
+  return new Promise((resolve, reject) => {
+    const handler = (data) => {
+      if (data.effect !== "blink") return;
+      cleanup();
+      resolve(data);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("warp landing timeout"));
+    }, WARP_CONFIG.ARRIVAL_TIMEOUT_MS);
+    const cleanup = () => {
+      clearTimeout(timer);
+      parent.socket.off("new_map", handler);
+    };
+    parent.socket.on("new_map", handler);
+  });
+}
+
+/**
+ * Merchant-only: warps to the destination off a carried warp vest's spare
+ * charge, swapping the vest in for the cast only.
+ * @param {Object} position - destination with `map`, `x`, `y`
+ * @returns {Promise<boolean>} whether he landed there
+ */
+async function useWarp(position) {
+  if (
+    character.ctype !== "merchant" ||
+    isWarping ||
+    typeof position !== "object" ||
+    !canWarpTo(position) ||
+    character.mp < G.skills.warp.mp ||
+    is_on_cooldown("warp") ||
+    character.c.town
+  )
+    return false;
+
+  const vestNum = findSpareWarpVest();
+  if (vestNum === undefined) return false;
+
+  isWarping = true;
+  try {
+    const landing = waitForWarpLanding();
+    landing.catch(() => undefined);
+
+    const isSwapping = vestNum >= 0;
+    const isWearingChest = !!getServerSlot("chest");
+    if (isSwapping) sendEquips([{ num: vestNum, slot: "chest" }]);
+    const cast = use_skill("warp", [position.x, position.y, position.map]);
+    // The vest only has to be on when the server takes the charge
+    if (isSwapping && isWearingChest)
+      sendEquips([{ num: vestNum, slot: "chest" }]);
+
+    await withTimeout(cast);
+    await landing;
+    return true;
+  } catch (e) {
+    console.warn("Warp failed:", e);
+    return false;
+  } finally {
+    isWarping = false;
+  }
+}
 
 /**
  * Every item calculateMerchantEquipments can ask for, with the most copies any

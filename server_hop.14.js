@@ -43,6 +43,8 @@ async function hopToServer(serverRegion, serverIdentifier) {
 
     setPartyRealm(serverRegion, serverIdentifier);
     markDeployed(character.name);
+    await waitForDeploySlot();
+    claimDeploySlot(character.name, `${serverRegion}${serverIdentifier}`);
     parent.caracAL.deploy(null, `SR_${serverRegion}${serverIdentifier}`);
   } else {
     send_cm(partyMems, "loot-before-hopping");
@@ -62,6 +64,8 @@ async function hopAlone(serverRegion, serverIdentifier, reason) {
 
   if (parent.caracAL) {
     markDeployed(character.name);
+    await waitForDeploySlot();
+    claimDeploySlot(character.name, `${serverRegion}${serverIdentifier}`);
     parent.caracAL.deploy(null, `SR_${serverRegion}${serverIdentifier}`);
   } else change_server(serverRegion, serverIdentifier);
 }

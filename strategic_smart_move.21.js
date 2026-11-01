@@ -464,6 +464,26 @@ class StrategicSmartMove {
   }
 
   /**
+   * @param {Object} toPosition - resolved destination with `map`, `x`, `y`
+   * @returns {boolean} whether the mage is parked at the destination with mp to port us
+   */
+  canMagiportTo(toPosition) {
+    const mageInfo = this.getMageInfo();
+    return (
+      !!mageInfo &&
+      mageInfo.map === toPosition.map &&
+      distance(toPosition, mageInfo) <
+        SMART_MOVE_CONFIG.MAGIPORT_MAGE_NEAR_DEST_DISTANCE &&
+      distance(character, mageInfo) >=
+        SMART_MOVE_CONFIG.MAGIPORT_MIN_WORTH_DISTANCE &&
+      mageInfo.mp >
+        parent.G.skills["magiport"].mp *
+          SMART_MOVE_CONFIG.MAGIPORT_MP_RESERVE_CASTS &&
+      !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
+    );
+  }
+
+  /**
    * Recurring check (1s) that asks the mage for a magiport once it is parked
    * near the destination.
    * @param {number} session - the smartMove session this loop belongs to
@@ -474,20 +494,7 @@ class StrategicSmartMove {
 
     if (SMART_MOVE_CONFIG.LOOP_DEBUG) console.warn("magiport tick", session);
 
-    const mageInfo = this.getMageInfo();
-
-    if (
-      mageInfo &&
-      mageInfo.map === toPosition.map &&
-      distance(toPosition, mageInfo) <
-        SMART_MOVE_CONFIG.MAGIPORT_MAGE_NEAR_DEST_DISTANCE &&
-      distance(character, mageInfo) >=
-        SMART_MOVE_CONFIG.MAGIPORT_MIN_WORTH_DISTANCE &&
-      mageInfo.mp >
-        parent.G.skills["magiport"].mp *
-          SMART_MOVE_CONFIG.MAGIPORT_MP_RESERVE_CASTS &&
-      !MAGIPORT_IGNORE_LIST.includes(character.map) // Avoid magiporting in ignore maps
-    ) {
+    if (this.canMagiportTo(toPosition)) {
       this.isDoingSomethingMagical = true;
       try {
         if (character.ctype === "rogue" && character.s.invis) {
@@ -913,6 +920,24 @@ class StrategicSmartMove {
     isAdvanceSmartMoving = true;
     this.isSmartMoving = true;
     smartmoveDebug = options.smartmoveDebug;
+
+    // A magiport outranks the warp vest
+    const shouldWarp =
+      character.ctype === "merchant" &&
+      !options.avoidMaps?.includes(toPosition.map) &&
+      !(options.useMagiport && this.canMagiportTo(toPosition));
+    if (shouldWarp && (await useWarp(toPosition))) {
+      if (session !== this.smartMoveSession) return;
+      if (distance(toPosition, character) < SMART_MOVE_CONFIG.ARRIVED_DISTANCE) {
+        this.cleanUp(session);
+        return;
+      }
+      pathFindingResult = this.pathfinderGetPath(
+        toPosition,
+        options.speed,
+        options.avoidMaps,
+      );
+    }
 
     if (!Array.isArray(pathFindingResult) || !pathFindingResult.length) {
       try {

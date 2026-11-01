@@ -1346,7 +1346,7 @@ Classes call `maybeImpactSwap(target, { candy, paleclaw })`, which runs at most 
 shot: the canes when they apply, else the paleclaw (see "Paleclaw" further down). Both swaps are
 class-agnostic, and each takes an optional `restore`. Their timing lives in `swapUntilImpact`.
 The rogue passes only `candy` for now. Giving him the paleclaw means adding a `paleclaw` entry
-with his own `swapFrom` / `amuletFrom`, plus a restore, since his strategy loop can leave the
+with his own `swapFrom`, plus a restore, since his strategy loop can leave the
 swapped item on after a kill. Swap to candy canes so they are equipped when the projectile *lands*, then swap back. It works
 because the server reads `attacker.a.sugarrush` in `complete_attack`, at impact, from whatever is
 equipped then. Only `sugarrush` and `frenzy` are read there. crit, critdamage, explosion, blast,
@@ -1438,22 +1438,44 @@ It shows up as `character.s.frenzied`.
 
 The warrior's weapons decide which swap runs. Canes ride `fireblade` / `rapier`. The paleclaw
 rides the pull set (`vhammer` / `ololipop`), only in pull strategy (the gate is at its
-`maybeImpactSwap` call), and only swaps off `stramulet`. `snring` (tanking) and `spookyamulet` (loot luck is rolled at the kill, which is the
-impact) are never swapped off.
+`maybeImpactSwap` call).
+
+**No swap takes off a luck item.** `swapUntilImpact` refuses when any slot it would change holds
+an item with luck (`hasLuck`, from `item_info`), because loot luck is rolled at the kill, which is
+the impact. That covers the canes and the paleclaw alike. It replaces the candy swap's hard-coded
+`mshield` name, which has luck 8 and was the only luck offhand. Today only `spookyamulet` blocks
+the paleclaw. The cleave tail checks the amulet it restores. The paleclaw used to swap off
+`stramulet` only, and it hardly ever ran: pull with vhammer is when the warrior tanks, and a
+targeted tank wears `snring`.
 
 **Cleave tail.** Cleave is not instant. Each mob gets its own `momentum` projectile (320 px/s, or
 the cleave weapon's own projectile), so over the 160 range the hits land up to ~500ms after the
 cast. Mana is spent at the cast, so `mpxamulet` goes on before `use_skill("cleave")`. The paleclaw
 is sent right after it, which the server handles straight after cleave, ahead of every hit still
 in flight. There is no hold. After a cleave the client sees 480–600ms of `penalty_cd`, and
-`equipBatch` bails until it clears, so `stramulet` cannot come back before the farthest hit lands.
+`equipBatch` bails until it clears, so the real amulet cannot come back before the farthest hit
+lands.
 A simulation at 75–85ms ping and 1.33 attacks/s (2026-11-01) found the hold changed neither the
 catch rate (100% of cleave hits) nor the attack delay. The paleclaw is sent on its own rather
 than in the restore batch. In the batch it is sliced off first when the budget is short, which
 catches only ~50% of hits. The cost of sending it alone is that its 120ms uses up the weapon
 restore's budget, so attacks fired with the cleave axe still in hand go from ~0.32 to ~0.48 per
-cleave. The attack swap adds no delay at that ping either. Its restore clears the client
-around ping×2 + 240ms after the shot, well inside the 752ms cycle.
+cleave. The attack swap adds no attack delay at that ping either.
+
+**Cleave goes first (`isCleaveDue`).** A 20s simulation of a pull fight with both running (attacks,
+cleaves and the gear loop) showed the attack swap starving cleave. Its restore leaves the client
+seeing `penalty_cd` until ~410ms after each shot. `planCleave` needs no visible penalty and more
+than 240 + ping/2 ms before the next attack, which left about a 60ms window per cycle. Cleaves fell
+from 13.3 to 9.1 per 20s at 1.33 attacks/s, and to almost none at 2.0. The few cleaves that did
+land came late in the cycle with no budget to restore the weapons, so the next attack went out
+with the axe and no ololipop (1.5 → 9.1 per 20s). Skipping the paleclaw attack swap when cleave
+comes off cooldown before the next attack brings cleaves back to 13.3, with wrong-weapon attacks at
+3.9 per 20s. It also gives more frenzy rolls overall (~73 cleave hits plus ~9 attack hits, versus
+~50 + ~21), because a cleave hits several mobs. `isCleaveDue` only gives way to a cleave that will
+swing. It asks `getSafeCleaveWeapon`, which is `planCleave` without its timing checks
+(`canAffordSwap(2)`, visible `penalty_cd`, `cc ≥ 100`). Those three are the ones the swap itself
+disturbs. A cleave that is ready but refused for safety, mp or mobs no longer keeps the paleclaw
+swap off.
 
 ## Field reports must fail closed (`entFieldReport`)
 
@@ -4650,6 +4672,25 @@ from ≤ N candidates, ours cracks 99–100% for: N=8, 2.0 mixes; N=32, 2.8; N=6
   so a strike waits and a flush falls back to a mix that can't crack. Any one recipe needs at most
   5 of a kind, plus the reserve.
 
+## One login at a time (`deploySlot`, party_plan.37.js, 2026-11-01)
+
+The server confirms one login per account at a time. When it rejects a login, caracAL's patched
+`disconnect` redeploys the character, so the process exits and the coordinator restarts it. The
+coordinator's `restart_backoff` (1s, doubling to 60s) resets on the child's `"connected"`. The
+child sends that as soon as the process starts, before it has logged into the game, so a rejected
+login retries about once a second forever. With three deploys 1s apart (a mrgreen roster swap, or
+a cold start) the bots keep stealing the slot from each other, and the log fills with a new
+`log_init` pid every second until one happens to get through.
+
+Every login under caracAL now claims a shared slot (`deploySlot`: `{id, realm, at}`, in the
+shared localStorage like `deployedAt:`): `deployCharacterOnce`, `moveToPartyRealm`,
+`hopToServer` and `hopAlone`. The slot frees when that character's realm heartbeat is newer
+than the claim and comes from the target realm (the old process can beat once more before it is
+killed), or after `DEPLOY_LOGIN_TIMEOUT_MS`. `deployCharacterOnce` refuses while the slot is
+busy, and the deploy loops wait on it (`waitForDeploySlot`) instead of sleeping 1s. An off-roster
+fighter stays on until its replacement got the slot. Heartbeats come every 5s, so each login adds
+up to ~5s before the next one starts.
+
 ## Trick or Treat disconnects (`knockNextDoor`, 2026-10-22)
 
 Characters got kicked while knocking. In spookytown the 24px door front sat 4–9px below the
@@ -4776,3 +4817,29 @@ rogue stood hitting whatever mob was on the priest. Now, like the warrior, it ta
 `getRogueCast` swings at a mob in reach on the way. While the focus is out of reach, the gear loop and
 the quickstab skill loop (both keyed on `get_target()` in range) idle. The follow-up still goes out
 with the attack in `getRogueCast`.
+
+## Warp vest (`useWarp`, merchant_gear.43.js, 2026-11-01)
+
+The merchant's `smartMove` (caracAL) and `oldAdvanceSmartMove` (native) warp off a carried
+`warpvest` when the mage can't magiport him. In `smartMove` that is `!canMagiportTo(toPosition)`.
+In the native mover it is the branch the magiport check didn't take. Server facts
+(kaansoral/adventureland_mongodb @ `93bb1c7`, live client 18285):
+
+- **Charges.** A warp costs `G.items.warpvest.charge` (1) from the item worn in `chest`. The
+  `slot` check runs before the skill, so the vest has to be worn at the cast. It only refills
+  with a computer: +1 per hour, and once above 1 charge only 4% of those ticks add one. The
+  tooltip shows `charges / charge × 100`%, so "over 100%" means 2+ charges.
+  `RESERVED_CHARGES: 1` keeps one charge for manual use, so auto-warp needs 2+ and spends at most
+  about one charge an hour. That is why short same-map hops walk (`MIN_SAME_MAP_DISTANCE`).
+- **Swap.** Vest on → `warp` → old chest back, all sent in one tick. The server takes the charge
+  while the vest is on and runs the jump 200ms later from the stored `blink` condition, whatever
+  is worn by then. Equipping the same bag slot twice swaps back, because the first equip left the
+  old chest in that slot.
+- **Destination.** Always pass `[x, y, map]`. With an incomplete target the client warps to a
+  random spawn somewhere in the world. `in` is an instance name, which equals the map name only
+  for shared maps, so instanced maps (crypt etc.) are out. The server refuses a jump across
+  `mount` (the bank maps have `mount: true`), so nothing warps into or out of the bank.
+  `safe_xy_nearby` snaps the spot to a nearby walkable point, and `smartMove` walks the rest.
+- **Landing.** Arrival comes as `new_map` with effect `"blink"` (`transport_player_to`). While he
+  is `dampened` (a `fieldgen0` field) the jump is cancelled and nothing lands, so `useWarp` waits
+  `ARRIVAL_TIMEOUT_MS` and falls back to walking.
