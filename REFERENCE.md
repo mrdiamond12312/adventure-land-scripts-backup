@@ -1519,6 +1519,12 @@ keeps the 2-equip bar and the attack swap runs. `character.frequency` is live, s
 (shorter cycles) turn the room off by themselves. Fireblade (normal strategy) keeps 240, because
 the candy swap already squeezes cleave there and 360 left it at 0 cleaves.
 
+**Below the cleave mp floor the attack swap runs anyway (2026-11-01).** Room only matters to a
+cleave that can swing. Under `warriorAoeMpFloor()`, `getSafeCleaveWeapon` refuses it, so the swap
+has no cleave to delay. Its own penalty is still checked against the attack cycle by
+`swapUntilImpact`. The worst case is mp crossing the floor just after a swap: that one cleave
+waits a cycle.
+
 The numbers come from a DPS model (`dps_sim` in the session scratchpad), with these assumptions:
 - Damage is item attack × str/20, so weapons compare by summed item attack: pull set +7/+10 =
   130.8, bataxe +8 = 129.8.

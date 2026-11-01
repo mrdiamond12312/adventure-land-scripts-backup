@@ -164,7 +164,7 @@ function getWarriorCast() {
           paleclaw:
             currentStrategy === usePullStrategies &&
             !isCleaveDue() &&
-            !hasCleaveRoom()
+            (!hasCleaveRoom() || character.mp < warriorAoeMpFloor())
               ? { swapFrom: PALECLAW_SWAP_WEAPON_ALLOW_LIST }
               : undefined,
         }),
