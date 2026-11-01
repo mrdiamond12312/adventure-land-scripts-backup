@@ -4406,7 +4406,11 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   user's pick among the spider, bigbird and scorpion spawns (their computed middle, about
   1290,-21, was close but not the user's choice). Bigbirds and scorpions there become
   targets only once they hit one of ours. Wolfie stands between its two winterland spawns
-  (about 90,-2033). The other kinds use their first spawn. The preset ranks just below `cave` and
+  (about 90,-2033). The other kinds use their first spawn.
+- **Hold** (`isHeld`, spider and wolfie): `getHoldSpot` (basic_function_kiting.47.js) hands the
+  gather spot and its mtype to `getFarmMobOrbit` in place of `mapX`/`mapY`/`mobsToFarm` while
+  the party is on that map. The tanker then circles the spot while a mob is on it, and walks a
+  stray one back, the same way it holds the farm spawn. Ghost and plantoid slots chase as before. The preset ranks just below `cave` and
   above Horseman, the same order `useWitchGatheringStrategy` takes, and it also stands aside for
   an open crypt. A swap costs one `deployCharacters` cycle (≤30s plus login), once per kind change.
   `isRangerWitchSlot` runs from `dynamicParty()`'s load-time call, before the witch section's
