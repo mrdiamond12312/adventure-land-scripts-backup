@@ -278,9 +278,10 @@ async function visitAnniversaryPlayer() {
 
 // Witch's Cipher
 
+/** The spot: `at`, else the middle of the `between` mobs' spawns on `map`, else the first `mtype` spawn */
 const WITCH_GATHER_SPOTS = {
-  verdantspore: { mtype: "spider", map: "main" },
-  frostscale: { mtype: "wolfie", map: "winterland" },
+  verdantspore: { mtype: "spider", map: "main", at: { x: 1328, y: -80 } },
+  frostscale: { mtype: "wolfie", map: "winterland", between: ["wolfie"] },
   embercoal: { mtype: "plantoid", map: "desertland" },
   gloomfeather: { mtype: "ghost", map: "halloween" },
 };
@@ -405,6 +406,27 @@ function pickWitchGatherKind(visited) {
   return [...kinds].sort((lhs, rhs) => stock[lhs] - stock[rhs])[0];
 }
 
+/** @returns {{map: string, x: number, y: number}|undefined} where `kind` is gathered */
+function getWitchGatherSpot(kind) {
+  const { mtype, map, at, between } = WITCH_GATHER_SPOTS[kind];
+  if (at)
+    return (
+      strategicSmartMove.getStandablePointNear({ map, ...at }) ?? { map, ...at }
+    );
+
+  const spawns = (between ?? [mtype])
+    .flatMap((type) => getMonsterSpawns(type))
+    .filter((spawn) => spawn.map === map);
+  if (!between || !spawns.length) return spawns[0];
+
+  const middle = {
+    map,
+    x: Math.round(spawns.reduce((sum, { x }) => sum + x, 0) / spawns.length),
+    y: Math.round(spawns.reduce((sum, { y }) => sum + y, 0) / spawns.length),
+  };
+  return strategicSmartMove.getStandablePointNear(middle) ?? middle;
+}
+
 /** @returns {{kind: string, mtype: string, spot: Object}|undefined} this slot's gathering, while gathering */
 function getWitchGatherPlan() {
   const cipher = server.status.witchcipher;
@@ -421,8 +443,8 @@ function getWitchGatherPlan() {
     set("witchGatherPlan", plan);
   }
 
-  const { mtype, map } = WITCH_GATHER_SPOTS[plan.kind];
-  const spot = getMonsterSpawns(mtype).find((spawn) => spawn.map === map);
+  const { mtype } = WITCH_GATHER_SPOTS[plan.kind];
+  const spot = getWitchGatherSpot(plan.kind);
   return spot && { kind: plan.kind, mtype, spot };
 }
 

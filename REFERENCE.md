@@ -4396,10 +4396,17 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   supply (count × hp ÷ `respawn`) is far beyond what the party can kill (spiders 540k/min, ghosts
   0.9–1.6M/min, boars 576k/min), so the party's damage is the limit, and the overstock of
   embercoal (133 vs 18–38) comes from time spent on plantoids, not a better rate. While the
-  round's `witchGatherPlan` slot is a `WITCH_RANGER_KINDS` kind (spider, wolfie, ghost),
+  round's `witchGatherPlan` slot is a `WITCH_RANGER_KINDS` kind (ghost only),
   `dynamicParty` picks `witch`: the ranger (RANGER2 on EUII, RANGER1 elsewhere) replaces the
   warrior, whose single-target swings waste the dense packs, and the priest tanks. Embercoal slots
-  keep the default party, since plantoids hit for 640. The preset ranks just below `cave` and
+  keep the default party, since plantoids hit for 640. Spider and wolfie (Dark Hound) slots
+  went back to the default warrior party on 2026-11-01 at the user's request.
+- **Spot** (`getWitchGatherSpot`): `at` pins a point; `between` takes the middle of those mobs'
+  spawn centres; both are moved to a walkable point. Spider is pinned at main 1328,-80, the
+  user's pick among the spider, bigbird and scorpion spawns (their computed middle, about
+  1290,-21, was close but not the user's choice). Bigbirds and scorpions there become
+  targets only once they hit one of ours. Wolfie stands between its two winterland spawns
+  (about 90,-2033). The other kinds use their first spawn. The preset ranks just below `cave` and
   above Horseman, the same order `useWitchGatheringStrategy` takes, and it also stands aside for
   an open crypt. A swap costs one `deployCharacters` cycle (≤30s plus login), once per kind change.
   `isRangerWitchSlot` runs from `dynamicParty()`'s load-time call, before the witch section's

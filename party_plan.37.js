@@ -456,7 +456,7 @@ const DYNAMIC_PARTY_PRESETS = {
 };
 
 /** Gather kinds whose mobs the ranger's multishot clears faster than the warrior */
-const WITCH_RANGER_KINDS = ["verdantspore", "frostscale", "gloomfeather"];
+const WITCH_RANGER_KINDS = ["gloomfeather"];
 
 /** @returns {boolean} whether this round's gathering slot wants the witch preset */
 function isRangerWitchSlot(status = server.status) {
