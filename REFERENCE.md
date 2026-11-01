@@ -1470,15 +1470,22 @@ tried, at 1.33 attacks/s:
 
 | Order | Cleave hits caught | Axe attacks /20s | Avg attack delay |
 |---|---|---|---|
-| paleclaw first | 100% | 3.8 (vs 1.4 with no paleclaw) | 10ms |
+| paleclaw first | 100% | 10.3 (vs 1.7 with no paleclaw) | 11ms |
 | weapons first, always | 100% | 0.4 | 13ms |
-| weapons first, paleclaw if it fits | 72% | 1.3 | 10ms |
+| weapons first, paleclaw if it fits | ~20% | 1.4 | 11ms |
+
+Numbers from the corrected model. A first version let cleave and `equipBatch` see unlimited
+budget between sending an attack and its reply. The real client still reads the attack as ready
+then (`ms_to_next_skill` = 0), so `canAffordSwap(2)` refuses cleave and the budget is 0. That
+version overstated the gated tail at 72%. The "weapons first, always" row is from the first model.
 
 Paleclaw first eats the weapons' budget, so the restore is sliced and the axe waits ~500ms for the
 retry. Weapons first, always, collapses at 1.6 attacks/s: attacks drop from 32 to 29 and the
 average delay reaches 69ms, because the unbudgeted paleclaw lands on the next attack. Gated on
-budget, it matches no-paleclaw on delay and axe attacks at every speed tried. It catches 72% of
-cleave hits at 1.33, 29% at 1.6 and 95% at 2.0.
+budget, it matches no-paleclaw on delay and axe attacks at every speed tried. It catches ~20% of
+cleave hits at 1.33 and none at 1.6. On fireblade at 1.44 it never fits: cleave fires late in the
+cycle (median 376ms before the next attack), and after the axe swap the budget covers only the
+mainhand restore.
 
 **Cleave goes first (`isCleaveDue`).** A 20s simulation of a pull fight with both running (attacks,
 cleaves and the gear loop) showed the attack swap starving cleave. Its restore leaves the client
@@ -1494,6 +1501,39 @@ swing. It asks `getSafeCleaveWeapon`, which is `planCleave` without its timing c
 (`canAffordSwap(2)`, visible `penalty_cd`, `cc ≥ 100`). Those three are the ones the swap itself
 disturbs. A cleave that is ready but refused for safety, mp or mobs no longer keeps the paleclaw
 swap off.
+
+**Room in the cycle decides both (`hasCleaveRoom`, 2026-11-01).** Rule: `cycle − 1.5 × ping −
+360 ≥ 240`. The client learns its next attack time a ping after it attacks, so the most free time
+cleave can see is `cycle − ping`. The 3-equip bar needs `360 + ping/2` of it, and what's left over
+is the room. With room, a pull cleave waits for the 3-equip bar (`planCleave`), so the weapons
+come back before the next attack, and the paleclaw attack swap stays off. Without room, cleave
+keeps the 2-equip bar and the attack swap runs. `character.frequency` is live, so frenzy and warcry
+(shorter cycles) turn the room off by themselves. Fireblade (normal strategy) keeps 240, because
+the candy swap already squeezes cleave there and 360 left it at 0 cleaves.
+
+The numbers come from a DPS model (`dps_sim` in the session scratchpad), with these assumptions:
+- Damage is item attack × str/20, so weapons compare by summed item attack: pull set +7/+10 =
+  130.8, bataxe +8 = 129.8.
+- Ololipop/vhammer explosion splash is 72%, landing on 2 stacked mobs.
+- Cleave hits each mob for 0.1–0.9 × attack (`commence_attack`).
+- Frenzy adds `frequency / 100` = +0.4 attacks/s (`apply_stats`), about +30% at 1.33, not a
+  percentage of base speed.
+
+The paleclaw attack swap costs 0.4–0.9% DPS when the cycle has room: its penalty pushes cleave late
+and creates axe attacks, which lose the splash. It gains ~1.1–1.5% at 1.6 attacks/s, where cleave
+is late anyway. The cleave tail alone is neutral everywhere. The rule scored best at 1.33/77ms
+(+0.18% vs no paleclaw) and 1.6/77ms (+1.56%). Elsewhere every variant sat within ~±0.5%, about the
+model's noise. The real DPS loss at high ping or high speed is axe attacks after cleave: up to ~30
+a minute at 1.6 or 200–350ms ping, about −9% DPS at 1.33 going from 77ms to 120–160ms ping. The
+paleclaw logic is not the lever there.
+
+**Mana and mpx (2026-11-01).** With potions (+500 mana every 2s), 86 mana per attack and 720 per
+cleave, mana caps pull cleaves at ~12–13 a minute, not the ~39 the timing allows. In this model,
+frenzy uptime at 1.33/77ms is ~9.5% (the tail goes out on ~76% of cleaves), at +3.6% DPS.
+`mpxamulet` gives `mp_cost −5`, `mp_reduction 12` even at +0 (cleave 720 → ~634). But it is
+swapped in when `canAffordSwap(3)` holds, the same check as the room rule, so it took the
+tail's budget on nearly every cleave and dropped frenzy uptime to ~3%. So the mpx swap only
+happens when no tail is planned: frenzy up, a luck amulet, or no paleclaw in the bag.
 
 ## Field reports must fail closed (`entFieldReport`)
 

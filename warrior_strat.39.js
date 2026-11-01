@@ -133,13 +133,29 @@ function warriorAoeMpFloor() {
   return G.skills["cleave"].mp + 400 + surgeMpReserve();
 }
 
+/** Free time a cycle must leave past the 3-equip bar for cleave to wait for it */
+const CLEAVE_ROOM_MIN_MS = 240;
+
+/** @returns {boolean} whether a cycle leaves cleave room to put the weapons back before the next attack */
+function hasCleaveRoom() {
+  return (
+    1000 / character.frequency - 1.5 * character.ping - 3 * EQUIP_PENALTY_MS >=
+    CLEAVE_ROOM_MIN_MS
+  );
+}
+
 /**
  * Every check cleave makes before it swings, its cooldown and in-flight locks aside.
  * @param {string} strategyName - "pull" or "normal"
  * @returns {Object|undefined} the cleave weapon, when cleave would swing now
  */
 function planCleave(strategyName) {
-  if (!canAffordSwap(2) || character.s.penalty_cd || character.cc >= 100)
+  const swapSlots = strategyName === "pull" && hasCleaveRoom() ? 3 : 2;
+  if (
+    !canAffordSwap(swapSlots) ||
+    character.s.penalty_cd ||
+    character.cc >= 100
+  )
     return;
   return getSafeCleaveWeapon(strategyName);
 }
@@ -306,13 +322,14 @@ async function warriorCleave(strategyName) {
   if (cleaveWeapon.num >= 0)
     cleaveSet.push({ num: cleaveWeapon.num, slot: "mainhand" });
 
-  const mpxAmulet = findMaxLevelItem("mpxamulet");
-  if (mpxAmulet >= 0 && canAffordSwap(3))
-    cleaveSet.push({ num: mpxAmulet, slot: "amulet" });
-
   const restoreItems = calculateWarriorItems();
   const paleclawTailMs = getPaleclawTailMs(restoreItems, cleaveWeapon);
   if (paleclawTailMs) restoreItems.amulet = "paleclaw";
+
+  // The paleclaw tail needs the budget the mpx swap would spend
+  const mpxAmulet = findMaxLevelItem("mpxamulet");
+  if (!paleclawTailMs && mpxAmulet >= 0 && canAffordSwap(3))
+    cleaveSet.push({ num: mpxAmulet, slot: "amulet" });
 
   const cleaveSwap = Promise.all([
     getServerSlot("offhand") ? sendUnequip("offhand") : undefined,
