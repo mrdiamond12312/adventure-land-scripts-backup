@@ -94,25 +94,21 @@ function markDeployed(id) {
   set(`deployedAt:${id}`, Date.now());
 }
 
-/** {id, realm, at}: the login in flight, whoever started it */
+/** {id, realm, at}: the last login started, whoever started it */
 const DEPLOY_SLOT_LS_KEY = "deploySlot";
 
-/** A login that has not beat by then is given up on */
-const DEPLOY_LOGIN_TIMEOUT_MS = 30_000;
+/** Logins started closer together than this get all but one rejected */
+const DEPLOY_SLOT_HOLD_MS = 1000;
 
-/** @returns {boolean} whether no login is in flight: the last one beat from its target realm, or timed out */
+/** @returns {boolean} whether the last login started at least DEPLOY_SLOT_HOLD_MS ago */
 function isDeploySlotFree() {
   const slot = get(DEPLOY_SLOT_LS_KEY);
-  if (!slot || Date.now() - slot.at >= DEPLOY_LOGIN_TIMEOUT_MS) return true;
-  const beat = get(`${REALM_BEAT_LS_PREFIX}${slot.id}`);
-  return (
-    (beat?.at ?? 0) > slot.at && (!slot.realm || beat.realm === slot.realm)
-  );
+  return !slot || Date.now() - slot.at >= DEPLOY_SLOT_HOLD_MS;
 }
 
-/** Resolves once no login is in flight */
+/** Resolves once the slot is free */
 async function waitForDeploySlot() {
-  while (!isDeploySlotFree()) await sleep(1000);
+  while (!isDeploySlotFree()) await sleep(250);
 }
 
 /**
@@ -524,14 +520,18 @@ function dynamicParty() {
   if (members) partyMems = members;
 }
 
-setInterval(() => {
+/** Writes our realm heartbeat, also once at load */
+function beatRealm() {
   set(`${REALM_BEAT_LS_PREFIX}${character.name}`, {
     realm: getCurrentServer(),
     window: character.controller || character.name,
     ctype: character.ctype,
     at: Date.now(),
   });
-}, 5000);
+}
+
+beatRealm();
+setInterval(beatRealm, 5000);
 
 setTimeout(deployCharacters, 5000);
 setInterval(deployCharacters, 30000);

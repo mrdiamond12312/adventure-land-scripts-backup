@@ -1525,6 +1525,22 @@ has no cleave to delay. Its own penalty is still checked against the attack cycl
 `swapUntilImpact`. The worst case is mp crossing the floor just after a swap: that one cleave
 waits a cycle.
 
+The mp model in the simulator puts the warrior under the floor ~85% of a pull fight. That model is
+86 mp per attack, 720 per cleave, 500 mp per 2s, and `isCleaveDue` false below the floor, as in
+the code. Against the room-only gate, DPS vs no paleclaw changes as below (400–800 runs × 60s):
+
+| Attacks/s, ping | Room-only gate | With the mp gate |
+|---|---|---|
+| 1.33, 75–85ms | +3.5% | +5.8% |
+| 1.33, 40–50ms | +4.3% | +6.2% |
+| 1.0, 75–85ms | +4.8% | +4.4% |
+| 1.6, 75–85ms | +1.9% | +1.8% (no room, so no change) |
+
+At 1.33 frenzy procs go from ~0.35 to ~1.25 per minute. Cleaves drop by ~0.4 per minute because
+the faster attacks spend mp. At 1.0 the cleave tail already gives 11% frenzy uptime, and the extra
+swaps add attacks with the cleave weapon. Waiting until mp is 250 or 500 under the floor did not
+recover it, and it cost ~1–2 points at 1.33.
+
 The numbers come from a DPS model (`dps_sim` in the session scratchpad), with these assumptions:
 - Damage is item attack × str/20, so weapons compare by summed item attack: pull set +7/+10 =
   130.8, bataxe +8 = 129.8.
@@ -4781,12 +4797,18 @@ a cold start) the bots keep stealing the slot from each other, and the log fills
 
 Every login under caracAL now claims a shared slot (`deploySlot`: `{id, realm, at}`, in the
 shared localStorage like `deployedAt:`): `deployCharacterOnce`, `moveToPartyRealm`,
-`hopToServer` and `hopAlone`. The slot frees when that character's realm heartbeat is newer
-than the claim and comes from the target realm (the old process can beat once more before it is
-killed), or after `DEPLOY_LOGIN_TIMEOUT_MS`. `deployCharacterOnce` refuses while the slot is
-busy, and the deploy loops wait on it (`waitForDeploySlot`) instead of sleeping 1s. An off-roster
-fighter stays on until its replacement got the slot. Heartbeats come every 5s, so each login adds
-up to ~5s before the next one starts.
+`hopToServer` and `hopAlone`. The slot frees `DEPLOY_SLOT_HOLD_MS` (1s) after the claim.
+`deployCharacterOnce` refuses while the slot is busy, and the deploy loops wait on it
+(`waitForDeploySlot`, polling every 250ms). An off-roster fighter stays on until its replacement
+got the slot.
+
+**Freeing on the heartbeat was too slow (2026-11-02).** The first version held the slot until the
+deployed character beat from its target realm. That meant process start, login, the whole script
+graph, and then the 5s beat interval, so roughly 15–20s per login. On a hop the merchant claimed
+the slot first, and the fighters went one by one after him, about a minute behind. Before the slot,
+a hop took ~10s. A 1s spacing claimed across processes keeps that old pacing. It also spaces the
+fighters' self-moves, which the old in-loop `sleep(1000)` never covered. `beatRealm` also runs
+at load, so a new character shows up in the heartbeats without the 5s wait.
 
 ## Trick or Treat disconnects (`knockNextDoor`, 2026-10-22)
 
