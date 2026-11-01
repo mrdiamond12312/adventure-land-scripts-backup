@@ -436,25 +436,34 @@ function trackStuckMovement() {
   }
 }
 
+/** @returns {{map: string, x: number, y: number, mtypes: string[]}} the spot a tanker holds: a held Witch gathering spot on its map, else the farm spot */
+function getHoldSpot() {
+  const plan = getWitchGatherPlan();
+  if (plan?.isHeld && plan.spot.map === character.map)
+    return { ...plan.spot, mtypes: [plan.mtype] };
+
+  return { map, x: mapX, y: mapY, mtypes: mobsToFarm };
+}
+
 // Tanker holding a farmed mob near the default spot orbits the spot itself rather
 // than the (moving) mob; far from the spot, it instead walks the mob home, with a
 // lead distance that widens the faster the mob outpaces the tanker's own speed.
 function getFarmMobOrbit(target) {
+  const holdSpot = getHoldSpot();
   const isTankerHoldingFarmMob =
     (isAssignedAsTanker() ||
       (character.ctype === "warrior" &&
         !!warriorHeldMobs?.includes(target.mtype))) &&
     target.type === "monster" &&
     target.target === character.name &&
-    mobsToFarm.includes(target.mtype);
+    holdSpot.mtypes.includes(target.mtype);
   const isNearDefaultSpot =
     (isTankerHoldingFarmMob ||
       (isAssignedAsTanker() &&
         character.ctype === "priest" &&
-        character.map === map)) &&
-    distance(target, { x: mapX, y: mapY }) <=
-      character.range + character.xrange;
-  const orbitCenter = isNearDefaultSpot ? { x: mapX, y: mapY } : target;
+        character.map === holdSpot.map)) &&
+    distance(target, holdSpot) <= character.range + character.xrange;
+  const orbitCenter = isNearDefaultSpot ? holdSpot : target;
   const speedRate =
     isTankerHoldingFarmMob && !isNearDefaultSpot
       ? Math.max(
@@ -463,7 +472,13 @@ function getFarmMobOrbit(target) {
         )
       : 1;
 
-  return { isTankerHoldingFarmMob, isNearDefaultSpot, orbitCenter, speedRate };
+  return {
+    holdSpot,
+    isTankerHoldingFarmMob,
+    isNearDefaultSpot,
+    orbitCenter,
+    speedRate,
+  };
 }
 
 function getOrbitDestination(target, orbit, radiusTotal, cosA, sinA) {
@@ -597,7 +612,10 @@ function moveTowardDestination(destination) {
 // farmed mob in tow, otherwise keeps sweeping around the orbit center as usual.
 function advanceOrbitAngle(target, orbit, radiusTotal, loopInterval) {
   if (orbit.isTankerHoldingFarmMob && !orbit.isNearDefaultSpot) {
-    angle = Math.atan2(mapY - target.y, mapX - target.x);
+    angle = Math.atan2(
+      orbit.holdSpot.y - target.y,
+      orbit.holdSpot.x - target.x,
+    );
     return;
   }
 

@@ -278,10 +278,23 @@ async function visitAnniversaryPlayer() {
 
 // Witch's Cipher
 
-/** The spot: `at`, else the middle of the `between` mobs' spawns on `map`, else the first `mtype` spawn */
+/**
+ * The spot: `at`, else the middle of the `between` mobs' spawns on `map`, else the first `mtype` spawn.
+ * `isHeld`: the tanker holds its mobs on the spot, as on the farm spot.
+ */
 const WITCH_GATHER_SPOTS = {
-  verdantspore: { mtype: "spider", map: "main", at: { x: 1328, y: -80 } },
-  frostscale: { mtype: "wolfie", map: "winterland", between: ["wolfie"] },
+  verdantspore: {
+    mtype: "spider",
+    map: "main",
+    at: { x: 1328, y: -80 },
+    isHeld: true,
+  },
+  frostscale: {
+    mtype: "wolfie",
+    map: "winterland",
+    between: ["wolfie"],
+    isHeld: true,
+  },
   embercoal: { mtype: "plantoid", map: "desertland" },
   gloomfeather: { mtype: "ghost", map: "halloween" },
 };
@@ -427,7 +440,7 @@ function getWitchGatherSpot(kind) {
   return strategicSmartMove.getStandablePointNear(middle) ?? middle;
 }
 
-/** @returns {{kind: string, mtype: string, spot: Object}|undefined} this slot's gathering, while gathering */
+/** @returns {{kind: string, mtype: string, spot: Object, isHeld?: boolean}|undefined} this slot's gathering, while gathering */
 function getWitchGatherPlan() {
   const cipher = server.status.witchcipher;
   if (!isWitchGathering(cipher)) return;
@@ -443,9 +456,9 @@ function getWitchGatherPlan() {
     set("witchGatherPlan", plan);
   }
 
-  const { mtype } = WITCH_GATHER_SPOTS[plan.kind];
+  const { mtype, isHeld } = WITCH_GATHER_SPOTS[plan.kind];
   const spot = getWitchGatherSpot(plan.kind);
-  return spot && { kind: plan.kind, mtype, spot };
+  return spot && { kind: plan.kind, mtype, spot, isHeld };
 }
 
 // Trick or Treat
