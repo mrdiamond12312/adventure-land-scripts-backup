@@ -88,7 +88,8 @@ basic_function.7.js          [SHARED — the core library]
   Then, based on class/config, it loads:
     strategic_fn.11.js           the shared core: damage/heal calc, mitigation, heal targeting,
                                  item_info and gear scoring (pickGearByScore, tank/heal/stat picks),
-                                 equipBatch and the candy swap, party roles, attack-loop helpers,
+                                 equipBatch and the impact swaps (candy canes / paleclaw,
+                                 maybeImpactSwap), party roles, attack-loop helpers,
                                  temporal surge; calculateBestItems dispatches to the class files,
                                  which it loads, all six, at its bottom:
       mage_strat.38.js             weapon + gear scored together under the mp budget, cburst targeting

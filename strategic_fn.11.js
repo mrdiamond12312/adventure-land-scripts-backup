@@ -1550,6 +1550,51 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
   });
 }
 
+/**
+ * Momentarily swaps the paleclaw onto the amulet slot so the landing hit
+ * rolls frenzy off it.
+ * @param {Object} targetToAttack - the entity being attacked
+ * @param {Object} options
+ * @param {string[]} options.swapFrom - held weapons the swap rides on
+ * @param {string[]} options.amuletFrom - amulets worth swapping off
+ * @param {Function} [options.restore] - re-equips the real amulet after the hold; omitted leaves it to currentStrategy
+ * @returns {Promise|undefined} the swap promise, or undefined if not swapping
+ */
+function maybePaleclawSwap(targetToAttack, { swapFrom, amuletFrom, restore }) {
+  const isRidingWeapon =
+    swapFrom.includes(getServerSlot("mainhand")?.name) ||
+    swapFrom.includes(getServerSlot("offhand")?.name);
+  if (
+    !canSwapUntilImpact() ||
+    character.s.frenzied ||
+    !isRidingWeapon ||
+    !amuletFrom.includes(getServerSlot("amulet")?.name)
+  )
+    return;
+
+  const paleclaw = findMaxLevelItem("paleclaw");
+  if (paleclaw === -1) return;
+
+  return swapUntilImpact(targetToAttack, [{ num: paleclaw, slot: "amulet" }], {
+    restore,
+  });
+}
+
+/**
+ * At most one impact swap per shot: the candy canes when they apply, else the paleclaw.
+ * @param {Object} targetToAttack - the entity being attacked
+ * @param {Object} swaps
+ * @param {Object} [swaps.candy] - maybeCandySwap's options; omitted skips the canes
+ * @param {Object} [swaps.paleclaw] - maybePaleclawSwap's options; omitted skips the paleclaw
+ * @returns {Promise|undefined} the swap promise, or undefined if not swapping
+ */
+function maybeImpactSwap(targetToAttack, { candy, paleclaw } = {}) {
+  return (
+    (candy && maybeCandySwap(targetToAttack, candy)) ??
+    (paleclaw && maybePaleclawSwap(targetToAttack, paleclaw))
+  );
+}
+
 function calculateHeal(fromEntity, toEntity) {
   if (!fromEntity) return 0;
 

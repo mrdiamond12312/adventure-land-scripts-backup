@@ -245,33 +245,6 @@ function mobsLeftAfterCleave(mobs) {
 const PALECLAW_SWAP_FROM_AMULET = "stramulet";
 
 /**
- * Swaps the paleclaw onto the amulet slot for the attack's landing hit, which
- * rolls frenzy off whatever is equipped then. Pull strategy only.
- * @param {Object} targetToAttack - the entity being attacked
- * @param {Object} options
- * @param {string[]} options.swapFrom - held weapons the swap rides on
- * @returns {Promise|undefined} the swap promise, or undefined if not swapping
- */
-function maybePaleclawSwap(targetToAttack, { swapFrom }) {
-  const isRidingWeapon =
-    swapFrom.includes(getServerSlot("mainhand")?.name) ||
-    swapFrom.includes(getServerSlot("offhand")?.name);
-  if (
-    currentStrategy !== usePullStrategies ||
-    !canSwapUntilImpact() ||
-    character.s.frenzied ||
-    !isRidingWeapon ||
-    getServerSlot("amulet")?.name !== PALECLAW_SWAP_FROM_AMULET
-  )
-    return;
-
-  const paleclaw = findMaxLevelItem("paleclaw");
-  if (paleclaw === -1) return;
-
-  return swapUntilImpact(targetToAttack, [{ num: paleclaw, slot: "amulet" }]);
-}
-
-/**
  * Whether cleave puts the paleclaw on right after the cast: each hit still in
  * flight rolls frenzy off the amulet worn when it lands.
  * @param {Object} restoreItems - the gear cleave puts back on

@@ -128,7 +128,9 @@ function getRogueCast() {
         !ms_to_next_skill("invis") && use_skill("invis"),
         castOnAttackCooldown("attack", attackTarget),
         ridesCandySwap(followUp) && castFollowUp(followUp, attackTarget),
-        maybeCandySwap(attackTarget, { restore: restoreRogueWeapons }),
+        maybeImpactSwap(attackTarget, {
+          candy: { restore: restoreRogueWeapons },
+        }),
       ].filter(Boolean),
     );
 }

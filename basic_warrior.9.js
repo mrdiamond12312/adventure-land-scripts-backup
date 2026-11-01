@@ -159,12 +159,16 @@ function getWarriorCast() {
       [
         castOnAttackCooldown("attack", attackTarget),
         // Left to currentStrategy to put the real weapons back on its own tick
-        maybeCandySwap(attackTarget, {
-          swapFrom: CANDY_SWAP_WEAPON_ALLOW_LIST,
-        }) ??
-          maybePaleclawSwap(attackTarget, {
-            swapFrom: PALECLAW_SWAP_WEAPON_ALLOW_LIST,
-          }),
+        maybeImpactSwap(attackTarget, {
+          candy: { swapFrom: CANDY_SWAP_WEAPON_ALLOW_LIST },
+          paleclaw:
+            currentStrategy === usePullStrategies
+              ? {
+                  swapFrom: PALECLAW_SWAP_WEAPON_ALLOW_LIST,
+                  amuletFrom: [PALECLAW_SWAP_FROM_AMULET],
+                }
+              : undefined,
+        }),
       ].filter(Boolean),
     );
 }

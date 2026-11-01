@@ -1342,8 +1342,12 @@ it is often skipped entirely rather than merely computed once.
 
 ## Candy-cane swap timing (`maybeCandySwap`, strategic_fn.11.js)
 
-The timing below lives in `swapUntilImpact`, which the candy swap and the warrior's paleclaw swap
-share (see "Paleclaw" further down). Swap to candy canes so they are equipped when the projectile *lands*, then swap back. It works
+Classes call `maybeImpactSwap(target, { candy, paleclaw })`, which runs at most one swap per
+shot: the canes when they apply, else the paleclaw (see "Paleclaw" further down). Both swaps are
+class-agnostic, and each takes an optional `restore`. Their timing lives in `swapUntilImpact`.
+The rogue passes only `candy` for now. Giving him the paleclaw means adding a `paleclaw` entry
+with his own `swapFrom` / `amuletFrom`, plus a restore, since his strategy loop can leave the
+swapped item on after a kill. Swap to candy canes so they are equipped when the projectile *lands*, then swap back. It works
 because the server reads `attacker.a.sugarrush` in `complete_attack`, at impact, from whatever is
 equipped then. Only `sugarrush` and `frenzy` are read there. crit, critdamage, explosion, blast,
 lifesteal, manasteal, the piercings, and the freeze/poison/burn/weave/petrify/hex/shatter/sunder
@@ -1432,9 +1436,9 @@ for 6 seconds, and a new proc resets the timer instead of stacking. Splash targe
 because the block sits inside `if (first)`, and evaded, missed or avoided hits return before it.
 It shows up as `character.s.frenzied`.
 
-The weapons decide which swap runs, so the two swaps never meet on one shot. Canes ride
-`fireblade` / `rapier`. The paleclaw rides the pull set (`vhammer` / `ololipop`) and only swaps off
-`stramulet`. `snring` (tanking) and `spookyamulet` (loot luck is rolled at the kill, which is the
+The warrior's weapons decide which swap runs. Canes ride `fireblade` / `rapier`. The paleclaw
+rides the pull set (`vhammer` / `ololipop`), only in pull strategy (the gate is at its
+`maybeImpactSwap` call), and only swaps off `stramulet`. `snring` (tanking) and `spookyamulet` (loot luck is rolled at the kill, which is the
 impact) are never swapped off.
 
 **Cleave tail.** Cleave is not instant. Each mob gets its own `momentum` projectile (320 px/s, or
