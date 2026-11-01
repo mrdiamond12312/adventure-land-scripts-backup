@@ -4785,30 +4785,38 @@ from ≤ N candidates, ours cracks 99–100% for: N=8, 2.0 mixes; N=32, 2.8; N=6
   so a strike waits and a flush falls back to a mix that can't crack. Any one recipe needs at most
   5 of a kind, plus the reserve.
 
-## One login at a time (`deploySlot`, party_plan.37.js, 2026-11-01)
+## Logins are queued by caracAL, not the scripts (2026-11-02)
 
-The server confirms one login per account at a time. When it rejects a login, caracAL's patched
-`disconnect` redeploys the character, so the process exits and the coordinator restarts it. The
-coordinator's `restart_backoff` (1s, doubling to 60s) resets on the child's `"connected"`. The
-child sends that as soon as the process starts, before it has logged into the game, so a rejected
-login retries about once a second forever. With three deploys 1s apart (a mrgreen roster swap, or
-a cold start) the bots keep stealing the slot from each other, and the log fills with a new
-`log_init` pid every second until one happens to get through.
+A realm server kicks every loose socket from an IP once a new connection makes more than 5.
+Loose means connected but not logged into a character. The kick message is "Too many loose
+connections from your network. Simply reload to play." The rule is `is_socket_allowed` →
+`disconnect_old_sockets` in the server's `node/server.js`. A game 18285 login stays loose for
+about 2s: `welcome`, then the first `entities`, then `log_in`, then `start`. The hop owner's
+`ServerRealmData` also keeps one loose socket on every realm.
 
-Every login under caracAL now claims a shared slot (`deploySlot`: `{id, realm, at}`, in the
-shared localStorage like `deployedAt:`): `deployCharacterOnce`, `moveToPartyRealm`,
-`hopToServer` and `hopAlone`. The slot frees `DEPLOY_SLOT_HOLD_MS` (1s) after the claim.
-`deployCharacterOnce` refuses while the slot is busy, and the deploy loops wait on it
-(`waitForDeploySlot`, polling every 250ms). An off-roster fighter stays on until its replacement
-got the slot.
+Bots that started together (a hop, a roster swap, a cold start) overlapped their loose sockets and
+passed 5. Each kick went through caracAL's patched `disconnect` to a redeploy, and the restart
+kicked the others. Bots kicked each other every 0.5–1.5s ("rotating"). A second server limit,
+one auth per account ("Authorization in progress."), adds to it.
 
-**Freeing on the heartbeat was too slow (2026-11-02).** The first version held the slot until the
-deployed character beat from its target realm. That meant process start, login, the whole script
-graph, and then the 5s beat interval, so roughly 15–20s per login. On a hop the merchant claimed
-the slot first, and the fighters went one by one after him, about a minute behind. Before the slot,
-a hop took ~10s. A 1s spacing claimed across processes keeps that old pacing. It also spaces the
-fighters' self-moves, which the old in-loop `sleep(1000)` never covered. `beatRealm` also runs
-at load, so a new character shows up in the heartbeats without the 5s wait.
+The fix lives in caracAL's coordinator: a login turn, so one bot per account opens its game socket
+at a time. The turn frees when the bot reaches the game, when it disconnects, when it exits, or
+after 10s. That also covers caracAL's own restarts, which no script can see. So the scripts deploy
+straight away again. The script-side `deploySlot` (2026-11-01) is gone. It only spaced our own
+`deploy` calls, and holding it until the heartbeat made a hop take about a minute.
+
+What stays:
+- **The 60s per-character deploy cooldown** (`deployedAt:`). A bot waiting in caracAL's queue is
+  not in `siblings` yet and has no heartbeat, so it looks missing. A second `deploy` would kill it
+  and send it to the back of the queue.
+- **`beatRealm` also runs at load**, so a new arrival shows up in the heartbeats without the 5s
+  wait.
+
+Two other findings from the same incident:
+- Game 18285's `ui` handler (game.js:2781) reads `character.name` before `start`. caracAL now wraps
+  `Socket.prototype.emitEvent` (`make_socket_handlers_safe`), so a handler throw is logged instead
+  of killing the process.
+- caracAL sends `"connected"` from `make_runner`, after the game is reached, not at process start.
 
 ## Trick or Treat disconnects (`knockNextDoor`, 2026-10-22)
 
