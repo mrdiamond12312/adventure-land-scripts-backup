@@ -14,6 +14,7 @@ const originRangeRate = 0.9;
 rangeRate = originRangeRate;
 
 const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
+const PALECLAW_SWAP_WEAPON_ALLOW_LIST = ["vhammer", "ololipop"];
 
 /**
  * @param {Object} entity
@@ -160,7 +161,10 @@ function getWarriorCast() {
         // Left to currentStrategy to put the real weapons back on its own tick
         maybeCandySwap(attackTarget, {
           swapFrom: CANDY_SWAP_WEAPON_ALLOW_LIST,
-        }),
+        }) ??
+          maybePaleclawSwap(attackTarget, {
+            swapFrom: PALECLAW_SWAP_WEAPON_ALLOW_LIST,
+          }),
       ].filter(Boolean),
     );
 }

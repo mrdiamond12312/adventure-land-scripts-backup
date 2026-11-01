@@ -1404,8 +1404,8 @@ function buildEquipPromises(suggestedItems, options) {
   return promises;
 }
 
-const CANDY_SWAP_FALLBACK_DELAY_MS = 150; // used when no projectile speed can be resolved
-const CANDY_MIN_HOLD_MS = 40; // dwell after the canes land, even if the ETA is spent
+const IMPACT_SWAP_FALLBACK_DELAY_MS = 150; // used when no projectile speed can be resolved
+const IMPACT_SWAP_MIN_HOLD_MS = 40; // dwell after the swap-ins land, even if the ETA is spent
 
 /**
  * ETA (ms) of the character's attack projectile against the target
@@ -1418,12 +1418,81 @@ function projectileEtaMs(target) {
     G.classes[character.ctype].projectile;
   const projectileSpeed = G.projectiles[projectileKey]?.speed;
 
-  if (!projectileSpeed || !target) return CANDY_SWAP_FALLBACK_DELAY_MS;
+  if (!projectileSpeed || !target) return IMPACT_SWAP_FALLBACK_DELAY_MS;
 
   return Math.max(
     20,
     (simple_distance(character, target) / projectileSpeed) * 1000 + 7,
   );
+}
+
+/** @returns {boolean} whether an impact swap may ride this shot at all */
+function canSwapUntilImpact() {
+  return (
+    character.ping < 1000 &&
+    !isCleaving &&
+    !isEquipingItems &&
+    1000 / character.frequency > 250 + character.ping &&
+    character.cc < 100
+  );
+}
+
+/**
+ * Holds `equips` from when they land until the attack's hit does, where the
+ * server rolls sugarrush and frenzy off whatever is equipped.
+ * @param {Object} targetToAttack - the entity being attacked
+ * @param {{num: number, slot: string}[]} equips - the swap-ins
+ * @param {Object} [options]
+ * @param {string} [options.freeSlot] - slot to unequip before the swap-ins
+ * @param {Function} [options.restore] - re-equips the real gear after the hold; omitted leaves it to currentStrategy
+ * @returns {Promise|undefined} the swap promise, or undefined if not swapping
+ */
+function swapUntilImpact(targetToAttack, equips, { freeSlot, restore } = {}) {
+  const characterAtkCycleMs = 1000 / character.frequency;
+  const swapPenaltyMs = equips.length * EQUIP_PENALTY_MS;
+  const restorePenaltyMs =
+    (equips.length + (freeSlot ? 1 : 0)) * EQUIP_PENALTY_MS;
+
+  const penaltyClearsInMs =
+    Math.max(swapPenaltyMs, character.ping + IMPACT_SWAP_MIN_HOLD_MS) +
+    character.ping +
+    restorePenaltyMs;
+  if (penaltyClearsInMs > characterAtkCycleMs) return;
+
+  // One-way trip for an equip to take effect server-side
+  const equipLatencyMs = character.ping / 2;
+  const etaMs = projectileEtaMs(targetToAttack);
+
+  if (etaMs <= equipLatencyMs) return;
+
+  isEquipingItems = true;
+
+  const swapBackAt = Date.now() + etaMs;
+
+  const swapBackDeadline =
+    Date.now() + characterAtkCycleMs - character.ping - restorePenaltyMs;
+
+  if (freeSlot) sendUnequip(freeSlot);
+  const swapEquip = sendEquips(equips);
+
+  // Hold the swap-ins until the hit lands, then release
+  const holdUntilSwapBack = () =>
+    new Promise((resolve) =>
+      setTimeout(
+        resolve,
+        Math.min(
+          Math.max(IMPACT_SWAP_MIN_HOLD_MS, swapBackAt - Date.now()),
+          Math.max(0, swapBackDeadline - Date.now()),
+        ),
+      ),
+    );
+
+  return Promise.allSettled([
+    swapEquip,
+    swapEquip.then(holdUntilSwapBack, () => undefined).then(restore),
+  ]).finally(() => {
+    isEquipingItems = false;
+  });
 }
 
 /**
@@ -1440,16 +1509,12 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
   const mainhand = getServerSlot("mainhand");
   const offhand = getServerSlot("offhand");
   const shouldUseCandyCanes =
-    character.ping < 1000 &&
-    !isCleaving &&
-    !isEquipingItems &&
-    characterAtkCycleMs > 250 + character.ping &&
+    canSwapUntilImpact() &&
     !character.s.sugarrush &&
     (!swapFrom ||
       swapFrom.includes(offhand?.name) ||
       swapFrom.includes(mainhand?.name)) &&
-    offhand?.name !== "mshield" &&
-    character.cc < 100;
+    offhand?.name !== "mshield";
 
   if (!shouldUseCandyCanes) return;
 
@@ -1479,50 +1544,9 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
   if (mustFreeOffhand && !character.items.some((_, num) => !getServerItem(num)))
     return;
 
-  const caneEquips = buildEquip(candycane1, candycane2);
-  const canePenaltyMs = caneEquips.length * EQUIP_PENALTY_MS;
-  const restorePenaltyMs =
-    (caneEquips.length + (mustFreeOffhand ? 1 : 0)) * EQUIP_PENALTY_MS;
-
-  const penaltyClearsInMs =
-    Math.max(canePenaltyMs, character.ping + CANDY_MIN_HOLD_MS) +
-    character.ping +
-    restorePenaltyMs;
-  if (penaltyClearsInMs > characterAtkCycleMs) return;
-
-  // One-way trip for an equip to take effect server-side
-  const equipLatencyMs = character.ping / 2;
-  const etaMs = projectileEtaMs(targetToAttack);
-
-  if (etaMs <= equipLatencyMs) return;
-
-  isEquipingItems = true;
-
-  const swapBackAt = Date.now() + etaMs;
-
-  const swapBackDeadline =
-    Date.now() + characterAtkCycleMs - character.ping - restorePenaltyMs;
-
-  if (mustFreeOffhand) sendUnequip("offhand");
-  const candyEquip = sendEquips(caneEquips);
-
-  // Hold the canes until the hit lands, then release
-  const holdUntilSwapBack = () =>
-    new Promise((resolve) =>
-      setTimeout(
-        resolve,
-        Math.min(
-          Math.max(CANDY_MIN_HOLD_MS, swapBackAt - Date.now()),
-          Math.max(0, swapBackDeadline - Date.now()),
-        ),
-      ),
-    );
-
-  return Promise.allSettled([
-    candyEquip,
-    candyEquip.then(holdUntilSwapBack, () => undefined).then(restore),
-  ]).finally(() => {
-    isEquipingItems = false;
+  return swapUntilImpact(targetToAttack, buildEquip(candycane1, candycane2), {
+    freeSlot: mustFreeOffhand ? "offhand" : undefined,
+    restore,
   });
 }
 

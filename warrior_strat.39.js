@@ -242,6 +242,53 @@ function mobsLeftAfterCleave(mobs) {
   );
 }
 
+const PALECLAW_SWAP_FROM_AMULET = "stramulet";
+
+/**
+ * Swaps the paleclaw onto the amulet slot for the attack's landing hit, which
+ * rolls frenzy off whatever is equipped then. Pull strategy only.
+ * @param {Object} targetToAttack - the entity being attacked
+ * @param {Object} options
+ * @param {string[]} options.swapFrom - held weapons the swap rides on
+ * @returns {Promise|undefined} the swap promise, or undefined if not swapping
+ */
+function maybePaleclawSwap(targetToAttack, { swapFrom }) {
+  const isRidingWeapon =
+    swapFrom.includes(getServerSlot("mainhand")?.name) ||
+    swapFrom.includes(getServerSlot("offhand")?.name);
+  if (
+    currentStrategy !== usePullStrategies ||
+    !canSwapUntilImpact() ||
+    character.s.frenzied ||
+    !isRidingWeapon ||
+    getServerSlot("amulet")?.name !== PALECLAW_SWAP_FROM_AMULET
+  )
+    return;
+
+  const paleclaw = findMaxLevelItem("paleclaw");
+  if (paleclaw === -1) return;
+
+  return swapUntilImpact(targetToAttack, [{ num: paleclaw, slot: "amulet" }]);
+}
+
+/**
+ * Whether cleave puts the paleclaw on right after the cast: each hit still in
+ * flight rolls frenzy off the amulet worn when it lands.
+ * @param {Object} restoreItems - the gear cleave puts back on
+ * @returns {boolean}
+ */
+function shouldPaleclawTail(restoreItems) {
+  return (
+    restoreItems.amulet === PALECLAW_SWAP_FROM_AMULET &&
+    !character.s.frenzied &&
+    findMaxLevelItem("paleclaw") !== -1 &&
+    Object.values(parent.entities).some((mob) => {
+      const dist = distance(mob, character);
+      return mob.type === "monster" && dist > 0 && dist < G.skills.cleave.range;
+    })
+  );
+}
+
 let isCleaving = false;
 async function warriorCleave(strategyName) {
   if (is_on_cooldown("cleave") || isCleaving || isEquipingItems) return;
@@ -261,14 +308,20 @@ async function warriorCleave(strategyName) {
     cleaveSet.push({ num: mpxAmulet, slot: "amulet" });
 
   const restoreItems = calculateWarriorItems();
+  const isPaleclawTail = shouldPaleclawTail(restoreItems);
+  if (isPaleclawTail) delete restoreItems.amulet;
+
   return Promise.allSettled([
     Promise.all([
       getServerSlot("offhand") ? sendUnequip("offhand") : undefined,
       cleaveSet.length ? sendEquips(cleaveSet) : undefined,
     ]),
     withTimeout(use_skill("cleave"), 2500),
-    // Cleave procs sugarcane off whatever the server sees equipped when it
-    // runs, so swap back right away instead of waiting on use_skill
+    // The penalty_cd bail on the restore keeps it on past the farthest hit
+    isPaleclawTail
+      ? sendEquips([{ num: findMaxLevelItem("paleclaw"), slot: "amulet" }])
+      : undefined,
+    // The cleave weapon only has to be on when the server runs cleave
     equipBatch(restoreItems, { preventKeySnatch: false }),
   ]).finally(() => {
     isCleaving = false;

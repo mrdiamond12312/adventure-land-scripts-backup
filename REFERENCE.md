@@ -1342,7 +1342,8 @@ it is often skipped entirely rather than merely computed once.
 
 ## Candy-cane swap timing (`maybeCandySwap`, strategic_fn.11.js)
 
-Swap to candy canes so they are equipped when the projectile *lands*, then swap back. It works
+The timing below lives in `swapUntilImpact`, which the candy swap and the warrior's paleclaw swap
+share (see "Paleclaw" further down). Swap to candy canes so they are equipped when the projectile *lands*, then swap back. It works
 because the server reads `attacker.a.sugarrush` in `complete_attack`, at impact, from whatever is
 equipped then. Only `sugarrush` and `frenzy` are read there. crit, critdamage, explosion, blast,
 lifesteal, manasteal, the piercings, and the freeze/poison/burn/weave/petrify/hex/shatter/sunder
@@ -1367,7 +1368,7 @@ Three timing facts, each of which broke it once:
 **The restore's `penalty_cd` must clear before the next shot (2026-10-11).** `isAttackReady` waits on
 the client's `character.s.penalty_cd`, which the client only learns from the echo, a full ping after
 the restore is sent. The restore itself can't go out before the cane equip's reply, a ping after
-the swap. So the client clears at `max(canePenalty, ping + CANDY_MIN_HOLD_MS) + ping +
+the swap. So the client clears at `max(canePenalty, ping + IMPACT_SWAP_MIN_HOLD_MS) + ping +
 restorePenalty` after the shot, and the swap is skipped when that is longer than the attack cycle.
 The old gate (`cycle > 250 + ping`) and a deadline that only subtracted `ping / 2` let a 1.74/s
 rogue swap up to ~325ms ping. Above ~150ms, every shot was then held back by about
@@ -1420,6 +1421,35 @@ was ruled out because the attack's swap already uses most of the cycle's penalty
   The bundled stab goes out whether or not `maybeCandySwap` then swaps, so it is aligned, never lost.
 - `isFollowUpInFlight` stops the two loops from double-sending while the first stab's cooldown is
   still unanswered.
+
+### Warrior: paleclaw on the amulet slot (2026-11-01)
+
+The Paleclaw Totem's `frenzy` ability is rolled right after sugarrush in `complete_attack`, with
+the same gates (server.js, kaansoral/adventureland_mongodb @ `93bb1c7`). Each landed hit of a
+`procs` skill rolls `attr0`% once, which is 1.75% at +0 and grows +0.3 per compound level. For the
+warrior those skills are only `attack` and `cleave`. The roll gives `frenzied`: +40 attack speed
+for 6 seconds, and a new proc resets the timer instead of stacking. Splash targets never roll
+because the block sits inside `if (first)`, and evaded, missed or avoided hits return before it.
+It shows up as `character.s.frenzied`.
+
+The weapons decide which swap runs, so the two swaps never meet on one shot. Canes ride
+`fireblade` / `rapier`. The paleclaw rides the pull set (`vhammer` / `ololipop`) and only swaps off
+`stramulet`. `snring` (tanking) and `spookyamulet` (loot luck is rolled at the kill, which is the
+impact) are never swapped off.
+
+**Cleave tail.** Cleave is not instant. Each mob gets its own `momentum` projectile (320 px/s, or
+the cleave weapon's own projectile), so over the 160 range the hits land up to ~500ms after the
+cast. Mana is spent at the cast, so `mpxamulet` goes on before `use_skill("cleave")`. The paleclaw
+is sent right after it, which the server handles straight after cleave, ahead of every hit still
+in flight. There is no hold. After a cleave the client sees 480–600ms of `penalty_cd`, and
+`equipBatch` bails until it clears, so `stramulet` cannot come back before the farthest hit lands.
+A simulation at 75–85ms ping and 1.33 attacks/s (2026-11-01) found the hold changed neither the
+catch rate (100% of cleave hits) nor the attack delay. The paleclaw is sent on its own rather
+than in the restore batch. In the batch it is sliced off first when the budget is short, which
+catches only ~50% of hits. The cost of sending it alone is that its 120ms uses up the weapon
+restore's budget, so attacks fired with the cleave axe still in hand go from ~0.32 to ~0.48 per
+cleave. The attack swap adds no delay at that ping either. Its restore clears the client
+around ping×2 + 240ms after the shot, well inside the 752ms cycle.
 
 ## Field reports must fail closed (`entFieldReport`)
 
