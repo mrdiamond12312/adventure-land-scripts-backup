@@ -11,18 +11,17 @@ const KEEP_THRESHOLD = {
   harbringer: 12,
   oozingterror: 12,
   pouchbow: 4,
-  daggerofthedead: 16,
-  bowofthedead: 16,
+  daggerofthedead: 12,
+  bowofthedead: 12,
   froststaff: 8,
   frankypants: 6,
-  gphelmet: 12,
+  gphelmet: 6,
   ololipop: 12,
   glolipop: 12,
   fallen: 16,
 
-
   // new stuffs!
-  cloverstud: 12,
+  cloverstud: 8,
   horsemanpumpkin: 7,
   handofmidas: 7,
 
