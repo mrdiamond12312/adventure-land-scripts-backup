@@ -1458,11 +1458,27 @@ alone and restores everything else as usual. Luck gear still wins. Usually the p
 `penalty_cd` (480–600ms, which `equipBatch` waits out) outlasts the hits anyway, and a
 simulation at 75–85ms ping (2026-11-01) found no difference in catch rate (100% of cleave
 hits), cleaves or attack delay. The hold covers the case where the penalty clears early. An
-earlier version held the whole equip lock with a `sleep`, which also held back the weapons. The paleclaw is sent on its own rather
-than in the restore batch. In the batch it is sliced off first when the budget is short, which
-catches only ~50% of hits. The cost of sending it alone is that its 120ms uses up the weapon
-restore's budget, so attacks fired with the cleave axe still in hand go from ~0.32 to ~0.48 per
-cleave. The attack swap adds no attack delay at that ping either.
+earlier version held the whole equip lock with a `sleep`, which also held back the weapons.
+
+**The paleclaw rides the restore batch, weapons first.** `warriorCleave` puts `amulet: "paleclaw"`
+in the restore it hands `equipBatch`. The budget sends mainhand first and slices the amulet off
+first, so the paleclaw goes on only when the penalty budget after the weapons still covers it.
+`paleclawHoldUntil` is set only if the batch really sent it: `getServerSlot("amulet")` sees the
+in-flight equip right after the call, because `equipBatch` sends synchronously before its first
+`await`. In the simulation this matched a separate budget-gated send exactly. The three orders
+tried, at 1.33 attacks/s:
+
+| Order | Cleave hits caught | Axe attacks /20s | Avg attack delay |
+|---|---|---|---|
+| paleclaw first | 100% | 3.8 (vs 1.4 with no paleclaw) | 10ms |
+| weapons first, always | 100% | 0.4 | 13ms |
+| weapons first, paleclaw if it fits | 72% | 1.3 | 10ms |
+
+Paleclaw first eats the weapons' budget, so the restore is sliced and the axe waits ~500ms for the
+retry. Weapons first, always, collapses at 1.6 attacks/s: attacks drop from 32 to 29 and the
+average delay reaches 69ms, because the unbudgeted paleclaw lands on the next attack. Gated on
+budget, it matches no-paleclaw on delay and axe attacks at every speed tried. It catches 72% of
+cleave hits at 1.33, 29% at 1.6 and 95% at 2.0.
 
 **Cleave goes first (`isCleaveDue`).** A 20s simulation of a pull fight with both running (attacks,
 cleaves and the gear loop) showed the attack swap starving cleave. Its restore leaves the client

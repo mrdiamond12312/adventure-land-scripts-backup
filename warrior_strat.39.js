@@ -312,22 +312,19 @@ async function warriorCleave(strategyName) {
 
   const restoreItems = calculateWarriorItems();
   const paleclawTailMs = getPaleclawTailMs(restoreItems, cleaveWeapon);
-  if (paleclawTailMs) {
-    delete restoreItems.amulet;
-    paleclawHoldUntil = Date.now() + paleclawTailMs;
-  }
+  if (paleclawTailMs) restoreItems.amulet = "paleclaw";
 
-  return Promise.allSettled([
-    Promise.all([
-      getServerSlot("offhand") ? sendUnequip("offhand") : undefined,
-      cleaveSet.length ? sendEquips(cleaveSet) : undefined,
-    ]),
-    withTimeout(use_skill("cleave"), 2500),
-    paleclawTailMs
-      ? sendEquips([{ num: findMaxLevelItem("paleclaw"), slot: "amulet" }])
-      : undefined,
-    equipBatch(restoreItems, { preventKeySnatch: false }),
-  ]).finally(() => {
+  const cleaveSwap = Promise.all([
+    getServerSlot("offhand") ? sendUnequip("offhand") : undefined,
+    cleaveSet.length ? sendEquips(cleaveSet) : undefined,
+  ]);
+  const cleaveCast = withTimeout(use_skill("cleave"), 2500);
+  // The budget slices the amulet off first, so the paleclaw only rides when it fits
+  const restore = equipBatch(restoreItems, { preventKeySnatch: false });
+  if (paleclawTailMs && getServerSlot("amulet")?.name === "paleclaw")
+    paleclawHoldUntil = Date.now() + paleclawTailMs;
+
+  return Promise.allSettled([cleaveSwap, cleaveCast, restore]).finally(() => {
     isCleaving = false;
     isEquipingItems = false;
     // equipBatch bails while penalty_cd is up, so retry the restore at the
