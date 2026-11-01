@@ -161,7 +161,9 @@ function getBossMinion(bossType) {
 const KANE_LUCK_BOSSES = ["mrpumpkin"];
 const KANE_ID = "$Kane";
 const KANE_MIN_COOP_POINTS = 300_000;
-const KANE_LEAVE_MS = 60_000;
+const KANE_LEAVE_MS = 45_000;
+/** Back to the boss if it outlives this much of the wait; one wait per spawn */
+const KANE_MAX_STAY_MS = 60_000;
 const KANE_RETURN_MS = 120_000;
 const KANE_STALL_MS = 60_000;
 const KANE_MIN_OTHER_ATTACKERS = 3;
@@ -192,7 +194,10 @@ function trackBoss(type) {
   if (hp === undefined) return track;
 
   const last = track.samples.at(-1);
-  if (last && hp > last[1]) track.samples = [];
+  if (last && hp > last[1]) {
+    track.samples = [];
+    track.kaneLeftAt = undefined;
+  }
   if (!last || hp !== last[1]) track.lastDropAt = now;
   if (!last || hp !== last[1] || now - last[0] >= BOSS_HP_SAMPLE_MS)
     track.samples.push([now, hp]);
@@ -225,6 +230,7 @@ function getBossMsToDeath({ samples }) {
 
 function shouldLeaveForKane(track) {
   return (
+    !track.kaneLeftAt &&
     (character.s.coop?.p ?? 0) >= KANE_MIN_COOP_POINTS &&
     getBossMsToDeath(track) <= KANE_LEAVE_MS &&
     Date.now() - track.attackersSeenAt <= KANE_ATTACKERS_TTL_MS &&
@@ -234,6 +240,7 @@ function shouldLeaveForKane(track) {
 
 function shouldReturnFromKane(track) {
   return (
+    Date.now() - track.kaneLeftAt > KANE_MAX_STAY_MS ||
     Date.now() - track.lastDropAt > KANE_STALL_MS ||
     getBossMsToDeath(track) > KANE_RETURN_MS
   );
@@ -250,6 +257,7 @@ async function waitOutBossAtKane(type) {
       : shouldLeaveForKane(track);
   const kane = isStaying && getRoamingNpcSpot(KANE_ID);
 
+  if (kane && kaneWaitBoss !== type) track.kaneLeftAt = Date.now();
   kaneWaitBoss = kane ? type : undefined;
   if (!kane) return;
 

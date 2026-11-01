@@ -1452,11 +1452,13 @@ targeted tank wears `snring`.
 the cleave weapon's own projectile), so over the 160 range the hits land up to ~500ms after the
 cast. Mana is spent at the cast, so `mpxamulet` goes on before `use_skill("cleave")`. The paleclaw
 is sent right after it, which the server handles straight after cleave, ahead of every hit still
-in flight. There is no hold. After a cleave the client sees 480–600ms of `penalty_cd`, and
-`equipBatch` bails until it clears, so the real amulet cannot come back before the farthest hit
-lands.
-A simulation at 75–85ms ping and 1.33 attacks/s (2026-11-01) found the hold changed neither the
-catch rate (100% of cleave hits) nor the attack delay. The paleclaw is sent on its own rather
+in flight. Only the amulet is held: `getPaleclawTailMs` gives the farthest hit's flight time, and
+until `paleclawHoldUntil` `getWarriorAmulet` returns `"paleclaw"`. The gear loop leaves that slot
+alone and restores everything else as usual. Luck gear still wins. Usually the post-cleave
+`penalty_cd` (480–600ms, which `equipBatch` waits out) outlasts the hits anyway, and a
+simulation at 75–85ms ping (2026-11-01) found no difference in catch rate (100% of cleave
+hits), cleaves or attack delay. The hold covers the case where the penalty clears early. An
+earlier version held the whole equip lock with a `sleep`, which also held back the weapons. The paleclaw is sent on its own rather
 than in the restore batch. In the batch it is sliced off first when the budget is short, which
 catches only ~50% of hits. The cost of sending it alone is that its 120ms uses up the weapon
 restore's budget, so attacks fired with the cleave axe still in hand go from ~0.32 to ~0.48 per
@@ -4175,9 +4177,12 @@ by `(luckm + 2) / luckm` (2.3× at 50 luck). Coop points never decay, so leaving
 
 The trigger is earthiverse's `KaneEventBossMoveStrategy` (adventureland-bots): the boss's hp is
 sampled every tick (in sight, else `server.status`), time to death is hp ÷ the damage rate over
-the last 5 min, and the mage leaves once `character.s.coop.p ≥ 300k`, death is ≤ 60s out, and 3+
+the last 5 min, and the mage leaves once `character.s.coop.p ≥ 300k`, death is ≤ 45s out, and 3+
 strangers (not ours, not party) were on the boss within 10s, so it still dies without us. It goes
-back when the hp stalls 60s or the estimate passes 120s. Magiport only pulls another player, so
+back when the hp stalls 60s, the estimate passes 120s, or the boss is still alive 60s after it
+left (`KANE_MAX_STAY_MS`, 2026-11-01). It leaves only once per spawn (`track.kaneLeftAt`, cleared
+when the hp jumps back up). Without that, an optimistic estimate would send it straight back to
+Kane after every return. Magiport only pulls another player, so
 the mage walks. Kane's spot is `$Kane` in sight, else the merchant's `noteRoamingNpcs` sighting
 for this realm (5 min fresh). The store is keyed realm → NPC id, so each realm keeps its own;
 `getRoamingNpcSpot(id, realm)` reads any of them. There the kite parks on Kane (`getKaneParkSpot` → `withParkSpot`)

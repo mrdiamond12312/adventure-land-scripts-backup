@@ -35,6 +35,7 @@ function getWarriorOffhand(shouldUseBlaster, feelingLucky) {
 
 function getWarriorAmulet(feelingLucky, isTanker) {
   if (feelingLucky) return "spookyamulet";
+  if (Date.now() < paleclawHoldUntil) return "paleclaw";
 
   const isBeingTargetedByMonster = Object.values(parent.entities)
     .filter((entity) => entity.type === "monster")
@@ -260,18 +261,35 @@ function isCleaveDue() {
   );
 }
 
-/** @returns {boolean} whether cleave puts the paleclaw on for its hits in flight */
-function shouldPaleclawTail(restoreItems) {
-  return (
-    !!restoreItems.amulet &&
-    !hasLuck({ name: restoreItems.amulet }) &&
-    !character.s.frenzied &&
-    findMaxLevelItem("paleclaw") !== -1 &&
-    Object.values(parent.entities).some((mob) => {
-      const dist = distance(mob, character);
-      return mob.type === "monster" && dist > 0 && dist < G.skills.cleave.range;
-    })
+/** Until then the amulet slot keeps the paleclaw for cleave's hits in flight */
+let paleclawHoldUntil = 0;
+
+/** @returns {number} ms from the cast to cleave's farthest hit, 0 to skip the paleclaw tail */
+function getPaleclawTailMs(restoreItems, cleaveWeapon) {
+  if (
+    !restoreItems.amulet ||
+    hasLuck({ name: restoreItems.amulet }) ||
+    character.s.frenzied ||
+    findMaxLevelItem("paleclaw") === -1
+  )
+    return 0;
+
+  const projectileKey =
+    cleaveWeapon.info?.projectile ?? G.classes[character.ctype].projectile;
+  const projectileSpeed = G.projectiles[projectileKey]?.speed;
+  const farthestHit = Math.max(
+    0,
+    ...Object.values(parent.entities)
+      .filter(
+        (mob) =>
+          mob.type === "monster" &&
+          distance(mob, character) < G.skills.cleave.range,
+      )
+      .map((mob) => distance(mob, character)),
   );
+  return projectileSpeed && farthestHit > 0
+    ? (farthestHit / projectileSpeed) * 1000 + 7
+    : 0;
 }
 
 let isCleaving = false;
@@ -293,8 +311,11 @@ async function warriorCleave(strategyName) {
     cleaveSet.push({ num: mpxAmulet, slot: "amulet" });
 
   const restoreItems = calculateWarriorItems();
-  const isPaleclawTail = shouldPaleclawTail(restoreItems);
-  if (isPaleclawTail) delete restoreItems.amulet;
+  const paleclawTailMs = getPaleclawTailMs(restoreItems, cleaveWeapon);
+  if (paleclawTailMs) {
+    delete restoreItems.amulet;
+    paleclawHoldUntil = Date.now() + paleclawTailMs;
+  }
 
   return Promise.allSettled([
     Promise.all([
@@ -302,7 +323,7 @@ async function warriorCleave(strategyName) {
       cleaveSet.length ? sendEquips(cleaveSet) : undefined,
     ]),
     withTimeout(use_skill("cleave"), 2500),
-    isPaleclawTail
+    paleclawTailMs
       ? sendEquips([{ num: findMaxLevelItem("paleclaw"), slot: "amulet" }])
       : undefined,
     equipBatch(restoreItems, { preventKeySnatch: false }),
