@@ -22,8 +22,8 @@ behavior plus three deliberate overrides:
   players are close, it just stops and faces the target instead of needlessly orbiting — no
   point kiting when nothing is chasing you.
 
-- **Tanker + farmed mobs (`mobsToFarm`, e.g. `ent`, `plantoid`)**: the goal is to drag the mob
-  back to the default farm spot (`mapX`/`mapY`) rather than fight it wherever it spawned.
+- **Tanker + farmed mobs (`getFarm().mobs`, e.g. `ent`, `plantoid`)**: the goal is to drag the mob
+  back to the farm spot (`getFarm()`) rather than fight it wherever it spawned.
   - While the mob is still far from the spot, the tanker holds a position between the mob and
     home, but that hold distance shrinks the faster the mob is relative to the tanker
     (`speedRate` = mob speed/charge over character speed) — holding a fixed offset from
@@ -1590,8 +1590,8 @@ guard — so swapping the mage out of the party meant nobody ever wrote it again
 mage-only because its other consumers (`advance_smart_move.20.js`, `strategic_smart_move.21.js`)
 genuinely need magiport.
 
-The reporter must **be able to see the field**: it returns early unless the character is on `map`
-and within `ENT_FIELD_REPORT_RANGE` of `{mapX, mapY}`. A distant fighter would otherwise report `0`
+The reporter must **be able to see the field**: it returns early unless the character is on the farm map
+and within `ENT_FIELD_REPORT_RANGE` of `getFarm()`. A distant fighter would otherwise report `0`
 ents and hand the merchant the same false green light in a new form.
 
 ## Two party rosters, one definition each (`getMyCharacters`/`getAlliedNames`)
@@ -2026,15 +2026,15 @@ changed), `selectFightTarget()` hands it back, and "owns the tick" stays a separ
 "has something to hit".
 
 **Each strategy carries its own move.** Walking into the crypt belongs to the crypt strategy,
-regrouping on `mapX`/`mapY` to the farming one, chasing an announced boss spot to the event one. The
+regrouping on `getFarm()` to the farming one, chasing an announced boss spot to the event one. The
 entry scripts keep only `const target = await selectFightTarget(); if (target) await fight(target);`
 — the per-class copies of the "no target, so move somewhere" block are gone, and with them the
 drift between them (warrior wanted leader *and* far, everyone else leader *or* far).
 
-**Off the spot, only `mobsToFarm` holds us (`isFarmMob`).** A boss dies and the field it drew stays
+**Off the spot, only the farm mobs hold us (`isFarmMob`).** A boss dies and the field it drew stays
 full of mobs, so plain targeting kept finding something to splash and the party farmed the event site
 instead of the spot — indefinitely, since each kill woke the next. Past `FARM_SPOT_SLACK` the target
-therefore has to be one we came for (`mobsToFarm`, or the character's own `ownTargets`); anything else
+therefore has to be one we came for (`getFarm().mobs`, or the character's own `ownTargets`); anything else
 is left standing and the walk home starts on that tick. Tying it to where we are rather than to the
 event that took us there keeps the crypt reachable: a crypt run is a strategy above farming, not a
 debt farming has to spend before it can start.
@@ -2045,13 +2045,13 @@ its own `range + xrange` mid-pull. Acting on a single such tick started a walk h
 the expensive half: `isAdvanceSmartMoving` short-circuits mainLoop until it lands, so one unlucky
 frame abandoned a live fight (a warrior still on a megatron, but every class hits this). The strategy
 therefore stamps `lastEngagementAt` whenever it has a target or `isPartyEngaged()` — a monster in
-vision holding any ally, or a `mobsToFarm` mob standing right here — and regroups only after that has
+vision holding any ally, or a farm mob standing right here — and regroups only after that has
 been quiet for 5s. Distance is the wrong signal for this: "do not leave when far from home" is exactly
 backwards, since far from home is when coming back matters most. `FARM_SPOT_SLACK` still decides
 *whether* a follower has drifted, not *when* it is safe to act.
 
 **Any class can farm its own spot.** `ownMap`/`ownMapX`/`ownMapY`/`ownTargets` default to `undefined`
-in farming_fighter_strat.27.js and fall back to the party's `map`/`mapX`/`mapY` and `getTarget()`, so an
+in farming_fighter_strat.27.js and fall back to the party's `getFarm()` and `getTarget()`, so an
 entry script overrides them by declaring them at its top and everyone else pays nothing. They were
 `rangerMap`/`rangerTarget` plus a copy of the shortlist scan in each ranger file, which is why
 basic_ranger.32.js never got either. The trip needs no `scareAwayMobs()` loop of its own: both
@@ -4039,15 +4039,15 @@ with a porcupine in splash radius, nor drops the pull strategy near one; `MELEE_
 keeps melee off hitting it directly, and agitate and cleave off it. cburst skips it too, by
 request: it is about not pulling the porcupine, not about dreturn.
 
-### A farm can pin its tanker (`farmTanker`, 2026-10-17)
+### A farm can pin its tanker (`tanker`, 2026-10-17)
 
-`farmTanker`, set beside `mobsToFarm`, takes the tank on the configured farm spot (within
-`FARM_SPOT_SLACK` of `map`/`mapX`/`mapY`), right after the boss-drag rule. It reads the shared
+A `FARMS` entry's `tanker` (`getFarm().tanker`) takes the tank on the configured farm spot (within
+`FARM_SPOT_SLACK` of `getFarm()`), right after the boss-drag rule. It reads the shared
 spot, not a character's `ownMap`, so every character settles on the same tanker. A global pin
 was tried and dropped because it leaked into every other farm and event; off the spot the
-damage-share pick above still decides. Set it to undefined when a farm has no preference.
+damage-share pick above still decides. Leave it out when a farm has no preference.
 
-`warriorHeldMobs` (ent at the plantoid farm) splits the tank: on the farm spot the warrior
+A farm's `warriorHeld` (ent at the plantoid farm) splits the tank: on the farm spot the warrior
 taunts those mobs off anyone in the party, the merchant's drag included, once they are within
 `WARRIOR_HOLD_RANGE` (150) of the spot, so the drag ends there first, and focuses them; mobs
 already on him stay his anywhere. All of it (`getWarriorHeldMobs`) holds whether or not he is
@@ -4057,7 +4057,7 @@ without that he orbited the ent wherever he met the drag. The held-mob
 taunt comes before the tanker gate and the 3000-damage cap of the ally peel, which an ent (3600
 physical) would fail.
 
-Beyond the held mobs the warrior off-tanks while `farmTanker` is someone else and he is on the
+Beyond the held mobs the warrior off-tanks while the farm's `tanker` is someone else and he is on the
 spot (`getOffTankTauntTarget`): he taunts physical mobs off the fighters (`partyMems`, so never a
 merchant drag), hardest hitter first, for as long as `hasCourageFor` holds, so his physical
 courage (5) is the amount he takes. Mobs over `OFF_TANK_MAX_MOB_DPS` on him, cooperative mobs and
@@ -4069,7 +4069,7 @@ else) while it is within his reach of the anchor, and goes to it only beyond tha
 plantoids. His taunt pull skips `MELEE_IGNORE_LIST` so porcupines do not block the warrior's
 cleave and agitate; the zapper still pulls them.
 
-The priest's `getAbsorbTarget` skips the warrior only while a `warriorHeldMobs` mob is on him
+The priest's `getAbsorbTarget` skips the warrior only while a `warriorHeld` mob is on him
 (absorbing pulled his held ents straight back; absorb takes every mob on the target, so one ent
 blocks the whole absorb), or while the priest himself is in `isAllyInEmergency`, which is the case
 in which the off-tank taunt pulls mobs off him (absorbing those back would ping-pong).
@@ -4428,8 +4428,8 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   0.9–1.6M/min, boars 576k/min), so the party's damage is the limit, and the overstock of
   embercoal (133 vs 18–38) comes from time spent on plantoids, not a better rate. While the
   round's `witchGatherPlan` slot is a `WITCH_RANGER_KINDS` kind (spider, ghost),
-  `dynamicParty` picks `witch`: the ranger (RANGER2 on EUII, RANGER1 elsewhere) replaces the
-  warrior, whose single-target swings waste the dense packs, and the priest tanks. Spiders also
+  `dynamicParty` picks `witch`. On EUI/EUII the home ranger (RANGER1/RANGER2) replaces the
+  warrior; elsewhere the warrior stays (2026-11-03, the user's call, "warrior for now"). The ranger beats the warrior, whose single-target swings waste the dense packs, and the priest tanks. Spiders also
   walk slowly (speed 24), so a melee warrior loses time reaching each one. Embercoal and wolfie
   (Dark Hound) slots keep the default warrior party: plantoids hit for 640, and wolfie went to
   the warrior on 2026-11-01 at the user's request. The preset ranks just below `cave` and
@@ -4438,14 +4438,16 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   `isRangerWitchSlot` runs from `dynamicParty()`'s load-time call, before the witch section's
   `const`s exist, so it only touches hoisted functions (`getWitchRoundKey` is one for that reason).
   Luck was already covered: `shouldWearLuckGear` swaps in luck gear for the killing blow.
-- **Spot** (`getWitchGatherSpot`): `at` pins a point; `between` takes the middle of those mobs'
+- **Spot** (`getWitchGatherSpot`): each ingredient names a `FARMS` entry and gathers on that
+  farm's spot (`getAnchorSpot`): `at` pins a point; `between` takes the middle of those mobs'
   spawn centres; both are moved to a walkable point. Spider is pinned at main 1328,-80, the
   user's pick among the spider, bigbird and scorpion spawns. Their computed middle, about
   1290,-21, is not walkable (the nearest clear point is 1228,-39). Bigbirds and scorpions
   there become targets only once they hit one of ours. Wolfie stands between its two
-  winterland spawns (about 90,-2033). The other kinds use their first spawn.
+  winterland spawns (about 90,-2033). Ghost stands between its three halloween spawns (about
+  35,-1363, some 525px from the big one fvampire shares). Embercoal shares the `plantoid` farm spot.
 - **Hold** (`isHeld`, spider and wolfie): `getHoldSpot` (basic_function_kiting.47.js) hands the
-  gather spot and its mtype to `getFarmMobOrbit` in place of `mapX`/`mapY`/`mobsToFarm` while
+  gather spot and its mtype to `getFarmMobOrbit` in place of the `getFarm()` spot and mobs while
   the party is on that map. The tanker, whichever class holds the role, then circles the spot
   while a mob is on it and walks a stray one back, the same way it holds the farm spawn. On held
   spots `getWitchGatherTarget` ranks mobs by distance to the spot, not to the character. A pick
@@ -5103,3 +5105,81 @@ In the native mover it is the branch the magiport check didn't take. Server fact
 - **Landing.** Arrival comes as `new_map` with effect `"blink"` (`transport_player_to`). While he
   is `dampened` (a `fieldgen0` field) the jump is cancelled and nothing lands, so `useWarp` waits
   `ARRIVAL_TIMEOUT_MS` and falls back to walking.
+
+## Farm library (`FARMS`, basic_function_farms.54.js, 2026-11-03)
+
+- **One library, two keys.** Each farm spot is a named `FARMS` entry: a `SpotAnchor` plus its
+  `mobs`. `defaultFarm` is config, and `currentFarm` is what `getFarm()` reads. `setCurrentFarm()`
+  changes `currentFarm`, and an unknown name or no name falls back to `defaultFarm`. The old
+  `map`/`mapX`/`mapY`/`mobsToFarm` globals are gone. The bare global `map` was especially risky,
+  since any local `map` silently shadowed it.
+- **Anchors are shared with the Witch's Cipher.** `getAnchorSpot` resolves `at`, else the middle
+  of the `between` spawns on `map`, else the first `mtype` spawn on `map`, and snaps the result to
+  a standable point. A farm's `mtype` defaults to its key, so `odino: { map, mobs }` alone anchors
+  on the odino spawn.
+- **Cached per name.** A resolved spot is cached in `farmSpotCache` and never recomputed, since
+  `getFarm()` runs on most ticks. If a farm's spot cannot be resolved, `getFarm()` serves
+  `defaultFarm` instead.
+- **Tank settings ride with the farm.** `tanker` and `warriorHeld` used to be global config
+  (`farmTanker`, `warriorHeldMobs`), so switching farms kept the old farm's pin, and the ent hold
+  applied on mforest, where no ent spawns. They are now per entry, and `getFarm()` returns
+  `warriorHeld` as `[]` when it is unset.
+- **`currentFarm` is per character.** It is in-memory, not localStorage, so `setCurrentFarm` on
+  one fighter moves neither the others nor the merchant: the merchant's mechagnome lure and ent
+  drag read the merchant's own `getFarm()`. Anything that switches the party's farm has to run
+  the setter on every character, or publish the choice for all of them to read.
+
+## Kite stuck check is relative to the step (`trackStuckMovement`, basic_function_kiting.47.js, 2026-11-03)
+
+- **What broke.** The old check flipped the orbit 90° whenever the average movement over the last
+  five ticks fell under 2px. Fear cuts speed by 20/40/70 per level, so a feared tanking priest
+  walked slowly enough to trip it while moving freely. He then flipped back and forth around his
+  target. Standing still on the spot (a step under 3px, which sends no move) also counted as stuck.
+- **Now.** `moveTowardDestination` records each step: where it started, how long it was and when.
+  The next tick measures progress as a share of what that step could reach, which is its length
+  capped by `character.speed` × the time since. `character.speed` already has the fear cut in it.
+  The orbit flips when the average over `STUCK_WINDOW` (4) steps is under `STUCK_PROGRESS_SHARE`
+  (25%). Ticks that ask for no step, stale steps (over 2s, e.g. after a park or a smart move) and
+  reaches under 3px are skipped.
+
+## Home is per character (`HOME_SERVERS`, basic_function.7.js, 2026-11-03)
+
+- **The homes.** The party (mage, rogue, warrior, priest) and the merchant are home on USI
+  (`DEFAULT_HOME_SERVER`). The rangers are home on their own realms: RANGER1 on EUI and RANGER2
+  on EUII. `HOME_SERVER` is now this character's own entry, so every `isAtHomeServer()` check
+  asks about the character running it.
+- **Keep the party on one home.** Nearly every home check means the party's home: the cave's
+  Dorr approach (each fighter checks its own), hopping home, the Witch brew realm, fatigue and
+  the home window. A cave-party member with a different home would never come to Dorr. That is
+  why the priest moved to USI with the rest. The rangers are not in `CAVE_PARTY`.
+- **The hop owner's home is the party's.** Under caracAL the owner is the first enabled
+  character in config order (`shouldOwnRealmSockets`), and `MoohThatCow` comes first there. A
+  ranger owning the hop would send the party home to EU. Keep a USI character first among the
+  enabled ones.
+
+## Party presets follow the realm's home ranger (`DYNAMIC_PARTY_PRESETS`, 2026-11-03)
+
+These are the user's rules, set after homes moved (USI for the party, EUI for RANGER1, EUII for
+RANGER2). A ranger joins mostly on its own home realm, where it is not abroad.
+- **franky:** always warrior + priest. The third is the home ranger on EUI/EUII, else the rogue.
+- **icegolem:** always the rogue, and the ranger heals wherever one is in the party. That means
+  the home ranger + rogue + mage on EUI/EUII, and priest + rogue + mage everywhere else. The
+  USI/USIV warrior + priest + mage entries are gone.
+- **snowman:** always RANGER1. The EUII → RANGER2 entry is gone.
+- **witch:** warrior + priest + mage, or the home ranger in place of the warrior on EUI/EUII.
+- **crabxx, pinkgoo, wabbit, dragold** are unchanged. They are special cases, where the ranger is
+  there for faster clearing.
+
+## Back to the pre-Halloween settings, under the new homes (2026-11-03)
+
+Compared against `12da697^`, the commit before "add all halloween events" (2026-10-22):
+- **ASIA ignored again.** `IGNORED_REALMS = ["ASIAI", "ASIAII"]`, as before Halloween. ASIA is no
+  character's home. Horseman keeps `ignoredRealms: []` (left as it is until next Halloween).
+  crabxx's own ASIA list went away because it now repeats the default.
+- **Presets for the old home move to the new one.** USIV was home, so its entries were the home
+  tuning. dragold and pinkgoo had an identical USI entry, so their USIV entry was dropped.
+  mrpumpkin, wabbit and snowman had none, so their USIV entry became USI.
+- **Left alone:** `knownTankers` (`trustedPartners` was dropped on purpose by bb80efa so our
+  priest leads Earth), the horseman and witch presets, and the merchant's home-only Horseman.
+  The farm, `partyMems`, `desiredElixir`, `USE_CAVE_STRATEGY` and the other `HOP_BOSSES` entries
+  were already the same as before Halloween.

@@ -79,6 +79,9 @@ basic_function.7.js          [SHARED — the core library]
     basic_function_trips.46.js   strategy-chain trips, advanceSmartMove, the inventory lock, sortInv
     basic_function_kiting.47.js  getTarget, boss drag routes, kite/orbit movement (hitAndRun)
     basic_function_loot.48.js    respawn and harakiri, potion stock, chests and midas looting
+    basic_function_farms.54.js   the FARMS library, setCurrentFarm/getFarm (currentFarm falls back
+                                 to defaultFarm), and getAnchorSpot — `at` / middle of `between`
+                                 spawns / first `mtype` spawn, shared with the Witch gather spots
     basic_function_events.53.js  live events, rogue/ent-field deploys, boss HP ranking, crabxx,
                                  anniversary, Witch's Cipher, trick-or-treat (shared by fighters
                                  and the merchant, so not in daily_event_fighter_strat.26.js)
@@ -179,10 +182,12 @@ Standalone / auxiliary (not wired into the load graph above, used directly or ad
 
 - **Config lives at the top of `basic_function.7.js`.** Party roster (`partyMems`), per-character role
   constants (`MAGE`, `WARRIOR`, `PRIEST`, `RANGER`, `TANKER`, `HEALER`), the `CODE_SLOTS` map (character name
-  → CODE slot), farming location (`map`/`mapX`/`mapY`), `mobsToFarm`, and `desiredElixir` are all
-  hand-edited here before (re)deploying scripts to a party. Several alternate map/location blocks are kept
-  commented out immediately below the active one — follow that pattern (comment out the old location, don't
-  delete it) when switching farming spots.
+  → CODE slot), the farm (`defaultFarm`), and `desiredElixir` are all hand-edited here before
+  (re)deploying scripts to a party. Farm spots and their mobs live in the `FARMS` library
+  (`basic_function_farms.54.js`): add an entry there rather than commenting blocks in and out, and switch
+  farms with `defaultFarm` (config) or `setCurrentFarm(name)` (runtime; no name falls back to the default).
+  Everything reads the farm through `getFarm()` → `{ name, map, x, y, mobs, tanker, warriorHeld }`; a
+  farm's pinned tanker and warrior-held mobs are entry fields, not globals.
 - **Cross-character coordination happens over code-messages (`cm`)**, via `send_cm(targetName, { msg, ...})`
   / the `on_cm`-style listener in `other_class_msg_listener.8.js`. Message `msg` types already in use include
   `buff_mluck`, `inv_full`, `buy_potions`, `elixir`, `xptome`, `dc-harakiri` — reuse these rather than

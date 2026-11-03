@@ -12,10 +12,11 @@ let lastEngagementAt = Date.now();
 
 /** @returns {{map: string, x: number, y: number}} the spot this character farms */
 function getFarmSpot() {
+  const farm = getFarm();
   return {
-    map: ownMap ?? map,
-    x: ownMapX ?? mapX,
-    y: ownMapY ?? mapY,
+    map: ownMap ?? farm.map,
+    x: ownMapX ?? farm.x,
+    y: ownMapY ?? farm.y,
   };
 }
 
@@ -47,7 +48,7 @@ function getFarmTarget() {
  */
 function isFarmMob(target) {
   return (
-    mobsToFarm.includes(target.mtype) ||
+    getFarm().mobs.includes(target.mtype) ||
     (ownTargets ?? []).includes(target.mtype)
   );
 }

@@ -2,7 +2,7 @@
 const HOP_REGIONS = ["US", "ASIA", "EU"];
 
 /** Realms we never hop to, e.g. "ASIAI", unless a HOP_BOSSES entry gives its own `ignoredRealms` */
-const IGNORED_REALMS = [];
+const IGNORED_REALMS = ["ASIAI", "ASIAII"];
 
 /** Bosses hopped to at first sighting, ranked first, and stayed for while live here */
 const TANKABLE_BOSSES = [
@@ -26,12 +26,7 @@ const HOP_BOSSES = {
   franky: { type: "franky", threshold: 0.75, hoppable: 1 },
   // mrpumpkin: { type: "mrpumpkin", threshold: 0.3, hoppable: 0.9999 },
   // mrgreen: { type: "mrgreen", threshold: 0.3, hoppable: 0.9999 },
-  crabxx: {
-    type: "crabxx",
-    threshold: 0.95,
-    hoppable: 1,
-    ignoredRealms: ["ASIAI", "ASIAII"],
-  },
+  crabxx: { type: "crabxx", threshold: 0.95, hoppable: 1 },
   dragold: { type: "dragold", threshold: 0.85, hoppable: 1 },
   pinkgoo: { type: "pinkgoo", threshold: 0.65, hoppable: 1 },
   // wabbit: { type: "wabbit", threshold: 0.5, hoppable: 1 },
@@ -39,6 +34,7 @@ const HOP_BOSSES = {
     type: "horseman",
     hoppable: 1,
     fatigueExempt: true,
+    ignoredRealms: [],
   },
 };
 

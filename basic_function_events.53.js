@@ -67,9 +67,9 @@ const ENT_FIELD_PARTNER_RANGE = 400;
 function publishEntFieldReport() {
   if (isMerchant()) return;
 
-  const farmSpot = { x: mapX, y: mapY, map };
+  const farmSpot = getFarm();
   if (
-    character.map !== map ||
+    character.map !== farmSpot.map ||
     distance(character, farmSpot) > ENT_FIELD_REPORT_RANGE
   )
     return;
@@ -279,24 +279,14 @@ async function visitAnniversaryPlayer() {
 // Witch's Cipher
 
 /**
- * The spot: `at`, else the middle of the `between` mobs' spawns on `map`, else the first `mtype` spawn.
+ * Each ingredient: its mob, and the FARMS entry (basic_function_farms.54.js) it is gathered at.
  * `isHeld`: the tanker holds its mobs on the spot, as on the farm spot.
  */
 const WITCH_GATHER_SPOTS = {
-  verdantspore: {
-    mtype: "spider",
-    map: "main",
-    at: { x: 1328, y: -80 },
-    isHeld: true,
-  },
-  frostscale: {
-    mtype: "wolfie",
-    map: "winterland",
-    between: ["wolfie"],
-    isHeld: true,
-  },
-  embercoal: { mtype: "plantoid", map: "desertland" },
-  gloomfeather: { mtype: "ghost", map: "halloween" },
+  verdantspore: { mtype: "spider", farm: "spider", isHeld: true },
+  frostscale: { mtype: "wolfie", farm: "wolfie", isHeld: true },
+  embercoal: { mtype: "plantoid", farm: "plantoid" },
+  gloomfeather: { mtype: "ghost", farm: "ghost" },
 };
 
 const WITCH_GATHER_SLOT_MS = 5 * 60_000;
@@ -421,23 +411,8 @@ function pickWitchGatherKind(visited) {
 
 /** @returns {{map: string, x: number, y: number}|undefined} where `kind` is gathered */
 function getWitchGatherSpot(kind) {
-  const { mtype, map, at, between } = WITCH_GATHER_SPOTS[kind];
-  if (at)
-    return (
-      strategicSmartMove.getStandablePointNear({ map, ...at }) ?? { map, ...at }
-    );
-
-  const spawns = (between ?? [mtype])
-    .flatMap((type) => getMonsterSpawns(type))
-    .filter((spawn) => spawn.map === map);
-  if (!between || !spawns.length) return spawns[0];
-
-  const middle = {
-    map,
-    x: Math.round(spawns.reduce((sum, { x }) => sum + x, 0) / spawns.length),
-    y: Math.round(spawns.reduce((sum, { y }) => sum + y, 0) / spawns.length),
-  };
-  return strategicSmartMove.getStandablePointNear(middle) ?? middle;
+  const farm = resolveFarm(WITCH_GATHER_SPOTS[kind].farm);
+  return farm && { map: farm.map, x: farm.x, y: farm.y };
 }
 
 /** @returns {{kind: string, mtype: string, spot: Object, isHeld?: boolean}|undefined} this slot's gathering, while gathering */

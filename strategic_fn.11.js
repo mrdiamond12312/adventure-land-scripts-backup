@@ -1961,7 +1961,7 @@ function rotateLeader(partyList, newLeaderId) {
 }
 
 function isOnPartyFarmSpot() {
-  return distance(character, { map, x: mapX, y: mapY }) <= FARM_SPOT_SLACK;
+  return distance(character, getFarm()) <= FARM_SPOT_SLACK;
 }
 
 function assignRoles() {
@@ -1977,8 +1977,9 @@ function assignRoles() {
     return;
   }
 
-  if (partyMems.includes(farmTanker) && isOnPartyFarmSpot()) {
-    TANKER = farmTanker;
+  const { tanker } = getFarm();
+  if (partyMems.includes(tanker) && isOnPartyFarmSpot()) {
+    TANKER = tanker;
     partyMems = rotateLeader(partyMems, TANKER);
     return;
   }
@@ -2089,8 +2090,8 @@ function getStrategyMob() {
   if (engaged) return engaged;
 
   // Shaped like an entity so calculateDamage can read its piercing off G
-  return (mobsToFarm ?? [])
-    .filter((mtype) => G.monsters[mtype])
+  return getFarm()
+    .mobs.filter((mtype) => G.monsters[mtype])
     .map((mtype) => ({ ...G.monsters[mtype], type: "monster", mtype }))
     .sort((lhs, rhs) => rhs.attack - lhs.attack)[0];
 }

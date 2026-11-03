@@ -28,16 +28,16 @@ const WARRIOR_HOLD_RANGE = 150;
 
 /** @returns {Object[]} held mobs on us or at the farm spot, nearest first */
 function getWarriorHeldMobs() {
-  if (!warriorHeldMobs?.length) return [];
+  const farmSpot = getFarm();
+  if (!farmSpot.warriorHeld.length) return [];
 
   const allies = getAlliedNames();
-  const farmSpot = { map, x: mapX, y: mapY };
   return Object.values(parent.entities)
     .filter(
       (entity) =>
         entity.type === "monster" &&
         !entity.dead &&
-        warriorHeldMobs.includes(entity.mtype) &&
+        farmSpot.warriorHeld.includes(entity.mtype) &&
         (entity.target === character.name ||
           ((!entity.target || allies.has(entity.target)) &&
             distance(entity, farmSpot) < WARRIOR_HOLD_RANGE)),
@@ -49,7 +49,7 @@ const OFF_TANK_MAX_MOB_DPS = 3000;
 
 /** @returns {Object|undefined} a physical mob to take off an ally in trouble */
 function getOffTankTauntTarget() {
-  if (!farmTanker || isAssignedAsTanker() || !isOnPartyFarmSpot())
+  if (!getFarm().tanker || isAssignedAsTanker() || !isOnPartyFarmSpot())
     return undefined;
 
   const allies = partyMems.filter(

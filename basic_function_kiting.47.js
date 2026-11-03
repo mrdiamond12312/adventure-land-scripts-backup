@@ -1,15 +1,25 @@
 // basic_function part: getTarget, boss drags, and the kite/orbit movement of hitAndRun
 
 //  run and hit
-const movementHistory = [];
+/** Share of each asked-for step actually covered, latest last */
+const stepProgress = [];
 var flipRotation = 1;
 var flipRotationCooldown = 0;
 var angle; // Your desired angle from the monster, in radians
 var flipCooldown = 0;
-var stuckThreshold = 2;
+
+/** Averaged over the window, progress under this share of the asked-for step counts as stuck */
+const STUCK_PROGRESS_SHARE = 0.25;
+const STUCK_WINDOW = 4;
+/** A step older than this says nothing about the wall in front of us */
+const STUCK_STEP_STALE_MS = 2000;
+/** Below this reach a step is noise, not a test */
+const STUCK_MIN_REACH = 3;
+
+/** @type {{map: string, x: number, y: number, length: number, at: number}|undefined} the last kite step asked for */
+var lastKiteStep;
 
 function getMonstersOnDeclares() {
-  // if (character.name === partyMems[0]) arrayShuffle(mobsToFarm);
   for (const monster of PRIORITY_MOB_IDS) {
     if (get_nearest_monster({ type: monster })) {
       return get_nearest_monster({ type: monster });
@@ -18,7 +28,7 @@ function getMonstersOnDeclares() {
 
   const luringMobType = get("luringMobType");
 
-  for (const monster of mobsToFarm) {
+  for (const monster of getFarm().mobs) {
     if (monster === luringMobType) continue;
     if (get_nearest_monster({ type: monster })) {
       return get_nearest_monster({ type: monster });
@@ -415,24 +425,37 @@ function updateKitingAngle(target) {
   if (!angle) faceTarget(target);
 }
 
-// Flips the orbit direction if we haven't actually moved much over the last
-// few ticks (e.g. wedged against a wall) — nudges the angle by 90° to break out.
+/**
+ * Flips the orbit 90° when the last few steps covered little of what they asked for
+ * (wedged against a wall). Measured against the step itself, so a slowed (feared) walk is not stuck.
+ */
 function trackStuckMovement() {
-  movementHistory.push({ x: character.real_x, y: character.real_y });
-  if (movementHistory.length > 5) movementHistory.shift();
+  const step = lastKiteStep;
+  lastKiteStep = undefined;
+  if (
+    !step ||
+    step.map !== character.map ||
+    Date.now() - step.at > STUCK_STEP_STALE_MS
+  )
+    return;
 
-  let totalMovement = 0;
-  for (let i = 1; i < movementHistory.length; i++) {
-    const dx = movementHistory[i].x - movementHistory[i - 1].x;
-    const dy = movementHistory[i].y - movementHistory[i - 1].y;
-    totalMovement += Math.sqrt(dx * dx + dy * dy);
-  }
+  const reach = Math.min(
+    step.length,
+    (character.speed * (Date.now() - step.at)) / 1000,
+  );
+  if (reach < STUCK_MIN_REACH) return;
 
-  const averageMovement = totalMovement / movementHistory.length;
-  if (averageMovement < stuckThreshold && flipRotationCooldown <= 0) {
+  const covered = Math.hypot(character.real_x - step.x, character.real_y - step.y);
+  stepProgress.push(Math.min(1, covered / reach));
+  if (stepProgress.length > STUCK_WINDOW) stepProgress.shift();
+  if (stepProgress.length < STUCK_WINDOW) return;
+
+  const share = stepProgress.reduce((sum, value) => sum + value, 0) / STUCK_WINDOW;
+  if (share < STUCK_PROGRESS_SHARE && flipRotationCooldown <= 0) {
     flipRotation *= -1;
     flipRotationCooldown = 4;
     angle += (flipRotation * Math.PI) / 2; // turn 90°
+    stepProgress.length = 0;
   }
 }
 
@@ -442,7 +465,8 @@ function getHoldSpot() {
   if (plan?.isHeld && plan.spot.map === character.map)
     return { ...plan.spot, mtypes: [plan.mtype] };
 
-  return { map, x: mapX, y: mapY, mtypes: mobsToFarm };
+  const { map, x, y, mobs } = getFarm();
+  return { map, x, y, mtypes: mobs };
 }
 
 // Tanker holding a farmed mob near the default spot orbits the spot itself rather
@@ -453,7 +477,7 @@ function getFarmMobOrbit(target) {
   const isTankerHoldingFarmMob =
     (isAssignedAsTanker() ||
       (character.ctype === "warrior" &&
-        !!warriorHeldMobs?.includes(target.mtype))) &&
+        getFarm().warriorHeld.includes(target.mtype))) &&
     target.type === "monster" &&
     target.target === character.name &&
     holdSpot.mtypes.includes(target.mtype);
@@ -605,6 +629,13 @@ function moveTowardDestination(destination) {
   }
 
   move(x, y);
+  lastKiteStep = {
+    map: character.map,
+    x: character.real_x,
+    y: character.real_y,
+    length: Math.hypot(x - character.real_x, y - character.real_y),
+    at: Date.now(),
+  };
   return { x, y };
 }
 

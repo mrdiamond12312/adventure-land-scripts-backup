@@ -45,11 +45,17 @@ const CODE_SLOTS = {
   MooohSteak: { script: 31 },
 };
 
-/** The realm this character told Bean to call home — Bean's choice is not readable from CODE */
-const HOME_SERVER = {
-  serverRegion: "US",
-  serverIdentifier: "IV",
+/** Home realm of anyone not listed in HOME_SERVERS */
+const DEFAULT_HOME_SERVER = { serverRegion: "US", serverIdentifier: "I" };
+
+/** Per character, the realm it told Bean to call home — Bean's choice is not readable from CODE */
+const HOME_SERVERS = {
+  [RANGER1]: { serverRegion: "EU", serverIdentifier: "I" },
+  [RANGER2]: { serverRegion: "EU", serverIdentifier: "II" },
 };
+
+/** This character's home realm; the hop owner's is where the party goes home to */
+const HOME_SERVER = HOME_SERVERS[character.name] ?? DEFAULT_HOME_SERVER;
 
 /** Published by server_hop_utilities.25.js */
 const HOME_WINDOW_LS_KEY = "homeWindow";
@@ -271,98 +277,10 @@ const SPECIAL_MOB_IDS = [
 /** Bosses every fighter drops everything to hit while one is in sight */
 const PRIORITY_MOB_IDS = ["slenderman", "grinch"];
 
-// var map = "main";
-// var mapX = 1248;
-// var mapY = -63;
-
-// var map = "uhills";
-// var mapX = -289;
-// var mapY = -188;
-
-// var map = "winterland";
-// var mapX = 423;
-// var mapY = -2614;
-
-// var map = "desertland";
-// var mapX = 223;
-// var mapY = -708;
-
-// var map = "tunnel";
-// var mapX = 0;
-// var mapY = -775;
-
-// var map = "halloween";
-// var mapX = -219;
-// var mapY = 681;
-
-// var map = "main";
-// var mapX = 676;
-// var mapY = 1754;
-
-// var map = "halloween";
-// var mapX = -368;
-// var mapY = -1623;
-
-// var map = "main";
-// var mapX = -1111;
-// var mapY = 132;
-
-// var map = "desertland";
-// var mapX = -840.75;
-// var mapY = -340.75;
-
-// var map = "level1";
-// var mapX = 50;
-// var mapY = 425;
-
-// var map = "spookytown";
-// var mapX = 256;
-// var mapY = -1253;
-
-// var map = "spookytown";
-// var mapX = 412;
-// var mapY = -694;
-
-// var map = "mforest";
-// var mapX = -172;
-// var mapY = 708;
-
-// var map = "mforest";
-// var mapX = 403;
-// var mapY = -347;
-
-var map = "mforest";
-var mapX = -25;
-var mapY = 700;
-
-// var mobsToFarm = ["grinch", "phoenix", "spider", "bigbird", "scorpion"];
-// var mobsToFarm = ["goldenbot", "sparkbot", "sparkbot"];
-// var mobsToFarm = ["phoenix", "stompy", "wolf"];
-// var mobsToFarm = ["fireroamer"];
-// var mobsToFarm = ["grinch", "phoenix", "mole"];
-
-// var mobsToFarm = ["phoenix", "xscorpion", "minimush"];
-
-// var mobsToFarm = ["phoenix", "croc", "armadillo"];
-// var mobsToFarm = ["fvampire", "grinch", "phoenix", "ghost"];
-// var mobsToFarm = [
-//   "phoenix",
-//   "frog",
-//   "squigtoad",
-//   "crab",
-//   "squig",
-//   "turtle",
-//   "crabx",
-// ];
-// var mobsToFarm = ["ent", "plantoid", "mechagnome"];
-// var mobsToFarm = ["prat"];
-// var mobsToFarm = ["mummy"];
-// var mobsToFarm = ["dryad", "mechagnome"];
-// var mobsToFarm = ["jr", "booboo"];
-var mobsToFarm = ["paledino", "odino", "mechagnome"];
-
-var farmTanker = PRIEST;
-var warriorHeldMobs = ["ent"];
+/** The farm the party falls back to; spots and mobs live in FARMS (basic_function_farms.54.js) */
+const defaultFarm = "odino";
+/** Set through setCurrentFarm() */
+let currentFarm = defaultFarm;
 
 /** Steer kills and damage by grow-group spawn rules (growth_tracker.34.js) */
 var USE_GROWTH_TARGETING = true;
@@ -415,6 +333,7 @@ if (parent.caracAL) {
     "adventure-land-scripts-backup/basic_function_trips.46.js",
     "adventure-land-scripts-backup/basic_function_kiting.47.js",
     "adventure-land-scripts-backup/basic_function_loot.48.js",
+    "adventure-land-scripts-backup/basic_function_farms.54.js",
     "adventure-land-scripts-backup/basic_function_events.53.js",
   ]);
 } else {
@@ -422,6 +341,7 @@ if (parent.caracAL) {
   load_code(46);
   load_code(47);
   load_code(48);
+  load_code(54);
   load_code(53);
 }
 

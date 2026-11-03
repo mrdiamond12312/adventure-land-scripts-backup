@@ -47,7 +47,7 @@ async function lureMechaGnome() {
       return (
         mageInfo.mp >= G.skills["magiport"].mp + 100 &&
         Date.now() - mageInfo.time < 15_000 &&
-        distance(mageInfo, { map: map, x: mapX, y: mapY }) < 300
+        distance(mageInfo, getFarm()) < 300
       );
     }, 10_000);
 
@@ -113,7 +113,8 @@ const SOLO_MAX_ENT = 1; // both caps, while no trusted partner tanks with us
 const ENT_PICKUP_TOLERANCE = 999;
 
 function getEntLureDestination() {
-  return { x: mapX, y: mapY, map: ENT_LURE_MAP };
+  const { x, y } = getFarm();
+  return { x, y, map: ENT_LURE_MAP };
 }
 
 function getEntWaypoints() {
@@ -455,7 +456,7 @@ async function runEntLure() {
 
 async function dragEnt() {
   if (
-    map !== ENT_LURE_MAP ||
+    getFarm().map !== ENT_LURE_MAP ||
     isOnDuty() ||
     isAwaitingParcel() ||
     isAdvanceSmartMoving ||

@@ -118,7 +118,7 @@ function onGrowthKill(entity, data) {
   const member = growthTracker.members[entity.id];
   const group = getGrowthGroupOf(entity);
   const killer = `by ${data.hid} ${data.source}${data.splash ? " splash" : ""}`;
-  const isLogged = growthDebug && mobsToFarm.includes(entity.mtype);
+  const isLogged = growthDebug && getFarm().mobs.includes(entity.mtype);
 
   if (!group || member.kind === "temp") {
     if (isLogged && member)
@@ -241,7 +241,7 @@ function classifyBurst(burst) {
     }
   }
 
-  if (growthDebug && mobsToFarm.includes(burst[0].mtype))
+  if (growthDebug && getFarm().mobs.includes(burst[0].mtype))
     console.warn(
       `[growth] ${burst[0].mtype} #${group?.index ?? "?"} spawned ` +
         `${permanentIds.size}P+${burst.length - permanentIds.size}T`,

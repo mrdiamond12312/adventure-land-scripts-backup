@@ -121,7 +121,7 @@ async function usePullSkills() {
               externalPartyMembers.includes(mob.target)),
         ) &&
         (!mobsTargetingExternalParty ||
-          distance(character, { map: map, x: mapX, y: mapY }) > 300);
+          distance(character, getFarm()) > 300);
 
       // Nobody outside our account is tanking in range
       const nobodyElseTanking = !mobsInAgitateRange.some(
