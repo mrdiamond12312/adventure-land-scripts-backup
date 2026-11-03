@@ -125,6 +125,7 @@ function forgetSpecialMobSighting(mtype) {
     seenAt: undefined,
     seenSpot: undefined,
     checkedAt: Date.now(),
+    realm: getCurrentServer(),
   });
 }
 

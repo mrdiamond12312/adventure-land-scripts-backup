@@ -4821,6 +4821,24 @@ HP race come first, and the party goes back to the Witch afterwards.
     makes even that slow, since evaded hits don't take aggro. The priest's drag-boss take-back
     works only because those bosses are co-op, and the shared co-op condition makes the thief
     friendly.
+- **EU I ↔ US I flip (2026-11-03, VPS).** The log showed `snipe: hop → undefinedundefined — sniping
+  monster`: a target with no `serverRegion`/`serverIdentifier`, its `type` taken from a raw entity.
+  The VPS ran a different copy of the snipe code. caracAL's coordinator resolves an unknown
+  `SR_<key>` by falling back to `servers[0]`, which is EU I (`could not find realm …, falling back`).
+  `goHome` then brought the party back to US I, and the bad sighting fired again: 5 snipe hops,
+  5 goHome hops. Fixes:
+  - `planHop` refuses any decision whose target lacks a region or id, and logs
+    `[hop] <rule>: refused <action> to an unnamed realm`. This guards every rule.
+  - `isSnipeSpent` holds from any realm: the fighters' report `realm` matches the sighting's realm
+    and `checkedAt ≥ seenAt`. It used to apply only while standing on that realm, so from home a
+    spent sighting looked valid again (ping-pong). `forgetSpecialMobSighting` stamps `realm`
+    alongside `checkedAt`.
+  - `getSnipeTarget` takes the fresher of the observers' sighting and the fighters' own
+    `scoutInfo` report on our realm (`getFighterSnipeSighting`). The spotlight moves on every ~13s,
+    so the observer sighting used to age past `maxAgeMs` mid-hunt, and `goHome` pulled the party
+    off a live mob.
+  - Checked with the harness on the real home config (`DEFAULT_HOME_SERVER` US I, the merchant as
+    hop owner): 17 of 17 cases. The home-window cases use US I's crabxx at 11-04 01:00.
 - **Priest absorb gamble** (`getAbsorbGambleTarget`, basic_priest.2.js). It's the last pick in
   `getAbsorbTarget`. It targets a stranger holding an `ABSORB_GAMBLE_MOBS` mob (mimic only:
   goldenbat and cutebee die before roughly 20 casts, about 24k mp, could pay). Its gates: level ≥
