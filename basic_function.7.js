@@ -342,7 +342,7 @@ const SPECIAL_MOB_IDS = [
 const PRIORITY_MOB_IDS = ["slenderman", "grinch"];
 
 /** The farm the party falls back to; spots and mobs live in FARMS (basic_function_farms.54.js) */
-const defaultFarm = "odino";
+const defaultFarm = "plantoid";
 /** Set through setCurrentFarm() */
 let currentFarm = defaultFarm;
 
