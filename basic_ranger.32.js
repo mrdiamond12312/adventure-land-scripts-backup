@@ -233,6 +233,41 @@ function restoreAttackingBow() {
 }
 
 /**
+ * Crossbow in hand from the shot until it lands: impact adds the live apiercing.
+ * The gear loop swaps it out once the lock is released.
+ * @param {Object} plan - the plan whose shot was just sent
+ * @returns {Promise|undefined} the swap, or undefined if not swapping
+ */
+function maybeCrossbowSwap(plan) {
+  const held = getServerSlot("mainhand");
+  const crossbow = findMaxLevelItem(RANGER_INV_ITEMS.crossBow);
+  if (
+    !held ||
+    held.name === RANGER_INV_ITEMS.crossBow ||
+    crossbow === -1 ||
+    !canSwapUntilImpact()
+  )
+    return;
+
+  const byDistance = [plan.shotTargets]
+    .flat()
+    .filter(Boolean)
+    .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs));
+  if (!byDistance.length) return;
+
+  // 0 until the shot's reply re-bases it
+  const msToNextAttack =
+    ms_to_next_skill("attack") || 1000 / character.frequency;
+  // Swap in and swap back
+  const restoreBy = msToNextAttack - character.ping - 2 * EQUIP_PENALTY_MS;
+  if (projectileEtaMs(byDistance[0]) > restoreBy) return;
+
+  return swapUntilImpact(byDistance.at(-1), [
+    { num: crossbow, slot: "mainhand" },
+  ]);
+}
+
+/**
  * Fires the plan's skill: a cupid heal at allies, or a shot at mobs.
  * @param {Object} plan - from getActionPlan
  */
@@ -240,10 +275,11 @@ async function firePlan(plan) {
   if (!isAttackReady()) return;
 
   const promisesToAwait = [];
+  const isSwappingOffCupid = plan.mode === "shot" && isCupidOnServer();
 
   // Cupid heals whatever it hits, so shooting mobs with it feeds them. Swap
   // concurrently with the shot instead of waiting for the gear loop's gap.
-  if (plan.mode === "shot" && isCupidOnServer()) {
+  if (isSwappingOffCupid) {
     const swap = inFlightSlots.mainhand
       ? restoreAttackingBow()
       : equipClassGear(plan.gearTargets);
@@ -265,6 +301,9 @@ async function firePlan(plan) {
   } else {
     promisesToAwait.push(tryMultiShot(plan.skill, plan.shotTargets));
   }
+
+  const crossbowSwap = isSwappingOffCupid ? undefined : maybeCrossbowSwap(plan);
+  if (crossbowSwap) promisesToAwait.push(crossbowSwap);
 
   try {
     await withTimeout(Promise.allSettled(promisesToAwait), 1500);

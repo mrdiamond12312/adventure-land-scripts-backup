@@ -1355,10 +1355,10 @@ The rogue passes only `candy` for now. Giving him the paleclaw means adding a `p
 with his own `swapFrom`, plus a restore, since his strategy loop can leave the
 swapped item on after a kill. Swap to candy canes so they are equipped when the projectile *lands*, then swap back. It works
 because the server reads `attacker.a.sugarrush` in `complete_attack`, at impact, from whatever is
-equipped then. Only `sugarrush` and `frenzy` are read there. crit, critdamage, explosion, blast,
-lifesteal, manasteal, the piercings, and the freeze/poison/burn/weave/petrify/hex/shatter/sunder
+equipped then. Of the procs, only `sugarrush` and `frenzy` are read there. crit, critdamage,
+explosion, blast, lifesteal, manasteal and the freeze/poison/burn/weave/petrify/hex/shatter/sunder
 abilities are copied onto the projectile in `commence_attack` when it is fired, so swapping them in
-mid-flight does nothing. `attr0` sums across equipped canes and does not grow with level: 0.25% per
+mid-flight does nothing. The piercings are read at both ends (see "Ranger: crossbow until impact"). `attr0` sums across equipped canes and does not grow with level: 0.25% per
 cane per proc-capable hit.
 
 Three timing facts, each of which broke it once:
@@ -1390,7 +1390,13 @@ swap command, leaving the canes on ~1 ping past the landing.
 Contention note: `maybeCandySwap` requires `!isEquipingItems` and takes the lock before equipping,
 so a free-running `strategy` loop mid-`equipBatch` silently *cancels* the swap for that shot — and
 `equipBatch`'s penalty budget is widest right after a shot, exactly the candy window. The warrior
-tolerates this (`canUse: () => true`); the rogue does not (see above).
+and the rogue both run their gear loop with `canUse: () => true` at 50ms (rogue since
+2026-11-03). His old gate (`!isAttackReady()` plus a live in-range target) gave no protection in
+that window. It also stopped the loop when the cane hit was the kill, so nothing re-geared him
+until a new target was in reach. While the attack is ready and a shot is pending (`isShotPending`),
+`equipBatch` budgets 0 and sends nothing, and it holds no lock when it sends nothing. With no
+target, `calculateRogueItems` falls back to `lastRoguePicks.damage`, so he still re-equips his
+daggers.
 
 ### Rogue: one two-handed cane, and his own restore
 
@@ -1570,6 +1576,49 @@ frenzy uptime at 1.33/77ms is ~9.5% (the tail goes out on ~76% of cleaves), at +
 swapped in when `canAffordSwap(3)` holds, the same check as the room rule, so it took the
 tail's budget on nearly every cleave and dropped frenzy uptime to ~3%. So the mpx swap only
 happens when no tail is planned: frenzy up, a luck amulet, or no paleclaw in the bag.
+
+### Ranger: crossbow until impact (`maybeCrossbowSwap`, 2026-11-03)
+
+Piercing counts twice (server.js `complete_attack`, kaansoral/adventureland_mongodb master, game
+v18285): `damage_multiplier(armor - attacker.apiercing - info.apiercing)`. `info.apiercing` is
+copied from the attacker in `commence_attack` (the weapon fired with), and `attacker.apiercing` is
+the weapon held at impact. A cupid heal uses
+`damage_multiplier((armor - attacker.apiercing) / 2)`, so only the weapon held at impact counts.
+`info.heal` is set at commence from the mainhand being cupid, so cupid can leave the hand once
+the shot is out. The ranger's class `mainhand.crossbow` bonus is `apiercing +120`,
+`frequency −36`. The crossbow is one-handed, so the quiver stays on.
+
+Piercing past the armor still pays: `damage_multiplier` goes above 1 for negative defense, up to
+1.32. So +120 is about +7–12% per hit on any mob, armored or not.
+
+`firePlan` sends the shot, then `swapUntilImpact` with the crossbow. It covers `attack`,
+`piercingshot`, `3shot` and `5shot`. There is no explicit restore, as with the warrior. At impact
+the swap only releases `isEquipingItems`. The gear loop (100ms) runs while the attack is on
+cooldown, so its next tick equips whatever `calculateRangerItems` picks: cupid when someone wants
+a heal, the bow otherwise. It keeps its cheap gate (skip while the attack is ready, cupid not in
+hand and a mainhand held) rather than `canUse: () => true`, because a `getActionPlan` scan every
+tick is too costly for the ranger.
+- **Idle after a kill keeps the crossbow.** With no targets, `calculateRangerItems` keeps the
+  mainhand the server holds, which is the crossbow. Once the attack is ready the cheap gate stops
+  the loop. So the first shot at the next mob goes out on the crossbow. That shot skips the swap,
+  and the loop picks the bow in the cooldown after it.
+- The gear loop's `equipBatch` stays penalty-budgeted. While the crossbow is held, the server's
+  re-based (longer) cooldown can overstate that budget. If the loop misses the window, the next
+  shot goes out on the crossbow, and that shot skips the swap.
+- **Nearest arrow decides whether to swap, farthest decides how long to hold.** The swap is
+  skipped unless the nearest target's ETA fits inside `ms − ping − 2 × EQUIP_PENALTY_MS`, where
+  `ms` is `ms_to_next_skill("attack")`, or the full cycle while it still reads 0 (the shot's reply
+  is not back yet). It subtracts one 120ms `penalty_cd` for the swap-in and one for the swap back,
+  both of which must clear before the next shot. The second 120 also absorbs the gear loop's up
+  to 100ms poll delay, since there is no explicit restore. At a 700ms cycle and 80ms ping that
+  leaves 380ms, about 190px of arrow flight. `swapUntilImpact` clamps the farthest-target hold to
+  its own, looser deadline (`cycle − ping − 120`). The hold aims at the farthest target and
+  is cut at that deadline, so the next shot is never delayed by a swap; arrows past it land on
+  the normal weapon.
+- The crossbow's −36 frequency re-bases the attack cooldown while held (see the candy-swap
+  re-base note); the restore re-bases it back, and nothing is lost when that comes before the
+  next shot.
+- Skipped while a cupid swap-off is in flight in the same `firePlan` (it holds the equip latch).
 
 ## Field reports must fail closed (`entFieldReport`)
 

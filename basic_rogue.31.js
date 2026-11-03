@@ -315,16 +315,12 @@ function startSkillLoops() {
 
   runActionLoop(getRogueCast);
 
-  // Gear only while the attack is on cooldown: equipping re-bases the attack
-  // cooldown, so swapping mid-window would delay the shot. Trips included.
+  // equipBatch's penalty budget keeps it off a pending shot. Trips included.
   runSkillLoop({
     skill: "gear",
-    floorMs: 100,
+    floorMs: 50,
     whileMoving: true,
-    canUse: () => {
-      const target = get_target();
-      return !isAttackReady() && !!target && inRange(target) && shouldAttack();
-    },
+    canUse: () => true,
     cast: () => equipClassGear(get_target()),
   });
 
