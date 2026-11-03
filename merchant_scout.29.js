@@ -19,6 +19,7 @@
  * @property {number} [checkedAt] Date.now() of the last visit to a spot
  * @property {number} [respawnEta] Date.now() plus the longest surge timer
  * @property {string} [target] who it was last seen fighting
+ * @property {string} [realm] where it was seen, e.g. "USII"; a report from another realm is skipped
  */
 
 /**
@@ -130,6 +131,7 @@ async function scoutSweep() {
       seenAt: Date.now(),
       seenSpot: { map: character.map, x: mob.real_x, y: mob.real_y },
       target: mob.target,
+      realm: getCurrentServer(),
     });
   }
 }

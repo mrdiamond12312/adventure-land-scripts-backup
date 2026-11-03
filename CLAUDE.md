@@ -110,12 +110,14 @@ basic_function.7.js          [SHARED — the core library]
                                  dynamicParty), the hop owner's partyPlan (which realm the fighters
                                  belong on), realm heartbeats, deployCharacters, and each fighter
                                  following the plan and fitting its realm's roster; loaded before 25
-    server_hop_utilities.25.js   the cross-realm ServerRealmData distributor and realm-fatigue
-                                 hop policy (HOME_SERVER itself is config in 7); loaded just before
-                                 14, which consults it
+    server_hop_utilities.25.js   the cross-realm ServerRealmData distributor, realm-fatigue hop
+                                 policy, realm reach (isReachableRealm), the Witch's day
+                                 (witchDay, isHomeWitchBrewDue) and the early hop's lineup checks
+                                 (HOME_SERVER itself is config in 7); loaded just before 14, which
+                                 consults it; its helpers read 14's config at call time
     server_hop.14.js             server-hopping automation (only if caracALconfig enables the character):
-                                 the boss race, fatigue-exempt bosses (Horseman), and the early hop
-                                 to a foreign Witch round 12–14 min ahead
+                                 the hop config (HOP_BOSSES, IGNORED_REALMS, ...), HOP_RULES — the
+                                 priority list, each rule with its own config — and the hop itself
     cave_fighter_strat.15.js         \_ the fighter targeting chain, walked in this
     daily_event_fighter_strat.26.js   | order by selectFightTarget(); each one carries
     crypt_fighter_strat.16.js         | its own smart move and owns the tick or defers

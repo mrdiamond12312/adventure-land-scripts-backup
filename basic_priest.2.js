@@ -282,7 +282,33 @@ function getCurseTarget() {
   );
 }
 
-// A stranger holding a dragged boss, else a party member (not us, not the tank) in absorb range and holding aggro.
+/** Mobs worth an absorb gamble while a stranger holds them; only 5% of casts on a stranger land */
+const ABSORB_GAMBLE_MOBS = ["mimic"];
+
+/** Absorb on a stranger costs this many times its mp and needs this level (server.js absorb) */
+const ABSORB_STRANGER_MP_MULT = 6;
+const ABSORB_STRANGER_MIN_LEVEL = 75;
+
+/** @returns {Object|undefined} a stranger holding a gamble mob, while the 6x-mp cast still leaves partyheal's floor and no ally is in trouble */
+function getAbsorbGambleTarget() {
+  if (character.level < ABSORB_STRANGER_MIN_LEVEL) return;
+
+  const cost = G.skills["absorb"].mp * ABSORB_STRANGER_MP_MULT;
+  if (character.mp - cost < partyHealMpFloor()) return;
+  if (getMyCharacters().some((name) => isAllyInEmergency(name))) return;
+
+  const allies = getAlliedNames();
+  for (const mob of Object.values(parent.entities)) {
+    if (mob.type !== "monster" || mob.dead) continue;
+    if (!ABSORB_GAMBLE_MOBS.includes(mob.mtype)) continue;
+    if (!mob.target || allies.has(mob.target)) continue;
+
+    const holder = get_player(mob.target);
+    if (holder && is_in_range(holder, "absorb")) return holder;
+  }
+}
+
+// A stranger holding a dragged boss, else a party member (not us, not the tank) in absorb range and holding aggro, else an absorb gamble.
 function getAbsorbTarget() {
   const bossThief = getBossThiefToAbsorb();
   if (bossThief) return bossThief;
@@ -315,7 +341,7 @@ function getAbsorbTarget() {
       if (hasAggro) return member;
     }
   }
-  return null;
+  return getAbsorbGambleTarget() ?? null;
 }
 
 function shouldPartyHeal() {

@@ -15,7 +15,8 @@ const SPECIAL_MOB_ARRIVAL_SLACK = 200;
 /** The fighter ticks far faster than the store needs rewriting */
 const SPECIAL_MOB_REPORT_INTERVAL_MS = 1000;
 
-const CONTESTED_SPECIAL_MOB_IDS = [];
+/** Taken even while someone outside our crew holds them */
+const CONTESTED_SPECIAL_MOB_IDS = ["cutebee", "goldenbat", "mimic"];
 
 var lastSpecialMobReportAt = 0;
 
@@ -77,6 +78,7 @@ function getSpecialMobSighting() {
     const report = reports[mtype];
 
     if (!report?.seenAt || !report.seenSpot) continue;
+    if (report.realm && report.realm !== getCurrentServer()) continue;
     if (Date.now() - report.seenAt > SPECIAL_MOB_SIGHTING_TTL_MS) continue;
     if (isLeftToOthers(mtype, report.target)) continue;
 
@@ -110,6 +112,7 @@ function reportSpecialMobInSight(mob) {
     seenAt: Date.now(),
     seenSpot: { map: character.map, x: mob.real_x, y: mob.real_y },
     target: mob.target,
+    realm: getCurrentServer(),
   });
 }
 
@@ -121,6 +124,7 @@ function forgetSpecialMobSighting(mtype) {
   updateStoreEntry(SCOUT_LS_KEY, mtype, {
     seenAt: undefined,
     seenSpot: undefined,
+    checkedAt: Date.now(),
   });
 }
 

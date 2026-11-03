@@ -1,39 +1,274 @@
-const HOP_SERVERS = ["US", "ASIA", "EU"];
+/** Regions the hop loop travels to; PvP realms are always skipped */
+const HOP_REGIONS = ["US", "ASIA", "EU"];
 
-const ignoreServer = ["ASIAI", "ASIAII"];
+/** Realms we never hop to, e.g. "ASIAI", unless a HOP_BOSSES entry gives its own `ignoredRealms` */
+const IGNORED_REALMS = [];
 
-const tankableBoss = [
+/** Bosses hopped to at first sighting, ranked first, and stayed for while live here */
+const TANKABLE_BOSSES = [
   // "snowman" // Commented out so newbies has time to find out about this little guy
 ];
 
-const bosses = {
+/**
+ * One boss the hop loop chases.
+ * @typedef {Object} HopBoss
+ * @property {string} type - monster id
+ * @property {number} hoppable - 1 hops at first sighting; below 1, only once someone holds it under that share of max hp
+ * @property {number} [threshold] - a held one here below this share of max hp keeps us on the realm (0.93 when unset)
+ * @property {boolean} [fatigueExempt] - hopped to ahead of the race and the home-window checks
+ * @property {string[]} [ignoredRealms] - replaces IGNORED_REALMS for this boss; [] chases it everywhere
+ */
+
+/** @type {Object<string, HopBoss>} the bosses the hop loop chases, by monster id */
+const HOP_BOSSES = {
   grinch: { type: "grinch", threshold: 0.7, hoppable: 1 },
   icegolem: { type: "icegolem", threshold: 0.9, hoppable: 1 },
   franky: { type: "franky", threshold: 0.75, hoppable: 1 },
   // mrpumpkin: { type: "mrpumpkin", threshold: 0.3, hoppable: 0.9999 },
   // mrgreen: { type: "mrgreen", threshold: 0.3, hoppable: 0.9999 },
-  crabxx: { type: "crabxx", threshold: 0.95, hoppable: 1 },
+  crabxx: {
+    type: "crabxx",
+    threshold: 0.95,
+    hoppable: 1,
+    ignoredRealms: ["ASIAI", "ASIAII"],
+  },
   dragold: { type: "dragold", threshold: 0.85, hoppable: 1 },
   pinkgoo: { type: "pinkgoo", threshold: 0.65, hoppable: 1 },
   // wabbit: { type: "wabbit", threshold: 0.5, hoppable: 1 },
-  horseman: { type: "horseman", hoppable: 1, fatigueExempt: true },
+  horseman: {
+    type: "horseman",
+    hoppable: 1,
+    fatigueExempt: true,
+  },
 };
-const waitForEvent = ["wabbit"];
 
-/** Bosses chased on any realm, ignoreServer included */
-const fatigueExemptBosses = Object.keys(bosses).filter(
-  (name) => bosses[name].fatigueExempt,
+/** Bosses hopped to ahead of the race and the home-window checks */
+const FATIGUE_EXEMPT_BOSSES = Object.keys(HOP_BOSSES).filter(
+  (name) => HOP_BOSSES[name].fatigueExempt,
 );
 
-/** Whether a fatigue-exempt boss may pull the party out of home's Witch gathering once stock covers the brew */
-var SKIP_HOME_GATHERING_FOR_EXEMPT = true;
+/**
+ * A realm to stand on or hop to; HOME_SERVER has this shape.
+ * @typedef {Object} HopRealm
+ * @property {string} serverRegion - e.g. "EU"
+ * @property {string} serverIdentifier - e.g. "II"
+ */
 
-/** Whether the merchant goes home alone to brew while the fighters stay on the exempt boss */
-var BREW_ALONE = true;
+/**
+ * A live boss on some realm, from ServerRealmData.query.
+ * @typedef {HopRealm & {type: string, hp?: number, max_hp?: number, target?: string}} HopSighting
+ */
+
+/**
+ * What every rule sees, built once per tick.
+ * @typedef {Object} HopContext
+ * @property {ServerRealmData} [realmData] - undefined until the realm sockets exist
+ * @property {HopSighting[]} candidates - the boss race's sightings, best first
+ * @property {boolean} isIdle - no boss in the race is worth chasing
+ * @property {HopSighting} [exemptTarget] - the live fatigue-exempt boss to chase
+ * @property {boolean} isHome
+ * @property {boolean} isWitchRoundHere - a Witch round here is gathering, or we can brew in it
+ */
+
+/**
+ * A rule's verdict, made by stayPut / hopTo / hopAloneTo / pointPartyAt.
+ * @typedef {Object} HopDecision
+ * @property {"stay"|"hop"|"hopAlone"|"point"} action
+ * @property {HopRealm} [target]
+ * @property {string} reason
+ */
+
+/**
+ * One step of the hop loop's priority list.
+ * @typedef {Object} HopRule
+ * @property {string} name
+ * @property {boolean} enabled - false skips the rule
+ * @property {boolean} [onlyWhenIdle] - skipped while the boss race has a candidate
+ * @property {Object} [config] - the rule's own settings, handed to `decide`
+ * @property {(ctx: HopContext, config: Object) => HopDecision|undefined} decide - nothing passes to the next rule
+ */
+
+/** @type {HopRule[]} the hop loop's priorities, top first; the first rule to decide wins the tick */
+const HOP_RULES = [
+  /** An open crypt or a cave run holds every move */
+  {
+    name: "instance",
+    enabled: true,
+    decide: () => {
+      if (get("cryptInstance")) return stayPut("crypt instance open");
+      if (get("caveRun") > Date.now()) return stayPut("cave run under way");
+    },
+  },
+  /** While the merchant brews alone, keeps the fighters on their boss and rejoins them after */
+  {
+    name: "splitParty",
+    enabled: true,
+    decide: ({ exemptTarget, candidates, isWitchRoundHere }) =>
+      steerSplitParty(exemptTarget ?? candidates[0], isWitchRoundHere),
+  },
+  /** The merchant alone goes home for the Witch's brewing; the fighters stay */
+  {
+    name: "brewAlone",
+    enabled: true,
+    decide: () => {
+      if (canHopAlone() && isHomeWitchBrewDue())
+        return hopAloneTo(HOME_SERVER, "home's Witch brewing is about to open");
+    },
+  },
+  /** Chases a live fatigue-exempt boss (Horseman), or stays with one here */
+  {
+    name: "exemptBoss",
+    enabled: true,
+    decide: ({ exemptTarget }) => {
+      if (exemptTarget)
+        return isOnCurrentRealm(exemptTarget)
+          ? stayPut(`${exemptTarget.type} here`)
+          : hopTo(exemptTarget, exemptTarget.type);
+      if (FATIGUE_EXEMPT_BOSSES.some((name) => server.status[name]?.live))
+        return stayPut("fatigue-exempt boss live here");
+    },
+  },
+  /** The Witch, once no boss is worth chasing: home's brewing, a round here, or a foreign one about to start */
+  {
+    name: "witch",
+    enabled: true,
+    onlyWhenIdle: true,
+    decide: ({ isHome, isWitchRoundHere }) => {
+      if (isHomeWitchBrewDue())
+        return hopTo(HOME_SERVER, "home's Witch brewing is about to open");
+      if (isWitchRoundHere) return stayPut("Witch round here");
+      if (isHome) return;
+
+      const cipher = server.status.witchcipher;
+      if (cipher?.live && Date.now() < cipher.end)
+        return hopTo(HOME_SERVER, "the Witch's gathering is over");
+      // The early hop already budgeted every scheduled home window
+      if (hasEarlyHopEventHere(getHopRule("earlyHop").config))
+        return stayPut("waiting for the Witch round here");
+    },
+  },
+  /** Goes home early enough for realm fatigue to clear before a home window */
+  {
+    name: "settleHome",
+    enabled: true,
+    decide: () => {
+      const reason = shouldReturnHomeToSettle();
+      if (reason) return hopTo(HOME_SERVER, reason);
+    },
+  },
+  /** Stays with a boss here that is already worn down */
+  {
+    name: "softenedBoss",
+    enabled: true,
+    decide: () => {
+      if (hasSoftenedBossHere()) return stayPut("softened boss here");
+    },
+  },
+  /** Stays for a brawl, a tankable boss, or a `waitFor` event live here */
+  {
+    name: "eventHere",
+    enabled: true,
+    config: {
+      /** Events worth staying on this realm for while they are live here */
+      waitFor: ["wabbit"],
+    },
+    decide: (ctx, config) => {
+      if (hasEventWorthStayingFor(config)) return stayPut("event here");
+    },
+  },
+  /** Lands on a foreign event early enough to shed hop sickness, once no boss is worth chasing */
+  {
+    name: "earlyHop",
+    enabled: true,
+    onlyWhenIdle: true,
+    config: {
+      /** Foreign events worth landing early for */
+      events: ["witchcipher"],
+      /** How long before the event we land */
+      leadMs: 14 * 60_000,
+      /** Cancel the trip when one is live, or starts any time from now until we would be back, on any realm we would chase it to */
+      clashingBosses: ["crabxx"],
+    },
+    decide: (ctx, config) => {
+      const target = getEarlyHopTarget(config);
+      if (target) return hopTo(target, `landing early for ${target.type}`);
+    },
+  },
+  /** Stays home for a live home-table boss or a home window coming up */
+  {
+    name: "holdHome",
+    enabled: true,
+    decide: () => {
+      const reason = shouldHoldAtHome();
+      if (reason) return stayPut(reason);
+    },
+  },
+  /** Hops to a rare mob the observers spotted on any realm, held by anyone or not */
+  {
+    name: "snipe",
+    enabled: true,
+    config: {
+      /** Rare mobs worth a hop; each must be in SPECIAL_MOB_IDS for the observers to record it */
+      mobs: ["cutebee", "goldenbat", "mimic"],
+      /** Sightings older than this are skipped; the spotlight moves on every ~13s */
+      maxAgeMs: 2 * 60_000,
+      /** Expected time abroad per mob; the trip plus 30 min of realm fatigue must end before home's next window */
+      stayMs: {
+        cutebee: 5 * 60_000,
+        goldenbat: 8 * 60_000,
+        mimic: 20 * 60_000,
+      },
+    },
+    decide: (ctx, config) => {
+      const target = getSnipeTarget(config);
+      if (!target) return;
+
+      if (!isOnCurrentRealm(target))
+        return hopTo(target, `sniping ${target.type}`);
+      shareSnipeSighting(target);
+      return stayPut(`sniping ${target.type} here`);
+    },
+  },
+  /** Chases the race's best sighting: tankable first, then home drops, then least hp left */
+  {
+    name: "bossRace",
+    enabled: true,
+    decide: ({ realmData, candidates: [target] }) => {
+      if (!realmData) return stayPut("realm data not ready");
+      if (!target) return;
+
+      const hpLeft = Math.round((100 * target.hp) / G.monsters[target.type].hp);
+      const reason = `${target.type} at ${hpLeft}%`;
+      return isOnCurrentRealm(target) ? stayPut(reason) : hopTo(target, reason);
+    },
+  },
+  /** Nothing left anywhere: back home */
+  {
+    name: "goHome",
+    enabled: true,
+    decide: ({ isHome }) => {
+      if (!isHome) return hopTo(HOME_SERVER, "nothing left to chase");
+    },
+  },
+];
+
+/**
+ * The hop rule called `name`, for its config or `enabled` switch.
+ * @param {string} name
+ * @returns {HopRule}
+ */
+function getHopRule(name) {
+  return HOP_RULES.find((rule) => rule.name === name);
+}
 
 /** Set once a hop is under way */
 let isLeaving = false;
 
+/**
+ * Moves the whole party: loots, points the plan at the realm, then leaves.
+ * @param {string} serverRegion - e.g. "EU"
+ * @param {string} serverIdentifier - e.g. "II"
+ */
 async function hopToServer(serverRegion, serverIdentifier) {
   isLeaving = true;
   if (parent.caracAL) {
@@ -54,9 +289,12 @@ async function hopToServer(serverRegion, serverIdentifier) {
   }
 }
 
-/** Moves only this character; the fighters keep the plan's realm */
-async function hopAlone(serverRegion, serverIdentifier, reason) {
-  console.warn(`Hopping to ${serverRegion}${serverIdentifier} alone — ${reason}`);
+/**
+ * Moves only this character; the fighters keep the plan's realm.
+ * @param {string} serverRegion - e.g. "EU"
+ * @param {string} serverIdentifier - e.g. "II"
+ */
+async function hopAlone(serverRegion, serverIdentifier) {
   isLeaving = true;
   await midasLooting(true);
 
@@ -82,32 +320,15 @@ function refreshPartyPlan() {
   else setPartyRealm(server.region, server.id);
 }
 
-/** @returns {string} the realm a sighting sits on, e.g. "USII" */
-function realmOf(candidate) {
-  return `${candidate.serverRegion}${candidate.serverIdentifier}`;
-}
-
 /**
- * @param {boolean} [isExempt] - a fatigue-exempt boss also goes to ignoreServer realms
- * @returns {boolean} whether we are willing to travel to this realm at all
- */
-function isReachableRealm(candidate, isExempt = false) {
-  return (
-    (isExempt || !ignoreServer.includes(realmOf(candidate))) &&
-    candidate.serverIdentifier !== "PVP" &&
-    HOP_SERVERS.includes(candidate.serverRegion)
-  );
-}
-
-/**
- * A tracked boss earns the trip once it is softened enough and someone is
- * holding it, or straight away when its `hoppable` is 1.
+ * Whether a tracked boss earns the trip: at once when its `hoppable` is 1, else once someone holds it under that share of max hp.
+ * @param {HopSighting} candidate
  * @returns {boolean}
  */
 function isWorthHopping(candidate) {
-  if (tankableBoss.includes(candidate.type)) return true;
+  if (TANKABLE_BOSSES.includes(candidate.type)) return true;
 
-  const boss = bosses[candidate.type];
+  const boss = HOP_BOSSES[candidate.type];
   if (!boss) return false;
   if (boss.hoppable === 1) return true;
 
@@ -115,20 +336,36 @@ function isWorthHopping(candidate) {
   return candidate.hp < ceiling && Boolean(candidate.target);
 }
 
-/** @returns {boolean} whether this sighting is somewhere we would actually go */
+/**
+ * Whether this sighting is somewhere we would actually go.
+ * @param {HopSighting} candidate
+ * @returns {boolean}
+ */
 function isHopCandidate(candidate) {
-  return isReachableRealm(candidate) && isWorthHopping(candidate);
+  return (
+    isReachableRealm(candidate, candidate.type) && isWorthHopping(candidate)
+  );
 }
 
-/** @returns {number[]} ascending sort key */
+/**
+ * The race's ascending sort key: tankable first, then home drops, then least hp left.
+ * @param {HopSighting} candidate
+ * @returns {number[]}
+ */
 function hopPriority(candidate) {
   return [
-    tankableBoss.includes(candidate.type) ? 0 : 1,
+    TANKABLE_BOSSES.includes(candidate.type) ? 0 : 1,
     homeDropRank(candidate),
     candidate.hp / G.monsters[candidate.type].hp,
   ];
 }
 
+/**
+ * Sort comparator over hopPriority.
+ * @param {HopSighting} lhs
+ * @param {HopSighting} rhs
+ * @returns {number}
+ */
 function byHopPriority(lhs, rhs) {
   const left = hopPriority(lhs);
   const right = hopPriority(rhs);
@@ -139,45 +376,51 @@ function byHopPriority(lhs, rhs) {
   return 0;
 }
 
-/** @returns {string[]} every boss the HP race chases; fatigue-exempt ones have their own hop */
+/** @returns {string[]} every boss the race chases; fatigue-exempt ones have their own rule */
 function trackedBossTypes() {
   return [
-    ...tankableBoss,
-    ...Object.keys(bosses).filter((name) => !bosses[name].fatigueExempt),
+    ...TANKABLE_BOSSES,
+    ...Object.keys(HOP_BOSSES).filter(
+      (name) => !HOP_BOSSES[name].fatigueExempt,
+    ),
   ];
 }
 
 /** @returns {boolean} whether a boss here is already softened enough to stay for */
 function hasSoftenedBossHere() {
-  return Object.keys(bosses).some((boss) => {
+  return Object.keys(HOP_BOSSES).some((boss) => {
     const state = server.status[boss];
     if (!state) return false;
 
     const engaged =
-      state.target || bosses[boss].hoppable === 1 || boss === "pinkgoo";
+      state.target || HOP_BOSSES[boss].hoppable === 1 || boss === "pinkgoo";
 
     return (
-      engaged && state.hp < (bosses[boss].threshold ?? 0.93) * state.max_hp
+      engaged && state.hp < (HOP_BOSSES[boss].threshold ?? 0.93) * state.max_hp
     );
   });
 }
 
-/** @returns {boolean} whether something here outranks anything another realm offers */
-function hasEventWorthStayingFor() {
+/**
+ * Whether something here outranks anything another realm offers.
+ * @param {{waitFor: string[]}} config - the eventHere rule's
+ * @returns {boolean}
+ */
+function hasEventWorthStayingFor({ waitFor }) {
   const brawling =
     (server.status.goobrawl ||
       server.status.abtesting ||
       canAnniversaryVisit()) &&
     !character.s.hopsickness;
 
-  const liveHere = [...tankableBoss, ...waitForEvent].some(
+  const liveHere = [...TANKABLE_BOSSES, ...waitFor].some(
     (name) => server.status[name]?.live,
   );
 
   return Boolean(brawling || liveHere);
 }
 
-/** @returns {Object|undefined} the live fatigue-exempt boss, home first, then least hp left */
+/** @returns {HopSighting|undefined} the live fatigue-exempt boss, home first, then least hp left */
 function getExemptHopTarget() {
   const awayFromHome = (candidate) =>
     realmOf(candidate) === getHomeServer() ? 0 : 1;
@@ -185,8 +428,8 @@ function getExemptHopTarget() {
     (hp ?? max_hp) / max_hp;
 
   return getRealmData()
-    ?.query({ types: fatigueExemptBosses })
-    .filter((candidate) => isReachableRealm(candidate, true))
+    ?.query({ types: FATIGUE_EXEMPT_BOSSES })
+    .filter((candidate) => isReachableRealm(candidate, candidate.type))
     .sort(
       (lhs, rhs) =>
         awayFromHome(lhs) - awayFromHome(rhs) ||
@@ -194,274 +437,140 @@ function getExemptHopTarget() {
     )[0];
 }
 
-/** Foreign events worth landing early for, so hop sickness wears off before they start */
-const EARLY_HOP_EVENTS = ["witchcipher"];
-
-/** How long before a foreign event we land on its realm */
-const EARLY_HOP_LEAD_MS = 14 * 60_000;
-
-const HOP_SICKNESS_MS = G.conditions.hopsickness?.duration ?? 720_000;
-
-/** Overrun past an event's own length before the party is free to head home */
-const EVENT_STAY_SLACK_MS = 60_000;
-
-const WITCH_DAY_REFRESH_MS = 5 * 60_000;
-
-/** The account's Witch day from witch_cipher_info(): mixes_left, and server once it has a claim */
-let witchDay = { at: 0 };
-
-/** Refreshes witchDay in the background; character.witchcipher only exists during a round here */
-async function refreshWitchDay() {
-  if (Date.now() - witchDay.at < WITCH_DAY_REFRESH_MS) return;
-  witchDay.at = Date.now();
-
-  const info = await witch_cipher_info().catch((e) => console.warn(e));
-  if (info) witchDay = { ...info, at: Date.now() };
-}
-
-/** @returns {boolean} whether the party would brew at `realm`'s Witch round rather than leave after gathering */
-function canBrewWitchAt(realm) {
-  refreshWitchDay();
-  return (
-    witchDay.mixes_left > 0 &&
-    (!witchDay.server || witchDay.server === realm) &&
-    !hasHomeWitchRoundToday()
-  );
-}
-
-/** Hop time budgeted ahead of home's brewing stage */
-const WITCH_RETURN_HOP_MS = 60_000;
-
-/** Least time abroad worth skipping home's gathering for */
-const WITCH_SKIP_MIN_STAY_MS = 5 * 60_000;
-
-/** @returns {number} when the party hops home for this round's brewing, now when the round's timing is unknown */
-function getWitchReturnAt(cipher) {
-  const gatherEnd =
-    cipher.gather_end ??
-    cipher.start + (G.events.witchcipher?.gathering ?? 0) * 1000;
-  if (!Number.isFinite(gatherEnd)) return Date.now();
-  return gatherEnd - WITCH_STAGE_LEAD_MS - WITCH_RETURN_HOP_MS;
-}
-
-/** @returns {boolean} whether the merchant's own stock already covers the day's remaining mixes */
-function hasWitchStockForDay() {
-  const needed = (character.witchcipher?.mixes_left ?? 0) * WITCH_SLOTS;
-  const stock = get("witchStock") ?? {};
-  return WITCH_INGREDIENTS.every(
-    (kind) => stock[kind] - WITCH_ELIXIR_RESERVE >= needed,
-  );
-}
-
-/** @returns {boolean} whether home's gathering can be skipped for a fatigue-exempt boss, back in time to brew */
-function canSkipHomeWitchGathering() {
-  const cipher = server.status.witchcipher;
-  return (
-    SKIP_HOME_GATHERING_FOR_EXEMPT &&
-    isAtHomeServer() &&
-    isWitchGathering(cipher) &&
-    getWitchReturnAt(cipher) - Date.now() >= WITCH_SKIP_MIN_STAY_MS &&
-    hasWitchStockForDay()
-  );
-}
-
-/** @returns {boolean} whether we are abroad while home's brewing is about to open, with mixes left for it */
-function isHomeWitchBrewDue() {
-  if (isAtHomeServer()) return false;
-
-  const cipher = getHomeRealmStatus()?.witchcipher;
-  if (!cipher?.live || Date.now() >= cipher.end) return false;
-  if (Date.now() < getWitchReturnAt(cipher)) return false;
-
-  refreshWitchDay();
-  return (
-    witchDay.mixes_left > 0 &&
-    (!witchDay.server || witchDay.server === getHomeServer())
-  );
-}
-
-/** @returns {number} ms the party spends on a foreign event once it starts */
-function getForeignEventStayMs(event, realm) {
-  const { duration = 0, gathering = duration } = G.events[event] ?? {};
-  const isGatherOnly = event === "witchcipher" && !canBrewWitchAt(realm);
-  return (isGatherOnly ? gathering : duration) * 1000 + EVENT_STAY_SLACK_MS;
-}
-
-/** @returns {boolean} whether, by `by`, home runs an early-hop event of its own, or a fatigue-exempt boss is due on any realm we would chase it to */
-function hasClashingEventBy(by) {
-  const realmData = getRealmData();
-  const isDue = (schedule, events) =>
-    getLineup(schedule, events).some(({ at }) => at <= by);
-
-  if (isDue(getHomeRealmStatus()?.schedule, EARLY_HOP_EVENTS)) return true;
-  return Object.entries(realmData?.realms ?? {}).some(
-    ([key, { region, name }]) =>
-      isReachableRealm({ serverRegion: region, serverIdentifier: name }, true) &&
-      isDue(realmData.status(key)?.schedule, fatigueExemptBosses),
-  );
-}
-
-/** @returns {Object|undefined} the foreign event to land early for: far enough out to shed hop sickness, back home before the next scheduled home window */
-function getEarlyHopTarget() {
-  const realmData = getRealmData();
-  if (!realmData) return;
-
-  const now = Date.now();
-  const untilHomeWindow = msUntilHomeScheduledEvent();
-  const targets = [];
-  for (const key of Object.keys(realmData.realms)) {
-    if (key === getHomeServer()) continue;
-
-    const { region, name } = realmData.realms[key];
-    const realm = { serverRegion: region, serverIdentifier: name };
-    if (!isReachableRealm(realm)) continue;
-
-    for (const { event, status, at } of getLineup(
-      realmData.status(key)?.schedule,
-      EARLY_HOP_EVENTS,
-    )) {
-      const until = at - now;
-      if (status !== "scheduled") continue;
-      if (until < HOP_SICKNESS_MS || until > EARLY_HOP_LEAD_MS) continue;
-
-      const stayMs = getForeignEventStayMs(event, key);
-      if (until + stayMs + HOME_RETURN_LEAD_MS > untilHomeWindow) continue;
-      if (hasClashingEventBy(at + stayMs)) continue;
-
-      targets.push({ ...realm, type: event, at });
-    }
-  }
-  return targets.sort((lhs, rhs) => lhs.at - rhs.at)[0];
-}
-
-/** @returns {boolean} whether an early-hop event here is about to start or running */
-function hasEarlyHopEventHere() {
-  const now = Date.now();
-  return getLineup(server.status.schedule, EARLY_HOP_EVENTS).some(
-    ({ status, at }) =>
-      status === "live" ||
-      (status === "scheduled" && at - now <= EARLY_HOP_LEAD_MS && at > now),
-  );
-}
-
-async function hopToCandidate(target) {
-  console.warn(`Hopping to ${realmOf(target)}`);
-  set("currentParty", undefined);
-  await hopToServer(target.serverRegion, target.serverIdentifier);
-}
-
-/** @param {string} reason */
-async function hopHome(reason) {
-  console.warn(`Hopping home — ${reason}`);
-  set("currentParty", undefined);
-  await hopToServer(HOME_SERVER.serverRegion, HOME_SERVER.serverIdentifier);
+/** @returns {HopSighting[]} the race's sightings, best first */
+function getRaceCandidates() {
+  return (getRealmData()?.query({ types: trackedBossTypes() }) ?? [])
+    .filter(isHopCandidate)
+    .sort(byHopPriority);
 }
 
 /**
- * Steers fighters left on another realm: onto the exempt boss, home once none is left, or rejoined.
- * @param {Object} [exemptTarget] from getExemptHopTarget
+ * Steers fighters left on another realm while the merchant brews: onto the boss they chase, home once none is left, or rejoined.
+ * @param {HopSighting} [target] - the exempt boss, else the race's best sighting
  * @param {boolean} isWitchRoundHere
- * @returns {boolean} whether the split claimed the tick
+ * @returns {HopDecision|undefined} nothing when the party is not split
  */
-function steerSplitParty(exemptTarget, isWitchRoundHere) {
+function steerSplitParty(target, isWitchRoundHere) {
   const plan = getPartyPlan();
-  if (!plan || plan.realm === getCurrentServer()) return false;
+  if (!plan || plan.realm === getCurrentServer()) return;
 
-  const targetRealm = exemptTarget && realmOf(exemptTarget);
-  if (!targetRealm || targetRealm === getCurrentServer()) {
-    setPartyRealm(server.region, server.id);
-    return true;
+  if (!target || isOnCurrentRealm(target)) {
+    const here = { serverRegion: server.region, serverIdentifier: server.id };
+    return pointPartyAt(here, "nothing left for the fighters elsewhere");
   }
   if (isWitchRoundHere) {
-    if (targetRealm !== plan.realm)
-      setPartyRealm(exemptTarget.serverRegion, exemptTarget.serverIdentifier);
-    return true;
+    return realmOf(target) === plan.realm
+      ? stayPut(`brewing while the fighters chase ${target.type}`)
+      : pointPartyAt(target, `fighters onto ${target.type}`);
   }
-  if (targetRealm !== plan.realm) return false;
+  if (realmOf(target) !== plan.realm) return;
 
-  hopAlone(plan.region, plan.id, "rejoining the party");
-  return true;
+  const planRealm = { serverRegion: plan.region, serverIdentifier: plan.id };
+  return hopAloneTo(planRealm, "rejoining the party");
 }
 
+/**
+ * Whether a sighting or realm is the one we stand on.
+ * @param {HopRealm} target
+ * @returns {boolean}
+ */
+function isOnCurrentRealm(target) {
+  return realmOf(target) === getCurrentServer();
+}
+
+/**
+ * Stays where we are.
+ * @param {string} reason
+ * @returns {HopDecision}
+ */
+function stayPut(reason) {
+  return { action: "stay", reason };
+}
+
+/**
+ * Hops the whole party to `target`'s realm.
+ * @param {HopRealm} target
+ * @param {string} reason
+ * @returns {HopDecision}
+ */
+function hopTo(target, reason) {
+  return { action: "hop", target, reason };
+}
+
+/**
+ * Hops only this character to `target`'s realm.
+ * @param {HopRealm} target
+ * @param {string} reason
+ * @returns {HopDecision}
+ */
+function hopAloneTo(target, reason) {
+  return { action: "hopAlone", target, reason };
+}
+
+/**
+ * Points the fighters at `target`'s realm while this character stays.
+ * @param {HopRealm} target
+ * @param {string} reason
+ * @returns {HopDecision}
+ */
+function pointPartyAt(target, reason) {
+  return { action: "point", target, reason };
+}
+
+/** @returns {{rule: HopRule, decision: HopDecision}|undefined} the first enabled rule that decides this tick */
+function pickHopDecision() {
+  const candidates = getRaceCandidates();
+  const ctx = {
+    realmData: getRealmData(),
+    candidates,
+    isIdle: !candidates.length,
+    exemptTarget: getExemptHopTarget(),
+    isHome: isAtHomeServer(),
+    isWitchRoundHere: isWitchGathering() || canBrewWitchCipher(),
+  };
+
+  for (const rule of HOP_RULES) {
+    if (!rule.enabled || (rule.onlyWhenIdle && !ctx.isIdle)) continue;
+
+    const decision = rule.decide(ctx, rule.config ?? {});
+    if (decision) return { rule, decision };
+  }
+}
+
+/** The last rule, action and realm logged, so a repeat stays quiet even as its reason ticks */
+let lastHopLog;
+
+/**
+ * Logs a decision once, until the rule, action or realm changes.
+ * @param {HopRule} rule
+ * @param {HopDecision} decision
+ */
+function logHopDecision(rule, { action, target, reason }) {
+  const where = target ? ` → ${realmOf(target)}` : "";
+  const key = `${rule.name}: ${action}${where}`;
+  if (key === lastHopLog) return;
+
+  lastHopLog = key;
+  console.warn(`[hop] ${key} — ${reason}`);
+}
+
+/** Carries out the tick's winning decision */
 async function planHop() {
-  // An open instance is paid-for content; nothing outranks finishing it
-  if (get("cryptInstance")) return;
+  const picked = pickHopDecision();
+  if (!picked) return;
 
-  // The merchant is never inside, but its hop takes the party out with it
-  if (get("caveRun") > Date.now()) return;
+  const { rule, decision } = picked;
+  logHopDecision(rule, decision);
 
-  if (isHomeWitchBrewDue()) {
-    const reason = "home's Witch brewing is about to open";
-    if (!BREW_ALONE || !canHopAlone()) return hopHome(reason);
-    return hopAlone(
-      HOME_SERVER.serverRegion,
-      HOME_SERVER.serverIdentifier,
-      reason,
-    );
+  const { action, target } = decision;
+  if (action === "point")
+    return setPartyRealm(target.serverRegion, target.serverIdentifier);
+  if (action === "hopAlone")
+    return hopAlone(target.serverRegion, target.serverIdentifier);
+  if (action === "hop") {
+    set("currentParty", undefined);
+    return hopToServer(target.serverRegion, target.serverIdentifier);
   }
-
-  const exemptTarget = getExemptHopTarget();
-  const isWitchRoundHere = isWitchGathering() || canBrewWitchCipher();
-  if (steerSplitParty(exemptTarget, isWitchRoundHere)) return;
-
-  // A live fatigue-exempt boss outranks a foreign Witch round, and home's gathering once stock covers the brew
-  const mayLeaveWitchRound =
-    exemptTarget && (!isAtHomeServer() || canSkipHomeWitchGathering());
-  if (isWitchRoundHere && !mayLeaveWitchRound) return;
-
-  if (exemptTarget) {
-    if (realmOf(exemptTarget) === getCurrentServer()) return;
-    return hopToCandidate(exemptTarget);
-  }
-  if (fatigueExemptBosses.some((name) => server.status[name]?.live)) return;
-
-  const cipher = server.status.witchcipher;
-  if (!isAtHomeServer() && cipher?.live && Date.now() < cipher.end)
-    return hopHome("the Witch's gathering is over");
-
-  // The early hop already budgeted every scheduled home window
-  if (!isAtHomeServer() && hasEarlyHopEventHere()) return;
-
-  // Should we return home?
-  // When there's gonna be a boss with home server drop table in 30 mins~!
-  const settleReason = shouldReturnHomeToSettle();
-  if (settleReason) return hopHome(settleReason);
-
-  if (hasSoftenedBossHere()) return;
-  if (hasEventWorthStayingFor()) return;
-
-  const earlyTarget = getEarlyHopTarget();
-  if (earlyTarget) return hopToCandidate(earlyTarget);
-
-  const holdReason = shouldHoldAtHome();
-  if (holdReason) {
-    console.warn(`Staying home — ${holdReason}`);
-    return;
-  }
-
-  const realmData = getRealmData();
-  if (!realmData) return;
-
-  const candidates = realmData
-    .query({ types: trackedBossTypes() })
-    .filter(isHopCandidate)
-    .sort(byHopPriority);
-
-  if (!candidates.length) {
-    if (!isAtHomeServer()) await hopHome("nothing left to chase");
-    return;
-  }
-
-  console.warn(
-    candidates.map(
-      (candidate) => `${realmOf(candidate)} ${candidate.type} ${candidate.hp}`,
-    ),
-  );
-
-  const target = candidates[0];
-  if (realmOf(target) === getCurrentServer()) return;
-
-  await hopToCandidate(target);
 }
 
 setInterval(async () => {

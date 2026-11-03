@@ -383,12 +383,13 @@ risking a home crabxx. It only goes when:
   instead, plus `EVENT_STAY_SLACK_MS` (1 min): about 29 or 21 min. The merchant is the hop owner
   (the one `enabled` caracAL character, which deploys the rest to its realm), so he is always
   there to brew;
-- by the foreign round's end, home has no Witch round of its own, and no `fatigueExemptBosses`
-  (Horseman) slot is due on any realm reachable for him, `ignoreServer` included
+- by the foreign round's end, home has no Witch round of its own, and no `FATIGUE_EXEMPT_BOSSES`
+  (Horseman) slot is due on any realm reachable for him, `IGNORED_REALMS` included
   (`hasClashingEventBy`). On 2026-10-24 it only checked home, so it took EU's 17:00 UTC round while
   ASIA's Horseman (ASIA 00:00) rode at the same moment, every day. EU's 06:00 round (05:00 UTC)
   clashes the same way with USIV's 00:00 Horseman.
-- The hop loop's Witch hold now yields to a live fatigue-exempt boss when the round is foreign:
+- (Superseded 2026-11-03, see "Bosses before the Witch": the hold now yields to any boss.)
+  The hop loop's Witch hold now yields to a live fatigue-exempt boss when the round is foreign:
   `isWitchRoundHere && (isAtHomeServer() || !exemptTarget)` returns, and anything else falls
   through to the Horseman hop. Before, the hold sat above `getExemptHopTarget`, so a party
   gathering abroad never left for him. Checked on live data at 17:04 UTC: on EUI mid-gathering
@@ -4320,9 +4321,9 @@ party (e.g. Earth) are still taken by agitate, so they still block it: we let hi
 - **Headless Horseman** (nightly, 00:00 realm clock, 30M HP, roams `halloween`): a simple boss,
   first in `EVENT_FIGHTS`. Its Jack-o Walkers come from `G.monsters.horseman.spawns` like any
   minion. He is not on the home drop table, and his achievements go up to 500 kills. Until the
-  season ends (2026-11-02), his `bosses` entry in server_hop.14.js stays, with `fatigueExempt:
-  true`. That flag builds `fatigueExemptBosses`, which `getExemptHopTarget` hops to ahead of the
-  home-window and realm-fatigue checks (`ignoreServer` realms allowed).
+  season ends (2026-11-02), his `HOP_BOSSES` entry in server_hop.14.js stays, with `fatigueExempt:
+  true`. That flag builds `FATIGUE_EXEMPT_BOSSES`, which `getExemptHopTarget` hops to ahead of the
+  home-window and realm-fatigue checks (`IGNORED_REALMS` realms allowed).
   `trackedBossTypes` leaves flagged bosses out of the HP race. Remove the flag or comment the
   entry out to stop chasing him. Realm clocks differ by region, so
   several rides a day are reachable. No ride is skipped for low hp (2026-10-23): the goal is the
@@ -4588,7 +4589,7 @@ one softened below him does.
   `G.skills.stack.max` 2000, 10s), so on a crowded Horseman other players' rogues build it for ours.
   `PRESET_FIRST_BOSSES` puts his preset ahead of the HP-ranked
   Mr. Pumpkin/Mr. Green pick, which would otherwise win all season.
-- The Horseman hop (`getExemptHopTarget`) also reaches `ignoreServer` realms (ASIAI, ASIAII) via
+- The Horseman hop (`getExemptHopTarget`) also reaches `IGNORED_REALMS` realms (ASIAI, ASIAII) via
   `isReachableRealm(candidate, true)`. Every other boss still skips them.
 - Brewing is home-only, so once a foreign realm's round reaches brewing, the hop loop goes
   straight home. That comes after the Horseman and gather-elsewhere checks, so a live Horseman
@@ -4642,8 +4643,140 @@ one softened below him does.
   - Fatigue only counts non-merchant siblings, so the split costs nothing there, and the server's
     brew has no fatigue or hop-sickness gate (`witch_cipher_brew`; checked 2026-10-26).
   - Switches at the top of server_hop.14.js: `SKIP_HOME_GATHERING_FOR_EXEMPT`, `BREW_ALONE`. The
-    exempt bosses themselves are still `bosses[name].fatigueExempt`.
+    exempt bosses themselves are still `HOP_BOSSES[name].fatigueExempt`.
   Once the season ends there is no exempt target, so none of this runs.
+  Superseded by "Bosses before the Witch (2026-11-03)": the skip switch and its stock check are gone.
+
+## Bosses before the Witch (2026-11-03, the user's call)
+
+The Witch's Cipher no longer holds the party anywhere, home included. Crabxx and the rest of the
+HP race come first, and the party goes back to the Witch afterwards.
+- **`HOP_RULES`** (top of server_hop.14.js) is the hop loop's priority list. `planHop` builds a
+  context once per tick (`realmData`, race `candidates`, `isIdle` when there are none,
+  `exemptTarget`, `isHome`, `isWitchRoundHere`). It runs `decide(ctx, config)` on each enabled rule
+  in order. The first decision wins: `stayPut`, `hopTo`, `hopAloneTo`, or `pointPartyAt` (re-point
+  the fighters while this character stays). A rule's knobs live in its own `config`: `eventHere`
+  holds `waitFor`, and `earlyHop` holds `events`, `leadMs` and `clashingBosses`. `enabled` replaces
+  the old `BREW_ALONE` switch. At runtime, use `getHopRule(name)`. Each decision is logged once as
+  `[hop] <rule>: <action> → <realm> — <reason>` and stays quiet while it repeats.
+- `onlyWhenIdle` rules (`witch`, `earlyHop`) are skipped while the race has a candidate. `witch`
+  covers the hold while a round runs here, a foreign round's "gathering is over" hop home, and the
+  `hasEarlyHopEventHere` wait. Both rules keep their places relative to `settleHome` and `holdHome`,
+  for the Pumpkin/Green reason under "Scheduled windows only".
+- Checked 2026-11-03 with a vm harness over stubbed globals. All 11 cases matched the intended
+  rule and action: home gathering vs. foreign crabxx, brew-alone with and without an earlier brew,
+  every split branch, the `witchBrewDone` bounce guard, early hop with crabxx due at 20 min and at
+  3 h, and nothing to chase.
+- Fatigue-exempt bosses (Horseman) already outranked the race, and no longer need stock to leave
+  home's gathering. `SKIP_HOME_GATHERING_FOR_EXEMPT`, `canSkipHomeWitchGathering`,
+  `hasWitchStockForDay` and `WITCH_SKIP_MIN_STAY_MS` were removed.
+- **Brewing is still done, by the merchant alone.** The `brewAlone` rule (`canHopAlone() &&
+  isHomeWitchBrewDue()`) sits right after `splitParty` and before any boss, so he leaves
+  whatever boss the fighters are on. `steerSplitParty` now steers to the exempt boss, else the
+  race's best sighting (`candidates[0]`). Before, it only knew the exempt boss, so a split on
+  crabxx would have pointed the fighters home. Without `canHopAlone` (native, fighters running in
+  the merchant's window), the whole party goes home for brewing, but only once there are no
+  candidates.
+- `isHomeWitchBrewDue` needs a day with **no brew yet**: `!witchDay.server` (`witch_cipher_info`
+  sets `server` on the account's first mix). A day already started in an earlier home round does
+  not call him back. If the party is home anyway, he finishes it as usual.
+- The early hop to a foreign round also yields to crabxx anywhere (`EARLY_HOP_CLASHING_BOSSES`).
+  `hasClashingEventBy` rejects the trip when crabxx is live, or due before the round's stay ends,
+  on any realm the race would chase it to (`IGNORED_REALMS` excluded). It reads the realm's
+  `S.crabxx.live` as well as the lineup, in case the fight runs on after its lineup entry ends.
+- **Ignored realms, default and per boss.** `IGNORED_REALMS` is the default. A `HOP_BOSSES` entry's
+  own `ignoredRealms` replaces it for that boss (`[]` chases it everywhere). `isReachableRealm(realm,
+  type)` takes the boss, and the old `isExempt` flag is gone. The early hop's Witch realm uses the
+  default, and the clash check uses each boss's own list. `HopBoss` / `HopRule` / `HopContext` /
+  `HopDecision` typedefs document the config at the top of server_hop.14.js.
+- **Where it lives.** server_hop.14.js holds the config, `HOP_RULES`, the race ranking, and the
+  hop actions. server_hop_utilities.25.js holds the realm reach (`realmOf`, `isReachableRealm`),
+  the Witch's day (`witchDay`, `canBrewWitchAt`, `getWitchReturnAt`, `isHomeWitchBrewDue`), and
+  the early hop's lineup checks (`getForeignEventStayMs`, `hasClashingEventBy`,
+  `getEarlyHopTarget`, `hasEarlyHopEventHere`). 25 loads first, and its helpers read 14's config
+  only inside function bodies. Both files load as a pair from basic_function.7.js. The live-data
+  week gave the same moves before and after the move.
+- Repeats are logged once per rule + action + realm. The reason is left out of that key, so
+  `holdHome`'s "home window in 32m … 31m …" stays a single line.
+- **Run against live data (2026-11-03).** The harness captured every realm's `welcome` /
+  `server_info` over read-only observer sockets. The addresses come from `X.servers`, embedded in
+  the adventure.land homepage: no login, and the same list `get_servers()` returns. It loaded the
+  real slots 14 and 25 (with `ServerRealmData` fed that capture), the Witch and lineup helpers out of
+  53 and 7, and the live `G` (v18285), then walked 7 days of the real lineups in 1-min steps.
+  Assumed: bosses die 20–30 min after spawning, brewing happens once the round's
+  `isWitchBrewDue`, and stock is plentiful. Findings:
+  - Halloween is over. The Witch is in the daily rotation, every US realm at once (18:00 or
+    01:00 UTC), and no boss falls within ±40 min of any home round that week. The boss race and
+    the home round never met on real data.
+  - With a crabxx injected on EUI at home's 18:05 round: the party hops to it at 18:05. At 18:15
+    the merchant goes home alone, brews at 18:20, and rejoins the fighters. When the crab dies they
+    all go home. No ping-pong.
+  - The clash check only looks until the Witch stay would end. A crabxx injected 9 min after
+    that (USII 19:30 against EU's 19:00 round) did not stop the early hop. The party left the EU
+    gathering at 19:20 and caught the crab at 19:30.
+  - On a day without a home round (e.g. 11-05), `isWitchBrewRealm` lets the merchant brew at the
+    foreign round the early hop takes him to (ASIAI 13:00). That is the design described under
+    the Witch section, not a regression.
+- It also skips a round whose `witchBrewDone` matches home's round key.
+
+## Cross-realm rare-mob snipes (`snipe` rule, 2026-11-03)
+
+- **Source: the observers' spotlight.** On the live server, an anonymous observer (`welcome` →
+  emit `loaded`) is moved about every 13s onto live fights anywhere on the realm, e.g. cave, main,
+  halloween, uhills, winter_cove. GitHub's `server.js` still parks it at a fixed `observer_map`; the
+  live server runs ahead of GitHub. A 2-min watch of every realm saw a phoenix on USIV and an
+  rharpy on USV. The sockets are not authenticated: no `welcome` carries `character`, which the
+  server only sends when a handshake `secret` matches a character on that realm, and caracAL adds
+  none. Goldenbat, cutebee and mimic spawn off realm-wide bat / bee / kobold kill counters
+  (`spawn_special_monster`) with no broadcast. They are never in `S`, and aldata doesn't list
+  them, so the spotlight is the only feed.
+- `ServerRealmData` now opens the entity feed on every non-PvP realm, not just home. That's
+  roughly 8 entity messages/s per realm on the hop owner. `_absorbEntities` writes each
+  `SPECIAL_MOB_IDS` sighting to `realmSightings` (keyed by type, latest wins) with its realm,
+  `serverRegion` / `serverIdentifier`, map, x/y, hp, target and `seenAt`.
+- **The rule** sits after `holdHome` and before `bossRace` (the user's pick). It never leaves a
+  softened boss or an event here, and never breaks a home hold, but it outranks crabxx and the
+  race. Config: `mobs` (cutebee, goldenbat, mimic; each must be in `SPECIAL_MOB_IDS`),
+  `maxAgeMs` (2 min), and `stayMs` per mob (5 / 8 / 20 min). A target held by someone else still
+  counts. A sighting on our own realm wins first. The whole party goes (the user's call), even
+  though hop sickness takes −80 gold/luck/xp for 12 min abroad.
+- **Realm fatigue budget** (`fitsBeforeHomeWindow`): a foreign snipe needs `stayMs` +
+  `HOME_RETURN_LEAD_MS` (30 min fatigue + 2 min) ≤ `msUntilHomeWindow()`. Fatigue runs for 30 min
+  after the last fighter comes home, so the trip has to end in time for it to clear. A sighting on
+  the realm we stand on costs nothing and skips the check.
+- **Hand-off to the fighters.** Once on the sighting's realm, the rule writes it into the scout
+  store (`shareSnipeSighting`), and `useSpecialMobStrategy` walks there. Scout reports now carry
+  `realm` (scout sweep, fighters' in-sight report, snipe), and `getSpecialMobSighting` skips
+  another realm's. A visit that finds nothing sets `checkedAt`. A sighting no newer than that is
+  "spent": it isn't shared again, and the rule passes, usually to `goHome`.
+- `CONTESTED_SPECIAL_MOB_IDS` (special_mob_fighter_strat.28.js) holds the three, so fighters take them
+  even while someone outside the crew holds them.
+- **Aggro can't be stolen cheaply** (`kaansoral/adventureland_mongodb` server.js; GitHub may lag
+  live). "Friendly" is `is_same(you, holder, 1)`: same name, same owner, same IP, same party or
+  team, or a shared `s.coop` id.
+  - Taunt only redirects a mob held by a friendly player (`atype == "taunt"`).
+  - Agitate skips mobs held by an unfriendly player.
+  - A plain hit only takes a mob that has no target and doesn't evade it. Natural aggro and rage
+    also need an untargeted mob.
+  - Absorb on a non-friendly player needs level ≥ 75 and 6 × mp (1200). 95% of casts fail with
+    `non_friendly_target` and still cost the mp and the cooldown. A success pulls every mob that
+    player holds.
+  - So a fresh, untargeted snipe goes to whoever lands the first hit. Cutebee's 99.9% avoidance
+    makes even that slow, since evaded hits don't take aggro. The priest's drag-boss take-back
+    works only because those bosses are co-op, and the shared co-op condition makes the thief
+    friendly.
+- **Priest absorb gamble** (`getAbsorbGambleTarget`, basic_priest.2.js). It's the last pick in
+  `getAbsorbTarget`. It targets a stranger holding an `ABSORB_GAMBLE_MOBS` mob (mimic only:
+  goldenbat and cutebee die before roughly 20 casts, about 24k mp, could pay). Its gates: level ≥
+  75, the 1200-mp cast still leaves `partyHealMpFloor()`, no ally `isAllyInEmergency`, and the
+  holder in absorb range. Once a cast lands, the priest holds the mimic (attack 2600), and the
+  warrior's friendly taunt can take it from there.
+- Checked with the harness, feeding `entities` through the real socket handlers. All 13 cases
+  matched: hop and stay, a stranger's target, a stale sighting, a spent one, snipe vs. a live
+  crabxx, the fatigue budget at 70 / 35 / 20 min to a home window, a sighting on our own realm,
+  and PvP getting no feed. `witchDay` refreshes only
+  every 5 min, so after he brews (or decides nothing is worth brewing) and rejoins the fighters,
+  a stale copy would otherwise send him straight back.
 
 ## Party plan (`party_plan.37.js`, 2026-10-26)
 
