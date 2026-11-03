@@ -2,7 +2,7 @@
 const HOP_REGIONS = ["US", "ASIA", "EU"];
 
 /** Realms we never hop to, e.g. "ASIAI", unless a HOP_BOSSES entry gives its own `ignoredRealms` */
-const IGNORED_REALMS = ["ASIAI", "ASIAII"];
+const IGNORED_REALMS = [];
 
 /** Bosses hopped to at first sighting, ranked first, and stayed for while live here */
 const TANKABLE_BOSSES = [
