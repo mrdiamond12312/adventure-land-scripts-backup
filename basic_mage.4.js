@@ -201,6 +201,7 @@ async function mainLoop() {
 
     // Handle immediate death state
     if (character.rip) {
+      respawnWhenReady();
       throw new Error("Character's down", {
         cause: "death",
       });

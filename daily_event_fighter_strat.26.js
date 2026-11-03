@@ -353,9 +353,42 @@ const CRABXX_RANGER_REACH_MARGIN = 25;
 /** Crabx spawn onto players within this of the boss; past it they chase someone away */
 const CRABX_SPAWN_RADIUS = 400;
 
+/** Stack cells the ranger's crabxx spot keeps off another character */
+const CRABXX_RANGER_STACK_CELLS = 3;
+
 /**
- * Where the ranger stands at crabxx: the spawn center while it reaches every
- * crab of the fight, else where he stands if that does, else their centroid.
+ * @param {{x: number, y: number}} spot
+ * @returns {Object|undefined} a living character, not us, whose stack cell the spot is in
+ */
+function getCharacterOnSpot(spot) {
+  return Object.values(parent.entities).find(
+    (entity) =>
+      entity.type === "character" &&
+      !entity.rip &&
+      Math.abs(entity.real_x - spot.x) < STACK_CELL &&
+      Math.abs(entity.real_y - spot.y) < STACK_CELL,
+  );
+}
+
+/**
+ * @param {{x: number, y: number}} spot
+ * @returns {{x: number, y: number}} the spot, pushed off any character standing on it
+ */
+function stepOffCharacters(spot) {
+  const blocker = getCharacterOnSpot(spot);
+  if (!blocker) return spot;
+
+  const away = Math.atan2(spot.y - blocker.real_y, spot.x - blocker.real_x);
+  const gap = CRABXX_RANGER_STACK_CELLS * STACK_CELL;
+  return {
+    x: blocker.real_x + gap * Math.cos(away),
+    y: blocker.real_y + gap * Math.sin(away),
+  };
+}
+
+/**
+ * Where the ranger stands at crabxx: where he stands while it reaches every
+ * crab of the fight, else their centroid, never on another character's cell.
  * @param {Object} [crabxx] - the boss
  * @returns {{x: number, y: number}|undefined} the spot to park on
  */
@@ -370,19 +403,18 @@ function getRangerCrabxxSpot(crabxx) {
     ),
     crabxx,
   ].filter(Boolean);
-  if (!fight.length) return center;
+  if (!fight.length) return center && stepOffCharacters(center);
 
   const reach = character.range - CRABXX_RANGER_REACH_MARGIN;
   const covers = (spot) =>
-    !!spot && fight.every((mob) => simple_distance(spot, mob) <= reach);
+    fight.every((mob) => simple_distance(spot, mob) <= reach);
   const here = { x: character.real_x, y: character.real_y };
 
-  if (covers(center)) return center;
-  if (covers(here)) return here;
-  return {
+  if (covers(here)) return stepOffCharacters(here);
+  return stepOffCharacters({
     x: fight.reduce((sum, mob) => sum + mob.real_x, 0) / fight.length,
     y: fight.reduce((sum, mob) => sum + mob.real_y, 0) / fight.length,
-  };
+  });
 }
 
 /** @returns {Promise<object|undefined>} the outcome, while crabxx is live */

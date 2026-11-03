@@ -347,6 +347,7 @@ async function moveHome() {
 
 setInterval(async function () {
   if (character.rip) {
+    respawnWhenReady();
     return;
   }
 

@@ -1488,7 +1488,8 @@ function swapUntilImpact(targetToAttack, equips, { freeSlot, restore } = {}) {
 
   isEquipingItems = true;
 
-  const swapBackAt = Date.now() + etaMs;
+  // The projectile spawns one one-way trip after the attack is sent
+  const swapBackAt = Date.now() + etaMs + equipLatencyMs;
 
   const swapBackDeadline =
     Date.now() + characterAtkCycleMs - character.ping - restorePenaltyMs;

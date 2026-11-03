@@ -4,6 +4,8 @@
 /** Ms past the server's cant_respawn wait before the retry */
 const RESPAWN_RETRY_PAD_MS = 300;
 const RESPAWN_DEATH_CHECKS = 5;
+/** Ms a respawn waits for the server's reply before it is sent again */
+const RESPAWN_REPLY_TIMEOUT_MS = 5000;
 /** Seconds a harakiri is watched for the server's rip, and how long another one is held back */
 const HARAKIRI_DEATH_CHECKS = 30;
 
@@ -12,19 +14,27 @@ let isRespawnPending = false;
 /** When the last harakiri went out, 0 once its death has arrived */
 let harakiriSentAt = 0;
 
-/** Respawns, and on cant_respawn retries once its `ms` has passed */
+/**
+ * Respawns; on cant_respawn retries once its `ms` has passed, and resends
+ * a respawn the server left unanswered for RESPAWN_REPLY_TIMEOUT_MS.
+ * Safe to call every tick: it no-ops while one is pending or once alive.
+ */
 async function respawnWhenReady() {
   if (isRespawnPending || !character.rip) return;
 
   isRespawnPending = true;
-  const retryMs = await respawn().then(
-    () => 0,
-    (e) => e?.ms ?? 0,
+  const retryMs = await withTimeout(
+    respawn().then(
+      () => 0,
+      (e) => e?.ms ?? 0,
+    ),
+    RESPAWN_REPLY_TIMEOUT_MS,
   );
+  const isUnanswered = retryMs === undefined;
   if (retryMs) await sleep(retryMs + RESPAWN_RETRY_PAD_MS);
   isRespawnPending = false;
 
-  if (retryMs) respawnWhenReady();
+  if (retryMs || isUnanswered) respawnWhenReady();
 }
 
 function handle_death() {

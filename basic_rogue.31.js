@@ -375,6 +375,7 @@ async function mainLoop() {
     // buff();
 
     if (character.rip) {
+      respawnWhenReady();
       throw new Error("Character's down", {
         cause: "death",
       });

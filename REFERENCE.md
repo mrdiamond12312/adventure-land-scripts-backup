@@ -1592,29 +1592,27 @@ Piercing past the armor still pays: `damage_multiplier` goes above 1 for negativ
 1.32. So +120 is about +7–12% per hit on any mob, armored or not.
 
 `firePlan` sends the shot, then `swapUntilImpact` with the crossbow. It covers `attack`,
-`piercingshot`, `3shot` and `5shot`. There is no explicit restore, as with the warrior. At impact
-the swap only releases `isEquipingItems`. The gear loop (100ms) runs while the attack is on
-cooldown, so its next tick equips whatever `calculateRangerItems` picks: cupid when someone wants
-a heal, the bow otherwise. It keeps its cheap gate (skip while the attack is ready, cupid not in
-hand and a mainhand held) rather than `canUse: () => true`, because a `getActionPlan` scan every
-tick is too costly for the ranger.
-- **Idle after a kill keeps the crossbow.** With no targets, `calculateRangerItems` keeps the
-  mainhand the server holds, which is the crossbow. Once the attack is ready the cheap gate stops
-  the loop. So the first shot at the next mob goes out on the crossbow. That shot skips the swap,
-  and the loop picks the bow in the cooldown after it.
-- The gear loop's `equipBatch` stays penalty-budgeted. While the crossbow is held, the server's
-  re-based (longer) cooldown can overstate that budget. If the loop misses the window, the next
-  shot goes out on the crossbow, and that shot skips the swap.
-- **Nearest arrow decides whether to swap, farthest decides how long to hold.** The swap is
-  skipped unless the nearest target's ETA fits inside `ms − ping − 2 × EQUIP_PENALTY_MS`, where
-  `ms` is `ms_to_next_skill("attack")`, or the full cycle while it still reads 0 (the shot's reply
-  is not back yet). It subtracts one 120ms `penalty_cd` for the swap-in and one for the swap back,
-  both of which must clear before the next shot. The second 120 also absorbs the gear loop's up
-  to 100ms poll delay, since there is no explicit restore. At a 700ms cycle and 80ms ping that
-  leaves 380ms, about 190px of arrow flight. `swapUntilImpact` clamps the farthest-target hold to
-  its own, looser deadline (`cycle − ping − 120`). The hold aims at the farthest target and
-  is cut at that deadline, so the next shot is never delayed by a swap; arrows past it land on
-  the normal weapon.
+`piercingshot`, `3shot`, `5shot` and cupid heals (the piercing raises the heal too, so the swap
+rides those on purpose). **The crossbow is locked in until the farthest arrow lands, then an
+explicit restore puts back the weapon the shot was fired with** (2026-11-04): `equipBatch` with
+`preventPenaltizeNextAttack: false, preventKeySnatch: false`, run inside the swap's
+`isEquipingItems` latch, so nothing else can take the crossbow off early. It used to have no
+restore and leave the swap back to the gear loop, which missed the window: `equipBatch` refuses
+while the swap-in's own `penalty_cd` is up, the loop polls at 100ms, and its cheap gate skips
+while the attack is ready. A missed window sent the next shot out on the crossbow (the shot's
+damage is snapshotted from the weapon at commence), and that shot skipped the swap. The gear loop
+still corrects afterwards if it wants a different weapon (cupid for a new healee).
+- **Farthest arrow decides both whether to swap and how long to hold.** The swap is skipped
+  unless the farthest target's ETA fits inside `ms − ping − 2 × EQUIP_PENALTY_MS`, where `ms` is
+  `ms_to_next_skill("attack")`, or the full cycle while it still reads 0 (the shot's reply is not
+  back yet). It subtracts one 120ms `penalty_cd` for the swap-in and one for the restore, both of
+  which must clear before the next shot. At a 700ms cycle and 80ms ping that leaves 380ms, about
+  190px of arrow flight. Gating on the nearest arrow let a multishot pass whose far arrows then
+  ate the restore's window. `swapUntilImpact` still clamps the hold to its own deadline
+  (`cycle − ping − 120`), so the next shot is never delayed by a swap.
+- **`swapBackAt` includes `equipLatencyMs` again** (strategic_fn.11.js, timing fact 1 above). The
+  `00c9baa` extraction of `swapUntilImpact` had dropped it, so every restore (candy, paleclaw,
+  crossbow) arrived level with the hit instead of after it.
 - The crossbow's −36 frequency re-bases the attack cooldown while held (see the candy-swap
   re-base note); the restore re-bases it back, and nothing is lost when that comes before the
   next shot.
@@ -2169,14 +2167,20 @@ The rest of the branch looks tunable, but is deliberate (confirmed 2026-09-29):
   drag him off. He used to orbit the boss at `rangeRate` 0.3 (~70px out). Now he stands still, on
   the first of these that keeps every crab of the fight (the boss, plus crabx within 400 of it)
   `CRABXX_RANGER_REACH_MARGIN` (25) inside his range:
-  1. the exact spawn center (the user's pick);
-  2. where he already stands, so he does not wander back and forth;
-  3. the crabs' centroid, as a best effort.
+  1. where he already stands, so he does not wander back and forth;
+  2. the crabs' centroid, as a best effort.
 
   The margin is there because a multishot whose targets all fail the server range check still
-  costs the cooldown (see "Ranger stalls with no penalty_cd"). Standing on the boss is safe:
-  monsters only hit their own target. Once the boss is on *him* he goes back to orbiting it, which
-  keeps him out of its melee.
+  costs the cooldown (see "Ranger stalls with no penalty_cd"). Once the boss is on *him* he goes
+  back to orbiting it, which keeps him out of its melee.
+- **The ranger's spot never shares a character's stack cell** (`stepOffCharacters`, 2026-11-04).
+  Standing on the boss is *not* safe. A monster hit also lands, combo-multiplied, on every player
+  in the victim's grid cell that `is_same(target, other, 2)` (party, account, or both in coop on
+  the same boss), see `canStackWith`. The ranger parked on the spawn center, where another
+  player's warrior was tanking the boss, and died to that warrior's hits. So the exact spawn
+  center is no longer a pick. Whatever spot wins is pushed `3 × STACK_CELL` (18px) away from any
+  living character inside its `STACK_CELL` box, any character at all, since coop relates
+  strangers.
 - **The tanker fetches a stolen boss back** (`isCrabxxStolen`, `fetchCrabxx`). Another player
   holding aggro walks the boss off the spawn center, where the tanker is anchored (one was seen
   dragging it ~2000px into town). Two predicates, deliberately separate:
@@ -4222,8 +4226,7 @@ sent dozens of respawns and sometimes got the character disconnected. Now `handl
 `runner_compat.js` wires to `character.on("death")` in the browser and in every caracAL character
 thread, calls `respawnWhenReady` once: it sends one respawn and, on `cant_respawn`, one more after
 that `ms` plus `RESPAWN_RETRY_PAD_MS`. `isRespawnPending` keeps a second caller from stacking
-another. A failure with no `ms` (`cave_rescuer`, `invalid`) is not retried. The loops keep their
-`character.rip` skip, without the call. A character already dead when the script loads never
+another. A failure with no `ms` (`cave_rescuer`, `invalid`) is not retried. A character already dead when the script loads never
 fires `death`, so `respawnOnceDead` looks for `character.rip` once a second for the first
 `RESPAWN_DEATH_CHECKS` seconds.
 
@@ -4240,6 +4243,21 @@ window gave up after ~4s. A `rip` that arrived later left the character dead for
 harakiri fires no `death`. Now `commitHarakiri` holds back for 30s after a send, or until
 `respawnOnceDead` sees the `rip`, and watches for those 30s. A late harakiri after a mob kill is
 harmless: the server returns early on a dead player, and the mob kill's `death` respawns as usual.
+
+**Respawn backstops: a reply timeout and the class loops** (2026-11-04). A ranger killed by a
+stacked crabxx hit stayed dead with no cause found in code: on paper the server sends the death
+like any other, the `death` event fires, and every `respawn` branch replies. The two ways left
+are both silent:
+- **A `respawn()` that is never answered pins `isRespawnPending` for good.** Client deferreds have
+  no timeout. The `respawn` queue is FIFO, so one orphan also makes every later reply settle the
+  orphan instead of the newest call. Now `respawnWhenReady` races the reply against
+  `RESPAWN_REPLY_TIMEOUT_MS` (5s) and resends while `character.rip`. Even with an orphan in the
+  queue each resend still reaches the server, which respawns once `rip_time` is up, and the next
+  call stops on `!character.rip`.
+- **A `death` that never reached the thread** (e.g. a reload past `respawnOnceDead`'s 5s window).
+  Every class loop's existing `character.rip` branch now calls `respawnWhenReady()`. That is not
+  the polling interval turned down above: no new timer, and while a respawn is pending or waiting
+  out `cant_respawn` the call is a no-op, so it sends nothing extra.
 
 ## Kill-triggered special mobs (`SPECIAL_MOB_IDS`, `MINI_BOSSES_TO_SCOUT`, 2026-10-18)
 

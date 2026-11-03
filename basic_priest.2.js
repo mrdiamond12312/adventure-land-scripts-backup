@@ -576,6 +576,7 @@ async function mainLoop() {
     assignRoles();
 
     if (character.rip) {
+      respawnWhenReady();
       throw new Error("Character down", { cause: "death" });
     }
 

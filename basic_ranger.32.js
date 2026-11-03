@@ -233,8 +233,8 @@ function restoreAttackingBow() {
 }
 
 /**
- * Crossbow in hand from the shot until it lands: impact adds the live apiercing.
- * The gear loop swaps it out once the lock is released.
+ * Crossbow locked in hand from the shot until its farthest arrow lands (impact
+ * adds the live apiercing, heals included), then the weapon it fired with goes back.
  * @param {Object} plan - the plan whose shot was just sent
  * @returns {Promise|undefined} the swap, or undefined if not swapping
  */
@@ -249,22 +249,32 @@ function maybeCrossbowSwap(plan) {
   )
     return;
 
-  const byDistance = [plan.shotTargets]
+  const farthest = [plan.shotTargets]
     .flat()
     .filter(Boolean)
-    .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs));
-  if (!byDistance.length) return;
+    .reduce(
+      (best, target) =>
+        !best || distance(character, target) > distance(character, best)
+          ? target
+          : best,
+      null,
+    );
+  if (!farthest) return;
 
   // 0 until the shot's reply re-bases it
   const msToNextAttack =
     ms_to_next_skill("attack") || 1000 / character.frequency;
   // Swap in and swap back
   const restoreBy = msToNextAttack - character.ping - 2 * EQUIP_PENALTY_MS;
-  if (projectileEtaMs(byDistance[0]) > restoreBy) return;
+  if (projectileEtaMs(farthest) > restoreBy) return;
 
-  return swapUntilImpact(byDistance.at(-1), [
-    { num: crossbow, slot: "mainhand" },
-  ]);
+  return swapUntilImpact(farthest, [{ num: crossbow, slot: "mainhand" }], {
+    restore: () =>
+      equipBatch(
+        { mainhand: held.name },
+        { preventPenaltizeNextAttack: false, preventKeySnatch: false },
+      ),
+  });
 }
 
 /**
@@ -535,6 +545,7 @@ async function mainLoop() {
     assignRoles();
 
     if (character.rip) {
+      respawnWhenReady();
       throw new Error("Character's down", {
         cause: "death",
       });
