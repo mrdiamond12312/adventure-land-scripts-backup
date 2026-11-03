@@ -651,13 +651,20 @@ function on_destroy() {
   clear_buttons(); // <-- Default in on_destroy
 }
 
-syncBankData();
-bankLoop();
-lureMechaGnome();
-dragEnt();
-cavalryOneeyeLoop();
-merchantAttackLoop();
-merchantScoutingLoop();
+/** Bean sets our home before the merchant loops start */
+async function settleHomeFirst() {
+  while (await settleHome()) await sleep(1000);
+}
+
+settleHomeFirst().finally(() => {
+  syncBankData();
+  bankLoop();
+  lureMechaGnome();
+  dragEnt();
+  cavalryOneeyeLoop();
+  merchantAttackLoop();
+  merchantScoutingLoop();
+});
 startSkillLoops();
 
 // Register secondhands event handler

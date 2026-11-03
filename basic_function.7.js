@@ -84,6 +84,70 @@ function isAtHomeServer() {
   return getCurrentServer() === getHomeServer();
 }
 
+/** How close to Bean set_home is asked from */
+const BEAN_REACH = 100;
+
+/** After a refusal we know nothing better about */
+const HOME_SET_RETRY_MS = 60_000;
+
+/** Not before this does Bean get asked again */
+var homeSetRetryAt = 0;
+
+/** @returns {boolean} whether Bean still has to make the configured home ours: we stand on it, and the server knows another */
+function isHomeUnset() {
+  const home = parent.character?.home;
+  return (
+    !!home &&
+    home !== getHomeServer() &&
+    isAtHomeServer() &&
+    Date.now() >= homeSetRetryAt
+  );
+}
+
+/** @returns {{map: string, x: number, y: number}} where to stand to talk to Bean */
+function getBeanSpot() {
+  const bean = G.maps.main.npcs.find((npc) => npc.id === "bean");
+  const [x, y] = bean.position;
+  return (
+    strategicSmartMove.getStandablePointNear({ map: "main", x, y }) ?? {
+      map: "main",
+      x,
+      y,
+    }
+  );
+}
+
+/** @returns {number} ms until Bean is worth asking again after `error` */
+function getHomeSetRetryDelay(error) {
+  if (error?.response === "sh_time") return (error.hours ?? 36) * 3_600_000;
+  if (error?.response === "cant_when_sick")
+    return character.s.hopsickness?.ms ?? HOME_SET_RETRY_MS;
+  return HOME_SET_RETRY_MS;
+}
+
+/**
+ * Walks to Bean and sets the configured home, while isHomeUnset.
+ * @returns {Promise<boolean>} whether it is still at it
+ */
+async function settleHome() {
+  if (!isHomeUnset() || character.cave || get("cryptInstance")) return false;
+
+  const bean = getBeanSpot();
+  if (distance(character, bean) > BEAN_REACH) {
+    await advanceSmartMove(bean).catch((e) => console.warn(e));
+    return true;
+  }
+
+  try {
+    await set_home();
+    console.warn(`Home set to ${getHomeServer()}`);
+  } catch (error) {
+    homeSetRetryAt = Date.now() + getHomeSetRetryDelay(error);
+    console.warn("Bean refused set_home", error);
+  }
+  return false;
+}
+
 /** @returns {number} the UTC midnight that ends the day `at` falls on */
 function getUtcDayEnd(at = Date.now()) {
   return new Date(at).setUTCHours(24, 0, 0, 0);
@@ -716,6 +780,7 @@ if (character.ctype !== "merchant") {
   }
 
   var fighterStrategies = [
+    useHomeSettingStrategy,
     usePriorityMobStrategy,
     // The identifier only resolves when slot 15 was loaded above
     ...(USE_CAVE_STRATEGY ? [useCaveRunStrategy] : []),
@@ -761,6 +826,11 @@ function getPriorityBossInView() {
 
 /** This tick is mine with nothing to hit: it went into the trip. */
 const travelling = () => ({});
+
+/** @returns {Promise<object|undefined>} travelling, while Bean is still to set our home */
+async function useHomeSettingStrategy() {
+  if (await settleHome()) return travelling();
+}
 
 /**
  * Runs the fighter strategies in priority order. The first one to claim the

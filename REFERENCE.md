@@ -461,6 +461,11 @@ and the cave's realm guard on the fighters needs it too. It is a hand-maintained
 realm**; there is no `character.home`, nothing in `runner_functions.js`, and `set_home()` returns
 nothing useful. Every policy here is only as correct as that constant, so it is the first thing to
 check if the guards misfire.
+**Superseded (2026-11-03):** the game frame does know the real home. `game.js` sets
+`character.home = data.home` on `start` and again on the `home_set` response. That is the frame's
+own `character`, so CODE reads it as `parent.character.home`; the runner's proxy does not list it.
+caracAL evaluates `game.js` too. `settleHome` uses it (see below), and `HOME_SERVER` is still what
+the policies check.
 
 ## TODO: the merchant tick wants to be per-concern loops (`basic_merchant.5.js`)
 
@@ -5183,3 +5188,19 @@ Compared against `12da697^`, the commit before "add all halloween events" (2026-
   priest leads Earth), the horseman and witch presets, and the merchant's home-only Horseman.
   The farm, `partyMems`, `desiredElixir`, `USE_CAVE_STRATEGY` and the other `HOP_BOSSES` entries
   were already the same as before Halloween.
+
+## Bean sets the configured home (`settleHome`, basic_function.7.js, 2026-11-03)
+
+- **When.** `isHomeUnset` holds when `parent.character.home` is known, differs from `getHomeServer()`,
+  and we stand on that configured home. Off it nothing happens: `set_home` makes home whatever
+  realm we stand on, so asking anywhere else would set the wrong one.
+- **What.** Walk to Bean (G.maps.main `bean`, about 74,-34, through `getStandablePointNear`), and
+  ask with `set_home()` once within `BEAN_REACH`. The public server (`socket.on("set_home")`) has
+  no distance check, but the live server runs ahead of the repo, so we walk anyway.
+- **Refusals.** The server allows one change per 36h (`sh_time` with `hours`); we wait that out.
+  The live server also has `cant_when_sick`; we wait out `hopsickness`. Anything else retries after
+  60s. A home that is not readable (undefined) is never set blind, because a wrong set costs 36h.
+- **Before anything else.** Fighters run `useHomeSettingStrategy` first in `fighterStrategies`, so it
+  owns the tick until it is done, except inside a cave run or a crypt. The merchant starts his loops
+  (bank, lure, ents, cavalry, events, scouting) only after `settleHomeFirst` returns. His 750ms tick
+  and skill loops run regardless.
