@@ -74,16 +74,16 @@ const MINI_BOSSES_TO_SCOUT = {
     spotsToCheck: [{ map: "uhills", x: 328, y: -271 }],
     useTeleportation: true,
   },
+  mimic: {
+    spotsToCheck: getMonsterSpawns("kobold"),
+    useTeleportation: true,
+  },
   paledino: {
     spotsToCheck: getMonsterSpawns("odino"),
     useTeleportation: true,
   },
   manyeye: {
     spotsToCheck: getMonsterSpawns("oneeye"),
-    useTeleportation: true,
-  },
-  mimic: {
-    spotsToCheck: getMonsterSpawns("kobold"),
     useTeleportation: true,
   },
 };
