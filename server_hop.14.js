@@ -556,9 +556,15 @@ async function planHop() {
   if (!picked) return;
 
   const { rule, decision } = picked;
+  const { action, target } = decision;
+
+  // caracAL lands an unknown realm on its first server, EU I
+  if (target && !(target.serverRegion && target.serverIdentifier)) {
+    console.warn(`[hop] ${rule.name}: refused ${action} to an unnamed realm`, target);
+    return;
+  }
   logHopDecision(rule, decision);
 
-  const { action, target } = decision;
   if (action === "point")
     return setPartyRealm(target.serverRegion, target.serverIdentifier);
   if (action === "hopAlone")

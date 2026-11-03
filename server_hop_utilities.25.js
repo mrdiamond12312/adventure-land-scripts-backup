@@ -624,17 +624,39 @@ function fitsBeforeHomeWindow(stayMs) {
 }
 
 /**
- * Whether the fighters already walked to this sighting here and found it gone.
+ * Whether the fighters already walked to this sighting's realm and spot and found it gone, wherever we stand now.
  * @param {HopSighting & {seenAt: number}} sighting
  * @returns {boolean}
  */
 function isSnipeSpent(sighting) {
-  const checkedAt = readStore(SCOUT_LS_KEY)[sighting.type]?.checkedAt ?? 0;
-  return isOnCurrentRealm(sighting) && checkedAt >= sighting.seenAt;
+  const report = readStore(SCOUT_LS_KEY)[sighting.type];
+  return (
+    report?.realm === realmOf(sighting) &&
+    (report.checkedAt ?? 0) >= sighting.seenAt
+  );
 }
 
 /**
- * The freshest observer sighting worth a hop, held by anyone or not; one on our realm first.
+ * The fighters' own report of `type` on our realm, shaped like an observer sighting.
+ * @param {string} type
+ * @returns {(HopSighting & {map: string, x: number, y: number, seenAt: number})|undefined}
+ */
+function getFighterSnipeSighting(type) {
+  const report = readStore(SCOUT_LS_KEY)[type];
+  if (report?.realm !== getCurrentServer() || !report.seenSpot) return;
+
+  return {
+    ...report.seenSpot,
+    type,
+    serverRegion: server.region,
+    serverIdentifier: server.id,
+    seenAt: report.seenAt,
+    target: report.target,
+  };
+}
+
+/**
+ * The freshest sighting worth a hop, from the observers or the fighters on our realm, held by anyone or not; one on our realm first.
  * @param {{mobs: string[], maxAgeMs: number, stayMs: Object<string, number>}} config the snipe rule's
  * @returns {(HopSighting & {map: string, x: number, y: number, seenAt: number})|undefined}
  */
@@ -644,9 +666,16 @@ function getSnipeTarget(config) {
   const isAffordable = (sighting) =>
     isOnCurrentRealm(sighting) ||
     fitsBeforeHomeWindow(config.stayMs[sighting.type] ?? 0);
+  const freshest = (type) =>
+    [
+      sightings[type] && { ...sightings[type], type },
+      getFighterSnipeSighting(type),
+    ]
+      .filter((sighting) => sighting?.seenAt)
+      .sort((lhs, rhs) => rhs.seenAt - lhs.seenAt)[0];
 
   return config.mobs
-    .map((type) => sightings[type] && { ...sightings[type], type })
+    .map(freshest)
     .filter(
       (sighting) =>
         sighting?.serverRegion &&
