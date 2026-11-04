@@ -1461,9 +1461,14 @@ function canSwapUntilImpact() {
  * @param {Object} [options]
  * @param {string} [options.freeSlot] - slot to unequip before the swap-ins
  * @param {Function} [options.restore] - re-equips the real gear after the hold; omitted leaves it to currentStrategy
+ * @param {number} [options.holdLimitMs] - latest swap back, from now; defaults to what still clears the penalty before the next attack
  * @returns {Promise|undefined} the swap promise, or undefined if not swapping
  */
-function swapUntilImpact(targetToAttack, equips, { freeSlot, restore } = {}) {
+function swapUntilImpact(
+  targetToAttack,
+  equips,
+  { freeSlot, restore, holdLimitMs } = {},
+) {
   // Loot luck rolls at the kill, which is the impact
   const swappedSlots = [...equips.map(({ slot }) => slot), freeSlot];
   if (swappedSlots.some((slot) => slot && hasLuck(getServerSlot(slot))))
@@ -1492,7 +1497,8 @@ function swapUntilImpact(targetToAttack, equips, { freeSlot, restore } = {}) {
   const swapBackAt = Date.now() + etaMs + equipLatencyMs;
 
   const swapBackDeadline =
-    Date.now() + characterAtkCycleMs - character.ping - restorePenaltyMs;
+    Date.now() +
+    (holdLimitMs ?? characterAtkCycleMs - character.ping - restorePenaltyMs);
 
   if (freeSlot) sendUnequip(freeSlot);
   const swapEquip = sendEquips(equips);

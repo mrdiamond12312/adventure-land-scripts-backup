@@ -234,7 +234,8 @@ function restoreAttackingBow() {
 
 /**
  * Crossbow locked in hand from the shot until its farthest arrow lands (impact
- * adds the live apiercing, heals included), then the weapon it fired with goes back.
+ * adds the live apiercing, heals included) or restoreBy, whichever is first, then
+ * the weapon it fired with goes back.
  * @param {Object} plan - the plan whose shot was just sent
  * @returns {Promise|undefined} the swap, or undefined if not swapping
  */
@@ -266,9 +267,9 @@ function maybeCrossbowSwap(plan) {
     ms_to_next_skill("attack") || 1000 / character.frequency;
   // Swap in and swap back
   const restoreBy = msToNextAttack - character.ping - 2 * EQUIP_PENALTY_MS;
-  if (projectileEtaMs(farthest) > restoreBy) return;
 
   return swapUntilImpact(farthest, [{ num: crossbow, slot: "mainhand" }], {
+    holdLimitMs: restoreBy,
     restore: () =>
       equipBatch(
         { mainhand: held.name },

@@ -1602,14 +1602,14 @@ while the swap-in's own `penalty_cd` is up, the loop polls at 100ms, and its che
 while the attack is ready. A missed window sent the next shot out on the crossbow (the shot's
 damage is snapshotted from the weapon at commence), and that shot skipped the swap. The gear loop
 still corrects afterwards if it wants a different weapon (cupid for a new healee).
-- **Farthest arrow decides both whether to swap and how long to hold.** The swap is skipped
-  unless the farthest target's ETA fits inside `ms − ping − 2 × EQUIP_PENALTY_MS`, where `ms` is
-  `ms_to_next_skill("attack")`, or the full cycle while it still reads 0 (the shot's reply is not
-  back yet). It subtracts one 120ms `penalty_cd` for the swap-in and one for the restore, both of
-  which must clear before the next shot. At a 700ms cycle and 80ms ping that leaves 380ms, about
-  190px of arrow flight. Gating on the nearest arrow let a multishot pass whose far arrows then
-  ate the restore's window. `swapUntilImpact` still clamps the hold to its own deadline
-  (`cycle − ping − 120`), so the next shot is never delayed by a swap.
+- **Farthest arrow sets the hold, capped at `restoreBy`** (2026-11-04). `restoreBy` is
+  `ms − ping − 2 × EQUIP_PENALTY_MS`, where `ms` is `ms_to_next_skill("attack")`, or the full cycle
+  while it still reads 0 (the shot's reply is not back yet). It subtracts one 120ms `penalty_cd` for
+  the swap-in and one for the restore. At a 700ms cycle and 80ms ping that leaves 380ms. Arrow
+  distance no longer skips the swap: that check made it rarely fire at short cycles or higher ping,
+  about 47px of reach at a 500ms cycle and 150ms ping. An arrow still in flight at `restoreBy` lands
+  with the bow back in hand, so it misses the bonus. `swapUntilImpact`'s
+  `2 × ping + 160 > cycle` check (at 80ms ping or above) can still skip the swap.
 - **`swapBackAt` includes `equipLatencyMs` again** (strategic_fn.11.js, timing fact 1 above). The
   `00c9baa` extraction of `swapUntilImpact` had dropped it, so every restore (candy, paleclaw,
   crossbow) arrived level with the hit instead of after it.
