@@ -1704,6 +1704,22 @@ function countWaitingGear(wantedGear) {
 }
 
 /**
+ * @param {boolean} [isEnergizing] - a self-energize went out with this shot, so character.frequency lacks it
+ * @returns {number} the cooldown of the shot just sent, the normal one if energized ends before it does
+ */
+function shotCycleMs(isEnergizing = false) {
+  const { frequency, duration } = G.conditions.energized;
+  const boost = (frequency / 100) * conditionFrequencyScale(character);
+  const energized = character.s.energized;
+  const plainFrequency = character.frequency - (energized ? boost : 0);
+  const energizedCycleMs = 1000 / (plainFrequency + boost);
+  const buffLeftMs = isEnergizing ? duration : energized?.ms ?? 0;
+  return buffLeftMs >= energizedCycleMs
+    ? energizedCycleMs
+    : 1000 / plainFrequency;
+}
+
+/**
  * The most piercing weapon locked in hand from the shot until its farthest hit
  * lands (impact adds the live piercing, heals included) or restoreBy, whichever
  * is first, then the weapon it fired with goes back. Call right after sending the shot.
@@ -1711,9 +1727,14 @@ function countWaitingGear(wantedGear) {
  * @param {() => Object<string, string>} getWantedGear - slot → item name the gear loop wants
  * @param {Object} [options]
  * @param {boolean} [options.mustLand] - skip when the farthest hit would land after restoreBy
+ * @param {boolean} [options.isEnergizing] - a self-energize went out with this shot
  * @returns {Promise|undefined} the swap, or undefined if not swapping
  */
-function maybePiercingSwap(targets, getWantedGear, { mustLand = false } = {}) {
+function maybePiercingSwap(
+  targets,
+  getWantedGear,
+  { mustLand = false, isEnergizing = false } = {},
+) {
   const held = getServerSlot("mainhand");
   const pierceable = [targets].flat().filter((mob) => mob && !mob["1hp"]);
   if (!held || !pierceable.length || !canSwapUntilImpact()) return;
@@ -1728,7 +1749,7 @@ function maybePiercingSwap(targets, getWantedGear, { mustLand = false } = {}) {
 
   // 0 until the shot's reply re-bases it
   const msToNextAttack =
-    ms_to_next_skill("attack") || 1000 / character.frequency;
+    ms_to_next_skill("attack") || shotCycleMs(isEnergizing);
   const reservedSlots = Math.max(
     1,
     Math.ceil(countWaitingGear(getWantedGear()) / 2),

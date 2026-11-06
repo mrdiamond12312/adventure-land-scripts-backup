@@ -1590,6 +1590,14 @@ on the ranger's crossbow.
 - **Late hits (`mustLand`, mage only):** the mage has one hit per shot, so a hit landing after
   `restoreBy` makes the swap pure cost and he skips it. The ranger doesn't pass it: he can hit several
   mobs, and the nearer arrows still land inside the hold when the farthest doesn't.
+- **Energized cycles (`shotCycleMs`):** the mage sends self-energize, the attack and the swap in one
+  tick, so `character.frequency` still lacks the +80 while the server already runs that shot on it
+  (448ms against 699ms on a firestaff). Holding for the old cycle made the restore's penalty delay
+  the next shot by about 100ms, so he now passes `isEnergizing`, and `mustLand` skips the swap on that
+  shot unless the mob is very close. The buff is 800ms, so the follow-up shot's cooldown outlives it
+  and re-bases to the normal cycle: `shotCycleMs` returns that when the buff ends first, and the
+  follow-up swaps normally. `swapUntilImpact`'s own gates still read the energized `character.frequency`,
+  so that follow-up skips the swap above about 145ms ping.
 - **Mage magical side:** `complete_attack` reads `attacker.rpiercing` the same way, and the bonus
   also reaches splash through the main hit. Burn and the other abilities roll at commence, so the
   firestaff keeps its burn. `mp_cost` is taken at commence, so the swap-in's `rpiercing / 15` is never

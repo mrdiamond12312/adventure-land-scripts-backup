@@ -77,10 +77,11 @@ function getMageCast() {
   if (!attackTarget || !shouldAttack(attackTarget)) return;
 
   // Paired with self-energize: spare mp feeds the shot
-  return () =>
-    Promise.allSettled(
+  return () => {
+    const isEnergizing = !is_on_cooldown("energize");
+    return Promise.allSettled(
       [
-        !is_on_cooldown("energize") &&
+        isEnergizing &&
           use_skill(
             "energize",
             character,
@@ -89,9 +90,11 @@ function getMageCast() {
         castOnAttackCooldown("attack", attackTarget),
         maybePiercingSwap(attackTarget, () => lastMageGear.gear, {
           mustLand: true,
+          isEnergizing,
         }),
       ].filter(Boolean),
     );
+  };
 }
 
 // --- Skills, each on its own runSkillLoop (see startSkillLoops) ---
