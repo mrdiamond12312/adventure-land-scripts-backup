@@ -19,13 +19,61 @@ const mageMpReserve = (stats = character) =>
   (G.skills["magiport"].mp + MAGE_RESERVED_BLINKS * G.skills["blink"].mp) *
   (1 - (stats.mp_reduction ?? 0) / 100);
 
+const REFLECTOR_WATCH_MS = 10_000;
+const ROGUE_SHIELD_DAMAGE_RATIO = 2;
+let reflectorWatch = { id: undefined, baselines: {} };
+
+/** @returns {number} `pdps` per second on this boss, 0 until watched */
+function watchedDamageRate(player) {
+  const now = Date.now();
+  const pdps = player.pdps ?? 0;
+  const baseline = reflectorWatch.baselines[player.name];
+  if (!baseline || pdps < baseline.pdps) {
+    reflectorWatch.baselines[player.name] = { pdps, at: now };
+    return 0;
+  }
+  const watchedMs = now - baseline.at;
+  return watchedMs < REFLECTOR_WATCH_MS
+    ? 0
+    : (pdps - baseline.pdps) / (watchedMs / 1000);
+}
+
+/** @returns {Object|undefined} who to shield now */
+function getFrostballReflector(boss) {
+  if (reflectorWatch.id !== boss.id)
+    reflectorWatch = { id: boss.id, baselines: {} };
+
+  const best = [character, get_player(ROGUE)]
+    .filter(
+      (player) =>
+        player &&
+        !player.rip &&
+        is_in_range(player, "reflection") &&
+        distance(player, boss) < MULTI_FREEZE_RANGE,
+    )
+    .map((player) => ({
+      player,
+      worth:
+        watchedDamageRate(player) *
+        (player === character ? ROGUE_SHIELD_DAMAGE_RATIO : 1),
+    }))
+    .sort((lhs, rhs) => rhs.worth - lhs.worth)[0];
+  if (!(best?.worth > 0)) return undefined;
+
+  const flightMs =
+    (distance(boss, best.player) / G.projectiles.frostball.speed) * 1000;
+  return isFrostballDue(boss, G.conditions.reflection.duration, flightMs)
+    ? best.player
+    : undefined;
+}
+
 /** @returns {[string, number][]} skill → cooldown padding, for the skills drawing on the attack mp */
 function mageBusySkills() {
   const known = (skill) => character.level >= (G.skills[skill].level ?? 0);
   return [
     currentStrategy === usePullStrategies &&
       known("cburst") && ["cburst", CBURST_COOLDOWN_PAD_MS],
-    avgPartyDmgTaken(partyMems, "magical") > 0 &&
+    (avgPartyDmgTaken(partyMems, "magical") > 0 || getFrostballBoss()) &&
       known("reflection") && ["reflection", 0],
   ].filter(Boolean);
 }
@@ -40,12 +88,94 @@ function energizeFrequencyDelta() {
   return average - (character.s.energized ? frequency : 0);
 }
 
-/** @returns {number} piercing per hit the impact swap adds to a shot from `mainhand`, as `mitigation` counts it */
+/** @returns {number} piercing the impact swap adds */
 function impactSwapPiercing(mainhand, frequency, target, swapPiercing) {
   const gain = swapPiercing - weaponPiercing(mainhand);
   if (gain < PIERCING_SWAP_MIN_GAIN) return 0;
   const holdMs = 1000 / frequency - character.ping - 2 * EQUIP_PENALTY_MS;
   return projectileEtaMs(target, mainhand) < holdMs ? gain / 2 : 0;
+}
+
+const BURN_PROC_JUMP_MS = 500;
+let burnRivals = {
+  id: undefined,
+  since: 0,
+  procs: 0,
+  outsiderProcs: 0,
+  owner: undefined,
+  endsAt: 0,
+};
+
+/** @returns {{holdSeconds: number, refreshEverySeconds: number}} others' burn proc rates */
+function burnRivalRates(target) {
+  const now = Date.now();
+  if (burnRivals.id !== target.id)
+    burnRivals = {
+      id: target.id,
+      since: now,
+      procs: 0,
+      outsiderProcs: 0,
+      owner: undefined,
+      endsAt: 0,
+    };
+
+  const burn = target.s?.burned;
+  if (burn && burn.f !== character.name) {
+    const endsAt = now + (burn.ms ?? 0);
+    if (
+      burnRivals.owner &&
+      (burn.f !== burnRivals.owner ||
+        endsAt > burnRivals.endsAt + BURN_PROC_JUMP_MS)
+    ) {
+      burnRivals.procs++;
+      if (!isOwnedCharacter(burn.f)) burnRivals.outsiderProcs++;
+    }
+    burnRivals.owner = burn.f;
+    burnRivals.endsAt = endsAt;
+  }
+
+  const watchedSeconds = (now - burnRivals.since) / 1000;
+  return {
+    holdSeconds: burnRivals.outsiderProcs
+      ? Math.min(BURN_SECONDS, watchedSeconds / burnRivals.outsiderProcs)
+      : BURN_SECONDS,
+    refreshEverySeconds: burnRivals.procs
+      ? watchedSeconds / burnRivals.procs
+      : Infinity,
+  };
+}
+
+/**
+ * @param {number} hit - damage before crit
+ * @param {Object} stats - projected stats
+ * @param {Object} target
+ * @param {number} procsPerSecond
+ * @param {{holdSeconds: number, refreshEverySeconds: number}} rivals
+ * @returns {number} burn damage per second his procs earn
+ */
+function burnProcDps(hit, stats, target, procsPerSecond, rivals) {
+  const carryOver = (1 - (target.firesistance ?? 0) / 100) / 3;
+  const coverage = 1 - Math.exp(-BURN_SECONDS * procsPerSecond);
+  const steady = (hit * averageCritFactor(stats)) / (1 - carryOver * coverage);
+  const burn = target.s?.burned;
+  const old = burn?.intensity ?? 0;
+
+  if (!burn || (burn.f === character.name && old <= steady))
+    return steady * BURN_DPS_PER_INTENSITY * coverage;
+
+  const crit = Math.min(stats.crit ?? 0, 100) / 100;
+  const raisedBy = (roll) => Math.max(old, carryOver * old + roll);
+  const raised =
+    (1 - crit) * raisedBy(hit) +
+    crit * raisedBy(hit * critMultiplier(stats));
+  const secondsLeft = (burn.ms ?? 0) / 1000;
+  const lapseChance = Math.exp(-secondsLeft / rivals.refreshEverySeconds);
+  const earnedSeconds =
+    target.cooperative && !isOwnedCharacter(burn.f)
+      ? raised * rivals.holdSeconds
+      : (raised - old) * BURN_SECONDS +
+        old * Math.max(0, BURN_SECONDS - secondsLeft) * lapseChance;
+  return (earnedSeconds * BURN_DPS_PER_INTENSITY * coverage) / BURN_SECONDS;
 }
 
 /**
@@ -148,9 +278,13 @@ function mageFightModel(projected, picks, target, worn, context) {
   // A burn only lights on a hit that leaves the mob alive
   const burnDps =
     burnChance && rawHit * MIN_DAMAGE_ROLL < hp
-      ? burnIntensityCap(rawHit * MIN_DAMAGE_ROLL, target.firesistance) *
-        BURN_DPS_PER_INTENSITY *
-        (1 - Math.exp(-BURN_SECONDS * shots * land * burnChance))
+      ? burnProcDps(
+          hit,
+          projected,
+          target,
+          shots * land * burnChance,
+          context.burnRivals,
+        )
       : 0;
 
   return {
@@ -175,6 +309,7 @@ function pickMageGear(target, blasterAllowed, fixed) {
   const context = {
     mpIncome: getMpIncome(),
     energizeDelta: energizeFrequencyDelta(),
+    burnRivals: burnRivalRates(target),
     skills: mageBusySkills(),
     clusterOf: (mob, radius) => {
       const key = Math.round(radius);

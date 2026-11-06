@@ -765,6 +765,36 @@ function getImminentFireball() {
   );
 }
 
+const MULTI_FREEZE_RANGE = 480;
+const FROSTBALL_MIN_LEAD_MS = 100;
+
+/** @returns {Object|undefined} the multi_freeze boss fought near us */
+function getFrostballBoss() {
+  return Object.values(parent.entities).find(
+    (mob) =>
+      mob.type === "monster" &&
+      mob.target &&
+      G.monsters[mob.mtype]?.abilities?.multi_freeze &&
+      distance(mob, character) < MULTI_FREEZE_RANGE,
+  );
+}
+
+/**
+ * @param {Object} boss
+ * @param {number} durationMs - the effect's length
+ * @param {number} [flightMs] - frostball travel
+ * @returns {boolean} whether to send the effect now
+ */
+function isFrostballDue(boss, durationMs, flightMs = 0) {
+  const ability = boss.s?.multi_freeze;
+  if (!ability) return true;
+  if ((boss.s.stunned?.ms ?? 0) > ability.ms) return false;
+
+  const { cooldown } = G.monsters[boss.mtype].abilities.multi_freeze;
+  const leadMs = ability.ms + flightMs - character.ping / 2;
+  return leadMs >= FROSTBALL_MIN_LEAD_MS && leadMs <= durationMs % cooldown;
+}
+
 /** @returns {number} one fireball's hit plus burn */
 function fireballDamage(mob, target) {
   const hit =
@@ -1030,7 +1060,7 @@ function fitsMainhand(info) {
   );
 }
 
-/** @returns {number} piercing against this class's damage type, the item's and the class's bonus for its wtype */
+/** @returns {number} the weapon's piercing for this class */
 function weaponPiercing(info) {
   const [, pierce] = mitigationStats(G.classes[character.ctype].damage_type);
   return (info?.[pierce] ?? 0) + getRelevantPiercing(info?.wtype);
@@ -1468,7 +1498,7 @@ const IMPACT_SWAP_MIN_HOLD_MS = 40; // dwell after the swap-ins land, even if th
 /**
  * ETA (ms) of the character's attack projectile against the target
  * @param {Object} target - the entity the attack was fired at
- * @param {Object} [weapon] - item_info of the weapon fired, defaults to the one in hand
+ * @param {Object} [weapon] - item_info of the weapon fired
  * @returns {number} delay in ms (>= 0)
  */
 function projectileEtaMs(target, weapon = item_info(character.slots.mainhand)) {
@@ -1672,10 +1702,9 @@ function maybeImpactSwap(targetToAttack, { candy, paleclaw } = {}) {
   );
 }
 
-/** Smallest piercing gain worth a swap's two equips */
 const PIERCING_SWAP_MIN_GAIN = 20;
 
-/** @returns {{num: number, name: string, piercing: number}|undefined} the bag's one-handed weapon with the most piercing */
+/** @returns {{num: number, name: string, piercing: number}|undefined} the bag's most piercing one-handed weapon */
 function findPiercingSwapIn() {
   let best;
   character.items.forEach((_, num) => {
@@ -1704,8 +1733,8 @@ function countWaitingGear(wantedGear) {
 }
 
 /**
- * @param {boolean} [isEnergizing] - a self-energize went out with this shot, so character.frequency lacks it
- * @returns {number} the cooldown of the shot just sent, the normal one if energized ends before it does
+ * @param {boolean} [isEnergizing] - self-energize sent with this shot
+ * @returns {number} the cooldown of the shot just sent
  */
 function shotCycleMs(isEnergizing = false) {
   const { frequency, duration } = G.conditions.energized;
@@ -1720,15 +1749,13 @@ function shotCycleMs(isEnergizing = false) {
 }
 
 /**
- * The most piercing weapon locked in hand from the shot until its farthest hit
- * lands (impact adds the live piercing, heals included) or restoreBy, whichever
- * is first, then the weapon it fired with goes back. Call right after sending the shot.
- * @param {Object|Object[]} targets - what the shot was fired at
- * @param {() => Object<string, string>} getWantedGear - slot → item name the gear loop wants
+ * Holds the most piercing weapon until impact.
+ * @param {Object|Object[]} targets
+ * @param {() => Object<string, string>} getWantedGear - slot → item name
  * @param {Object} [options]
- * @param {boolean} [options.mustLand] - skip when the farthest hit would land after restoreBy
- * @param {boolean} [options.isEnergizing] - a self-energize went out with this shot
- * @returns {Promise|undefined} the swap, or undefined if not swapping
+ * @param {boolean} [options.mustLand] - skip a hit landing after the hold
+ * @param {boolean} [options.isEnergizing] - self-energize sent with this shot
+ * @returns {Promise|undefined} the swap, if any
  */
 function maybePiercingSwap(
   targets,

@@ -968,6 +968,55 @@ Choices the model makes:
   damage). Shots are `min(frequency, budget / cost per shot)`.
 - Hits are capped at the mob's max hp, so overkill earns nothing. A burn counts only when a
   minimum roll leaves the mob alive: crabs were picking the firestaff on uncapped burn.
+- A burn counts for what his procs actually add (`burnProcDps`, 2026-11-06), and the weapon with the
+  higher hits-plus-burn total wins (user's rule). A mob has one shared burn: a proc makes it
+  `max(old, old / 3 + hit)` and resets it to 5s. So over a bigger burn, one proc adds
+  `((raised − old) × 5s + old × (5s − seconds left) × lapse chance) × 0.95`, averaged over crits. A burn
+  above his cap still has value: a crit can raise it, and any proc refreshes it, worth more the bigger
+  it is and the closer to running out (user's example: a 31k burn deals about 29.5k DPS, far above his
+  hits, so keeping it up wins). The lapse chance is `exp(−seconds left / how often others refresh it)`,
+  from `burnRivalRates`: if someone else would have refreshed it anyway, his refresh adds nothing. His
+  own burn, told apart by the condition's `f`, scores as the steady burn his procs hold up while it is
+  at that level or below, or each proc would talk him off the firestaff until it faded. Above it (a
+  crit proc, or a stolen burn) it scores like any other big burn. The model takes the proc rate as even,
+  so with a 2.3s frozen cycle it slightly overrates a burn about to end before his next shot.
+- **Reflective shield on `multi_freeze` bosses** (`getFrostballReflector`, 2026-11-06). The goal is
+  keeping the bigger damage dealer unfrozen (user's rule), so it goes to whichever of the mage and
+  the rogue deals more. The icegolem's melee is physical, so `avgDmgTaken(player, "magical")` never
+  picked a target and the shield went unused there. Its frostballs are magical, and a reflected one
+  returns before the hit, so it doesn't freeze or hurt its target. Damage is measured, not modeled:
+  `pdps` rising per second since first seen on this boss, which other clients can see, and which
+  already holds the rogue's burn and stacking. Its `difficulty` multiplier is the same for both on
+  one boss, and both are frozen alike while measured. No shield goes out until someone has 10s of
+  data. The mage's own `pdps` gets a bump for shielding an ally (`add_pdps(player, target, 4000)`),
+  about 15% on the icegolem, which leans the pick slightly toward him. It rarely thaws anyone: a
+  freeze lasts 5s with a frostball every 2s, so 2 in a row must miss. With `fzresistance` resists
+  counted, that's about 16% per shield for the mage (5% without it), about 6% for a rogue with no gear
+  reflection and 5% resistance (0.25% without it). So a shield gains the mage about +11% and the rogue
+  about +5.5%, and the rogue takes it only at `ROGUE_SHIELD_DAMAGE_RATIO` (2) times the mage's measured
+  damage. The ratio is fixed on those gear assumptions, not read off the rogue's gear.
+- **Timing on the boss's ability timer** (`isFrostballDue`, shield and stomp, 2026-11-06). A monster's
+  ability cooldowns sit in its `s` with a live `ms` (`s.multi_freeze`, like the `multi_burn` read in
+  `getImminentFireball`). An effect lasting `d` catches one extra frostball if it starts within
+  `d % 2000` of the next: the 5s shield within 1000ms of a landing covers 3, the 3.2s stun within
+  1200ms of a throw covers 2. The shield times the landing (throw plus flight at 420px/s), because
+  `complete_attack` is where it reflects. The stun times the throw, because the server skips an ability
+  whose timer ends on a disabled mob: `is_disabled(monster)` `continue`s after re-arming the cooldown.
+  Two skipped throws leave a 6s gap against a 5s freeze, so the whole party thaws for about 1s. The
+  icegolem's `phresistance` 40 is a 40% chance to resist the stun, with the 24s cooldown still spent.
+  Near such a boss stomp fires only on this timing, not on the injured-party rule. Neither effect fires
+  while a stun already covers the next throw. Only a boss with a `target` counts, since `multi_freeze`
+  only throws at players who have points on it.
+- **Stealing a burn earns its contribution** (2026-11-06). A proc sets the burn's `f` to the attacker
+  even when the intensity stays, and each tick calls `add_coop_points(monster, burner, damage, ...)`
+  for that owner, the same points a hit earns. So against an outsider's burn on a cooperative mob a
+  proc is worth `raised × seconds held × 0.95`, not just what it adds to the boss. The score there
+  stands for his contribution, not the boss's total damage. `burnRivalRates` estimates the hold from
+  how often outsiders proc on this target (5s at most, and 5s until it has seen one). Burns owned by
+  our own characters (`isOwnedCharacter`) keep the raise-and-refresh value: each of them rolls loot
+  separately, so taking points from one to give the mage gains the account little and costs him hit
+  damage. Non-cooperative mobs have no points (`add_coop_points` returns early) and keep it too.
+  Frozen, stealing a 2.7k burn beats harbringer when he holds it for about 3s or longer.
 - With avoidance the objective is landed hits per second, not damage; the user prefers pinkie
   there for the extra attempts. That and the overkill cap replace `MAGE_WEAK_MOB_TYPES` and
   `pinkieOneShots`.

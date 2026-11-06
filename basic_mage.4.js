@@ -112,8 +112,11 @@ function getEnergizeBuffee() {
   return shouldEnergize ? buffee : null;
 }
 
-// Party member (in reflection range) taking the most magical damage right now.
+/** @returns {Object|undefined} who to shield now */
 function getReflectionBuffee() {
+  const frostballBoss = getFrostballBoss();
+  if (frostballBoss) return getFrostballReflector(frostballBoss);
+
   return prioritizedNames()
     .map((name) => get_player(name))
     .filter((player) => player && is_in_range(player, "reflection"))

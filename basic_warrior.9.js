@@ -313,6 +313,14 @@ function startSkillLoops() {
     skill: "stomp",
     canUse: () => {
       const hasBasher = locate_item("basher") !== -1;
+      const frostballBoss = getFrostballBoss();
+      if (frostballBoss)
+        return (
+          hasBasher &&
+          distance(frostballBoss, character) < G.skills["stomp"].range &&
+          isFrostballDue(frostballBoss, G.skills["stomp"].duration)
+        );
+
       const partyHasInjured = (
         parent.party_list.length ? parent.party_list : [character]
       )
