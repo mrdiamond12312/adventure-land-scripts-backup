@@ -88,6 +88,65 @@ function energizeFrequencyDelta() {
   return average - (character.s.energized ? frequency : 0);
 }
 
+const ENERGIZE_LEAD_MARGIN_MS = 20;
+const ENERGIZE_WAKE_FLOOR_MS = 10;
+let lastMageShot = { at: 0, cooldown: undefined };
+
+function markMageShot() {
+  lastMageShot = { at: Date.now(), cooldown: parent.next_skill.attack };
+}
+
+/** @returns {boolean} whether the last shot's reply is still out */
+function isMageShotInFlight() {
+  return (
+    parent.next_skill.attack === lastMageShot.cooldown &&
+    Date.now() - lastMageShot.at < 2 * character.ping + 100
+  );
+}
+
+/** @returns {number} ms early a shot passes with self-energize */
+function energizeLeadMs() {
+  const boost =
+    (G.conditions.energized.frequency / 100) *
+    conditionFrequencyScale(character);
+  return Math.max(
+    0,
+    1000 / character.frequency -
+      1000 / (character.frequency + boost) -
+      ENERGIZE_LEAD_MARGIN_MS,
+  );
+}
+
+/** @returns {boolean} whether the mage can shoot now */
+function canMageAct() {
+  if (isMageShotInFlight()) return false;
+  if (canActOnAttackCooldown()) return true;
+  return (
+    !isOnTrip() &&
+    !isEquipingItems &&
+    !unansweredPenaltyMs &&
+    !character.s.penalty_cd &&
+    !Object.keys(character.c).length &&
+    !is_on_cooldown("energize") &&
+    ms_to_next_skill("attack") <= energizeLeadMs()
+  );
+}
+
+/** @returns {number} ms until the action loop looks again */
+function mageLoopInterval() {
+  const interval = getLoopInterval();
+  const attackMs = ms_to_next_skill("attack");
+  if (!attackMs) return interval;
+
+  const earlyMs = Math.max(
+    attackMs - energizeLeadMs(),
+    ms_to_next_skill("energize"),
+  );
+  return earlyMs < attackMs
+    ? Math.min(interval, Math.max(ENERGIZE_WAKE_FLOOR_MS, earlyMs))
+    : interval;
+}
+
 /** @returns {number} piercing the impact swap adds */
 function impactSwapPiercing(mainhand, frequency, target, swapPiercing) {
   const gain = swapPiercing - weaponPiercing(mainhand);

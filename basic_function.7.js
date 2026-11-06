@@ -397,6 +397,7 @@ if (parent.caracAL) {
     "adventure-land-scripts-backup/basic_function_loot.48.js",
     "adventure-land-scripts-backup/basic_function_farms.54.js",
     "adventure-land-scripts-backup/basic_function_events.53.js",
+    "adventure-land-scripts-backup/debug_scripts.44.js",
   ]);
 } else {
   load_code(45);
@@ -405,6 +406,7 @@ if (parent.caracAL) {
   load_code(48);
   load_code(54);
   load_code(53);
+  load_code(44);
 }
 
 // Strategic functions

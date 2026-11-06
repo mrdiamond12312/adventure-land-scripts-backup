@@ -1775,8 +1775,9 @@ function maybePiercingSwap(
     return;
 
   // 0 until the shot's reply re-bases it
-  const msToNextAttack =
-    ms_to_next_skill("attack") || shotCycleMs(isEnergizing);
+  const msToNextAttack = isEnergizing
+    ? shotCycleMs(true)
+    : ms_to_next_skill("attack") || shotCycleMs();
   const reservedSlots = Math.max(
     1,
     Math.ceil(countWaitingGear(getWantedGear()) / 2),
@@ -2520,16 +2521,23 @@ function getEnRouteCast() {
  * mainLoop (getLoopInterval).
  * @param {() => ((() => Promise)|undefined)} getCast - what to cast now, if anything
  * @param {number} [timeoutMs] - how long a cast may hold the loop
+ * @param {Object} [options]
+ * @param {() => boolean} [options.canAct]
+ * @param {() => number} [options.nextDelayMs]
  */
-function runActionLoop(getCast, timeoutMs = character.ping) {
+function runActionLoop(
+  getCast,
+  timeoutMs = character.ping,
+  { canAct = canActOnAttackCooldown, nextDelayMs = getLoopInterval } = {},
+) {
   let pendingCast;
   runSkillLoop({
     skill: "attack",
     whileMoving: true,
-    nextDelayMs: getLoopInterval,
+    nextDelayMs,
     timeoutMs,
     canUse: () => {
-      if (!canActOnAttackCooldown()) return false;
+      if (!canAct()) return false;
       pendingCast = getCast();
       return !!pendingCast;
     },

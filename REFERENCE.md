@@ -1639,6 +1639,18 @@ on the ranger's crossbow.
 - **Late hits (`mustLand`, mage only):** the mage has one hit per shot, so a hit landing after
   `restoreBy` makes the swap pure cost and he skips it. The ranger doesn't pass it: he can hit several
   mobs, and the nearer arrows still land inside the hold when the farthest doesn't.
+- **Energize goes out early, with the shot** (`canMageAct`, 2026-11-07, user's idea). The cooldown
+  floats on `attack_ms`, and the server runs energize first on the same socket, so a shot sent with
+  energize passes once `elapsed >= energized cycle`. It can leave up to `normal − energized cycle − 20ms`
+  before it was due, about 225ms on a firestaff, with no wait for energize's reply. Paired at the ready
+  time, about 350ms of the buff ran out unused. Sent early, the buff covers both fast cycles: about 5%
+  more shots by the server's math. The early shot waits for three things: a shot still awaiting its
+  reply (`isMageShotInFlight`, since the cooldown reads stale or 0 until then and it would fire again),
+  the swap latch (it would fire from the swap-in), and penalties, seen or unanswered (the server adds
+  them to the cooldown). A swap on the shot before can therefore shorten the lead. The action loop wakes
+  for the window through `mageLoopInterval`. Only the mage does this, since only he self-energizes.
+  `maybePiercingSwap` takes the energized cycle when energizing, because the live countdown on an early
+  shot is the stale one.
 - **Energized cycles (`shotCycleMs`):** the mage sends self-energize, the attack and the swap in one
   tick, so `character.frequency` still lacks the +80 while the server already runs that shot on it
   (448ms against 699ms on a firestaff). Holding for the old cycle made the restore's penalty delay

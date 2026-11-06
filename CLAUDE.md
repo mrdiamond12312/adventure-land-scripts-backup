@@ -85,6 +85,9 @@ basic_function.7.js          [SHARED — the core library]
     basic_function_events.53.js  live events, rogue/ent-field deploys, boss HP ranking, crabxx,
                                  anniversary, Witch's Cipher, trick-or-treat (shared by fighters
                                  and the merchant, so not in daily_event_fighter_strat.26.js)
+    debug_scripts.44.js          checks called by name from the Hub, results in console.warn
+                                 (checkFrequency, checkAttacks, checkEnergize, checkPiercingSwap,
+                                 checkShotGaps, checkRogueBurn, checkRogueWeapons)
   A part never runs code at load: a definition moved below a slot load would vanish for any
   file that slot pulls in. Merchant-only item lists live in their merchant modules
   (STORE_ABLE/SALE_ABLE/IGNORE in 17, BUYABLE in 18, DISMANTLE_LIST in 22).

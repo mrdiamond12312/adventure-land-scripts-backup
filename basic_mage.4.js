@@ -79,6 +79,7 @@ function getMageCast() {
   // Paired with self-energize: spare mp feeds the shot
   return () => {
     const isEnergizing = !is_on_cooldown("energize");
+    markMageShot();
     return Promise.allSettled(
       [
         isEnergizing &&
@@ -131,7 +132,10 @@ function startSkillLoops() {
   let pendingEnergizeBuffee = null;
   let pendingReflectionBuffee = null;
 
-  runActionLoop(getMageCast);
+  runActionLoop(getMageCast, undefined, {
+    canAct: canMageAct,
+    nextDelayMs: mageLoopInterval,
+  });
 
   // Gear, trips included, on a fixed cadence decoupled from the attack loop.
   // Keeps the native mover's broom on for the trip.
