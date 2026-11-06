@@ -398,6 +398,7 @@ if (parent.caracAL) {
     "adventure-land-scripts-backup/basic_function_farms.54.js",
     "adventure-land-scripts-backup/basic_function_events.53.js",
     "adventure-land-scripts-backup/debug_scripts.44.js",
+    "adventure-land-scripts-backup/character_info.55.js",
   ]);
 } else {
   load_code(45);
@@ -407,6 +408,7 @@ if (parent.caracAL) {
   load_code(54);
   load_code(53);
   load_code(44);
+  load_code(55);
 }
 
 // Strategic functions
@@ -517,6 +519,7 @@ parent.socket.on("skill_timeout", leadSkillTimeout);
 
 potionLoop();
 startCosmeticSkillLoops();
+setInterval(publishCharacterStatus, 250);
 // Starting Positioning loop
 hitAndRun();
 respawnOnceDead();

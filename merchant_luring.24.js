@@ -42,11 +42,11 @@ async function lureMechaGnome() {
     } else nextDelay = 110_000;
 
     const mageResponse = await waitUntil(() => {
-      const mageInfo = get("mageLocation");
+      const mageInfo = getCharacterInfo(MAGE);
       if (!mageInfo) return false;
       return (
         mageInfo.mp >= G.skills["magiport"].mp + 100 &&
-        Date.now() - mageInfo.time < 15_000 &&
+        Date.now() - mageInfo.at < 15_000 &&
         distance(mageInfo, getFarm()) < 300
       );
     }, 10_000);
@@ -60,7 +60,8 @@ async function lureMechaGnome() {
     await mainframe_command("mooooooooooh", 2_000).catch((e) =>
       console.warn("mooh:", e),
     );
-    await advanceSmartMove(get("mageLocation"), { useScare: false });
+    const { map, x, y } = getCharacterInfo(MAGE);
+    await advanceSmartMove({ map, x, y }, { useScare: false });
 
     await waitUntil(
       () =>

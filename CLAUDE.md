@@ -85,6 +85,9 @@ basic_function.7.js          [SHARED — the core library]
     basic_function_events.53.js  live events, rogue/ent-field deploys, boss HP ranking, crabxx,
                                  anniversary, Witch's Cipher, trick-or-treat (shared by fighters
                                  and the merchant, so not in daily_event_fighter_strat.26.js)
+    character_info.55.js         live info shared between our characters (publishCharacterInfo,
+                                 getCharacterInfo): sessionStorage under caracAL, the character's
+                                 iframe in the browser, so readers don't branch
     debug_scripts.44.js          checks called by name from the Hub, results in console.warn
                                  (checkFrequency, checkAttacks, checkEnergize, checkPiercingSwap,
                                  checkShotGaps, checkRogueBurn, checkRogueWeapons)

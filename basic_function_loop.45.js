@@ -16,7 +16,17 @@ async function withTimeout(
  */
 function leadSkillTimeout(data) {
   if (data?.name) reduce_cooldown(data.name, Math.min(...parent.pings));
+  if (data?.name !== "attack") return;
+
+  if (!data.reason)
+    publishCharacterInfo({
+      lastShotAt: Date.now() - character.ping / 2 + (data.penalty ?? 0),
+    });
+  else if (!isEquipingItems) wakeActionLoop?.();
 }
+
+/** @type {(() => void)|undefined} rechecks the action loop now */
+var wakeActionLoop;
 
 async function waitUntil(fn, timeout = 10_000, interval = 100) {
   const start = Date.now();
@@ -120,7 +130,11 @@ function runSkillLoop({
   whileMoving = false,
   nextDelayMs,
 }) {
+  let timer;
+  let isRunning = false;
+
   async function loop() {
+    isRunning = true;
     try {
       const isMovingControlled =
         (smart.moving || isAdvanceSmartMoving) && !smartmoveDebug;
@@ -136,12 +150,18 @@ function runSkillLoop({
     } catch (e) {
       console.log(`[skillLoop:${skill}]`, e);
     } finally {
-      setTimeout(
+      isRunning = false;
+      timer = setTimeout(
         loop,
         nextDelayMs?.() ?? Math.max(ms_to_next_skill(skill), floorMs),
       );
     }
   }
+  loop.wake = () => {
+    if (isRunning) return;
+    clearTimeout(timer);
+    timer = setTimeout(loop, 0);
+  };
   loop();
   return loop;
 }

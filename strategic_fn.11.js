@@ -1244,6 +1244,17 @@ function getServerItem(num) {
   return landing ? landing.previous : character.items[num];
 }
 
+let predictedPenaltyUntil = 0;
+
+/** @param {number} penaltyMs - penalty_cd just sent */
+function publishPenalty(penaltyMs) {
+  if (!penaltyMs) return;
+  predictedPenaltyUntil =
+    Math.max(predictedPenaltyUntil, Date.now() + character.ping / 2) +
+    penaltyMs;
+  publishCharacterInfo({ penaltyUntil: predictedPenaltyUntil });
+}
+
 /**
  * @param {Promise} promise - the equip, unequip or shift
  * @param {Object<string, Object>} entries - slot -> inFlightSlots entry
@@ -1253,6 +1264,7 @@ function getServerItem(num) {
 function trackInFlight(promise, entries, penaltyMs) {
   Object.assign(inFlightSlots, entries);
   unansweredPenaltyMs += penaltyMs;
+  publishPenalty(penaltyMs);
 
   let isCleared = false;
   const clear = () => {
@@ -2531,7 +2543,7 @@ function runActionLoop(
   { canAct = canActOnAttackCooldown, nextDelayMs = getLoopInterval } = {},
 ) {
   let pendingCast;
-  runSkillLoop({
+  wakeActionLoop = runSkillLoop({
     skill: "attack",
     whileMoving: true,
     nextDelayMs,
@@ -2542,7 +2554,7 @@ function runActionLoop(
       return !!pendingCast;
     },
     cast: () => pendingCast(),
-  });
+  }).wake;
 }
 
 function shouldAttack(target = get_target()) {

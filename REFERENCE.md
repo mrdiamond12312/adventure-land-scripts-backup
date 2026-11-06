@@ -941,6 +941,26 @@ Findings from the "warrior attacks slower than his frequency" session (2026-07-2
   picked around it, by `mageFightModel`: shots per second capped by the mp budget, times what a
   shot lands. See "Mage gear under the mp budget" below.
 
+## Live character info (`character_info.55.js`, 2026-11-07)
+
+`getCharacterInfo(name)` gives any character's published info with the same fields in both clients, so
+readers don't branch. In the browser it reads the character's iframe directly, as `getCharacter` did:
+always live, nothing is written. Under caracAL each character is its own process, so it goes through
+`sessionStorage`, not `localStorage`: the coordinator keeps it in a plain `Map` and forwards each write to
+every character, with no disk involved. `localStorage` does a sync file append per changed value, and the
+old `mageLocation` wrote one every main loop tick. Nothing here survives a restart, and that's the point:
+anything that must stays on `set()`.
+
+- **Two speeds.** Status (`hp`, `mp`, `frequency`, `map`, `in`, `x`, `y`, `rip`, `target`) goes out on a
+  250ms interval, only when it changed or once per second. Timing fields go out the moment they
+  change: `lastShotAt` from `leadSkillTimeout` (the reply's time less half a ping, plus any penalty the
+  server added) and `penaltyUntil` from `trackInFlight`. A faster status interval adds no accuracy to
+  those, and its only readers are smart-move and magiport checks.
+- **`at` replaces `mageLocation.time`.** A reader that cares about staleness compares it itself. Under
+  caracAL an entry outlives its character, so `getMageInfo` still checks `siblings` first.
+- **`in` is published too**, for the crypt-instance hole noted under smart move. No reader uses it yet.
+- Entries are about 200 bytes. Every write reaches every process, so keep them small.
+
 ## Mage gear under the mp budget (`mageFightModel`, 2026-10-28)
 
 Server formulas (upstream `server.js` `calculate_player_stats`, `server_functions.js` `consume_mp`):
@@ -1651,6 +1671,28 @@ on the ranger's crossbow.
   for the window through `mageLoopInterval`. Only the mage does this, since only he self-energizes.
   `maybePiercingSwap` takes the energized cycle when energizing, because the live countdown on an early
   shot is the stale one.
+- **Energize goes to whoever gains the most** (`getEnergizeDamageTarget`, 2026-11-07). It adds the same
+  frequency to anyone, so its value is extra shots × damage per shot: `pdps` per second over 15s ÷
+  frequency, compared across the mage and our own non-priest fighters in range who were seen shooting
+  in the last two cycles. Priests' `pdps` is mostly heals. A low-mana ally still comes first, as before.
+  An ally gets 1 mp with it, since a self-energize's mp is neutral but an ally's is a real transfer.
+  **Network:** a self-energize shares a socket with its shot, so lag can't separate them. An ally's can't
+  fire with the shot: it lands, then he needs a round trip to hear and shoot. So `isAllyEnergizeDue` times
+  it off his published `lastShotAt`, taking the mage's ping for his, since our bots share a connection.
+  It lands in the window where both his fast cycles fit in the 800ms buff (`2 × energized − 800`, plus
+  100ms, since a cooldown ending as the buff does gains nothing) and he still has a round trip left
+  (`energized − ping`). A frozen cycle is too long for two, so there it's `energized − 800 + 100`. Past that much lag the window closes and it goes any
+  time. **An ally's penalty:** he can't shoot until `penalty_cd` clears, so a shorter cooldown is wasted
+  while it runs (user's catch). `s.penalty_cd` is too late for this: the mage reads the server half a
+  ping ago and energize lands half a ping later, a blind ping in which equips can still beat it there.
+  So each fighter publishes its predicted `penaltyUntil` from `trackInFlight`, at the moment an equip
+  is sent. `isAllyPenaltyBlocking` drops him when under half of the normal saving survives
+  (`ENERGIZE_MIN_SAVED_SHARE`), and the next best gets it, usually the mage. If the mage has a penalty
+  too, seen or unanswered, or a swap in progress, energize waits for it (`isSelfEnergizeDue`, user's
+  rule), and a shot due in the meantime goes out without it. **Waking allies:** an attack `skill_timeout` with a `reason` (the cooldown changed) wakes the
+  action loop (`wakeActionLoop`), or he'd sleep through the shorter cooldown. It skips the wake during a
+  swap hold, or he'd fire from the swap-in. This is the one part that reaches every class. His `pdps` also
+  includes tanking at 0.25×, so a tank's number runs a little high.
 - **Energized cycles (`shotCycleMs`):** the mage sends self-energize, the attack and the swap in one
   tick, so `character.frequency` still lacks the +80 while the server already runs that shot on it
   (448ms against 699ms on a firestaff). Holding for the old cycle made the restore's penalty delay

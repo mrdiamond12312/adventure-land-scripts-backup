@@ -448,7 +448,7 @@ class StrategicSmartMove {
    */
   getMageInfo() {
     if (!this.isMageOnline()) return undefined;
-    return parent.caracAL ? get("mageLocation") : getCharacter(MAGE);
+    return getCharacterInfo(MAGE);
   }
 
   /**

@@ -82,7 +82,7 @@ function mageBusySkills() {
 function energizeFrequencyDelta() {
   const { frequency, duration } = G.conditions.energized;
   const average =
-    character.level >= G.skills.energize.level
+    character.level >= G.skills.energize.level && isSelfEnergizeTarget()
       ? (frequency * duration) / G.skills.energize.cooldown
       : 0;
   return average - (character.s.energized ? frequency : 0);
@@ -90,7 +90,96 @@ function energizeFrequencyDelta() {
 
 const ENERGIZE_LEAD_MARGIN_MS = 20;
 const ENERGIZE_WAKE_FLOOR_MS = 10;
+const ENERGIZE_BUFF_MARGIN_MS = 100;
+const ENERGIZE_MIN_SAVED_SHARE = 0.5;
+const ENERGIZE_WATCH_MS = 15_000;
+const ENERGIZE_SKIPPED_CLASSES = ["priest", "merchant"];
+const energizeDamageWatch = {};
 let lastMageShot = { at: 0, cooldown: undefined };
+
+/** @returns {number} `pdps` per second over the last finished window */
+function recentDamageRate(player) {
+  const now = Date.now();
+  const pdps = player.pdps ?? 0;
+  const watch = energizeDamageWatch[player.name];
+  if (!watch || pdps < watch.pdps) {
+    energizeDamageWatch[player.name] = { pdps, at: now, rate: watch?.rate ?? 0 };
+    return watch?.rate ?? 0;
+  }
+  if (now - watch.at >= ENERGIZE_WATCH_MS) {
+    watch.rate = (pdps - watch.pdps) / ((now - watch.at) / 1000);
+    watch.pdps = pdps;
+    watch.at = now;
+  }
+  return watch.rate;
+}
+
+/** @returns {boolean} whether the ally shot within two cycles */
+function isAllyShooting(player) {
+  const shotAt = getCharacterInfo(player.name)?.lastShotAt;
+  return !!shotAt && Date.now() - shotAt < 2000 / player.frequency;
+}
+
+/** @returns {number} the ally's attack cycle with energize */
+function allyEnergizedMs(player) {
+  const { frequency } = G.conditions.energized;
+  const boost = (frequency / 100) * conditionFrequencyScale(player);
+  return 1000 / (player.frequency + boost);
+}
+
+/** @returns {boolean} whether the ally's penalty eats most of what energize saves */
+function isAllyPenaltyBlocking(player) {
+  const { penaltyUntil, lastShotAt } = getCharacterInfo(player.name) ?? {};
+  if (!penaltyUntil || !lastShotAt) return false;
+
+  const normalReady = lastShotAt + 1000 / player.frequency;
+  const energizedReady = lastShotAt + allyEnergizedMs(player);
+  const saved = normalReady - Math.max(energizedReady, penaltyUntil);
+  return saved < (normalReady - energizedReady) * ENERGIZE_MIN_SAVED_SHARE;
+}
+
+/** @returns {Object} who gains the most from energize */
+function getEnergizeDamageTarget() {
+  const allies = [...getAlliedNames()]
+    .filter((name) => name !== character.name && isOwnedCharacter(name))
+    .map((name) => get_player(name))
+    .filter(
+      (player) =>
+        player &&
+        !player.rip &&
+        !ENERGIZE_SKIPPED_CLASSES.includes(player.ctype) &&
+        is_in_range(player, "energize") &&
+        isAllyShooting(player) &&
+        !isAllyPenaltyBlocking(player),
+    );
+  const damagePerShot = (player) =>
+    recentDamageRate(player) / Math.max(player.frequency, 0.01);
+  return [character, ...allies].reduce((best, player) =>
+    damagePerShot(player) > damagePerShot(best) ? player : best,
+  );
+}
+
+const isSelfEnergizeTarget = () => getEnergizeDamageTarget() === character;
+
+/** @returns {boolean} whether energize landing now shortens the ally's cooldowns the most */
+function isAllyEnergizeDue(player) {
+  const shotAt = getCharacterInfo(player.name)?.lastShotAt;
+  if (!shotAt) return true;
+
+  const { duration } = G.conditions.energized;
+  const energizedMs = allyEnergizedMs(player);
+  const earliest = Math.max(
+    0,
+    (energizedMs <= duration ? 2 * energizedMs : energizedMs) -
+      duration +
+      ENERGIZE_BUFF_MARGIN_MS,
+  );
+  const latest = energizedMs - character.ping;
+  if (latest <= earliest) return true;
+
+  const elapsed = Date.now() - shotAt + character.ping / 2;
+  return elapsed >= earliest && elapsed <= latest;
+}
 
 function markMageShot() {
   lastMageShot = { at: Date.now(), cooldown: parent.next_skill.attack };
@@ -117,18 +206,26 @@ function energizeLeadMs() {
   );
 }
 
+/** @returns {boolean} whether a shot now should carry self-energize */
+function isSelfEnergizeDue() {
+  return (
+    !is_on_cooldown("energize") &&
+    !isEquipingItems &&
+    !unansweredPenaltyMs &&
+    !character.s.penalty_cd &&
+    isSelfEnergizeTarget()
+  );
+}
+
 /** @returns {boolean} whether the mage can shoot now */
 function canMageAct() {
   if (isMageShotInFlight()) return false;
   if (canActOnAttackCooldown()) return true;
   return (
     !isOnTrip() &&
-    !isEquipingItems &&
-    !unansweredPenaltyMs &&
-    !character.s.penalty_cd &&
     !Object.keys(character.c).length &&
-    !is_on_cooldown("energize") &&
-    ms_to_next_skill("attack") <= energizeLeadMs()
+    ms_to_next_skill("attack") <= energizeLeadMs() &&
+    isSelfEnergizeDue()
   );
 }
 
@@ -136,7 +233,7 @@ function canMageAct() {
 function mageLoopInterval() {
   const interval = getLoopInterval();
   const attackMs = ms_to_next_skill("attack");
-  if (!attackMs) return interval;
+  if (!attackMs || !isSelfEnergizeTarget()) return interval;
 
   const earlyMs = Math.max(
     attackMs - energizeLeadMs(),

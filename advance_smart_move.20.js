@@ -41,14 +41,6 @@ const ALIA_FROM_POSITION = {
  * @param {string} name Character's ID
  * @returns
  */
-function getCharacter(name) {
-  for (const iframe of top.$("iframe")) {
-    const char = iframe.contentWindow.character;
-    if (!char) continue; // Character isn't loaded yet
-    if (char.name == name) return char;
-  }
-}
-
 async function mageBlink(
   map,
   coordinates,
@@ -207,11 +199,10 @@ async function oldAdvanceSmartMove(
         return;
       }
     } else {
-      const mageEntity = parent.caracAL
-        ? parent.caracAL.siblings.includes(MAGE)
-          ? get("mageLocation")
-          : undefined
-        : getCharacter(MAGE);
+      const mageEntity =
+        parent.caracAL && !parent.caracAL.siblings.includes(MAGE)
+          ? undefined
+          : getCharacterInfo(MAGE);
       log("Asking for a miracle, may be a magiport?");
       if (
         mageEntity &&
@@ -236,11 +227,10 @@ async function oldAdvanceSmartMove(
         await useWarp(props);
 
         const checkingMageMagiportInterval = setInterval(async () => {
-          let mageEntityUpdate = parent.caracAL
-            ? parent.caracAL.siblings.includes(MAGE)
-              ? get("mageLocation")
-              : undefined
-            : getCharacter(MAGE);
+          const mageEntityUpdate =
+            parent.caracAL && !parent.caracAL.siblings.includes(MAGE)
+              ? undefined
+              : getCharacterInfo(MAGE);
           if (
             mageEntityUpdate &&
             mageEntityUpdate.map === props.map &&

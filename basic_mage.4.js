@@ -78,7 +78,7 @@ function getMageCast() {
 
   // Paired with self-energize: spare mp feeds the shot
   return () => {
-    const isEnergizing = !is_on_cooldown("energize");
+    const isEnergizing = isSelfEnergizeDue();
     markMageShot();
     return Promise.allSettled(
       [
@@ -130,6 +130,7 @@ function startSkillLoops() {
   // runSkillLoop always calls canUse right before cast, so canUse stashes what
   // it approved and cast reuses it instead of recomputing the scans.
   let pendingEnergizeBuffee = null;
+  let pendingEnergizeMp = 1;
   let pendingReflectionBuffee = null;
 
   runActionLoop(getMageCast, undefined, {
@@ -160,14 +161,22 @@ function startSkillLoops() {
     canUse: () => {
       if (is_on_cooldown("energize")) return false;
       pendingEnergizeBuffee = getEnergizeBuffee();
-      return pendingEnergizeBuffee != null;
+      pendingEnergizeMp = Math.max(
+        character.mp - G.skills["magiport"].mp * 1.5,
+        2,
+      );
+      if (pendingEnergizeBuffee) return true;
+
+      const target = getEnergizeDamageTarget();
+      if (target === character || !isAllyEnergizeDue(target)) return false;
+      pendingEnergizeBuffee = target;
+      pendingEnergizeMp = 1;
+      return true;
     },
     cast: () =>
-      use_skill(
-        "energize",
-        pendingEnergizeBuffee,
-        Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
-      ).catch((e) => attackErrorHandler(e)),
+      use_skill("energize", pendingEnergizeBuffee, pendingEnergizeMp).catch(
+        (e) => attackErrorHandler(e),
+      ),
   });
 
   runSkillLoop({
@@ -221,19 +230,6 @@ async function mainLoop() {
     }
 
     publishEntFieldReport();
-
-    // Save location data for magiport consumers once high level. The ent count
-    // moved to publishEntFieldReport (basic_function.7.js) so it survives the
-    // mage being swapped out of the party.
-    if (character.max_mp > G.skills["magiport"].mp * 1.5) {
-      set("mageLocation", {
-        mp: character.mp,
-        map: character.map,
-        x: character.x,
-        y: character.y,
-        time: Date.now(),
-      });
-    }
 
     // --- Target Selection --- events, then the crypt, then the farming spot
     // Mid-trip it only hands back a target when a higher strategy took over.
