@@ -63,7 +63,6 @@ function refineTarget(target) {
   if (!target) return {};
 
   const partyDmgRecieved = avgPartyDmgTaken(partyMems);
-  const prioritizedCharacter = prioritizedNames();
   const mobsInSearchRange = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
@@ -103,18 +102,7 @@ function refineTarget(target) {
     (character.slots.orb?.name === "test_orb" ||
       character.slots.mainhand?.name === "oozingterror") &&
     !target?.cooperative
-      ? mobsInRange
-          .filter(
-            (mob) =>
-              !mob.s.poisoned && prioritizedCharacter.includes(mob.target),
-          )
-          .sort((lhs, rhs) => {
-            if (rhs.attack === lhs.attack) {
-              return rhs.hp - lhs.hp;
-            }
-            return rhs.attack - lhs.attack;
-          })
-          .shift() ?? target
+      ? getNextPoisonTarget(mobsInRange) ?? target
       : target;
 
   // The tanker's pull beats a pin, a priority boss beats the pull

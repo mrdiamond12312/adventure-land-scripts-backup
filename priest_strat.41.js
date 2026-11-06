@@ -16,7 +16,17 @@ const PRIEST_DEFAULT_GEAR = {
 
 let priestLastHealGearAt = 0;
 
+/** @returns {boolean} whether this is a player getPlayersToHeal would never heal */
+function isEnemyPlayer(entity) {
+  if (entity?.type !== "character" || entity.npc) return false;
+  if (entity.name === character.name) return false;
+  if (character.team) return entity.team !== character.team;
+  return is_pvp() && !prioritizedNames().includes(entity.name);
+}
+
 function isPriestInHealGraceWindow(target) {
+  if (isEnemyPlayer(target)) return false;
+
   if (target && target.type !== "monster") {
     priestLastHealGearAt = Date.now();
     return true;
@@ -62,6 +72,7 @@ function getPriestOffhand(mainhand, tankGear, statGear, healGear) {
 }
 
 function getPriestOrb(target, tankGear, statGear, healGear) {
+  if (isEnemyPlayer(target)) return "test_orb";
   if (statGear.orb) return statGear.orb;
   if (isPriestInHealGraceWindow(target)) return healGear.orb ?? "jacko";
   return tankGear.orb ?? "test_orb";

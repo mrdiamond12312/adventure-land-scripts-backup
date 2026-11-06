@@ -844,6 +844,25 @@ function pickStatGear(stat) {
   return gear;
 }
 
+/**
+ * @param {Object[]} mobs - mobs in reach
+ * @returns {Object|undefined} the hardest-hitting unpoisoned mob on an ally
+ */
+function getNextPoisonTarget(mobs) {
+  const allies = getAlliedNames();
+  return mobs
+    .filter((mob) => !mob.s.poisoned && allies.has(mob.target))
+    .sort((lhs, rhs) => rhs.attack - lhs.attack || rhs.hp - lhs.hp)[0];
+}
+
+/** @returns {number} what the poison gear in `picks` is expected to leave of a mob's frequency */
+function poisonFrequencyScale(projected, picks, worn) {
+  const { duration, frequencym } = G.conditions.poisoned;
+  const chance = gearAbilityWith(picks, "poison", worn).attr0 / 100;
+  const uptime = 1 - Math.exp((-duration / 1000) * projected.frequency * chance);
+  return 1 - uptime * (1 - frequencym);
+}
+
 /** Slot → item the last tank pick chose, the incumbent of the next one */
 let lastTankPick = {};
 
@@ -869,10 +888,27 @@ function pickTankGear() {
   }
 
   const isHealer = character.ctype === "priest";
-  const score = (projected) => {
-    const damage =
-      mobs.reduce((sum, mob) => sum + calculateDamage(mob, projected), 0) +
-      fightBurnDps(mobs, projected);
+  const worn = getWornGearInfos();
+  const poisonTarget = get_targeted_monster()?.cooperative
+    ? undefined
+    : getNextPoisonTarget(
+        mobs.filter(
+          (mob) =>
+            distance(mob, character) <= character.range + character.xrange,
+        ),
+      );
+  const incomingDamage = (projected, picks) =>
+    mobs.reduce(
+      (sum, mob) =>
+        sum +
+        calculateDamage(mob, projected) *
+          (mob === poisonTarget
+            ? poisonFrequencyScale(projected, picks, worn)
+            : 1),
+      0,
+    ) + fightBurnDps(mobs, projected);
+  const score = (projected, picks) => {
+    const damage = incomingDamage(projected, picks);
     if (!isHealer) return damage;
 
     const heal =
@@ -881,12 +917,17 @@ function pickTankGear() {
       healMitigation(projected, projected);
     return heal > 0 ? damage / heal : Infinity;
   };
-  lastTankPick = pickGearByScore(
-    slots,
-    score,
-    TANK_GEAR_SWAP_MIN_GAIN,
-    lastTankPick,
-  );
+  lastTankPick = {
+    ...pickGearByScore(
+      slots.filter((slot) => slot !== "orb"),
+      score,
+      TANK_GEAR_SWAP_MIN_GAIN,
+      lastTankPick,
+    ),
+    ...pickGearByScore(["orb"], incomingDamage, 0, {
+      orb: lastTankPick.orb ?? "test_orb",
+    }),
+  };
   return lastTankPick;
 }
 

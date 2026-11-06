@@ -3964,6 +3964,22 @@ mix picks exoarm, whose int and str lift the heal more than its lost resistance 
 - **The orb follows the action loop:** the heal pick's orb in the heal grace window, else the tank
   (or fireball) pick's orb, else `test_orb` for the attack. The tank pick has to keep the orb: on
   fireroamers its burn scoring puts on orba, the only orb with firesistance.
+- **An enemy player always gets `test_orb`** (`isEnemyPlayer`, 2026-11-06), ahead of luck and xp
+  orbs, and ends the heal grace window at once so the attack weapon goes on too. Any non-monster
+  target used to count as a heal, so a hostile player got `lmace` and the heal orb. Enemy mirrors
+  `getPlayersToHeal`: with a team, another team; otherwise a non-prioritized player under `is_pvp()`.
+- **The tank pick scores its orb on incoming damage alone** (2026-11-06). That orb is only worn
+  outside the heal window, so its frequency or rpiercing speeds up no heal; the heal pick's orb does
+  that. Scored on heals, `test_orb` lost to `blackcatbell` (+8.24% heal) and `jacko` (+5.84%), and a
+  tanking priest never spread poison. Now those tie at zero, and only the poison and burn terms
+  separate orbs. Min gain is 0 with `test_orb` as the first incumbent, so a tie holds the orb.
+  The bell's attack speed is not scored.
+- **The next poison target counts at its slowed frequency** (`poisonFrequencyScale`, 2026-11-06).
+  The mob `getNextPoisonTarget` picks, in reach, scores at `frequencym` (0.9) weighted by expected
+  uptime from the worn and candidate poison gear's `attr0`, so `blightcap` (4%) earns about a
+  quarter of what `test_orb` (50%) does. Mobs already poisoned get no discount: the server applies
+  0.9 to `monster.frequency` and sends it (`calculate_common_stats`, `monster_to_client`), so
+  `calculateDamage` already reads it. Only one mob is discounted, though poison can hold several.
 - **The incumbent is `lastTankPick`, not the worn gear** (2026-10-16). Against the worn gear, luck
   gear put on for a kill never came off: `cloverstud` (luck, vit) scores the same as nothing, and
   `cearring`'s int is worth ~1% of heal, under the 5% bar. A tanking priest on fireroamers wore
