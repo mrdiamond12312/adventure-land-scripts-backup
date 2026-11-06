@@ -40,6 +40,7 @@ const DUTY = {
 };
 /** The merchant's one duty lock, `{ owner, since }`, null while free */
 var duty = null;
+
 // Set when an exchange fails with inventory_full; makes the emergency banking
 // below run even if isInvFull() reads false. Read by merchant_exchange.23.js
 // and merchant_frenzinesss.100.js, so it is declared here for all of them.

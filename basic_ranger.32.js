@@ -233,70 +233,6 @@ function restoreAttackingBow() {
 }
 
 /**
- * @param {Object|Object[]} [gearTargets] - the plan's gear targets
- * @returns {number} slots whose wanted gear is in the bag, not on the server yet
- */
-function countWaitingGear(gearTargets) {
-  return Object.entries(calculateRangerItems(gearTargets)).filter(
-    ([slot, wanted]) =>
-      wanted &&
-      wanted !== getServerSlot(slot)?.name &&
-      findMaxLevelItem(wanted) !== -1,
-  ).length;
-}
-
-/**
- * Crossbow locked in hand from the shot until its farthest arrow lands (impact
- * adds the live apiercing, heals included) or restoreBy, whichever is first, then
- * the weapon it fired with goes back.
- * @param {Object} plan - the plan whose shot was just sent
- * @returns {Promise|undefined} the swap, or undefined if not swapping
- */
-function maybeCrossbowSwap(plan) {
-  const held = getServerSlot("mainhand");
-  const crossbow = findMaxLevelItem(RANGER_INV_ITEMS.crossBow);
-  if (
-    !held ||
-    held.name === RANGER_INV_ITEMS.crossBow ||
-    crossbow === -1 ||
-    !canSwapUntilImpact()
-  )
-    return;
-
-  const farthest = [plan.shotTargets]
-    .flat()
-    .filter(Boolean)
-    .reduce(
-      (best, target) =>
-        !best || distance(character, target) > distance(character, best)
-          ? target
-          : best,
-      null,
-    );
-  if (!farthest) return;
-
-  // 0 until the shot's reply re-bases it
-  const msToNextAttack =
-    ms_to_next_skill("attack") || 1000 / character.frequency;
-  const reservedSlots = Math.max(
-    1,
-    Math.ceil(countWaitingGear(plan.gearTargets) / 2),
-  );
-  // Swap in, then the slots kept for the swap back and waiting gear
-  const restoreBy =
-    msToNextAttack - character.ping - (1 + reservedSlots) * EQUIP_PENALTY_MS;
-
-  return swapUntilImpact(farthest, [{ num: crossbow, slot: "mainhand" }], {
-    holdLimitMs: restoreBy,
-    restore: () =>
-      equipBatch(
-        { mainhand: held.name },
-        { preventPenaltizeNextAttack: false, preventKeySnatch: false },
-      ),
-  });
-}
-
-/**
  * Fires the plan's skill: a cupid heal at allies, or a shot at mobs.
  * @param {Object} plan - from getActionPlan
  */
@@ -331,8 +267,12 @@ async function firePlan(plan) {
     promisesToAwait.push(tryMultiShot(plan.skill, plan.shotTargets));
   }
 
-  const crossbowSwap = isSwappingOffCupid ? undefined : maybeCrossbowSwap(plan);
-  if (crossbowSwap) promisesToAwait.push(crossbowSwap);
+  const piercingSwap = isSwappingOffCupid
+    ? undefined
+    : maybePiercingSwap(plan.shotTargets, () =>
+        calculateRangerItems(plan.gearTargets),
+      );
+  if (piercingSwap) promisesToAwait.push(piercingSwap);
 
   try {
     await withTimeout(Promise.allSettled(promisesToAwait), 1500);

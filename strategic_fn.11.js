@@ -1019,6 +1019,23 @@ function classWeaponModifier(info) {
   };
 }
 
+/** @returns {boolean} whether this class can hold `info` in its mainhand */
+function fitsMainhand(info) {
+  if (info?.type !== "weapon") return false;
+  if (info.class && !info.class.includes(character.ctype)) return false;
+  const classData = G.classes[character.ctype];
+  return (
+    info.wtype in (classData.mainhand ?? {}) ||
+    info.wtype in (classData.doublehand ?? {})
+  );
+}
+
+/** @returns {number} piercing against this class's damage type, the item's and the class's bonus for its wtype */
+function weaponPiercing(info) {
+  const [, pierce] = mitigationStats(G.classes[character.ctype].damage_type);
+  return (info?.[pierce] ?? 0) + getRelevantPiercing(info?.wtype);
+}
+
 const MP_POTIONS = ["mpot1", "mpot0"];
 
 /** @returns {number} mp per second our potions, or regen without one, restore */
@@ -1451,12 +1468,12 @@ const IMPACT_SWAP_MIN_HOLD_MS = 40; // dwell after the swap-ins land, even if th
 /**
  * ETA (ms) of the character's attack projectile against the target
  * @param {Object} target - the entity the attack was fired at
+ * @param {Object} [weapon] - item_info of the weapon fired, defaults to the one in hand
  * @returns {number} delay in ms (>= 0)
  */
-function projectileEtaMs(target) {
+function projectileEtaMs(target, weapon = item_info(character.slots.mainhand)) {
   const projectileKey =
-    item_info(character.slots.mainhand)?.projectile ||
-    G.classes[character.ctype].projectile;
+    weapon?.projectile || G.classes[character.ctype].projectile;
   const projectileSpeed = G.projectiles[projectileKey]?.speed;
 
   if (!projectileSpeed || !target) return IMPACT_SWAP_FALLBACK_DELAY_MS;
@@ -1653,6 +1670,86 @@ function maybeImpactSwap(targetToAttack, { candy, paleclaw } = {}) {
     (candy && maybeCandySwap(targetToAttack, candy)) ??
     (paleclaw && maybePaleclawSwap(targetToAttack, paleclaw))
   );
+}
+
+/** Smallest piercing gain worth a swap's two equips */
+const PIERCING_SWAP_MIN_GAIN = 20;
+
+/** @returns {{num: number, name: string, piercing: number}|undefined} the bag's one-handed weapon with the most piercing */
+function findPiercingSwapIn() {
+  let best;
+  character.items.forEach((_, num) => {
+    const item = getServerItem(num);
+    if (G.items[item?.name]?.type !== "weapon") return;
+    const info = item_info(item);
+    if (!fitsMainhand(info) || classWeaponModifier(info).doublehand) return;
+    const piercing = weaponPiercing(info);
+    if (piercing > (best?.piercing ?? 0))
+      best = { num, name: item.name, piercing };
+  });
+  return best;
+}
+
+/**
+ * @param {Object<string, string>} wantedGear - slot → item name
+ * @returns {number} slots whose wanted gear is in the bag, not on the server yet
+ */
+function countWaitingGear(wantedGear) {
+  return Object.entries(wantedGear).filter(
+    ([slot, wanted]) =>
+      wanted &&
+      wanted !== getServerSlot(slot)?.name &&
+      findMaxLevelItem(wanted) !== -1,
+  ).length;
+}
+
+/**
+ * The most piercing weapon locked in hand from the shot until its farthest hit
+ * lands (impact adds the live piercing, heals included) or restoreBy, whichever
+ * is first, then the weapon it fired with goes back. Call right after sending the shot.
+ * @param {Object|Object[]} targets - what the shot was fired at
+ * @param {() => Object<string, string>} getWantedGear - slot → item name the gear loop wants
+ * @param {Object} [options]
+ * @param {boolean} [options.mustLand] - skip when the farthest hit would land after restoreBy
+ * @returns {Promise|undefined} the swap, or undefined if not swapping
+ */
+function maybePiercingSwap(targets, getWantedGear, { mustLand = false } = {}) {
+  const held = getServerSlot("mainhand");
+  const pierceable = [targets].flat().filter((mob) => mob && !mob["1hp"]);
+  if (!held || !pierceable.length || !canSwapUntilImpact()) return;
+
+  const swapIn = findPiercingSwapIn();
+  if (
+    !swapIn ||
+    swapIn.name === held.name ||
+    swapIn.piercing - weaponPiercing(item_info(held)) < PIERCING_SWAP_MIN_GAIN
+  )
+    return;
+
+  // 0 until the shot's reply re-bases it
+  const msToNextAttack =
+    ms_to_next_skill("attack") || 1000 / character.frequency;
+  const reservedSlots = Math.max(
+    1,
+    Math.ceil(countWaitingGear(getWantedGear()) / 2),
+  );
+  // Swap in, then the slots kept for the swap back and waiting gear
+  const restoreBy =
+    msToNextAttack - character.ping - (1 + reservedSlots) * EQUIP_PENALTY_MS;
+
+  const farthest = pierceable.reduce((best, mob) =>
+    projectileEtaMs(mob) > projectileEtaMs(best) ? mob : best,
+  );
+  if (mustLand && projectileEtaMs(farthest) >= restoreBy) return;
+
+  return swapUntilImpact(farthest, [{ num: swapIn.num, slot: "mainhand" }], {
+    holdLimitMs: restoreBy,
+    restore: () =>
+      equipBatch(
+        { mainhand: held.name },
+        { preventPenaltizeNextAttack: false, preventKeySnatch: false },
+      ),
+  });
 }
 
 function calculateHeal(fromEntity, toEntity) {

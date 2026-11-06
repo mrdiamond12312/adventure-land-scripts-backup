@@ -40,12 +40,12 @@ function energizeFrequencyDelta() {
   return average - (character.s.energized ? frequency : 0);
 }
 
-/** @returns {boolean} whether the mage can hold `info` in his mainhand */
-function fitsMageHand(info) {
-  if (info?.type !== "weapon") return false;
-  if (info.class && !info.class.includes(character.ctype)) return false;
-  const classData = G.classes[character.ctype];
-  return info.wtype in classData.mainhand || info.wtype in classData.doublehand;
+/** @returns {number} piercing per hit the impact swap adds to a shot from `mainhand`, as `mitigation` counts it */
+function impactSwapPiercing(mainhand, frequency, target, swapPiercing) {
+  const gain = swapPiercing - weaponPiercing(mainhand);
+  if (gain < PIERCING_SWAP_MIN_GAIN) return 0;
+  const holdMs = 1000 / frequency - character.ping - 2 * EQUIP_PENALTY_MS;
+  return projectileEtaMs(target, mainhand) < holdMs ? gain / 2 : 0;
 }
 
 /**
@@ -73,7 +73,16 @@ function mageFightModel(projected, picks, target, worn, context) {
   const reflection = (target.reflection ?? def.reflection ?? 0) / 100;
   const land = (1 - avoidance) * (1 - reflection);
   const hp = target.max_hp ?? target.hp ?? 0;
-  const rawHit = projected.attack * mitigation(projected, target);
+  const rawHit =
+    projected.attack *
+    mitigation(projected, target, {
+      extraPiercing: impactSwapPiercing(
+        mainhand,
+        frequency,
+        target,
+        context.swapPiercing,
+      ),
+    });
 
   const restore = gearAbilityWith(picks, "restore_mp", worn);
   const skillMp = context.skills.reduce(
@@ -202,8 +211,15 @@ function pickMageGear(target, blasterAllowed, fixed) {
   const copies = getGearCopies(["mainhand"]);
   const owned = Object.keys(copies).filter(
     (name) =>
-      fitsMageHand(copies[name][0]) &&
+      fitsMainhand(copies[name][0]) &&
       (blasterAllowed || !classWeaponModifier(copies[name][0]).doublehand),
+  );
+  context.swapPiercing = Math.max(
+    0,
+    ...owned
+      .map((name) => copies[name][0])
+      .filter((info) => !classWeaponModifier(info).doublehand)
+      .map(weaponPiercing),
   );
   const cryptStaffs = owned.filter((name) => MAGE_CRYPT_STAFFS.includes(name));
   const weapons =

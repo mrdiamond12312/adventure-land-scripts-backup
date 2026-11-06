@@ -1358,7 +1358,7 @@ because the server reads `attacker.a.sugarrush` in `complete_attack`, at impact,
 equipped then. Of the procs, only `sugarrush` and `frenzy` are read there. crit, critdamage,
 explosion, blast, lifesteal, manasteal and the freeze/poison/burn/weave/petrify/hex/shatter/sunder
 abilities are copied onto the projectile in `commence_attack` when it is fired, so swapping them in
-mid-flight does nothing. The piercings are read at both ends (see "Ranger: crossbow until impact"). `attr0` sums across equipped canes and does not grow with level: 0.25% per
+mid-flight does nothing. The piercings are read at both ends (see "Most piercing weapon until impact"). `attr0` sums across equipped canes and does not grow with level: 0.25% per
 cane per proc-capable hit.
 
 Three timing facts, each of which broke it once:
@@ -1577,7 +1577,33 @@ swapped in when `canAffordSwap(3)` holds, the same check as the room rule, so it
 tail's budget on nearly every cleave and dropped frenzy uptime to ~3%. So the mpx swap only
 happens when no tail is planned: frenzy up, a luck amulet, or no paleclaw in the bag.
 
-### Ranger: crossbow until impact (`maybeCrossbowSwap`, 2026-11-03)
+### Most piercing weapon until impact (`maybePiercingSwap`, ranger 2026-11-03, mage 2026-11-06)
+
+The ranger and the mage share the swap. It takes the bag's one-handed weapon with the most piercing
+for the class's damage type (`weaponPiercing`: the item's stat plus the class's wtype bonus, which is
+where the ranger's crossbow +120 comes from). Nothing names a weapon. The notes below were measured
+on the ranger's crossbow.
+
+- **Skips:** a gain under `PIERCING_SWAP_MIN_GAIN` (20, about 2% per hit), so a 5-apiercing
+  `reunionbow` isn't worth two equips. A shot at only `1hp` mobs, which take a flat 1 or 2. A swap-in
+  with the held weapon's name, because the restore would pick the higher-level copy and leave it on.
+- **Late hits (`mustLand`, mage only):** the mage has one hit per shot, so a hit landing after
+  `restoreBy` makes the swap pure cost and he skips it. The ranger doesn't pass it: he can hit several
+  mobs, and the nearer arrows still land inside the hold when the farthest doesn't.
+- **Mage magical side:** `complete_attack` reads `attacker.rpiercing` the same way, and the bonus
+  also reaches splash through the main hit. Burn and the other abilities roll at commence, so the
+  firestaff keeps its burn. `mp_cost` is taken at commence, so the swap-in's `rpiercing / 15` is never
+  paid. Staffs carry no frequency change, and pinkie's +60 comes back with the restore.
+- **Mage reach:** at 80ms ping the hit lands in the hold within about 119px on firestaff (fireball is
+  320px/s, about 700ms cycle), 136px on gstaff, 156px on froststaff and 76px on pinkie (493ms cycle).
+  His orbit is about 95px (`range × 0.4 + xrange × 0.5`), so pinkie shots mostly skip the swap. These
+  are estimates, not in-game measurements.
+- **Mage scoring:** `impactSwapPiercing` adds the swap to `mageFightModel`, half the gain in
+  `extraPiercing` because `mitigation` doubles it, and only if the shot lands inside the hold. Without
+  it a fired harbringer gets its piercing twice while a firestaff gets none, which skews the weapon
+  choice. The hold there assumes no waiting gear.
+- **Keeping a swap-in in the bag:** the fighter's merchant handover sends away any +0 item not on its
+  list (`basic_function.7.js`), so a swap-in needs to be at least +1.
 
 Piercing counts twice (server.js `complete_attack`, kaansoral/adventureland_mongodb master, game
 v18285): `damage_multiplier(armor - attacker.apiercing - info.apiercing)`. `info.apiercing` is

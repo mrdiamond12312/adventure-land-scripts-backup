@@ -3,7 +3,6 @@
 const RANGER_INV_ITEMS = {
   poucher: "pouchbow",
   fireBow: "firebow",
-  crossBow: "crossbow",
   cupid: "cupid",
 };
 
