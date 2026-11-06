@@ -1603,9 +1603,12 @@ while the attack is ready. A missed window sent the next shot out on the crossbo
 damage is snapshotted from the weapon at commence), and that shot skipped the swap. The gear loop
 still corrects afterwards if it wants a different weapon (cupid for a new healee).
 - **Farthest arrow sets the hold, capped at `restoreBy`** (2026-11-04). `restoreBy` is
-  `ms − ping − 2 × EQUIP_PENALTY_MS`, where `ms` is `ms_to_next_skill("attack")`, or the full cycle
-  while it still reads 0 (the shot's reply is not back yet). It subtracts one 120ms `penalty_cd` for
-  the swap-in and one for the restore. At a 700ms cycle and 80ms ping that leaves 380ms. Arrow
+  `ms − ping − (1 + reserved) × EQUIP_PENALTY_MS`, where `ms` is `ms_to_next_skill("attack")`, or the
+  full cycle while it still reads 0 (the shot's reply is not back yet). One 120ms slot is for the
+  swap-in. `reserved` is half the gear slots still waiting to go on (`countWaitingGear`), rounded up,
+  and at least 1 for the restore. With nothing waiting, a 700ms cycle and 80ms ping leave 380ms. The
+  gear loop still waits for the restore's reply and penalty, so a bigger reservation frees only
+  about 1 item per shot at most at 150ms ping, and the shorter hold costs piercing on far arrows. Arrow
   distance no longer skips the swap: that check made it rarely fire at short cycles or higher ping,
   about 47px of reach at a 500ms cycle and 150ms ping. An arrow still in flight at `restoreBy` lands
   with the bow back in hand, so it misses the bonus. `swapUntilImpact`'s

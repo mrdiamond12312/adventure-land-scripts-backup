@@ -233,6 +233,19 @@ function restoreAttackingBow() {
 }
 
 /**
+ * @param {Object|Object[]} [gearTargets] - the plan's gear targets
+ * @returns {number} slots whose wanted gear is in the bag, not on the server yet
+ */
+function countWaitingGear(gearTargets) {
+  return Object.entries(calculateRangerItems(gearTargets)).filter(
+    ([slot, wanted]) =>
+      wanted &&
+      wanted !== getServerSlot(slot)?.name &&
+      findMaxLevelItem(wanted) !== -1,
+  ).length;
+}
+
+/**
  * Crossbow locked in hand from the shot until its farthest arrow lands (impact
  * adds the live apiercing, heals included) or restoreBy, whichever is first, then
  * the weapon it fired with goes back.
@@ -265,8 +278,13 @@ function maybeCrossbowSwap(plan) {
   // 0 until the shot's reply re-bases it
   const msToNextAttack =
     ms_to_next_skill("attack") || 1000 / character.frequency;
-  // Swap in and swap back
-  const restoreBy = msToNextAttack - character.ping - 2 * EQUIP_PENALTY_MS;
+  const reservedSlots = Math.max(
+    1,
+    Math.ceil(countWaitingGear(plan.gearTargets) / 2),
+  );
+  // Swap in, then the slots kept for the swap back and waiting gear
+  const restoreBy =
+    msToNextAttack - character.ping - (1 + reservedSlots) * EQUIP_PENALTY_MS;
 
   return swapUntilImpact(farthest, [{ num: crossbow, slot: "mainhand" }], {
     holdLimitMs: restoreBy,
