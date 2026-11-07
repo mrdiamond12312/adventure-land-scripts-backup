@@ -20,7 +20,7 @@ const isMob = (entity) => entity.type === "monster";
 const tryMultiShot = async (skill, entityList) => {
   if (entityList.length === 0) return false;
   set_message(`${skill} Shooting`);
-  return use_skill(skill, entityList).catch((e) => onAttackError(e));
+  return use_skill(skill, [...entityList]).catch((e) => onAttackError(e));
 };
 
 const inRange = (entity) =>
@@ -64,8 +64,9 @@ const isCupidEquipped = () => character.slots.mainhand?.name === "cupid";
 /** @returns {boolean} whether the server holds cupid */
 const isCupidOnServer = () => getServerSlot("mainhand")?.name === "cupid";
 
-/** A cooperative boss behind its shell: every hit lands for 1 */
-const isShelledBoss = (mob) => !!mob["1hp"] && !!mob.cooperative;
+/** A cooperative boss behind its shell, not one that is always `1hp`: every hit lands for 1 */
+const isShelledBoss = (mob) =>
+  !!mob["1hp"] && !!mob.cooperative && !G.monsters[mob.mtype]?.["1hp"];
 
 /**
  * Mobs worth shooting right now, annotated with cluster count and distance,
@@ -347,6 +348,7 @@ function getHuntersMarkTarget() {
           entity.target &&
           party.has(entity.target) &&
           !entity.s?.marked &&
+          !entity.immune &&
           entity.hp > MARK_HP_THRESHOLD &&
           is_in_range(entity, "huntersmark"),
       )

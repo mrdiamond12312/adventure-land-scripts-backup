@@ -1724,6 +1724,10 @@ on the ranger's crossbow.
   choice. The hold there assumes no waiting gear.
 - **Keeping a swap-in in the bag:** the fighter's merchant handover sends away any +0 item not on its
   list (`basic_function.7.js`), so a swap-in needs to be at least +1.
+- **`use_skill` overwrites a target array (found 2026-11-07):** the client's `use_skill` replaces each
+  entity in the array with its id, in place. `tryMultiShot` passed the plan's own array, so the swap
+  after a 3shot or 5shot got strings and `distance()` threw on `"in" in a`, which lost the swap. It
+  now passes a copy. Anything reading a target array after a multi-target cast needs the same.
 
 Piercing counts twice (server.js `complete_attack`, kaansoral/adventureland_mongodb master, game
 v18285): `damage_multiplier(armor - attacker.apiercing - info.apiercing)`. `info.apiercing` is
@@ -2385,7 +2389,12 @@ The rest of the branch looks tunable, but is deliberate (confirmed 2026-09-29):
   harmless, so the shelled crabxx came out on top. It took an arrow out of every 3shot/5shot, and
   became the single-shot target whenever the pinned crabx was out of reach, all for 1 damage a
   hit. It is out of the list now; he still shoots it as the strategy's own fallback, when no crabx
-  is left and someone holds it.
+  is left and someone holds it. Only a shell counts (2026-11-07): snowman and pinkgoo are `1hp` in
+  `G`, so those 1-damage hits are how they die, and the old check left him shooting arcticbees.
+- **`immune` refuses most skills (2026-11-07).** `commence_attack` fails with `skill_immune` unless the
+  skill has `pierces_immunity`, and a refused curse sets no cooldown, so `getCurseTarget` retried the
+  same mob every 100ms. Curse, huntersmark and cburst now skip immune mobs. The client copies `immune`
+  from `G` onto the entity.
 - **Stomp waits for at most one crabx, not zero** (confirmed 2026-10-16). While the boss is free
   it summons one a second, so "0 in view" is a short gap that a summon often fills before the
   stomp lands. Stomp is on a long cooldown (~40s in practice), so a miss is costly. Stunning with
@@ -4701,6 +4710,15 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   nearest the character pulled the party deeper into the spawn with every kill, and since
   spiders are always in sight from the spot, the walk back never triggered. Ghost and plantoid
   slots chase as before.
+- **The priest tanks the gathering (`assignRoles`, 2026-11-07, user's call).** Physical mobs made the
+  warrior TANKER, and a melee tank can't hold the spider spot: 1328,-80 is 132px outside the spider
+  box (x 700–1196) on purpose, to sit among all three spawns, and his reach of it is about 50px. The
+  priest pulls from range and walks mobs back while the rest of the party follows. It applies while
+  `getFighterWitchPlan` has a slot, to every kind, and stands aside for a priority boss in view.
+- **Walking a mob back (`getHoldWalkRadius`, 2026-11-07).** The lead was `radiusTotal`, 35px on the
+  warrior. Monsters attack by hitbox gap and a spider's range is 32, so it stood and hit him and never
+  followed. The lead now keeps the gap at the mob's range + 10, capped at his own reach so he keeps
+  swinging. A mob out-ranging that cap (ent, 64) still won't follow.
 - **Merchant** (merchant_witch.36.js): `attendWitchGathering` comes first in `merchantStrategies`.
   It takes the `WITCH` duty (over an event duty) and stays within 200 of a fighter. The fighters'
   10s handoff in basic_function.7.js then sends him every ingredient, since none is on its keep

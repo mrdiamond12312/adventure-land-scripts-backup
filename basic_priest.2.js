@@ -295,6 +295,7 @@ function getCurseTarget() {
           !isCaveFriendly(mob) &&
           !mob.dead &&
           !mob.s.cursed &&
+          !mob.immune &&
           is_in_range(mob, "curse") &&
           mob.hp > CURSE_HP_THRESHOLD,
       )

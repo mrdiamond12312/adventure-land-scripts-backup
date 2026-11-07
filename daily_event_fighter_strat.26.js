@@ -795,9 +795,7 @@ function getWitchGatherTarget({ mtype, spot, isHeld }) {
 
 /** @returns {Promise<object|undefined>} the outcome, while the Cipher is gathering */
 async function useWitchGatheringStrategy() {
-  if (get("cryptInstance") || (USE_CAVE_STRATEGY && isCaveUnderway())) return;
-
-  const plan = getWitchGatherPlan();
+  const plan = getFighterWitchPlan();
   if (!plan) return;
 
   set(`witchBag:${character.name}`, countBagWitchIngredients());

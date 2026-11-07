@@ -292,3 +292,66 @@ function checkRogueWeapons() {
       }
   });
 }
+
+/**
+ * What the hop loop knows about a realm, and what it would do now. Hop owner only.
+ * @param {string} [realm] - e.g. "ASIAI"
+ */
+function checkRealmMobs(realm = "ASIAI") {
+  const realmData = getRealmData();
+  if (!realmData || typeof pickHopDecision !== "function") {
+    console.warn(`checkRealmMobs: ${character.name} doesn't own the realm data`);
+    return;
+  }
+
+  const secondsAgo = (at) => Math.round((Date.now() - at) / 1000);
+  const cached = realmData.realms[realm];
+  const freshness = !cached
+    ? "no data"
+    : `updated ${secondsAgo(cached.at)}s ago${realmData.isStale(realm) ? " (stale, ignored)" : ""}`;
+
+  const best = getRaceCandidates()[0];
+  const bossLines = realmData
+    .query()
+    .filter((row) => realmOf(row) === realm)
+    .map((row) => {
+      const maxHp = row.max_hp ?? G.monsters[row.type]?.hp;
+      const hp = row.hp && maxHp ? `${Math.round((100 * row.hp) / maxHp)}%` : "?";
+      const isExempt = FATIGUE_EXEMPT_BOSSES.includes(row.type);
+      const verdict =
+        best?.type === row.type && realmOf(best) === realm
+          ? "race leader"
+          : isExempt && isReachableRealm(row, row.type)
+          ? "exempt, chased"
+          : trackedBossTypes().includes(row.type) && isHopCandidate(row)
+          ? "race candidate"
+          : "not chased";
+      return `  ${row.type} hp ${hp} target ${row.target ?? "none"}: ${verdict}`;
+    });
+
+  const sightingLines = Object.entries(readStore(REALM_SIGHTINGS_LS_KEY))
+    .filter(([, sighting]) => sighting.realm === realm)
+    .map(
+      ([type, sighting]) =>
+        `  ${type} on ${sighting.map} hp ${sighting.hp ?? "?"} target ${sighting.target ?? "none"}, ${secondsAgo(sighting.seenAt)}s ago`,
+    );
+
+  const picked = pickHopDecision();
+  const where = picked?.decision.target
+    ? ` → ${realmOf(picked.decision.target)}`
+    : "";
+  const decision = picked
+    ? `${picked.rule.name}: ${picked.decision.action}${where} — ${picked.decision.reason}`
+    : "no rule decided";
+
+  console.warn(
+    [
+      `checkRealmMobs ${realm}: ${freshness}`,
+      "live bosses:",
+      ...(bossLines.length ? bossLines : ["  none"]),
+      "observer sightings:",
+      ...(sightingLines.length ? sightingLines : ["  none"]),
+      `hop decision now: ${decision}`,
+    ].join("\n"),
+  );
+}

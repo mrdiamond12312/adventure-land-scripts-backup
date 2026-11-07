@@ -2183,6 +2183,16 @@ function assignRoles() {
     return;
   }
 
+  if (
+    partyMems.includes(PRIEST) &&
+    !getPriorityBossInView() &&
+    getFighterWitchPlan()
+  ) {
+    TANKER = PRIEST;
+    partyMems = rotateLeader(partyMems, TANKER);
+    return;
+  }
+
   const { tanker } = getFarm();
   if (partyMems.includes(tanker) && isOnPartyFarmSpot()) {
     TANKER = tanker;

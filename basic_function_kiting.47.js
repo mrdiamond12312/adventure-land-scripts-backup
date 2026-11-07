@@ -505,9 +505,23 @@ function getFarmMobOrbit(target) {
   };
 }
 
+/** Hitbox gap kept past a mob's range while walking it back, so it has to follow */
+const HOLD_WALK_EXTRA_GAP = 10;
+
+/** @returns {number} centre distance that keeps a walked-back mob following, within our own reach */
+function getHoldWalkRadius(target, radiusTotal, speedRate) {
+  const hitboxes =
+    (get_combat_dimensions(target)[0] + get_width(character)) / 2;
+  const gap = Math.min(
+    target.range + HOLD_WALK_EXTRA_GAP,
+    character.range + character.xrange,
+  );
+  return Math.max(radiusTotal * speedRate, gap + hitboxes);
+}
+
 function getOrbitDestination(target, orbit, radiusTotal, cosA, sinA) {
   if (orbit.isTankerHoldingFarmMob && !orbit.isNearDefaultSpot) {
-    const holdRadius = radiusTotal * orbit.speedRate;
+    const holdRadius = getHoldWalkRadius(target, radiusTotal, orbit.speedRate);
     return { x: target.x + holdRadius * cosA, y: target.y + holdRadius * sinA };
   }
   return {

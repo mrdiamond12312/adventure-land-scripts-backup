@@ -436,6 +436,12 @@ function getWitchGatherPlan() {
   return spot && { kind: plan.kind, mtype, spot, isHeld };
 }
 
+/** @returns {{kind: string, mtype: string, spot: Object, isHeld?: boolean}|undefined} this slot's gathering, unless an open crypt or a cave run holds the fighters */
+function getFighterWitchPlan() {
+  if (get("cryptInstance") || (USE_CAVE_STRATEGY && isCaveUnderway())) return;
+  return getWitchGatherPlan();
+}
+
 // Trick or Treat
 
 /** Realm hour the knocking starts each day */

@@ -622,6 +622,7 @@ function getMonstersToCBurst() {
     .filter(
       (mob) =>
         mob.type === "monster" &&
+        !mob.immune &&
         is_in_range(mob, "cburst") &&
         !MELEE_IGNORE_LIST.includes(mob.mtype) &&
         calculateDamage(mob, partyTanker) < MAX_MOB_DPS &&
