@@ -1,4 +1,4 @@
-const MAX_TARGET = 10;
+const MAX_TARGET = 20;
 const BLAST_DIVISOR = 3.6;
 const BLAST_RADIUS = getMaxBlastRadius() || 17;
 const TARGET_TO_SWITCH_TO_BLASTER_WEAPON = 2;
@@ -695,8 +695,7 @@ function restoreMpChance(restore, target) {
 function castMpCost(mp, stats, restore, target) {
   const chance = restoreMpChance(restore, target);
   return (
-    (1 - chance) * mp * (1 - (stats.mp_reduction ?? 0) / 100) -
-    chance * 2 * mp
+    (1 - chance) * mp * (1 - (stats.mp_reduction ?? 0) / 100) - chance * 2 * mp
   );
 }
 
@@ -889,7 +888,8 @@ function getNextPoisonTarget(mobs) {
 function poisonFrequencyScale(projected, picks, worn) {
   const { duration, frequencym } = G.conditions.poisoned;
   const chance = gearAbilityWith(picks, "poison", worn).attr0 / 100;
-  const uptime = 1 - Math.exp((-duration / 1000) * projected.frequency * chance);
+  const uptime =
+    1 - Math.exp((-duration / 1000) * projected.frequency * chance);
   return 1 - uptime * (1 - frequencym);
 }
 
@@ -1571,8 +1571,7 @@ function swapUntilImpact(
 ) {
   // Loot luck rolls at the kill, which is the impact
   const swappedSlots = [...equips.map(({ slot }) => slot), freeSlot];
-  if (swappedSlots.some((slot) => slot && hasLuck(getServerSlot(slot))))
-    return;
+  if (swappedSlots.some((slot) => slot && hasLuck(getServerSlot(slot)))) return;
 
   const characterAtkCycleMs = 1000 / character.frequency;
   const swapPenaltyMs = equips.length * EQUIP_PENALTY_MS;
@@ -1684,11 +1683,7 @@ function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
  * @returns {Promise|undefined} the swap promise, or undefined if not swapping
  */
 function maybePaleclawSwap(targetToAttack, { swapFrom, restore }) {
-  if (
-    !canSwapUntilImpact() ||
-    character.s.frenzied ||
-    !isHoldingOnly(swapFrom)
-  )
+  if (!canSwapUntilImpact() || character.s.frenzied || !isHoldingOnly(swapFrom))
     return;
 
   const paleclaw = findMaxLevelItem("paleclaw");
