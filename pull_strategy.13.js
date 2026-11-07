@@ -57,9 +57,14 @@ async function usePullSkills() {
         (mob) => is_in_range(mob, "agitate") && isAgitatable(mob),
       );
 
+      // The tanker absorbs the pull off us, so it is judged on them
+      const pullHolder = isAssignedAsTanker()
+        ? character
+        : get_player(TANKER) ?? character;
+
       const formidableMonsterAppeared = mobsInAgitateRange.find(
         (mob) =>
-          calculateDamage(mob, character) > MAX_MOB_DPS ||
+          calculateDamage(mob, pullHolder) > MAX_MOB_DPS ||
           MELEE_IGNORE_LIST.includes(mob.mtype),
       );
 
@@ -82,7 +87,6 @@ async function usePullSkills() {
 
       // Basic Requirements
       const canUseAgitate =
-        isAssignedAsTanker() &&
         !havePulledEnoughMobs &&
         !formidableMonsterAppeared &&
         character.mp >= warriorAoeMpFloor() &&
@@ -137,7 +141,7 @@ async function usePullSkills() {
       // Damage Check
       const currentAggroDamage = mobsInAgitateRange
         .filter((mob) => !partyMems.includes(mob.target))
-        .reduce((prev, curr) => prev + calculateDamage(curr, character), 0);
+        .reduce((prev, curr) => prev + calculateDamage(curr, pullHolder), 0);
 
       const damageIsAcceptable =
         currentAggroDamage < healReceivableAmount - partyDmgRecieved;
