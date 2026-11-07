@@ -193,7 +193,8 @@ const WITCH_FLUSH_LEAD_MS = 60_000;
 /** How long an untouched board waits, once gathering is over, before the day's last round brews alone */
 const WITCH_QUIET_MS = 2 * 60_000;
 
-const WITCH_BREW_SPACING_MS = 3_000;
+/** How long a refused brew waits before the next try */
+const WITCH_BREW_RETRY_MS = 500;
 
 let witchBoardSeen = { state: undefined, at: 0 };
 
@@ -322,13 +323,13 @@ async function brewWitchCipher() {
   const result = await brew(mix).catch((e) => e);
   console.log(`[witchcipher] ${mix.join(",")}:`, result);
 
-  nextWitchBrewAt = Date.now() + WITCH_BREW_SPACING_MS;
-
   if (result?.success) {
     if (result.cracked && result.parcels >= G.events.witchcipher.payout.crack)
       set("witchCrackedDay", getUtcDay());
   } else if (WITCH_FINAL_REJECTIONS.includes(result?.reason)) {
     finishWitchBrewing();
+  } else {
+    nextWitchBrewAt = Date.now() + WITCH_BREW_RETRY_MS;
   }
   return true;
 }

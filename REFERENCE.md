@@ -4802,10 +4802,16 @@ the window closing mid-walk, or a first `brew` refused for `distance`.
 Now `canBrewWitchCipher` opens `WITCH_STAGE_LEAD_MS` (4 min) before `gather_end`, and
 `attendWitchGathering` hands over its `WITCH` duty then. `brewWitchCipher` does one step per
 tick: retrieve once per round, walk until within `NPC_REACH` (380 in basic_merchant.5.js, shared
-with Xyn; the server's `B.sell_dist` is 400 for every NPC), wait for a narrow board (see below), then brew once every `WITCH_BREW_SPACING_MS`, so
-`server.status` shows our last mix before the next pick (a mix already on the board pays 0).
+with Xyn; the server's `B.sell_dist` is 400 for every NPC), wait for a narrow board (see below), then brew on the next tick after each success.
+`server.status` already shows our last mix when `brew()` resolves: `witch_cipher_brew` resends
+the bag and `player.witchcipher`, then `witch_cipher_publish()` → `broadcast_e()` emits
+`server_info` synchronously, all before it returns, and the socket keeps that order. So the next
+pick never sees a stale board (a mix already on the board pays 0). Until 2026-11-08 every brew
+waited 3s, which left our clues on the shared board for others to use before our next mix.
+`merchantAttackLoop` reschedules with `getLoopInterval()`, which can be 1ms, so a refusal waits
+`WITCH_BREW_RETRY_MS` (500ms) rather than resending every round trip.
 Only `witchcipher_not_live` / `_no_mixes` / `_elsewhere`, or no affordable mix left, write
-`witchBrewDone`. Any other refusal just waits for the next spacing.
+`witchBrewDone`. Any other refusal just waits out the retry.
 
 The ingredients are `material`s, so the bank store puts them away through
 `!isEquipable && !isBagSupply` (`IGNORE` only covers equipables). The retrieve happens once per
@@ -5181,8 +5187,11 @@ from ≤ N candidates, ours cracks 99–100% for: N=8, 2.0 mixes; N=32, 2.8; N=6
   and `moveHome()` first if he is in the bank, e.g. right after the retrieve.
   `basic_merchant.5.js` already keeps the computer in the bag. `haveAComputer` used to test
   `ancientcomputer`, which is not an item id, and missed `supercomputer`.
-- **Strike**: while `cipher.possible` ≤ `WITCH_STRIKE_POSSIBLE` (32), he brews every
-  `WITCH_BREW_SPACING_MS`. His own mixes keep the board narrow, so he keeps going until it cracks.
+- **Strike**: while `cipher.possible` ≤ `WITCH_STRIKE_POSSIBLE` (32), he brews back to back, one mix per brew round trip. His own mixes keep the board narrow, so he
+  keeps going until it cracks. From ≤ 32 he posts about 1.8 clues before cracking (2.2 from ≤ 64),
+  each on the board for only a round trip before his next mix. Since 2026-11 every realm runs
+  at most one round per UTC day, so every round is the day's last: when nobody narrows the board,
+  the flush below still spends all 5, whatever the gate.
   If another crack resets the board, `possible` jumps past the gate and he stops. A higher gate
   strikes sooner, before other players do, and still leaves mixes for a second board. Before the
   day's crack, a strike brews only candidates. With no affordable candidate he waits instead of
