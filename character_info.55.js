@@ -12,6 +12,8 @@ function characterStatus(entity) {
     mp: entity.mp,
     max_mp: entity.max_mp,
     frequency: entity.frequency,
+    explosion: entity.explosion,
+    blast: entity.blast,
     map: entity.map,
     in: entity.in,
     x: entity.x,

@@ -120,8 +120,8 @@ function isAllyShooting(player) {
   return !!shotAt && Date.now() - shotAt < 2000 / player.frequency;
 }
 
-/** @returns {number} the ally's attack cycle with energize */
-function allyEnergizedMs(player) {
+/** @returns {number} the player's attack cycle with energize */
+function cycleWithEnergizeMs(player) {
   const { frequency } = G.conditions.energized;
   const boost = (frequency / 100) * conditionFrequencyScale(player);
   return 1000 / (player.frequency + boost);
@@ -133,7 +133,7 @@ function isAllyPenaltyBlocking(player) {
   if (!penaltyUntil || !lastShotAt) return false;
 
   const normalReady = lastShotAt + 1000 / player.frequency;
-  const energizedReady = lastShotAt + allyEnergizedMs(player);
+  const energizedReady = lastShotAt + cycleWithEnergizeMs(player);
   const saved = normalReady - Math.max(energizedReady, penaltyUntil);
   return saved < (normalReady - energizedReady) * ENERGIZE_MIN_SAVED_SHARE;
 }
@@ -161,20 +161,21 @@ function getEnergizeDamageTarget() {
 
 const isSelfEnergizeTarget = () => getEnergizeDamageTarget() === character;
 
-/** @returns {boolean} whether energize landing now shortens the ally's cooldowns the most */
+/** @returns {boolean} whether energize landing now comes after the ally's swaps and before his shot */
 function isAllyEnergizeDue(player) {
   const shotAt = getCharacterInfo(player.name)?.lastShotAt;
   if (!shotAt) return true;
 
   const { duration } = G.conditions.energized;
-  const energizedMs = allyEnergizedMs(player);
+  const energizedMs = cycleWithEnergizeMs(player);
+  const normalMs = 1000 / player.frequency;
   const earliest = Math.max(
-    0,
+    normalMs - energizeLeadMs(player),
     (energizedMs <= duration ? 2 * energizedMs : energizedMs) -
       duration +
       ENERGIZE_BUFF_MARGIN_MS,
   );
-  const latest = energizedMs - character.ping;
+  const latest = normalMs - character.ping;
   if (latest <= earliest) return true;
 
   const elapsed = Date.now() - shotAt + character.ping / 2;
@@ -193,15 +194,15 @@ function isMageShotInFlight() {
   );
 }
 
-/** @returns {number} ms early a shot passes with self-energize */
-function energizeLeadMs() {
-  const boost =
-    (G.conditions.energized.frequency / 100) *
-    conditionFrequencyScale(character);
+/**
+ * @param {Object} [player]
+ * @returns {number} ms before the player's normal shot that energize already makes it ready
+ */
+function energizeLeadMs(player = character) {
   return Math.max(
     0,
-    1000 / character.frequency -
-      1000 / (character.frequency + boost) -
+    1000 / player.frequency -
+      cycleWithEnergizeMs(player) -
       ENERGIZE_LEAD_MARGIN_MS,
   );
 }

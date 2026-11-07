@@ -1679,9 +1679,18 @@ on the ranger's crossbow.
   **Network:** a self-energize shares a socket with its shot, so lag can't separate them. An ally's can't
   fire with the shot: it lands, then he needs a round trip to hear and shoot. So `isAllyEnergizeDue` times
   it off his published `lastShotAt`, taking the mage's ping for his, since our bots share a connection.
-  It lands in the window where both his fast cycles fit in the 800ms buff (`2 × energized − 800`, plus
-  100ms, since a cooldown ending as the buff does gains nothing) and he still has a round trip left
-  (`energized − ping`). A frozen cycle is too long for two, so there it's `energized − 800 + 100`. Past that much lag the window closes and it goes any
+  **It lands late in his cycle (2026-11-07, user's idea):** no more than `energizeLeadMs(player)` before
+  his normal shot (`normal − energized − 20`, about 228ms on fireblades) and at least a ping before it.
+  Landing early, the mage decided before the swaps existed: the warrior's candy restore can't go out until
+  the swap-in's penalty clears (about 260–360ms in), then energize's shorter cooldown left no budget for
+  it, so he'd fire with the canes still on. Cleave could also spend the penalty right after the decision.
+  Now the restore has gone out on the normal budget and the penalty check reads the whole swap. In the
+  blind ping his budget is down to one or two equips and below cleave's bar at about 1.33–2 attacks/s,
+  though a late gear equip can still slip in. The price is that the first fast cycle is cut by about
+  `20ms + ping` (60 of 496ms saved at 40ms ping); the second is whole. The energize loop polls every
+  100ms, so a window narrower than that (frenzied at 100ms ping: 23ms) can miss a cycle and wait for the next.
+  Both fast cycles must still fit in the 800ms buff (`2 × energized − 800 + 100`, or `energized − 800 + 100`
+  on a frozen cycle too long for two). Past that much lag the window closes and it goes any
   time. **An ally's penalty:** he can't shoot until `penalty_cd` clears, so a shorter cooldown is wasted
   while it runs (user's catch). `s.penalty_cd` is too late for this: the mage reads the server half a
   ping ago and energize lands half a ping later, a blind ping in which equips can still beat it there.
@@ -2733,6 +2742,16 @@ Curse is +20% damage taken and −20% damage dealt, so it is worth the party dps
 mob's dps on whoever it is actually reaching (within `range + speed`). The old highest-hp sort
 picked the mob nobody was damaging, often a straggler chasing someone at the edge of curse range.
 The condition is `cursed`, not `curse`: the old `!mob.s.curse` filter never skipped a cursed mob.
+
+**Splash goes through the main target (2026-11-07, user's catch).** `complete_attack` works out the
+main hit once, `incdmgamp` included, and each splash is that number × the neighbour's defense
+multiplier × `intensity / 100`. So a curse on the main target amps the whole splash, and a curse on a
+mob caught only by the splash adds nothing. `curseValue` multiplies each attacker's dps by
+`1 + splashShareAround`, which steers curse to the AoE pick. It reads that pick from `member.target`,
+since `change_target` sends it to the server. Calling `sortPullTargets` here would rank with the priest's
+own stats and range, and tag mobs and note growth options on his client. The server sends `explosion`
+and `blast` only to their owner, so `characterStatus` publishes them. `CURSE_HP_THRESHOLD` still applies:
+the amp ends when the main target dies, however many mobs stand around it.
 
 ## The exchange queue (`EXCHANGE_QUEUE`, merchant_exchange.23.js, 2026-09-28)
 

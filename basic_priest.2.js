@@ -227,15 +227,49 @@ function curseMpFloor() {
 }
 
 /**
+ * @param {Object} member
+ * @param {Object} mob - the member's main target
+ * @returns {number} what the member's splash around the mob adds, as a share of the main hit
+ */
+function splashShareAround(member, mob) {
+  const damageType = damageTypeOf(member);
+  const { explosion, blast } = getCharacterInfo(member.name) ?? {};
+  const intensity = damageType === "physical" ? explosion : blast;
+  if (!intensity) return 0;
+
+  const [defense] = mitigationStats(damageType);
+  return Object.values(parent.entities)
+    .filter(
+      (other) =>
+        other.type === "monster" &&
+        other !== mob &&
+        !other.dead &&
+        !other["1hp"] &&
+        distance(other, mob) < intensity / BLAST_DIVISOR,
+    )
+    .reduce(
+      (share, other) =>
+        share + (damage_multiplier(other[defense] ?? 0) * intensity) / 100,
+      0,
+    );
+}
+
+/**
  * @param {Object} mob
  * @param {string[]} prioritized
- * @returns {number} party dps on it plus its dps on one of ours
+ * @returns {number} party dps through it, splash included, plus its dps on one of ours
  */
 function curseValue(mob, prioritized) {
   const dealt = partyMems
     .map((name) => (name === character.name ? character : get_player(name)))
     .filter((member) => member && !member.rip && member.target === mob.id)
-    .reduce((total, member) => total + calculateDamage(member, mob, false), 0);
+    .reduce(
+      (total, member) =>
+        total +
+        calculateDamage(member, mob, false) *
+          (1 + splashShareAround(member, mob)),
+      0,
+    );
 
   const victim = prioritized.includes(mob.target) && get_player(mob.target);
   const isReachingVictim =
