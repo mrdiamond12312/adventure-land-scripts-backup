@@ -4715,10 +4715,10 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   box (x 700–1196) on purpose, to sit among all three spawns, and his reach of it is about 50px. The
   priest pulls from range and walks mobs back while the rest of the party follows. It applies while
   `getFighterWitchPlan` has a slot, to every kind, and stands aside for a priority boss in view.
-- **Agitate gathers for a tanking priest (2026-11-07, user's call).** `canUseAgitate` no longer needs
-  the warrior to be TANKER, anywhere. Agitate (320px) takes every free mob and any on our party, and
-  `getAbsorbTarget` then pulls them all to the priest from within 240px. Until that lands the warrior
-  holds the lot. His taunt pull stays tanker-only. The damage gates (`MAX_MOB_DPS`, damage within
+- **Agitate gathers for a tanking priest (2026-11-07, user's call).** Off tank, the warrior may agitate
+  anywhere while a priest TANKER is within absorb range (`isPullAbsorbable`, 240px), else not at all.
+  Agitate (320px) takes every free mob and any on our party, and `getAbsorbTarget` then pulls them
+  all to the priest. Until that lands the warrior holds the lot. His taunt pull stays tanker-only. The damage gates (`MAX_MOB_DPS`, damage within
   healing) read `pullHolder`, the TANKER when he can see them, since that's who ends up tanking the pull.
   His courage gate stays his own, and caps a pull at 5 physical mobs. The priest's courage isn't checked
   (`FEAR_AFFECTS_HEAL`). A fairy over 320px away is out of the pull, so it no longer stops him agitating.

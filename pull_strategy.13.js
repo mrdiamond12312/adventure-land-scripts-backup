@@ -61,6 +61,9 @@ async function usePullSkills() {
       const pullHolder = isAssignedAsTanker()
         ? character
         : get_player(TANKER) ?? character;
+      const isPullAbsorbable =
+        pullHolder.ctype === "priest" &&
+        distance(character, pullHolder) < G.skills["absorb"].range;
 
       const formidableMonsterAppeared = mobsInAgitateRange.find(
         (mob) =>
@@ -87,6 +90,7 @@ async function usePullSkills() {
 
       // Basic Requirements
       const canUseAgitate =
+        (isAssignedAsTanker() || isPullAbsorbable) &&
         !havePulledEnoughMobs &&
         !formidableMonsterAppeared &&
         character.mp >= warriorAoeMpFloor() &&
