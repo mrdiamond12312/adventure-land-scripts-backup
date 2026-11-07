@@ -76,9 +76,9 @@ async function usePullSkills() {
         mobsList.filter((mob) => mob.target === character.name).length >=
         MAX_TARGET;
 
-      // Monsters that are in range of 'agitate' but *not* currently targeting the character
-      const listOfNoTargetMonsterInRange = mobsInAgitateRange.filter(
-        (mob) => mob.target !== character.name,
+      // Mobs a pull would add: off tank, only free ones, or it takes the tanker's back
+      const listOfNoTargetMonsterInRange = mobsInAgitateRange.filter((mob) =>
+        isAssignedAsTanker() ? mob.target !== character.name : !mob.target,
       );
 
       const mobsTargetingSelf = mobsList.filter(
