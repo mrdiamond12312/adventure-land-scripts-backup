@@ -81,8 +81,8 @@ const WITCH_FLUSH_LEAD_MS = 60_000;
 /** How long an untouched board waits, once gathering is over, before the day's last round brews alone */
 const WITCH_QUIET_MS = 2 * 60_000;
 
-/** Wait after a refused brew, or after a mix that leaves the board at the strike gate or wider; a narrower board waits in proportion */
-const WITCH_BREW_SPACING_MS = 500;
+/** Wait after a refused brew, and after a mix per `WITCH_STRIKE_POSSIBLE` candidates it leaves */
+const WITCH_BREW_SPACING_MS = 400;
 
 /** A stack per ingredient, and one for the Parcels */
 const WITCH_BAG_SLOTS = WITCH_INGREDIENTS.length + 1;
@@ -311,7 +311,7 @@ async function brewWitchMix(mix) {
   const left = server.status.witchcipher?.possible ?? WITCH_STRIKE_POSSIBLE;
   nextWitchBrewAt =
     Date.now() +
-    WITCH_BREW_SPACING_MS * Math.min(1, left / WITCH_STRIKE_POSSIBLE);
+    WITCH_BREW_SPACING_MS * (left / WITCH_STRIKE_POSSIBLE);
 }
 
 /** @returns {Promise<boolean>} whether brewing owned this tick */

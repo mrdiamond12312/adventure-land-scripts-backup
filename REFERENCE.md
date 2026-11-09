@@ -4805,8 +4805,9 @@ Now `canBrewWitchCipher` opens `WITCH_STAGE_LEAD_MS` (4 min) before `gather_end`
 `attendWitchGathering` hands over its `WITCH` duty then. `brewWitchCipher` does one step per
 tick: retrieve once per round, walk until within `NPC_REACH` (380 in basic_merchant.5.js, shared
 with Xyn; the server's `B.sell_dist` is 400 for every NPC), wait for a narrow board (see below), then brew, waiting
-`WITCH_BREW_SPACING_MS` (500ms) × min(1, `possible` / `WITCH_STRIKE_POSSIBLE`) after each success:
-500ms at the gate or wider, about 30ms at 2 candidates.
+`WITCH_BREW_SPACING_MS` (400ms) × `possible` / `WITCH_STRIKE_POSSIBLE` after each success, so
+400ms per 64 candidates left: about 1.9s at 300, 400ms at 64, about 12ms at 2, and 6.4s after a
+crack resets the board to 1024. A solo flush from a fresh board waits about 2.6s in all.
 `server.status` already shows our last mix when `brew()` resolves: `witch_cipher_brew` resends
 the bag and `player.witchcipher`, then `witch_cipher_publish()` → `broadcast_e()` emits
 `server_info` synchronously, all before it returns, and the socket keeps that order. So the next
