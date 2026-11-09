@@ -4759,7 +4759,9 @@ works from the board only when `fit` is missing. Every other player's mix is in 
 `pickWitchMix`: until the account cracks today (`witchCrackedDay`), the 50 dominates. It guesses
 only candidates, taking the lowest Σ n² over the 0..5 right-count groups (the fewest candidates
 left on average); a tie goes to the most expected right places, since those are paid. After the
-crack, any untried mix may be picked, by expected right places alone. A cracked recipe gives no
+crack, any untried mix may be picked, by expected right places alone. A tie left after that is
+broken at random (`pickBest`, reservoir style). A fixed order would pick the same mix as another
+bot running the same picker, and a mix already on the board pays 0. A cracked recipe gives no
 hint about the next: the new secret is uniform and the board resets. Simulated alone with 5 mixes
 a day from an empty board: 37% crack, ~26 Parcels a day.
 
@@ -4802,14 +4804,18 @@ the window closing mid-walk, or a first `brew` refused for `distance`.
 Now `canBrewWitchCipher` opens `WITCH_STAGE_LEAD_MS` (4 min) before `gather_end`, and
 `attendWitchGathering` hands over its `WITCH` duty then. `brewWitchCipher` does one step per
 tick: retrieve once per round, walk until within `NPC_REACH` (380 in basic_merchant.5.js, shared
-with Xyn; the server's `B.sell_dist` is 400 for every NPC), wait for a narrow board (see below), then brew on the next tick after each success.
+with Xyn; the server's `B.sell_dist` is 400 for every NPC), wait for a narrow board (see below), then brew, waiting
+`WITCH_BREW_SPACING_MS` (500ms) × min(1, `possible` / `WITCH_STRIKE_POSSIBLE`) after each success:
+500ms at the gate or wider, about 30ms at 2 candidates.
 `server.status` already shows our last mix when `brew()` resolves: `witch_cipher_brew` resends
 the bag and `player.witchcipher`, then `witch_cipher_publish()` → `broadcast_e()` emits
 `server_info` synchronously, all before it returns, and the socket keeps that order. So the next
 pick never sees a stale board (a mix already on the board pays 0). Until 2026-11-08 every brew
 waited 3s, which left our clues on the shared board for others to use before our next mix.
-`merchantAttackLoop` reschedules with `getLoopInterval()`, which can be 1ms, so a refusal waits
-`WITCH_BREW_RETRY_MS` (500ms) rather than resending every round trip.
+`merchantAttackLoop` reschedules with `getLoopInterval()`, which can be 1ms, so a refusal waits the full
+`WITCH_BREW_SPACING_MS` rather than resending every round trip.
+The wait shrinks with the board because a clue on a wide board helps others little and the wait
+can let their mixes narrow it for free, while a clue on a narrow one nearly hands them the answer.
 Only `witchcipher_not_live` / `_no_mixes` / `_elsewhere`, or no affordable mix left, write
 `witchBrewDone`. Any other refusal just waits out the retry.
 
@@ -5187,9 +5193,14 @@ from ≤ N candidates, ours cracks 99–100% for: N=8, 2.0 mixes; N=32, 2.8; N=6
   and `moveHome()` first if he is in the bank, e.g. right after the retrieve.
   `basic_merchant.5.js` already keeps the computer in the bag. `haveAComputer` used to test
   `ancientcomputer`, which is not an item id, and missed `supercomputer`.
-- **Strike**: while `cipher.possible` ≤ `WITCH_STRIKE_POSSIBLE` (32), he brews back to back, one mix per brew round trip. His own mixes keep the board narrow, so he
-  keeps going until it cracks. From ≤ 32 he posts about 1.8 clues before cracking (2.2 from ≤ 64),
-  each on the board for only a round trip before his next mix. Since 2026-11 every realm runs
+- **Strike**: while `cipher.possible` ≤ `WITCH_STRIKE_POSSIBLE` (64), he brews with the shrinking wait above. His own mixes keep the board narrow, so he keeps going
+  until it cracks. From ≤ 64 he cracks within 5 mixes ~99% of the time (3.2 mixes on average), as
+  reliably as from ≤ 32 (2.8); from ≤ 128 that drops to ~94%. The crack bonus is per account, so
+  others cracking doesn't take it, but it does reset a board they narrowed for him, so once the
+  board is narrow enough to crack reliably he strikes rather than waiting for more clues.
+  The same gate holds during gathering (a separate 16 was tried briefly on 2026-11-09): he brews
+  back to back, so his clues are only exposed for seconds unless he misses (~1%), and waiting for
+  gathering to end only gives others time to reset a narrowed board. Since 2026-11 every realm runs
   at most one round per UTC day, so every round is the day's last: when nobody narrows the board,
   the flush below still spends all 5, whatever the gate.
   If another crack resets the board, `possible` jumps past the gate and he stops. A higher gate
