@@ -308,6 +308,7 @@ function findProbeItemSlot(target) {
 
 /** @param {boolean} [all=false] also sell the ones still worth a scroll */
 async function sellProbeItems(all = false) {
+  if (isFailstacking()) return;
   const sales = [];
   character.items.forEach((item, slot) => {
     if (item?.name !== LUCKY_SLOT_PROBE_ITEM || item.l) return;

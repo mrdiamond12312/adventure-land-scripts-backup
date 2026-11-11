@@ -5608,3 +5608,76 @@ Reading is floor-free, so the second floor only re-read the same packs.
   warm cache. The Witch reads switched to `isBankKnown` (stock publishing, attending, packing,
   the Parcels-room store): all of them walk to the bank before acting on it. `isMerchantBusy`
   (merchant_frenzinesss.100.js) and the scout still wait for the real trip on purpose.
+
+## Grace planning for listed upgrades (`merchant_grace.56.js`, 2026-11-11)
+
+Untested in-game. Built from the server source (`node/server.js` upgrade handler,
+`design/upgrades.js`) and checked against live `G.upgrades`, which matches.
+
+**What the server does.** For an upgrade to level `n` with base chance `p`:
+
+- Grace number `N = max(0, min(n+1, item.grace + min(3, p.ugrace[n]/4.5) + igrace) +
+  min(6, S.ugrace[n]/3) + p.ograce/3.2)`, then `g = N * (p/n + 0.001)`. `igrace` is +1 / -1 / -2
+  by the item's level 0 grade.
+- A primling (offering grade 1) against the item's *current* grade: grade 0 `1.5p + 1.2g`,
+  grade 1 `1.4p + g`, grade 2 `1.15p + g/3.2`. No offering: `p + max(0, g/4.8 - 0.4/(n-0.999)^2)`,
+  so grace is nearly worthless without one.
+- A scroll one grade above the item (`n <= 10`) turns `p` into `1.2p + 0.01` first and lifts the
+  cap from `min(p+0.24, 2p)` to `min(p+0.36, 3p)`.
+- A primling with no scroll adds a flat +0.5 `item.grace` in 1s (+1 with a stat scroll, on items
+  that take one; not used here).
+- `p.ugrace[n]` / `S.ugrace[n]` (personal / realm-wide) gain 1 per fail at `n`, and a fail at
+  `n+1` also adds 1 to level `n` (2 when `n+1 >= 8`). **Any** success at `n` zeroes both for `n`.
+- `p.ograce` gains 0.6 per failed primling upgrade, is cut to a quarter by a primling upgrade
+  success and to zero by a primling compound success.
+- `item.grace`, `ugrace` and `ograce` never reach the client. `upgrade(item, scroll, offering,
+  true)` does: it returns the real chance and `item.grace` and consumes nothing.
+
+**Why it is a planner and not a rule.** At 5m a primling, feeding is rarely worth it: a fed
+primling adds `0.5 * (p/n + 0.001)`, under 1% on a +7 high-grade item, so it only pays once an
+attempt is worth roughly 100m. A fodder fail adds about the same grace (1/4.5 + 1/3) for a ~250k
+vendor helmet at +7. So the order that falls out is failstack first, one primling on the real
+attempt, feeds only on very expensive items. Without a primling the stack is divided by 4.8 and
+only pays on dearer items — the planner decides, nothing is hard-coded.
+
+**How it runs.** `findAndUpgrade` hands an item to `planGraceStep` when `UPGRADE_CONFIG` lists it
+with `graceFromLevel` at or under its level and no craft is climbing it. Each tick:
+
+1. One calculate-only upgrade (same-grade scroll, plus a primling if one is on hand) gives the
+   chance; `estimateGraceNum` inverts the model to the grace number, hidden counters included.
+2. `planGraceUpgrade` compares gold per success for: upgrade now (scroll grade or grade + 1, with
+   or without a primling), feed one primling first, or failstack first. Lowest wins.
+3. Stack: `runFailstackStep` buys/climbs a `helmet` and fails it at the item's next level. A helmet
+   that gets through is tried once more (that fail still feeds the level below and risks nothing),
+   then sold. The gate `gain >= risk` weighs a fail's gain against a success wiping the stack —
+   the realm's stack included — so an already-warm level is upgraded on, not stacked.
+4. The lookahead (`FAILSTACK_LOOKAHEAD`) is there for the no-primling case, where the chance does
+   not move at all until grace clears the `0.4/(n-0.999)^2` offset.
+
+Feedback, since the caps are hidden too: a feed that did not move the chance marks that copy
+capped (`graceFeedCapped`). A fodder fail is always assumed to add the full 0.56
+(`FAILSTACK_GRACE`); measuring what it really added was cut for brevity (the user's call), so a
+capped realm counter can cost a few wasted helmets. `stackFails` stops the stack at 18 own fails
+without a success.
+
+**Worth** (`getItemWorth`) is what losing the copy costs: `UPGRADE_CONFIG[name].value` (level 0
+gold, or `{ level: gold }`), else the vendor price, else the recipe (ingredients priced the same
+way, plus the craft cost), each climbed to the copy's level on plain scrolls; anything else is
+`item_value(item) * 2`. The config shape follows earthiverse's `ItemConfig` (one object per
+item); his planner is the same cost-per-success idea but assumes zero pity grace.
+
+**Things that look odd but are meant.**
+
+- `helmet` is both the lucky-slot probe item and the fodder. `sellProbeItems` stands down while
+  `isFailstacking()`, and `sellStaleFodder` (when `findAndUpgrade` has nothing) only sells helmets
+  at or above the probe's own max level.
+- `firestars` grades are `[0,4,10,12]`: rare from +4, so it needs `scroll2` and a primling counts
+  for little on it. The other fiery weapons are `[0,8,10,12]`.
+- Compounds have no failstack. The compound formula reads the three copies' grace and `p.ograce`
+  only (`0.027 * (sum + 0.5 + ograce)` with an offering, `0.007 * (sum + ograce)` without);
+  `cgrace` is initialised and never used, a scroll-less feed is refused for anything not
+  upgradeable, and a plain failed compound moves no counter. Raising `ograce` on purpose costs a
+  primling per fail, so the only free lever is timing: a listed set (`graceFromLevel`, same
+  config) always takes a primling and `shouldHoldCompound` keeps it back until the calculate-only
+  chance reaches what `COMPOUND_WARM_OGRACE` (1.2) would give, or `COMPOUND_HOLD_MS` (1h) passes.
+  A set already at its cap reads warm at once. Unlisted sets keep the `isRareItem` rule.

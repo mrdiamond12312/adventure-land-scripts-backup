@@ -590,15 +590,23 @@ async function findAndCompound() {
       break;
     }
 
-    await ensureOffering(isRareItem);
+    const isListed = isGraceCompound(item, targeted);
+    const wantsPrimling = isRareItem || isListed;
+    await ensureOffering(wantsPrimling);
     // Scrolls and offerings come out of the bank, but it refuses the compound
     if (isInBank()) break;
-    activateMassProduction();
 
-    const offeringSlot = getOfferingSlot(isRareItem);
+    const offeringSlot = getOfferingSlot(wantsPrimling);
     const offeringReady =
-      !havePrimlingInBank || !isRareItem || offeringSlot !== undefined;
+      !havePrimlingInBank || !wantsPrimling || offeringSlot !== undefined;
     if (!offeringReady) continue;
+    if (
+      isListed &&
+      offeringSlot !== undefined &&
+      (await shouldHoldCompound(compoundSlots, scrollSlot, offeringSlot))
+    )
+      continue;
+    activateMassProduction();
 
     return compound(...compoundSlots, scrollSlot, offeringSlot).catch(() => {});
   }
@@ -674,7 +682,7 @@ async function findAndUpgrade() {
     }
   }
 
-  if (itemIndex === -1) return;
+  if (itemIndex === -1) return sellStaleFodder();
 
   const item = character.items[itemIndex];
   const itemName = item.name;
@@ -689,40 +697,47 @@ async function findAndUpgrade() {
       selectedGrade >= 2);
   const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
 
-  const scrollSlot = await ensureScroll(
-    `scroll${selectedGrade}`,
-    selectedGrade,
-  );
-  if (scrollSlot === -1) return;
+  let scrollSlot;
+  let offeringSlot;
+  if (isGraceUpgrade(item, selectedTargeted)) {
+    const step = await planGraceStep(itemIndex);
+    if (step.scrollSlot === undefined) return step.sent;
+    ({ scrollSlot, offeringSlot } = step);
+  } else {
+    scrollSlot = await ensureScroll(`scroll${selectedGrade}`, selectedGrade);
+    if (scrollSlot === -1) return;
 
-  await ensureOffering(isRareItem);
-  // Scrolls and offerings come out of the bank, but it refuses the upgrade
-  if (isInBank()) return;
+    await ensureOffering(isRareItem);
+    // Scrolls and offerings come out of the bank, but it refuses the upgrade
+    if (isInBank()) return;
+
+    offeringSlot = getOfferingSlot(isRareItem);
+    if (havePrimlingInBank && isRareItem && offeringSlot === undefined) return;
+  }
+
   const production = getLeakSafeProduction(item);
   if (production) activateMassProduction(production === "pp");
 
-  const offeringSlot = getOfferingSlot(isRareItem);
-  if (!havePrimlingInBank || !isRareItem || offeringSlot !== undefined) {
-    await upgradeInLuckySlot(itemIndex, scrollSlot, offeringSlot)
-      .then(async (e) => {
-        if (!e?.success) return;
+  await upgradeInLuckySlot(itemIndex, scrollSlot, offeringSlot)
+    .then(async (e) => {
+      if (!e?.success) return;
+      noteUpgradeSuccess(e.level);
 
-        if (e.level > (selectedHighestLevel?.level ?? 0)) {
-          itemsHighestLevel[itemKey] = {
-            level: e.level,
-            quantity: 1,
-            ...item_info({ name: itemName }),
-          };
-        }
+      if (e.level > (selectedHighestLevel?.level ?? 0)) {
+        itemsHighestLevel[itemKey] = {
+          level: e.level,
+          quantity: 1,
+          ...item_info({ name: itemName }),
+        };
+      }
 
-        if (
-          !selectedTargeted &&
-          e.level >= (selectedHighestLevel?.level ?? 0) - 1
-        ) {
-          storeToBankFloor(findMaxLevelBagSlot(itemKey));
-        }
-      })
-      .catch(() => {});
-    return true;
-  }
+      if (
+        !selectedTargeted &&
+        e.level >= (selectedHighestLevel?.level ?? 0) - 1
+      ) {
+        storeToBankFloor(findMaxLevelBagSlot(itemKey));
+      }
+    })
+    .catch(() => {});
+  return true;
 }

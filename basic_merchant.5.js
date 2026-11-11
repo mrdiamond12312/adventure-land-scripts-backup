@@ -12,6 +12,7 @@ if (parent.caracAL) {
     "adventure-land-scripts-backup/merchant_scout.29.js",
     "adventure-land-scripts-backup/merchant_lucky_slot_finder.30.js",
     "adventure-land-scripts-backup/merchant_cavalry.35.js",
+    "adventure-land-scripts-backup/merchant_grace.56.js",
   ]);
 } else {
   load_code(10);
@@ -26,6 +27,7 @@ if (parent.caracAL) {
   load_code(29);
   load_code(30);
   load_code(35);
+  load_code(56);
 }
 
 // Global Vars

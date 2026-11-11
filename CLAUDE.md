@@ -167,6 +167,10 @@ Merchant entry script:
                               (probeLuckySlot runs after an idle upgradeInv; exportLuckySlotTally)
     merchant_cavalry.35.js   tags level 3+ oneeyes from range and calls the cavalry on them
                               (cavalryOneeyeLoop; callCavalry keeps the account cooldown in set())
+    merchant_grace.56.js     grace planning for listed upgrades: UPGRADE_CONFIG (item worth,
+                              graceFromLevel), PRIMLING_VALUE, the server chance model, and the
+                              feed / failstack / upgrade pick by gold per success (planGraceStep,
+                              called from upgradeInv)
     merchant_witch.36.js     Witch's Cipher: publishes ingredient stock, stays with the gathering
                               party, brews (earlier rounds only strike a narrowing board; the
                               day's last round also spends what is left) (loaded before slot 100,
