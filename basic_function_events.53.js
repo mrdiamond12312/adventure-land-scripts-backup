@@ -313,47 +313,121 @@ function getWitchRoundKey(cipher = server.status.witchcipher) {
   return `${getCurrentServer()}:${cipher?.id}`;
 }
 
-/** @returns {boolean} whether home still runs a Witch round this UTC day, assumed so when its lineup is out of reach */
-function hasHomeWitchRoundToday() {
-  const status = isAtHomeServer()
-    ? server.status
-    : typeof getHomeRealmStatus === "function"
-      ? getHomeRealmStatus()
-      : undefined;
-  if (!status?.schedule?.events) return true;
+/** Candidates left at or below which a board is worth the day's mixes */
+const WITCH_STRIKE_POSSIBLE = 64;
 
-  const dayEnd = getUtcDayEnd();
-  return getLineup(status.schedule, ["witchcipher"]).some(
-    ({ status, at }) => status === "live" || at < dayEnd,
+/** How long a narrow board sits untouched before it counts as stalled rather than being solved */
+const WITCH_STRIKE_QUIET_MS = 20_000;
+
+/** How long before the cauldron closes the day's last round spends what is left */
+const WITCH_FLUSH_LEAD_MS = 3 * 60_000;
+
+/** @returns {{mixes_left: number, server?: string}|undefined} the account's day: live during a round here, else the hop owner's witch_cipher_info() copy once read */
+function getWitchDay() {
+  if (character.witchcipher) return character.witchcipher;
+  if (typeof refreshWitchDay !== "function") return;
+  refreshWitchDay();
+  return witchDay.mixes_left === undefined ? undefined : witchDay;
+}
+
+/**
+ * @param {string} realm e.g. "USI"
+ * @returns {boolean} whether the account can still brew today on `realm`: mixes left and no claim elsewhere; false until the day is known
+ */
+function canWitchDayBrewOn(realm) {
+  const day = getWitchDay();
+  return !!day && day.mixes_left > 0 && (!day.server || day.server === realm);
+}
+
+/**
+ * @typedef {Object} WitchRealm
+ * @property {string} key e.g. "USI"
+ * @property {{serverRegion: string, serverIdentifier: string}} realm
+ * @property {object} status that realm's server.status
+ */
+
+/** @returns {WitchRealm[]} the realms we would brew on, with fresh status, this one first; just this one without realm data */
+function getWitchRealmStatuses() {
+  const here = {
+    key: getCurrentServer(),
+    realm: { serverRegion: server.region, serverIdentifier: server.id },
+    status: server.status,
+  };
+  const realmData =
+    typeof getRealmData === "function" ? getRealmData() : undefined;
+  if (!realmData) return [here];
+
+  const others = Object.entries(realmData.realms).flatMap(
+    ([key, { region, name }]) => {
+      if (key === here.key) return [];
+      const realm = { serverRegion: region, serverIdentifier: name };
+      const status = realmData.status(key);
+      return status && isReachableRealm(realm) ? [{ key, realm, status }] : [];
+    },
   );
+  return [here, ...others];
 }
 
-/** @returns {boolean} whether today's mixes belong here: the realm the account brewed on, else home, else wherever we are once home has no round left today */
-function isWitchBrewRealm() {
-  const day = character.witchcipher;
-  if (day?.server) return false;
-  if (day?.mixes > 0) return true;
-  return isAtHomeServer() || !hasHomeWitchRoundToday();
-}
-
-/** @returns {boolean} whether today's mixes end with this round: we are abroad, or the lineup holds no later round before the UTC day ends */
+/** @returns {boolean} whether today's mixes end with `cipher`'s round: no brew realm runs a later round before its UTC day ends */
 function isLastWitchRoundOfDay(cipher) {
-  if (!isAtHomeServer()) return true;
-
   const dayEnd = getUtcDayEnd(cipher.start);
-  return !getLineup(server.status.schedule, ["witchcipher"]).some(
-    ({ status, at }) => status === "scheduled" && at > cipher.end && at < dayEnd,
+  return !getWitchRealmStatuses().some(({ key, status }) => {
+    if (!canWitchDayBrewOn(key)) return false;
+
+    const live = status.witchcipher;
+    if (
+      live?.live &&
+      live.id !== cipher.id &&
+      live.end > cipher.end &&
+      live.start < dayEnd
+    )
+      return true;
+    return getLineup(status.schedule, ["witchcipher"]).some(
+      ({ status: state, at }) =>
+        state === "scheduled" && at > cipher.end && at < dayEnd,
+    );
+  });
+}
+
+/** @returns {boolean} whether `cipher`'s round is the day's last and about to close */
+function isWitchFlushDue(cipher) {
+  return (
+    Date.now() >= cipher.end - WITCH_FLUSH_LEAD_MS &&
+    isLastWitchRoundOfDay(cipher)
   );
+}
+
+/** Per realm, the board state last seen and when it changed */
+const witchBoardsSeen = {};
+
+/** @returns {number} ms since `key`'s board last took a mix or a crack, as seen from here */
+function getWitchBoardQuietMs(key, cipher) {
+  const state = `${cipher.id}|${cipher.cracks}|${cipher.mixes}`;
+  if (witchBoardsSeen[key]?.state !== state)
+    witchBoardsSeen[key] = { state, at: Date.now() };
+  return Date.now() - witchBoardsSeen[key].at;
+}
+
+/** The board we are striking, as realm|round|cracks: our own mixes keep it moving, so its quiet is not checked */
+let witchStrikingBoard;
+
+/** @returns {boolean} whether `key`'s board is narrow and stalled, or the one we are already striking */
+function isWitchBoardWorthStriking(key, cipher) {
+  if ((cipher.possible ?? Infinity) > WITCH_STRIKE_POSSIBLE) return false;
+  if (witchStrikingBoard === `${key}|${cipher.id}|${cipher.cracks}`) return true;
+  return getWitchBoardQuietMs(key, cipher) >= WITCH_STRIKE_QUIET_MS;
 }
 
 /** @returns {boolean} whether the account can still brew in this realm's round, or get ready to */
 function canBrewWitchCipher() {
   const cipher = server.status.witchcipher;
-  if (!isWitchBrewRealm()) return false;
   if (!cipher?.live || Date.now() >= cipher.end) return false;
-  if (Date.now() < cipher.gather_end - WITCH_STAGE_LEAD_MS) return false;
-  if (!(character.witchcipher?.mixes_left > 0)) return false;
+  if (!canWitchDayBrewOn(getCurrentServer())) return false;
   if (get("witchBrewDone") === getWitchRoundKey(cipher)) return false;
+
+  const isStaged = Date.now() >= cipher.gather_end - WITCH_STAGE_LEAD_MS;
+  if (!isStaged && !isWitchBoardWorthStriking(getCurrentServer(), cipher))
+    return false;
 
   const stock = getWitchStock();
   const spare = WITCH_INGREDIENTS.reduce(
@@ -363,17 +437,14 @@ function canBrewWitchCipher() {
   return spare >= WITCH_SLOTS;
 }
 
-/** Candidates left at or below which an earlier round of the day calls the merchant over to strike */
-const WITCH_APPROACH_POSSIBLE = 128;
-
-/** @returns {boolean} whether brewing wants the merchant now: the day's last round, or an earlier one narrowing toward a strike */
+/** @returns {boolean} whether brewing wants the merchant here now: this board is worth a strike, or the day's mixes end with this round */
 function isWitchBrewDue() {
   if (!canBrewWitchCipher()) return false;
 
   const cipher = server.status.witchcipher;
   return (
-    isLastWitchRoundOfDay(cipher) ||
-    (cipher.possible ?? Infinity) <= WITCH_APPROACH_POSSIBLE
+    isWitchBoardWorthStriking(getCurrentServer(), cipher) ||
+    isLastWitchRoundOfDay(cipher)
   );
 }
 

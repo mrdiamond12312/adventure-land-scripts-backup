@@ -200,10 +200,28 @@ const BANK_IDLE_POLL_MS = 5_000;
 // State
 // ---------------------------------------------------------------------------
 
-var bankCache = undefined;
+/** Warm from the last session; the first bank visit confirms it */
+var bankCache = get("bankCache") || undefined;
 
-// Set once bankLoop's first run has walked every floor.
+// Set once bankLoop's first run has stood in the bank
 var hasVisitedBank = false;
+
+/** @returns {boolean} whether the cache can be read: confirmed this session, or warm from the last */
+const isBankKnown = () => hasVisitedBank || !!bankCache;
+
+/** How often the cache is written to storage while in the bank */
+const BANK_CACHE_PERSIST_MS = 5_000;
+
+let bankCachePersistedAt = 0;
+
+/** @param {boolean} [force] - write even within BANK_CACHE_PERSIST_MS of the last */
+function persistBankCache(force = false) {
+  if (!bankCache) return;
+  if (!force && Date.now() - bankCachePersistedAt < BANK_CACHE_PERSIST_MS)
+    return;
+  bankCachePersistedAt = Date.now();
+  set("bankCache", bankCache);
+}
 
 /** Whether no shared pack has an empty slot */
 var isBankFull = false;
@@ -226,9 +244,11 @@ async function leaveBankForSale() {
   return !isInBank();
 }
 
-/** Merges character.bank into bankCache */
+/** Merges character.bank into bankCache; the server mounts the whole bank on any floor */
 async function updateBank() {
-  if (character.bank) bankCache = { ...bankCache, ...character.bank };
+  if (!character.bank) return;
+  bankCache = { ...bankCache, ...character.bank };
+  persistBankCache();
 }
 
 /**
@@ -1491,17 +1511,17 @@ async function bankLoop() {
   let freed = 0;
 
   if (isAwaitingParcel() && !hasVisitedBank) return setTimeout(bankLoop, 5_000);
+  // A strike right after a hop goes ahead of the first bank walk
+  if (!hasVisitedBank && isWitchBrewDue()) return setTimeout(bankLoop, 5_000);
 
   // An event fight holds the duty too, so banking waits for it to end
   const lock = takeDuty(DUTY.ERRAND);
   if (!lock) return setTimeout(bankLoop, 5_000);
 
   try {
-    // First run: build item level map then fetch items
+    // First run: build item level map then fetch items; one floor reads every pack
     if (Object.keys(itemsHighestLevel).length === 0) {
-      for (const floor of Object.keys(BANK_FLOORS)) {
-        await goToBankFloor(floor, true);
-      }
+      await goToBankFloor(Object.keys(BANK_FLOORS)[0], true);
 
       hasVisitedBank = true;
 
@@ -1527,6 +1547,7 @@ async function bankLoop() {
     pulled = false;
     freed = 0;
   } finally {
+    persistBankCache(true);
     releaseDuty(lock);
     // Only real progress earns an early retry, or a stuck bag would round-trip
     // to the bank every BANK_MIN_DELAY achieving nothing

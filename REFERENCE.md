@@ -5512,3 +5512,99 @@ Compared against `12da697^`, the commit before "add all halloween events" (2026-
   owns the tick until it is done, except inside a cave run or a crypt. The merchant starts his loops
   (bank, lure, ents, cavalry, events, scouting) only after `settleHomeFirst` returns. His 750ms tick
   and skill loops run regardless.
+
+## The Witch's day goes to the first stalled narrow board on any realm (2026-11-11)
+
+A week without the 50. On 2026-11-11 the merchant flushed 5 mixes solo onto USI's fresh board at
+minute 20 and earned 5 Parcels; an observer snapshot afterwards showed USI's round had been cracked
+three times, none ours. He was feeding a faster solver: each crack resets the board, so his next mix
+faced a fresh one again (a first mix averages ~1.25 right places, hence ~5 Parcels).
+
+From the server source (`node/logic/witch_cipher.js`):
+- One claim per account per UTC day, keyed `claim:<owner>:<day>` in a collection all realms share;
+  `day` is the UTC date the round *started* on. The first brew fixes the realm; any other realm
+  then refuses with `witchcipher_elsewhere`. So the day's rounds on US, EU and ASIA (up to three,
+  read off the lineups) are three chances for one set of mixes.
+- `witch_cipher_publish` broadcasts `possible`, `mixes`, `cracks`, `gather_end`, `end` in
+  `server_info`, which the realm observers receive, so every realm's board is visible from anywhere.
+- `witch_cipher_brew` checks only live round, reach (a computer passes), not in bank, ingredients and
+  the claim: no hop-sickness check. `witch_cipher_reload` sets `player.witchcipher` on login mid-round.
+- The live server keeps a finished round in `S` until the next one, so a snapshot after a round is a
+  census of how far other players got.
+
+Census of 2026-11-11's last rounds (realm: final board / mixes after the last crack / cracks): USI
+1024/0/3, USII 80/2/1, USIII 405/1/0, USIV 9/4/3, USV 24/3/4, EUI 1024/0/1, EUII 1024/0/0, EUIII
+2/5/1, EUIV 108/2/1, ASIAI 6/5/0, ASIAII 1024/0/0. Other players crack on most realms, and the best
+boards are the ones narrowed and then abandoned by a player out of mixes (EUIII at 2): free 50s.
+
+Policy now: the day's mixes go to the first **narrow and stalled** board on any reachable realm;
+the solo flush only in the day's last reachable round, late. Simulated: solo from a fresh board
+cracks 33% (~26 Parcels); after 1 / 2 / 3 mixes by others 72% / 95% / 97% (~47 / 60 / 61 Parcels);
+with 5–8 mixes by others it drops to ~84% because they crack and reset first.
+
+- **The day** (`getWitchDay`, basic_function_events.53.js): `character.witchcipher` during a round
+  here, else the hop owner's `witchDay` from `witch_cipher_info()` (25). `canWitchDayBrewOn(realm)`
+  is false until the day is known, so nothing hops on a guess. `noteWitchDay` records each brew's
+  `mixes_left` and the realm at once, `forgetWitchDay` after a final refusal, since the 5-min refresh
+  would otherwise let him hop to a second realm after claiming the first.
+- **Brew realms** (`getWitchRealmStatuses`): every fresh, reachable realm from `ServerRealmData`,
+  this one first; just this one without realm data. `isLastWitchRoundOfDay(cipher)` looks across them
+  for a later round before the round's UTC day ends; `isWitchFlushDue` is that plus `end −
+  WITCH_FLUSH_LEAD_MS` (3 min). The quiet-timer flush is gone with `WITCH_QUIET_MS`,
+  `witchBoardSeen` and the `witchSoloRound` latch: it counted gathering minutes and always fired at
+  minute 20.
+- **Strike** (`isWitchBoardWorthStriking(key, cipher)`): `possible ≤ WITCH_STRIKE_POSSIBLE` (64, now
+  in 53) and the board untouched for `WITCH_STRIKE_QUIET_MS` (20s), tracked per realm in
+  `witchBoardsSeen` from whatever polls it (the merchant's tick here, the 10s hop loop abroad).
+  `witchStrikingBoard` (realm|round|cracks) exempts the board we are already brewing on, since our
+  own mixes keep it moving; a crack by someone else changes `cracks` and drops the latch. Racing an
+  active solver is skipped on purpose: it cracks within its next mix or two and resets the board.
+- **Brewing wants him here** (`isWitchBrewDue`): a strikable board here, or the day's last round
+  here (from `gather_end − WITCH_STAGE_LEAD_MS`, as before). `canBrewWitchCipher` also admits a
+  strikable board during gathering.
+- **Hop alone** (`getWitchHopTarget`, 25; the `witchAlone` rule, server_hop.14.js, first in
+  HOP_RULES): nothing while brewing is due here; else the narrowest stalled board elsewhere with
+  `WITCH_HOP_BUDGET_MS` (75s) left, else the day's last round elsewhere once `end − lead − budget`.
+  He has a computer, so he brews from the landing spot. `steerSplitParty` points the fighters home
+  while he brews abroad (before, with no boss target, it pulled them to his realm), and he rejoins
+  them when idle abroad. Foreign early-hop stays are gather-only for the party
+  (`getForeignEventStayMs`); the merchant brews alone. The `brewAlone` rule and `isHomeWitchBrewDue`
+  are gone: home is not preferred.
+- **After a hop** `bankLoop`'s first run (merchant_bank.17.js) yields while `isWitchBrewDue()`, like
+  it does for a pending parcel; otherwise its floor walk under `DUTY.ERRAND` would hold the strike
+  for minutes. `brewWitchCipher` no longer needs `hasVisitedBank` and skips the Parcels-room bank
+  trip before the first visit: the bag was packed before leaving.
+- **Packing** (`needsWitchPack` / `packWitchBag`): once per UTC day, all four kinds out of the bank
+  when a brewable round is live or within `WITCH_PACK_LEAD_MS` (30 min) on any brew realm
+  (`isWitchBrewAhead`), or as a fallback when brewing is possible here. `isHeldForWitchBrew` keeps
+  them in the bag on the same condition. The per-round retrieve (`witchRetrievedRound`) and the
+  per-tick bank+bag `pickWitchMix` pre-check are gone (the latter re-scored a wide board every ~1ms
+  tick).
+- **Assumption**: the merchant is the hop owner (`shouldOwnRealmSockets`, the first enabled caracAL
+  character), so `getRealmData()` serves him. With a fighter as owner there are no foreign strikes;
+  the merchant still brews on the realm he is on.
+- Pending the observer recording (`witch_recorder.js`, every realm's `possible` on change): the
+  quiet threshold, the hop budget and the flush lead are first guesses.
+- Removed names: `hasHomeWitchRoundToday`, `isWitchBrewRealm`, `isHomeWitchBrewDue`,
+  `canBrewWitchAt`, `getWitchReturnAt`, `WITCH_APPROACH_POSSIBLE`, `WITCH_QUIET_MS`,
+  `isFlushingWitchMixes`. Earlier sections above describe the home-first design they belonged to.
+
+## The bank cache is warm across restarts, and the first visit is one floor (2026-11-11)
+
+`bankCache` only ever fills from `character.bank`, which the server sends while the merchant stands
+in a bank map, and nothing restored it: `syncBankData` pushes the cache to aldata.earthiverse.ca,
+it never pulls. So every restart or hop began blind until `bankLoop`'s first run, and that run
+walked both floors. From the server source, entering any bank map runs `mount_user`, which loads
+the account's whole bank document (`player.user = R.user`) and nulls it on leaving; only the
+operations are floor-bound (`bank_retrieve`/`bank_store` need `bank_packs[pack][0] == player.map`).
+Reading is floor-free, so the second floor only re-read the same packs.
+
+- The first run visits `BANK_FLOORS`' first floor only, then goes on as before.
+- `updateBank` persists the merged cache to storage (`set("bankCache")`, throttled to
+  `BANK_CACHE_PERSIST_MS`, 5s) and `bankLoop` writes it once more when it ends. The next session
+  starts with `bankCache = get("bankCache")`. The merchant is the only character that touches the
+  bank, so after a hop the warm cache is exact; a manual bank edit is stale until the first visit.
+- `hasVisitedBank` keeps its meaning (a real visit this session) and `isBankKnown()` is that or a
+  warm cache. The Witch reads switched to `isBankKnown` (stock publishing, attending, packing,
+  the Parcels-room store): all of them walk to the bank before acting on it. `isMerchantBusy`
+  (merchant_frenzinesss.100.js) and the scout still wait for the real trip on purpose.

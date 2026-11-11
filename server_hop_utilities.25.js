@@ -494,45 +494,79 @@ async function refreshWitchDay() {
   if (info) witchDay = { ...info, at: Date.now() };
 }
 
-/** @returns {boolean} whether the party would brew at `realm`'s round rather than leave after gathering */
-function canBrewWitchAt(realm) {
-  refreshWitchDay();
-  return (
-    witchDay.mixes_left > 0 &&
-    (!witchDay.server || witchDay.server === realm) &&
-    !hasHomeWitchRoundToday()
+/** Records a brew's answer in witchDay at once, ahead of the next refresh */
+function noteWitchDay({ mixes_left, server }) {
+  witchDay = { ...witchDay, mixes_left, server, at: Date.now() };
+}
+
+/** Forgets witchDay, so the next read asks the server again */
+function forgetWitchDay() {
+  witchDay = { at: 0 };
+}
+
+/** Time for the hop and a strike before a foreign round closes */
+const WITCH_HOP_BUDGET_MS = 75_000;
+
+/** A brewable round live or starting within this keeps the ingredients in the bag */
+const WITCH_PACK_LEAD_MS = 30 * 60_000;
+
+/** @returns {(WitchRealm & {cipher: object})[]} live rounds on realms the account may still brew on, this one included */
+function getLiveWitchRounds() {
+  const now = Date.now();
+  return getWitchRealmStatuses().flatMap((entry) => {
+    const cipher = entry.status.witchcipher;
+    if (!cipher?.live || now >= cipher.end || !canWitchDayBrewOn(entry.key))
+      return [];
+    return [{ ...entry, cipher }];
+  });
+}
+
+/** @returns {{realm: HopRealm, reason: string}|undefined} another realm brewing wants the merchant on: a stalled narrow board, else the day's last round about to close */
+function getWitchHopTarget() {
+  if (isWitchBrewDue()) return;
+
+  const now = Date.now();
+  const rounds = getLiveWitchRounds().filter(
+    ({ key, cipher }) =>
+      key !== getCurrentServer() && cipher.end - now >= WITCH_HOP_BUDGET_MS,
   );
+
+  const strike = rounds
+    .filter(({ key, cipher }) => isWitchBoardWorthStriking(key, cipher))
+    .sort((lhs, rhs) => lhs.cipher.possible - rhs.cipher.possible)[0];
+  if (strike)
+    return {
+      realm: strike.realm,
+      reason: `a board at ${strike.cipher.possible} on ${strike.key}`,
+    };
+
+  const flush = rounds.find(
+    ({ cipher }) =>
+      now >= cipher.end - WITCH_FLUSH_LEAD_MS - WITCH_HOP_BUDGET_MS &&
+      isLastWitchRoundOfDay(cipher),
+  );
+  if (flush) return { realm: flush.realm, reason: "the day's last round is closing" };
 }
 
-/** Hop time budgeted ahead of home's brewing */
-const WITCH_RETURN_HOP_MS = 60_000;
+/** @returns {boolean} whether a brewable round is live, or starts within WITCH_PACK_LEAD_MS, on a realm we would brew on */
+function isWitchBrewAhead() {
+  const now = Date.now();
+  return getWitchRealmStatuses().some(({ key, status }) => {
+    if (!canWitchDayBrewOn(key)) return false;
 
-/** @returns {number} when to hop home for this round's brewing; now when its timing is unknown */
-function getWitchReturnAt(cipher) {
-  const gatherEnd =
-    cipher.gather_end ??
-    cipher.start + (G.events.witchcipher?.gathering ?? 0) * 1000;
-  if (!Number.isFinite(gatherEnd)) return Date.now();
-  return gatherEnd - WITCH_STAGE_LEAD_MS - WITCH_RETURN_HOP_MS;
+    const live = status.witchcipher;
+    if (live?.live && now < live.end) return true;
+    return getLineup(status.schedule, ["witchcipher"]).some(
+      ({ status: state, at }) =>
+        state === "scheduled" && at > now && at - now <= WITCH_PACK_LEAD_MS,
+    );
+  });
 }
 
-/** @returns {boolean} whether we are abroad, home's brewing is about to open, and nothing was brewed today */
-function isHomeWitchBrewDue() {
-  if (isAtHomeServer()) return false;
-
-  const cipher = getHomeRealmStatus()?.witchcipher;
-  if (!cipher?.live || Date.now() >= cipher.end) return false;
-  if (Date.now() < getWitchReturnAt(cipher)) return false;
-  if (get("witchBrewDone") === `${getHomeServer()}:${cipher.id}`) return false;
-
-  refreshWitchDay();
-  return witchDay.mixes_left > 0 && !witchDay.server;
-}
-
-/** @returns {number} ms the party spends on a foreign event once it starts */
-function getForeignEventStayMs(event, realm) {
+/** @returns {number} ms the party spends on a foreign event once it starts; the Witch's for gathering only, since the merchant brews alone */
+function getForeignEventStayMs(event) {
   const { duration = 0, gathering = duration } = G.events[event] ?? {};
-  const isGatherOnly = event === "witchcipher" && !canBrewWitchAt(realm);
+  const isGatherOnly = event === "witchcipher";
   return (isGatherOnly ? gathering : duration) * 1000 + EVENT_STAY_SLACK_MS;
 }
 
@@ -588,7 +622,7 @@ function getEarlyHopTarget(config) {
       if (status !== "scheduled") continue;
       if (until < HOP_SICKNESS_MS || until > config.leadMs) continue;
 
-      const stayMs = getForeignEventStayMs(event, key);
+      const stayMs = getForeignEventStayMs(event);
       if (until + stayMs + HOME_RETURN_LEAD_MS > untilHomeWindow) continue;
       if (hasClashingEventBy(at + stayMs, config)) continue;
 

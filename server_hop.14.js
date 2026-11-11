@@ -63,7 +63,7 @@ const FATIGUE_EXEMPT_BOSSES = Object.keys(HOP_BOSSES).filter(
  * @property {boolean} isIdle - no boss in the race is worth chasing
  * @property {HopSighting} [exemptTarget] - the live fatigue-exempt boss to chase
  * @property {boolean} isHome
- * @property {boolean} isWitchRoundHere - a Witch round here is gathering, or we can brew in it
+ * @property {boolean} isWitchRoundHere - a Witch round here is gathering, or brewing wants us here
  */
 
 /**
@@ -95,21 +95,22 @@ const HOP_RULES = [
       if (get("caveRun") > Date.now()) return stayPut("cave run under way");
     },
   },
+  /** The merchant alone goes where the day's mixes are worth most: a stalled narrow board, else the day's last round; the fighters stay */
+  {
+    name: "witchAlone",
+    enabled: true,
+    decide: () => {
+      if (!canHopAlone()) return;
+      const target = getWitchHopTarget();
+      if (target) return hopAloneTo(target.realm, target.reason);
+    },
+  },
   /** While the merchant brews alone, keeps the fighters on their boss and rejoins them after */
   {
     name: "splitParty",
     enabled: true,
     decide: ({ exemptTarget, candidates, isWitchRoundHere }) =>
       steerSplitParty(exemptTarget ?? candidates[0], isWitchRoundHere),
-  },
-  /** The merchant alone goes home for the Witch's brewing; the fighters stay */
-  {
-    name: "brewAlone",
-    enabled: true,
-    decide: () => {
-      if (canHopAlone() && isHomeWitchBrewDue())
-        return hopAloneTo(HOME_SERVER, "home's Witch brewing is about to open");
-    },
   },
   /** Chases a live fatigue-exempt boss (Horseman), or stays with one here */
   {
@@ -124,14 +125,12 @@ const HOP_RULES = [
         return stayPut("fatigue-exempt boss live here");
     },
   },
-  /** The Witch, once no boss is worth chasing: home's brewing, a round here, or a foreign one about to start */
+  /** The Witch, once no boss is worth chasing: a round here, or a foreign one about to start */
   {
     name: "witch",
     enabled: true,
     onlyWhenIdle: true,
     decide: ({ isHome, isWitchRoundHere }) => {
-      if (isHomeWitchBrewDue())
-        return hopTo(HOME_SERVER, "home's Witch brewing is about to open");
       if (isWitchRoundHere) return stayPut("Witch round here");
       if (isHome) return;
 
@@ -441,7 +440,7 @@ function getRaceCandidates() {
 }
 
 /**
- * Steers fighters left on another realm while the merchant brews: onto the boss they chase, home once none is left, or rejoined.
+ * Steers the fighters while the party is split: onto the boss they chase, home while the merchant brews abroad, else back together.
  * @param {HopSighting} [target] - the exempt boss, else the race's best sighting
  * @param {boolean} isWitchRoundHere
  * @returns {HopDecision|undefined} nothing when the party is not split
@@ -450,9 +449,21 @@ function steerSplitParty(target, isWitchRoundHere) {
   const plan = getPartyPlan();
   if (!plan || plan.realm === getCurrentServer()) return;
 
-  if (!target || isOnCurrentRealm(target)) {
-    const here = { serverRegion: server.region, serverIdentifier: server.id };
+  const here = { serverRegion: server.region, serverIdentifier: server.id };
+  const planRealm = { serverRegion: plan.region, serverIdentifier: plan.id };
+  if (target && isOnCurrentRealm(target))
     return pointPartyAt(here, "nothing left for the fighters elsewhere");
+
+  if (!target) {
+    if (!isWitchRoundHere)
+      return isAtHomeServer()
+        ? pointPartyAt(here, "nothing left for the fighters elsewhere")
+        : hopAloneTo(planRealm, "rejoining the party");
+
+    const rest = isAtHomeServer() ? here : HOME_SERVER;
+    return realmOf(rest) === plan.realm
+      ? stayPut("brewing while the fighters hold home")
+      : pointPartyAt(rest, "fighters home while brewing here");
   }
   if (isWitchRoundHere) {
     return realmOf(target) === plan.realm
@@ -461,7 +472,6 @@ function steerSplitParty(target, isWitchRoundHere) {
   }
   if (realmOf(target) !== plan.realm) return;
 
-  const planRealm = { serverRegion: plan.region, serverIdentifier: plan.id };
   return hopAloneTo(planRealm, "rejoining the party");
 }
 
@@ -522,7 +532,7 @@ function pickHopDecision() {
     isIdle: !candidates.length,
     exemptTarget: getExemptHopTarget(),
     isHome: isAtHomeServer(),
-    isWitchRoundHere: isWitchGathering() || canBrewWitchCipher(),
+    isWitchRoundHere: isWitchGathering() || isWitchBrewDue(),
   };
 
   for (const rule of HOP_RULES) {

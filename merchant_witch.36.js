@@ -22,7 +22,7 @@ const countWitchStock = () =>
 
 /** Shares bank and bag ingredient counts with the fighters */
 function publishWitchStock() {
-  if (hasVisitedBank) set("witchStock", countWitchStock());
+  if (isBankKnown()) set("witchStock", countWitchStock());
 }
 
 setInterval(publishWitchStock, WITCH_STOCK_PUBLISH_MS);
@@ -33,7 +33,7 @@ async function attendWitchGathering() {
 
   const plan = getWitchGatherPlan();
   const isFree =
-    hasVisitedBank &&
+    isBankKnown() &&
     !mustAbandonFight() &&
     (!isOnDuty() || isOnDuty(DUTY.WITCH) || isOnDuty(DUTY.EVENT));
 
@@ -72,15 +72,6 @@ async function attendWitchGathering() {
 /** Expected Parcels a mix that can't crack must beat: 20 ingredients make one */
 const WITCH_MIN_MIX_PARCELS = WITCH_SLOTS / 20;
 
-/** Candidates left at or below which a guess is worth one of the day's mixes */
-const WITCH_STRIKE_POSSIBLE = 64;
-
-/** How long before the cauldron closes the day's last round spends what is left */
-const WITCH_FLUSH_LEAD_MS = 60_000;
-
-/** How long an untouched board waits, once gathering is over, before the day's last round brews alone */
-const WITCH_QUIET_MS = 2 * 60_000;
-
 /** Wait after a refused brew, and after a mix per `WITCH_STRIKE_POSSIBLE` candidates it leaves */
 const WITCH_BREW_SPACING_MS = 400;
 
@@ -106,11 +97,8 @@ const WITCH_RECIPES = Array.from(
     ),
 );
 
-let witchBoardSeen = { state: undefined, at: 0 };
-
-let witchSoloRound;
-
-let witchRetrievedRound;
+/** The UTC day the ingredients were last taken out of the bank */
+let witchPackedDay;
 
 let nextWitchBrewAt = 0;
 
@@ -220,55 +208,33 @@ const spareWitchIngredients = (counts) =>
     ]),
   );
 
-/** @returns {number} ms since the board last took a mix or a crack */
-function getWitchBoardQuietMs(cipher) {
-  const state = `${cipher.id}|${cipher.cracks}|${cipher.mixes}`;
-  if (witchBoardSeen.state !== state) witchBoardSeen = { state, at: Date.now() };
-  return Date.now() - witchBoardSeen.at;
-}
-
-/** @returns {boolean} whether the day's last round spends what is left: nobody is narrowing, or it is about to close */
-function isFlushingWitchMixes(cipher) {
-  const quietMs = getWitchBoardQuietMs(cipher);
-  if (!isLastWitchRoundOfDay(cipher)) return false;
-
-  const key = getWitchRoundKey(cipher);
-  if (witchSoloRound === key) return true;
-
-  const now = Date.now();
-  const isQuiet = now >= cipher.gather_end && quietMs >= WITCH_QUIET_MS;
-  if (!isQuiet && now < cipher.end - WITCH_FLUSH_LEAD_MS) return false;
-
-  witchSoloRound = key;
-  return true;
-}
-
-/** @returns {boolean} whether the bag keeps this item for the round's brewing */
+/** @returns {boolean} whether the bag keeps this item: a round here to brew in, or one ahead on any brew realm */
 const isHeldForWitchBrew = (itemName) =>
-  WITCH_INGREDIENTS.includes(itemName) && canBrewWitchCipher();
+  WITCH_INGREDIENTS.includes(itemName) &&
+  (canBrewWitchCipher() ||
+    (typeof isWitchBrewAhead === "function" && isWitchBrewAhead()));
 
 const hasRoomForWitchParcels = () =>
   !isInvFull(0) || locate_item("witchparcel") !== -1;
 
-/** @returns {Promise<boolean>} whether the round's retrieve, or making room for the Parcels, took this tick */
+/** @returns {boolean} whether the day's ingredients are still in the bank with a brewable round ahead, or live here */
+function needsWitchPack() {
+  if (witchPackedDay === getUtcDay() || !isBankKnown()) return false;
+  if (typeof isWitchBrewAhead === "function" && isWitchBrewAhead()) return true;
+  return canBrewWitchCipher();
+}
+
+/** Takes every ingredient out of the bank for the day, with room for the Parcels */
 async function packWitchBag() {
-  const key = getWitchRoundKey();
-  if (witchRetrievedRound !== key) {
-    witchRetrievedRound = key;
-    if (isInvFull(WITCH_BAG_SLOTS))
-      await bankStoreRoutine(true).catch((e) => console.warn(e));
+  witchPackedDay = getUtcDay();
+  if (isInvFull(WITCH_BAG_SLOTS))
+    await bankStoreRoutine(true).catch((e) => console.warn(e));
 
-    const slots = WITCH_INGREDIENTS.flatMap((kind) =>
-      getItemBankSlots(kind, true, true),
-    );
-    if (slots.length)
-      await retrieveAll(slots, true).catch((e) => console.warn(e));
-    return true;
-  }
-
-  if (hasRoomForWitchParcels()) return false;
-  await bankStoreRoutine(true).catch((e) => console.warn(e));
-  return true;
+  const slots = WITCH_INGREDIENTS.flatMap((kind) =>
+    getItemBankSlots(kind, true, true),
+  );
+  if (slots.length)
+    await retrieveAll(slots, true).catch((e) => console.warn(e));
 }
 
 /** @returns {Promise<boolean>} whether getting within her reach took this tick; a computer reaches her from anywhere but the bank */
@@ -292,19 +258,32 @@ function finishWitchBrewing() {
   if (isOnDuty(DUTY.WITCH)) releaseDuty(duty);
 }
 
-/** Brews `mix`, then sets when the next one may go */
-async function brewWitchMix(mix) {
+/**
+ * Brews `mix`, then sets when the next one may go
+ * @param {string[]} mix
+ * @param {string} reason - strike or flush, and the candidates left before it, for the log
+ */
+async function brewWitchMix(mix, reason) {
   const result = await brew(mix).catch((e) => e);
-  console.log(`[witchcipher] ${mix.join(",")}:`, result);
+  const { right, fits, cracked, parcels, mixes_left, reason: refusal } =
+    result ?? {};
+  console.warn(
+    `[witchcipher] ${reason} ${mix.join(",")}:`,
+    JSON.stringify({ right, fits, cracked, parcels, mixes_left, refusal }),
+  );
 
-  if (WITCH_FINAL_REJECTIONS.includes(result?.reason))
+  if (WITCH_FINAL_REJECTIONS.includes(result?.reason)) {
+    if (typeof forgetWitchDay === "function") forgetWitchDay();
     return finishWitchBrewing();
+  }
 
   if (!result?.success) {
     nextWitchBrewAt = Date.now() + WITCH_BREW_SPACING_MS;
     return;
   }
 
+  if (typeof noteWitchDay === "function")
+    noteWitchDay({ mixes_left: result.mixes_left, server: getCurrentServer() });
   if (result.cracked && result.parcels >= G.events.witchcipher.payout.crack)
     set("witchCrackedDay", getUtcDay());
 
@@ -314,19 +293,12 @@ async function brewWitchMix(mix) {
     WITCH_BREW_SPACING_MS * (left / WITCH_STRIKE_POSSIBLE);
 }
 
-/** @returns {Promise<boolean>} whether brewing owned this tick */
+/** @returns {Promise<boolean>} whether brewing, or packing for it, owned this tick */
 async function brewWitchCipher() {
   const isFree = !isOnDuty() || isOnDuty(DUTY.WITCH);
-  if (!isWitchBrewDue() || character.rip || !isFree || !hasVisitedBank) {
+  const wantsPack = needsWitchPack();
+  if (character.rip || !isFree || (!wantsPack && !isWitchBrewDue())) {
     if (isOnDuty(DUTY.WITCH)) releaseDuty(duty);
-    return false;
-  }
-
-  const cipher = server.status.witchcipher;
-  const hasCracked = get("witchCrackedDay") === getUtcDay();
-  const spareStock = spareWitchIngredients(countWitchStock());
-  if (!pickWitchMix(cipher, spareStock, hasCracked)) {
-    finishWitchBrewing();
     return false;
   }
 
@@ -334,7 +306,16 @@ async function brewWitchCipher() {
   else if (!takeDuty(DUTY.WITCH)) return false;
 
   if (smart.moving || isAdvanceSmartMoving) return true;
-  if (await packWitchBag()) return true;
+  if (wantsPack) {
+    await packWitchBag();
+    return true;
+  }
+
+  // Packed before any hop, so a fresh landing brews from the bag ahead of its first bank walk
+  if (isBankKnown() && !hasRoomForWitchParcels()) {
+    await bankStoreRoutine(true).catch((e) => console.warn(e));
+    return true;
+  }
 
   const witch = find_npc("witch");
   if (!witch) {
@@ -344,10 +325,13 @@ async function brewWitchCipher() {
   if (await approachWitch(witch)) return true;
   if (Date.now() < nextWitchBrewAt) return true;
 
-  const isFlushing = isFlushingWitchMixes(cipher);
-  const possible = cipher.possible ?? getWitchCandidates(cipher).length;
-  if (!isFlushing && possible > WITCH_STRIKE_POSSIBLE) return true;
+  const cipher = server.status.witchcipher;
+  const key = getCurrentServer();
+  const isFlushing = isWitchFlushDue(cipher);
+  if (!isFlushing && !isWitchBoardWorthStriking(key, cipher)) return true;
 
+  const possible = cipher.possible ?? getWitchCandidates(cipher).length;
+  const hasCracked = get("witchCrackedDay") === getUtcDay();
   const mix = pickWitchMix(
     cipher,
     spareWitchIngredients(countBagWitchIngredients()),
@@ -360,6 +344,7 @@ async function brewWitchCipher() {
     return false;
   }
 
-  await brewWitchMix(mix);
+  witchStrikingBoard = `${key}|${cipher.id}|${cipher.cracks}`;
+  await brewWitchMix(mix, `${isFlushing ? "flush" : "strike"} @${possible}`);
   return true;
 }
