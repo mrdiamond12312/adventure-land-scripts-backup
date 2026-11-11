@@ -1,7 +1,7 @@
 // Warrior: gear, cleave planning, and stomp
 
-// Cleave rolls 0.1 to 0.9 of the weapon's damage per hit — this is the midpoint
-const CLEAVE_ONE_HIT_MULTIPLIER = 0.5;
+// Cleave rolls 0.1 to 0.9 of the weapon's damage per hit — this is the floor
+const CLEAVE_ONE_HIT_MULTIPLIER = 0.1;
 
 const STUN_FOCUS_LIST = ["crabxx", "grinch"];
 const WARRIOR_WEAK_MOB_TYPES = ["pinkgoo", "snowman", "wabbit"];
@@ -43,7 +43,7 @@ function getWarriorAmulet(feelingLucky, isTanker) {
 
   if ((isTanker && isBeingTargetedByMonster) || character.map === "crypt")
     return "snring";
-  return "stramulet";
+  return pickAmuletWithFrenzy("stramulet");
 }
 
 function getWarriorChest(feelingLucky, isTanker) {
@@ -258,7 +258,7 @@ function mobsLeftAfterCleave(mobs) {
     !!planCleave(currentStrategy === usePullStrategies ? "pull" : "normal");
   if (!isCleaveSwinging) return mobs;
 
-  const cleaveRange = G.skills["cleave"].range + character.xrange;
+  const cleaveRange = G.skills["cleave"].range;
   return mobs.filter(
     (mob) =>
       mob.target ||
@@ -308,15 +308,30 @@ function getPaleclawTailMs(restoreItems, cleaveWeapon) {
     : 0;
 }
 
+const CLEAVE_LEASE = "cleave";
+const CLEAVE_SLOTS = ["mainhand", "offhand", "amulet"];
+const CLEAVE_LEASE_MS = 2500;
+
 let isCleaving = false;
 async function warriorCleave(strategyName) {
-  if (is_on_cooldown("cleave") || isCleaving || isEquipingItems) return;
+  if (
+    is_on_cooldown("cleave") ||
+    isCleaving ||
+    getEquipLeases().length > 0 ||
+    isAnySlotBusy(CLEAVE_SLOTS)
+  )
+    return;
 
   const cleaveWeapon = planCleave(strategyName);
   if (!cleaveWeapon) return;
 
   isCleaving = true;
-  isEquipingItems = true;
+  takeEquipLease(
+    CLEAVE_LEASE,
+    CLEAVE_SLOTS,
+    CLEAVE_LEASE_MS,
+    CLEAVE_SLOTS.length * EQUIP_PENALTY_MS,
+  );
 
   const cleaveSet = [];
   if (cleaveWeapon.num >= 0)
@@ -343,7 +358,7 @@ async function warriorCleave(strategyName) {
 
   return Promise.allSettled([cleaveSwap, cleaveCast, restore]).finally(() => {
     isCleaving = false;
-    isEquipingItems = false;
+    dropEquipLease(CLEAVE_LEASE);
     // equipBatch bails while penalty_cd is up, so retry the restore at the
     // earliest moment it can actually equip
     setTimeout(

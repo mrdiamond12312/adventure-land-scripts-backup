@@ -97,8 +97,9 @@ basic_function.7.js          [SHARED — the core library]
   Then, based on class/config, it loads:
     strategic_fn.11.js           the shared core: damage/heal calc, mitigation, heal targeting,
                                  item_info and gear scoring (pickGearByScore, tank/heal/stat picks),
-                                 equipBatch and the impact swaps (candy canes / paleclaw,
-                                 maybeImpactSwap; maybePiercingSwap for the ranger and mage),
+                                 equipBatch, the per-slot equip leases, and the impact swap
+                                 (maybeImpactSwap: piercing, candy canes and paleclaw held until
+                                 the hit lands, picked by value for every class),
                                  party roles, attack-loop helpers,
                                  temporal surge; calculateBestItems dispatches to the class files,
                                  which it loads, all six, at its bottom:

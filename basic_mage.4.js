@@ -89,7 +89,8 @@ function getMageCast() {
             Math.max(character.mp - G.skills["magiport"].mp * 1.5, 2),
           ).catch((e) => attackErrorHandler(e)),
         castOnAttackCooldown("attack", attackTarget),
-        maybePiercingSwap(attackTarget, () => lastMageGear.gear, {
+        maybeImpactSwap(attackTarget, {
+          getWantedGear: () => lastMageGear.gear,
           mustLand: true,
           isEnergizing,
         }),

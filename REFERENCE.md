@@ -5681,3 +5681,62 @@ item); his planner is the same cost-per-success idea but assumes zero pity grace
   config) always takes a primling and `shouldHoldCompound` keeps it back until the calculate-only
   chance reaches what `COMPOUND_WARM_OGRACE` (1.2) would give, or `COMPOUND_HOLD_MS` (1h) passes.
   A set already at its cap reads warm at once. Unlisted sets keep the `isRareItem` rule.
+
+## Immunity, hunter's mark and piercing shot against the server (2026-11-12)
+
+Checked against `socket.on("skill")` / `commence_attack` in the server's `node/server.js`.
+
+- `immune` mobs (slenderman, tinyp, tiger, goblin, pinkgoo, snowman, wabbit, the four xmages)
+  refuse every skill without `pierces_immunity`, with `skill_immune`, no mp and **no cooldown**, so
+  a loop that keeps picking one retries at its floor forever. `zapperzap`, `mentalburst`, `curse`
+  and `cburst` do not pierce; `attack`, `heal`, the ranger shots, `cleave`, `taunt`, `quickstab`
+  and `quickpunch` do. `getZapTarget`, the rogue's mentalburst picks and `rogueFightModel` filter
+  on it. `scare` and `stomp` skip immune mobs server-side, so `scareAwayMobs` ignores them.
+- `huntersmark` is not an attack: the handler adds `marked` directly, immunity or not. The mark
+  target is therefore not filtered on `immune`, only on `1hp` (10% of a 1-damage hit is nothing).
+  It picks like curse, by `partyDpsThrough` (shared with `curseValue`), grow mobs and cooperative
+  bosses first.
+- `piercingshot` is 0.75x attack with 500 extra piercing on top of ours, which the server counts
+  twice. Against `armor - 2 * apiercing` it passes a plain attack near 120 (+8% at 200, +20% at
+  300, +41% at 500), not at 700. It costs its flat 64 mp, not `mp_cost`.
+- `cleave` reaches `dist < range`, no `xrange`. The safety scan in `getSafeCleaveWeapon` keeps
+  `xrange` on purpose: on a laggy ping a porcupine a step outside must still veto the swing.
+  `mobsLeftAfterCleave` uses the exact range, so agitate still takes the outer ring.
+- `CLEAVE_ONE_HIT_MULTIPLIER` is the roll's floor (0.1): at the midpoint half the "kills"
+  survived and came back aggroed.
+
+## One impact swap for every class, on slot leases (`maybeImpactSwap`, strategic_fn.11.js, 2026-11-12)
+
+Supersedes `maybeCandySwap`, `maybePaleclawSwap`, `maybePiercingSwap` and the `isEquipingItems`
+latch described in the older sections above; the timing in `swapUntilImpact` is unchanged.
+
+- **What the server reads when.** At the cast (`commence_attack`): attack, crit, critdamage,
+  blast/explosion, lifesteal, manasteal, piercing (first count) and the freeze/burn/poison/stun/
+  petrify/hex rolls. At the hit (`complete_attack`): piercing again, the sugarrush and frenzy rolls,
+  and at a kill the luck, xp and gold. So anything in the second list can be held only until impact.
+- **One picker.** `getImpactSwapIns` lists every bag item worth holding at impact, per slot it fits:
+  proc gear by `(attr0 gained) x rolls x shots the proc is worth` (`impactProcShots`: frequency x
+  duration, 24 shots for sugarrush, 2.4 for frenzy), piercing by `impactPiercingValue` (share of the
+  shot, counted once, the heal formula under cupid). Both are deltas against what the slot holds, so
+  a cane over a piercing blade pays for the piercing it drops and an ololipop's own sugarrush is not
+  counted twice. `maybeImpactSwap` takes them best first while `impactSwapFits` still clears the
+  penalty inside the shot's cooldown. Below `IMPACT_SWAP_MIN_VALUE` (1% of a shot) nothing rides.
+- **Rolls.** One per projectile with `procs`: the ranger passes its arrows by default (5shot = 5
+  frenzy rolls) and 0 for a cupid heal, the rogue 2 when the follow-up stab rides.
+- **Kill bonuses stay on.** `hasKillBonus` keeps any slot holding luck, xp or gold out of the swap
+  (it was luck only): `xpm`/`goldm` are read at the kill like `luckm`.
+- **Restore is what the slots held**, forced, by default. The warrior used to leave it to the gear
+  loop, whose penalty budget could hold the real weapon back a cycle.
+- **Leases, not a latch.** `takeEquipLease(owner, slots, ms, penaltyMs)` for the impact swap,
+  cleave and shelter. An ordinary `equipBatch` drops leased slots (both hands when either is
+  leased) and keeps `penaltyMs` out of its budget, instead of bailing whole; a holder's own equip
+  passes `preventKeySnatch: false`. Leases expire, so a lost reply cannot strand the gear loop.
+  `isGearBatchInFlight` only stops two ordinary batches overlapping. `isEquipBusy()` is the old
+  latch's meaning for the readers that want it (energize pairing, midas, the debug checks).
+  Cleave still waits on any live lease: `canAffordSwap` does not count another holder's penalty.
+- **Worn instead of swapped.** With `impactSwapRoom() === 0` (cycle too short for one slot at this
+  ping) the paleclaw can never ride, so the scorers value it worn: `wornFrenzyFrequency` in the
+  rogue and mage fight models, `pickAmuletWithFrenzy` over the warrior's and ranger's default
+  amulet (attack x frequency through `projectStatsWith`). With room they value it at 0.
+- **Mage model.** `impactSwapPiercing` still assumes the piercing weapon rides every shot. With room
+  for one slot and frenzy worth more, the paleclaw rides instead and the model reads slightly high.

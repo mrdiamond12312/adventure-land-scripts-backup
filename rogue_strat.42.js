@@ -64,10 +64,17 @@ function rogueFightModel(projected, picks, target, worn) {
   const mainhand = handWith(picks, worn, "mainhand");
   const wornModifier = classWeaponModifier(worn.mainhand).modifier;
   const modifier = classWeaponModifier(mainhand).modifier;
-  const frequency =
+  const plainFrequency =
     projected.frequency +
     (((modifier.frequency ?? 0) - (wornModifier.frequency ?? 0)) / 100) *
       conditionFrequencyScale(character);
+  const frequency =
+    plainFrequency +
+    wornFrenzyFrequency(
+      picks,
+      plainFrequency * rogueLandChance("attack", projected, target),
+      worn,
+    );
   const restore = gearAbilityWith(picks, "restore_mp", worn);
 
   const attackHit = rogueHitDamage("attack", projected, target);
@@ -86,7 +93,12 @@ function rogueFightModel(projected, picks, target, worn) {
   let budget = income - rates.attack * attackCost;
 
   const skills = [followUpFor(mainhand), "mentalburst"]
-    .filter((skill) => skill && meetsRequirements(skill, projected))
+    .filter(
+      (skill) =>
+        skill &&
+        meetsRequirements(skill, projected) &&
+        (!target.immune || G.skills[skill].pierces_immunity),
+    )
     .map((skill) => ({
       skill,
       hit: rogueHitDamage(skill, projected, target),

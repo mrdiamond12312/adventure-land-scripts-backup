@@ -211,7 +211,7 @@ function energizeLeadMs(player = character) {
 function isSelfEnergizeDue() {
   return (
     !is_on_cooldown("energize") &&
-    !isEquipingItems &&
+    !isEquipBusy() &&
     !unansweredPenaltyMs &&
     !character.s.penalty_cd &&
     isSelfEnergizeTarget()
@@ -343,13 +343,15 @@ function mageFightModel(projected, picks, target, worn, context) {
   const mainhand = handWith(picks, worn, "mainhand");
   const wornModifier = classWeaponModifier(worn.mainhand).modifier;
   const modifier = classWeaponModifier(mainhand).modifier;
-  const frequency =
+  const plainFrequency =
     projected.frequency +
     (((modifier.frequency ?? 0) -
       (wornModifier.frequency ?? 0) +
       context.energizeDelta) /
       100) *
       conditionFrequencyScale(character);
+  const frequency =
+    plainFrequency + wornFrenzyFrequency(picks, plainFrequency, worn);
   const mpCost = Math.max(
     1,
     projected.mp_cost + (modifier.mp_cost ?? 0) - (wornModifier.mp_cost ?? 0),

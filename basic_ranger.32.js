@@ -39,17 +39,18 @@ const multiShotMpThreshold = () =>
   Math.max(G.skills["3shot"].mp, G.skills["5shot"].mp) +
   huntersMarkMpThreshold();
 
-/** armor above which piercingshot out-damages a plain attack */
-const PIERCING_SHOT_MIN_ARMOR = 700;
+/** armor left after our piercing above which piercingshot out-damages a plain attack */
+const PIERCING_SHOT_MIN_ARMOR = 120;
 
 /**
  * Piercing shot shares the attack cooldown and ignores armor, so it replaces
- * the single-target attack on heavily armored mobs.
+ * the single-target attack on armored mobs.
  * @param {Object} target - the mob about to be shot
  * @returns {boolean} whether to piercingshot instead of attack
  */
 const shouldPiercingShot = (target) =>
-  target.armor > PIERCING_SHOT_MIN_ARMOR &&
+  (target.armor ?? 0) - 2 * (character.apiercing ?? 0) >
+    PIERCING_SHOT_MIN_ARMOR &&
   character.level >= G.skills["piercingshot"].level &&
   !is_on_cooldown("piercingshot") &&
   character.mp > G.skills["piercingshot"].mp + huntersMarkMpThreshold();
@@ -268,12 +269,14 @@ async function firePlan(plan) {
     promisesToAwait.push(tryMultiShot(plan.skill, plan.shotTargets));
   }
 
-  const piercingSwap = isSwappingOffCupid
+  // One frenzy roll per arrow; a cupid heal rolls none
+  const impactSwap = isSwappingOffCupid
     ? undefined
-    : maybePiercingSwap(plan.shotTargets, () =>
-        calculateRangerItems(plan.gearTargets),
-      );
-  if (piercingSwap) promisesToAwait.push(piercingSwap);
+    : maybeImpactSwap(plan.shotTargets, {
+        getWantedGear: () => calculateRangerItems(plan.gearTargets),
+        rolls: plan.mode === "cupid" ? 0 : undefined,
+      });
+  if (impactSwap) promisesToAwait.push(impactSwap);
 
   try {
     await withTimeout(Promise.allSettled(promisesToAwait), 1500);
@@ -327,7 +330,8 @@ function getRangerCast() {
 const MARK_HP_THRESHOLD = 15_000;
 
 /**
- * Beefiest unmarked mob aggroed onto the party and in mark range.
+ * Unmarked mob in mark range the party puts the most dps through, grow mobs
+ * and cooperative bosses first.
  * @returns {Object|null} the mob to mark, or null
  */
 function getHuntersMarkTarget() {
@@ -337,7 +341,7 @@ function getHuntersMarkTarget() {
   )
     return null;
 
-  const party = getAlliedNames();
+  const isPrioritized = (mob) => !!mob.cooperative || isGrowMob(mob);
 
   return (
     Object.values(parent.entities)
@@ -345,14 +349,23 @@ function getHuntersMarkTarget() {
         (entity) =>
           entity.type === "monster" &&
           !isCaveFriendly(entity) &&
-          entity.target &&
-          party.has(entity.target) &&
+          !entity.dead &&
           !entity.s?.marked &&
-          !entity.immune &&
+          !entity["1hp"] &&
           entity.hp > MARK_HP_THRESHOLD &&
           is_in_range(entity, "huntersmark"),
       )
-      .sort((lhs, rhs) => rhs.hp - lhs.hp)[0] ?? null
+      .map((mob) => ({
+        mob,
+        isPrioritized: isPrioritized(mob),
+        value: partyDpsThrough(mob),
+      }))
+      .filter(({ value }) => value > 0)
+      .sort(
+        (lhs, rhs) =>
+          Number(rhs.isPrioritized) - Number(lhs.isPrioritized) ||
+          rhs.value - lhs.value,
+      )[0]?.mob ?? null
   );
 }
 

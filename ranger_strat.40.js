@@ -219,7 +219,7 @@ function calculateRangerItems(target) {
       : getOwnedItemInfo("cave_loaded_die")
       ? "cave_loaded_die"
       : "orbofdex",
-    amulet: feelingWise ? "spookyamulet" : "dexamulet",
+    amulet: feelingWise ? "spookyamulet" : pickAmuletWithFrenzy("dexamulet"),
     shoes: feelingLucky ? "wshoes" : "wingedboots",
     gloves: feelingLucky ? "wgloves" : "supermittens",
     belt: "dexbelt",

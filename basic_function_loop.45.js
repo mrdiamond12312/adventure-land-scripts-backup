@@ -22,7 +22,7 @@ function leadSkillTimeout(data) {
     publishCharacterInfo({
       lastShotAt: Date.now() - character.ping / 2 + (data.penalty ?? 0),
     });
-  else if (!isEquipingItems) wakeActionLoop?.();
+  else if (!isEquipBusy()) wakeActionLoop?.();
 }
 
 /** @type {(() => void)|undefined} rechecks the action loop now */

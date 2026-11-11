@@ -13,8 +13,12 @@ if (parent.caracAL) {
 const originRangeRate = 0.9;
 rangeRate = originRangeRate;
 
-const CANDY_SWAP_WEAPON_ALLOW_LIST = ["fireblade", "rapier"];
-const PALECLAW_SWAP_WEAPON_ALLOW_LIST = ["vhammer", "ololipop"];
+const IMPACT_SWAP_WEAPON_ALLOW_LIST = [
+  "fireblade",
+  "rapier",
+  "vhammer",
+  "ololipop",
+];
 
 /**
  * @param {Object} entity
@@ -158,15 +162,16 @@ function getWarriorCast() {
     Promise.allSettled(
       [
         castOnAttackCooldown("attack", attackTarget),
-        // Left to currentStrategy to put the real weapons back on its own tick
+        // Cleave carries the paleclaw itself when it is about to swing
         maybeImpactSwap(attackTarget, {
-          candy: { swapFrom: CANDY_SWAP_WEAPON_ALLOW_LIST },
-          paleclaw:
-            currentStrategy === usePullStrategies &&
-            !isCleaveDue() &&
-            (!hasCleaveRoom() || character.mp < warriorAoeMpFloor())
-              ? { swapFrom: PALECLAW_SWAP_WEAPON_ALLOW_LIST }
-              : undefined,
+          weaponsFrom: IMPACT_SWAP_WEAPON_ALLOW_LIST,
+          procs: {
+            frenzy:
+              !isCleaveDue() &&
+              (currentStrategy !== usePullStrategies ||
+                !hasCleaveRoom() ||
+                character.mp < warriorAoeMpFloor()),
+          },
         }),
       ].filter(Boolean),
     );

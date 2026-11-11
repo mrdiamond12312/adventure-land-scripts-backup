@@ -33,19 +33,6 @@ const isAttackReady = () =>
   character.mp > character.mp_cost;
 
 /**
- * Puts the daggers back after a candy swap; the strategy loop would skip it
- * once the swapped hit kills the target.
- * @returns {Promise}
- */
-function restoreRogueWeapons() {
-  const { mainhand, offhand } = calculateRogueItemsCached(get_target());
-  return equipBatch(
-    { mainhand, offhand },
-    { preventKeySnatch: false, preventPenaltizeNextAttack: false },
-  );
-}
-
-/**
  * The selected target as the rogue fights it: in pull mode the best
  * party-aggroed mob, and what to swing at, it when in reach, else the best
  * party-aggroed mob that is.
@@ -120,17 +107,16 @@ function getRogueCast() {
   if (!attackTarget || attackTarget.dead || !shouldAttack(attackTarget)) return;
 
   const followUp = getFollowUp(attackTarget);
+  const isFollowUpRiding = ridesCandySwap(followUp);
 
-  // The follow-up goes after the attack, which takes invis's bonus, and lands under the cane
+  // The follow-up goes after the attack, which takes invis's bonus, and lands under the swap
   return () =>
     Promise.allSettled(
       [
         !ms_to_next_skill("invis") && use_skill("invis"),
         castOnAttackCooldown("attack", attackTarget),
-        ridesCandySwap(followUp) && castFollowUp(followUp, attackTarget),
-        maybeImpactSwap(attackTarget, {
-          candy: { restore: restoreRogueWeapons },
-        }),
+        isFollowUpRiding && castFollowUp(followUp, attackTarget),
+        maybeImpactSwap(attackTarget, { rolls: isFollowUpRiding ? 2 : 1 }),
       ].filter(Boolean),
     );
 }
@@ -239,6 +225,7 @@ function getMentalBurstKill() {
         mob.type === "monster" &&
         !mob.dead &&
         !mob.cooperative &&
+        !mob.immune &&
         !mob["1hp"] &&
         !isCaveFriendly(mob) &&
         (isMonsterEngaged(mob) || isHarmlessMob(mob)) &&
@@ -267,6 +254,7 @@ function getMentalBurstTarget() {
   if (
     target?.type !== "monster" ||
     target.dead ||
+    target.immune ||
     !is_in_range(target, "mentalburst") ||
     !shouldAttack(target) ||
     character.mp <= damageCastMpFloor("mentalburst", target)

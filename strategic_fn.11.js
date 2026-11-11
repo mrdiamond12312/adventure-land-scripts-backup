@@ -1148,6 +1148,56 @@ function explosionScore(
   return score * critRate;
 }
 
+/**
+ * @param {Object} member
+ * @param {Object} mob - the member's main target
+ * @returns {number} what the member's splash around the mob adds, as a share of the main hit
+ */
+function splashShareAround(member, mob) {
+  const damageType = damageTypeOf(member);
+  const { explosion, blast } = getCharacterInfo(member.name) ?? {};
+  const intensity = damageType === "physical" ? explosion : blast;
+  if (!intensity) return 0;
+
+  const [defense] = mitigationStats(damageType);
+  return Object.values(parent.entities)
+    .filter(
+      (other) =>
+        other.type === "monster" &&
+        other !== mob &&
+        !other.dead &&
+        !other["1hp"] &&
+        distance(other, mob) < intensity / BLAST_DIVISOR,
+    )
+    .reduce(
+      (share, other) =>
+        share + (damage_multiplier(other[defense] ?? 0) * intensity) / 100,
+      0,
+    );
+}
+
+/**
+ * @param {Object} mob
+ * @returns {number} dps our party members targeting the mob put through it, splash included
+ */
+function partyDpsThrough(mob) {
+  return partyMems
+    .map((name) => (name === character.name ? character : get_player(name)))
+    .filter((member) => member && !member.rip && member.target === mob.id)
+    .reduce(
+      (total, member) =>
+        total +
+        calculateDamage(member, mob, false) *
+          (1 + splashShareAround(member, mob)),
+      0,
+    );
+}
+
+/** @returns {boolean} whether the mob belongs to a `grow` spawn group */
+function isGrowMob(mob) {
+  return typeof getGrowthGroupOf === "function" && !!getGrowthGroupOf(mob);
+}
+
 /** @returns {boolean} whether the target is a ghost with no heal landed or in the air */
 function isUnhealedGhost(target) {
   return (
@@ -1189,7 +1239,55 @@ function findMaxLevelItem(id, offset = 0) {
   return matches[offset]?.slot ?? -1;
 }
 
-let isEquipingItems = false;
+/** An ordinary equipBatch is sent and unanswered */
+let isGearBatchInFlight = false;
+
+/** @type {Object<string, {slots: string[], until: number, penaltyMs: number}>} slots a swap holds, by owner */
+const equipLeases = {};
+
+/**
+ * Keeps the gear loop off `slots` until the owner drops the lease or it expires.
+ * @param {string} owner
+ * @param {string[]} slots
+ * @param {number} ms - expiry, should the owner never drop it
+ * @param {number} [penaltyMs] - penalty_cd the owner still has to spend
+ */
+function takeEquipLease(owner, slots, ms, penaltyMs = 0) {
+  equipLeases[owner] = { slots, until: Date.now() + ms, penaltyMs };
+}
+
+/** @param {string} owner */
+function dropEquipLease(owner) {
+  delete equipLeases[owner];
+}
+
+/** @returns {{slots: string[], until: number, penaltyMs: number}[]} the leases still held */
+function getEquipLeases() {
+  const now = Date.now();
+  for (const owner of Object.keys(equipLeases))
+    if (equipLeases[owner].until <= now) delete equipLeases[owner];
+  return Object.values(equipLeases);
+}
+
+/** @returns {boolean} whether a swap holds the slot */
+function isSlotLeased(slot) {
+  return getEquipLeases().some(({ slots }) => slots.includes(slot));
+}
+
+/** @returns {boolean} whether any of the slots is leased or has an equip unanswered */
+function isAnySlotBusy(slots) {
+  return slots.some((slot) => slot in inFlightSlots || isSlotLeased(slot));
+}
+
+/** @returns {number} penalty_cd the lease holders still have to spend */
+function leasedPenaltyMs() {
+  return getEquipLeases().reduce((sum, { penaltyMs }) => sum + penaltyMs, 0);
+}
+
+/** @returns {boolean} whether a gear batch is unanswered or a swap holds a slot */
+function isEquipBusy() {
+  return isGearBatchInFlight || getEquipLeases().length > 0;
+}
 
 /** @type {{set: string, since: number, lastAt: number}|null} the swap the penalty budget keeps holding back */
 let equipHold = null;
@@ -1215,8 +1313,8 @@ function isShotPending(target = get_target()) {
 }
 
 // withTimeout in the callers only bounds the wait — the equip promise it raced
-// stays pending. Without a bound here, one unanswered equip latches
-// isEquipingItems forever and silently ends all gear changes until a restart.
+// stays pending. Without a bound here, one unanswered equip latches the gear
+// loop forever and silently ends all gear changes until a restart.
 const EQUIP_TIMEOUT_MS = 1000;
 
 /** @type {Object<string, {item: (Object|null), previous: (Object|null), num: number}>} unanswered equips by slot */
@@ -1323,7 +1421,7 @@ function sendUnequip(slot) {
  * @param {Object} suggestedItems - slot -> item name
  * @param {Object} [options]
  * @param {boolean} [options.preventPenaltizeNextAttack=true] - false skips the penalty_cd bail and slicing
- * @param {boolean} [options.preventKeySnatch=true] - false ignores the isEquipingItems latch
+ * @param {boolean} [options.preventKeySnatch=true] - false is a lease holder's own equip: leased slots included, no wait for the gear batch in flight
  */
 async function equipBatch(suggestedItems, options = {}) {
   const { preventPenaltizeNextAttack = true, preventKeySnatch = true } =
@@ -1332,7 +1430,7 @@ async function equipBatch(suggestedItems, options = {}) {
   // An equip cancels the town channel
   if (character.c.town) return false;
 
-  if (preventKeySnatch && isEquipingItems) return false;
+  if (preventKeySnatch && isGearBatchInFlight) return false;
 
   if (
     preventPenaltizeNextAttack &&
@@ -1340,20 +1438,28 @@ async function equipBatch(suggestedItems, options = {}) {
   )
     return false;
 
-  // Never release a latch we didn't take — a preventKeySnatch:false call runs
-  // inside someone else's swap and must leave their flag alone
-  const tookLatch = !isEquipingItems;
-  isEquipingItems = true;
+  if (preventKeySnatch) {
+    // A two-handed mainhand would unequip a leased offhand
+    const isHandLeased = isSlotLeased("mainhand") || isSlotLeased("offhand");
+    for (const slot of Object.keys(suggestedItems))
+      if (
+        isSlotLeased(slot) ||
+        (isHandLeased && (slot === "mainhand" || slot === "offhand"))
+      )
+        delete suggestedItems[slot];
+    isGearBatchInFlight = true;
+  }
 
   try {
     const promises = buildEquipPromises(suggestedItems, {
       preventPenaltizeNextAttack,
+      reservedPenaltyMs: preventKeySnatch ? leasedPenaltyMs() : 0,
     });
     if (!promises.length) return false;
 
     return await withTimeout(Promise.allSettled(promises), EQUIP_TIMEOUT_MS);
   } finally {
-    if (tookLatch) isEquipingItems = false;
+    if (preventKeySnatch) isGearBatchInFlight = false;
   }
 }
 
@@ -1364,7 +1470,7 @@ async function equipBatch(suggestedItems, options = {}) {
  * @returns {Promise[]} the in-flight equip promises
  */
 function buildEquipPromises(suggestedItems, options) {
-  const { preventPenaltizeNextAttack } = options;
+  const { preventPenaltizeNextAttack, reservedPenaltyMs = 0 } = options;
   const promises = [];
   const currentBooster = findInvBooster();
 
@@ -1376,7 +1482,8 @@ function buildEquipPromises(suggestedItems, options) {
   const currentPenalty =
     (character.s.penalty_cd?.ms ?? 0) + unansweredPenaltyMs;
   const equipLatency = Math.min(character.ping / 2, 100);
-  let penaltyBudget = timeToNextAttack - currentPenalty - equipLatency;
+  let penaltyBudget =
+    timeToNextAttack - currentPenalty - equipLatency - reservedPenaltyMs;
 
   let targetBooster = null;
   if ((!isLooting || !preventPenaltizeNextAttack) && currentBooster) {
@@ -1542,47 +1649,90 @@ function isHoldingOnly(names) {
   return held.length > 0 && held.every(({ name }) => names.includes(name));
 }
 
+const KILL_BONUS_STATS = ["luck", "xp", "gold"];
+
+/** @param {Object} [item] - an item, or just `{name}` */
+function hasKillBonus(item) {
+  const info = item_info(item);
+  return KILL_BONUS_STATS.some((stat) => (info?.[stat] ?? 0) > 0);
+}
+
+const IMPACT_SWAP_LEASE = "impact";
+const IMPACT_SWAP_MIN_CYCLE_MS = 250;
+
 /** @returns {boolean} whether an impact swap may ride this shot at all */
 function canSwapUntilImpact() {
   return (
     character.ping < 1000 &&
     !isCleaving &&
-    !isEquipingItems &&
-    1000 / character.frequency > 250 + character.ping &&
+    !equipLeases[IMPACT_SWAP_LEASE] &&
+    1000 / character.frequency > IMPACT_SWAP_MIN_CYCLE_MS + character.ping &&
     character.cc < 100
   );
 }
 
 /**
+ * @param {number} slots - swap-ins
+ * @param {number} freed - slots unequipped for them
+ * @param {number} cycleMs - the shot's cooldown
+ * @returns {boolean} whether swapping in and back clears its penalty_cd before the next attack
+ */
+function impactSwapFits(slots, freed, cycleMs) {
+  return (
+    Math.max(
+      slots * EQUIP_PENALTY_MS,
+      character.ping + IMPACT_SWAP_MIN_HOLD_MS,
+    ) +
+      character.ping +
+      (slots + freed) * EQUIP_PENALTY_MS <=
+    cycleMs
+  );
+}
+
+/** @returns {number} slots an impact swap can carry on a plain shot */
+function impactSwapRoom() {
+  const cycleMs = 1000 / character.frequency;
+  if (
+    character.ping >= 1000 ||
+    cycleMs <= IMPACT_SWAP_MIN_CYCLE_MS + character.ping
+  )
+    return 0;
+
+  let slots = 0;
+  while (impactSwapFits(slots + 1, 0, cycleMs)) slots++;
+  return slots;
+}
+
+/**
  * Holds `equips` from when they land until the attack's hit does, where the
- * server rolls sugarrush and frenzy off whatever is equipped.
+ * server reads piercing a second time and rolls sugarrush and frenzy.
  * @param {Object} targetToAttack - the entity being attacked
  * @param {{num: number, slot: string}[]} equips - the swap-ins
  * @param {Object} [options]
  * @param {string} [options.freeSlot] - slot to unequip before the swap-ins
- * @param {Function} [options.restore] - re-equips the real gear after the hold; omitted leaves it to currentStrategy
+ * @param {Function} [options.restore] - re-equips the real gear after the hold; defaults to what the slots held
  * @param {number} [options.holdLimitMs] - latest swap back, from now; defaults to what still clears the penalty before the next attack
+ * @param {number} [options.cycleMs] - the shot's cooldown
  * @returns {Promise|undefined} the swap promise, or undefined if not swapping
  */
 function swapUntilImpact(
   targetToAttack,
   equips,
-  { freeSlot, restore, holdLimitMs } = {},
+  { freeSlot, restore, holdLimitMs, cycleMs = 1000 / character.frequency } = {},
 ) {
-  // Loot luck rolls at the kill, which is the impact
-  const swappedSlots = [...equips.map(({ slot }) => slot), freeSlot];
-  if (swappedSlots.some((slot) => slot && hasLuck(getServerSlot(slot)))) return;
+  // Luck, xp and gold are read at the kill, which is the impact
+  const swappedSlots = [...equips.map(({ slot }) => slot), freeSlot].filter(
+    Boolean,
+  );
+  if (
+    swappedSlots.some((slot) => hasKillBonus(getServerSlot(slot))) ||
+    isAnySlotBusy(swappedSlots)
+  )
+    return;
 
-  const characterAtkCycleMs = 1000 / character.frequency;
-  const swapPenaltyMs = equips.length * EQUIP_PENALTY_MS;
-  const restorePenaltyMs =
-    (equips.length + (freeSlot ? 1 : 0)) * EQUIP_PENALTY_MS;
-
-  const penaltyClearsInMs =
-    Math.max(swapPenaltyMs, character.ping + IMPACT_SWAP_MIN_HOLD_MS) +
-    character.ping +
-    restorePenaltyMs;
-  if (penaltyClearsInMs > characterAtkCycleMs) return;
+  const freed = freeSlot ? 1 : 0;
+  const restorePenaltyMs = (equips.length + freed) * EQUIP_PENALTY_MS;
+  if (!impactSwapFits(equips.length, freed, cycleMs)) return;
 
   // One-way trip for an equip to take effect server-side
   const equipLatencyMs = character.ping / 2;
@@ -1590,14 +1740,29 @@ function swapUntilImpact(
 
   if (etaMs <= equipLatencyMs) return;
 
-  isEquipingItems = true;
+  const previous = Object.fromEntries(
+    swappedSlots.map((slot) => [slot, getServerSlot(slot)?.name]),
+  );
+  const putBack =
+    restore ??
+    (() =>
+      equipBatch(previous, {
+        preventPenaltizeNextAttack: false,
+        preventKeySnatch: false,
+      }));
 
   // The projectile spawns one one-way trip after the attack is sent
   const swapBackAt = Date.now() + etaMs + equipLatencyMs;
+  const swapBackInMs =
+    holdLimitMs ?? cycleMs - character.ping - restorePenaltyMs;
+  const swapBackDeadline = Date.now() + swapBackInMs;
 
-  const swapBackDeadline =
-    Date.now() +
-    (holdLimitMs ?? characterAtkCycleMs - character.ping - restorePenaltyMs);
+  takeEquipLease(
+    IMPACT_SWAP_LEASE,
+    swappedSlots,
+    Math.max(swapBackInMs, 0) + EQUIP_TIMEOUT_MS,
+    restorePenaltyMs,
+  );
 
   if (freeSlot) sendUnequip(freeSlot);
   const swapEquip = sendEquips(equips);
@@ -1616,115 +1781,11 @@ function swapUntilImpact(
 
   return Promise.allSettled([
     swapEquip,
-    swapEquip.then(holdUntilSwapBack, () => undefined).then(restore),
-  ]).finally(() => {
-    isEquipingItems = false;
-  });
-}
-
-/**
- * Momentarily swaps to candy cane(s) so the landing hit rolls sugarrush off
- * them. A class that wields canes two-handed holds one and frees the offhand.
- * @param {Object} targetToAttack - the entity being attacked
- * @param {Object} [options]
- * @param {string[]} [options.swapFrom] - weapons worth swapping off; any if omitted
- * @param {Function} [options.restore] - re-equips the real weapons after the hold; omitted leaves it to currentStrategy
- * @returns {Promise|undefined} the swap promise, or undefined if not swapping
- */
-function maybeCandySwap(targetToAttack, { swapFrom, restore } = {}) {
-  const characterAtkCycleMs = 1000 / character.frequency;
-  const offhand = getServerSlot("offhand");
-  const shouldUseCandyCanes =
-    canSwapUntilImpact() &&
-    !character.s.sugarrush &&
-    (!swapFrom || isHoldingOnly(swapFrom));
-
-  if (!shouldUseCandyCanes) return;
-
-  const isTwoHanded =
-    !!G.classes[character.ctype].doublehand[G.items.candycanesword.wtype];
-  const candycane1 = findMaxLevelItem("candycanesword");
-  const candycane2 = findMaxLevelItem("candycanesword", 1);
-  const isFastAttacker = characterAtkCycleMs < 600;
-  const isMainhandOnly = isTwoHanded || isFastAttacker;
-
-  // To avoid penalty_cd, fast attackers only swap the mainhand; slower
-  // attackers dual-wield candy canes when a second one is available.
-  const buildEquip = (firstCane, secondCane) =>
-    isMainhandOnly
-      ? [{ num: firstCane, slot: "mainhand" }]
-      : [
-          { num: firstCane, slot: "mainhand" },
-          { num: secondCane, slot: "offhand" },
-        ];
-
-  const canCandySwap =
-    candycane1 !== -1 && (isMainhandOnly || candycane2 !== -1);
-  if (!canCandySwap) return;
-
-  // The server refuses a two-handed cane over a held offhand
-  const mustFreeOffhand = isTwoHanded && !!offhand;
-  if (mustFreeOffhand && !character.items.some((_, num) => !getServerItem(num)))
-    return;
-
-  return swapUntilImpact(targetToAttack, buildEquip(candycane1, candycane2), {
-    freeSlot: mustFreeOffhand ? "offhand" : undefined,
-    restore,
-  });
-}
-
-/**
- * Momentarily swaps the paleclaw onto the amulet slot so the landing hit
- * rolls frenzy off it.
- * @param {Object} targetToAttack - the entity being attacked
- * @param {Object} options
- * @param {string[]} options.swapFrom - held weapons the swap rides on
- * @param {Function} [options.restore] - re-equips the real amulet after the hold; omitted leaves it to currentStrategy
- * @returns {Promise|undefined} the swap promise, or undefined if not swapping
- */
-function maybePaleclawSwap(targetToAttack, { swapFrom, restore }) {
-  if (!canSwapUntilImpact() || character.s.frenzied || !isHoldingOnly(swapFrom))
-    return;
-
-  const paleclaw = findMaxLevelItem("paleclaw");
-  if (paleclaw === -1) return;
-
-  return swapUntilImpact(targetToAttack, [{ num: paleclaw, slot: "amulet" }], {
-    restore,
-  });
-}
-
-/**
- * At most one impact swap per shot: the candy canes when they apply, else the paleclaw.
- * @param {Object} targetToAttack - the entity being attacked
- * @param {Object} swaps
- * @param {Object} [swaps.candy] - maybeCandySwap's options; omitted skips the canes
- * @param {Object} [swaps.paleclaw] - maybePaleclawSwap's options; omitted skips the paleclaw
- * @returns {Promise|undefined} the swap promise, or undefined if not swapping
- */
-function maybeImpactSwap(targetToAttack, { candy, paleclaw } = {}) {
-  return (
-    (candy && maybeCandySwap(targetToAttack, candy)) ??
-    (paleclaw && maybePaleclawSwap(targetToAttack, paleclaw))
-  );
+    swapEquip.then(holdUntilSwapBack, () => undefined).then(putBack),
+  ]).finally(() => dropEquipLease(IMPACT_SWAP_LEASE));
 }
 
 const PIERCING_SWAP_MIN_GAIN = 20;
-
-/** @returns {{num: number, name: string, piercing: number}|undefined} the bag's most piercing one-handed weapon */
-function findPiercingSwapIn() {
-  let best;
-  character.items.forEach((_, num) => {
-    const item = getServerItem(num);
-    if (G.items[item?.name]?.type !== "weapon") return;
-    const info = item_info(item);
-    if (!fitsMainhand(info) || classWeaponModifier(info).doublehand) return;
-    const piercing = weaponPiercing(info);
-    if (piercing > (best?.piercing ?? 0))
-      best = { num, name: item.name, piercing };
-  });
-  return best;
-}
 
 /**
  * @param {Object<string, string>} wantedGear - slot → item name
@@ -1755,57 +1816,300 @@ function shotCycleMs(isEnergizing = false) {
     : 1000 / plainFrequency;
 }
 
+/** Abilities the server rolls off the gear worn when the hit lands → the condition they give */
+const IMPACT_PROCS = { sugarrush: "sugarrush", frenzy: "frenzied" };
+
+/** Share of a shot a swap-in must be worth to ride */
+const IMPACT_SWAP_MIN_VALUE = 0.01;
+
+/** @returns {number} shots a proc of the ability is worth: the frequency it adds over its duration */
+function impactProcShots(ability) {
+  const name = IMPACT_PROCS[ability];
+  const condition = G.conditions[name];
+  if (!condition || character.s[name]) return 0;
+
+  return (
+    ((condition.frequency ?? 0) / 100) *
+    conditionFrequencyScale(character) *
+    ((condition.duration ?? 0) / 1000)
+  );
+}
+
 /**
- * Holds the most piercing weapon until impact.
+ * @param {number} attr0 - frenzy chance per hit, in percent
+ * @param {number} procRate - hits per second that roll it
+ * @returns {number} frequency frenzy adds on average while the gear stays on
+ */
+function frenzyFrequency(attr0, procRate) {
+  const { frequency = 0, duration = 0 } = G.conditions.frenzied ?? {};
+  const uptime = 1 - Math.exp((-duration / 1000) * procRate * (attr0 / 100));
+  return (frequency / 100) * conditionFrequencyScale(character) * uptime;
+}
+
+/**
+ * @param {Object<string, Object>} picks - slot → item_info
+ * @param {number} procRate - hits per second that roll it
+ * @param {Object<string, Object>} [worn]
+ * @returns {number} frequency the frenzy gear in `picks` adds, 0 while an impact swap can carry it instead
+ */
+function wornFrenzyFrequency(picks, procRate, worn) {
+  if (impactSwapRoom() > 0) return 0;
+
+  const { attr0 } = gearAbilityWith(picks, "frenzy", worn);
+  return attr0 ? frenzyFrequency(attr0, procRate) : 0;
+}
+
+/**
+ * @param {string} fallback - the amulet worn otherwise
+ * @param {number} [rolls] - hits per attack that roll frenzy
+ * @returns {string} the frenzy amulet when no impact swap can carry it and it out-damages `fallback`
+ */
+function pickAmuletWithFrenzy(fallback, rolls = 1) {
+  if (impactSwapRoom() > 0) return fallback;
+
+  const copies = getGearCopies(["amulet"]);
+  const [frenzyName] = Object.keys(copies)
+    .filter(
+      (name) =>
+        copies[name][0].ability === "frenzy" &&
+        fitsSlot(copies[name][0], "amulet"),
+    )
+    .sort((lhs, rhs) => copies[rhs][0].attr0 - copies[lhs][0].attr0);
+  if (!frenzyName) return fallback;
+
+  const damageWith = (info) => {
+    if (!info) return 0;
+    const projected = projectStatsWith({ amulet: info });
+    const frenzy =
+      info.ability === "frenzy"
+        ? frenzyFrequency(info.attr0 ?? 0, projected.frequency * rolls)
+        : 0;
+    return projected.attack * (projected.frequency + frenzy);
+  };
+
+  return damageWith(copies[frenzyName][0]) > damageWith(copies[fallback]?.[0])
+    ? frenzyName
+    : fallback;
+}
+
+/**
+ * @param {Object[]} targets
+ * @param {number} gain - piercing added, or lost, when the hit lands
+ * @returns {number} share of the shot that is worth, averaged over the targets
+ */
+function impactPiercingValue(targets, gain) {
+  const [defense, pierce] = mitigationStats(damageTypeOf(character));
+  const pierceable = targets.filter((target) => !target["1hp"]);
+  if (!defense || !gain || !pierceable.length) return 0;
+
+  const own = character[pierce] ?? 0;
+  const isHealing = getServerSlot("mainhand")?.name === "cupid";
+  const total = pierceable.reduce((sum, target) => {
+    const guard = target[defense] ?? 0;
+    const [before, after] =
+      isHealing && target.type === "character"
+        ? [(guard - own) / 2, (guard - own - gain) / 2]
+        : [guard - 2 * own, guard - 2 * own - gain];
+    return sum + damage_multiplier(after) / damage_multiplier(before) - 1;
+  }, 0);
+  return total / pierceable.length;
+}
+
+/**
+ * Bag items worth holding until the hit lands, each for a slot it fits.
+ * @param {Object[]} targets
+ * @param {Object} options
+ * @param {number} options.rolls - hits that roll the procs
+ * @param {boolean} options.canMoveWeapons - whether the hands may be swapped
+ * @param {Object<string, boolean>} options.procs - ability → false to leave it out
+ * @param {boolean} options.piercing - whether piercing counts
+ * @returns {{slot: string, num: number, value: number, isTwoHanded: boolean}[]} best first
+ */
+function getImpactSwapIns(targets, { rolls, canMoveWeapons, procs, piercing }) {
+  const [, pierce] = mitigationStats(damageTypeOf(character));
+  const classData = G.classes[character.ctype];
+  const procShots = Object.fromEntries(
+    Object.keys(IMPACT_PROCS).map((ability) => [
+      ability,
+      procs[ability] === false ? 0 : impactProcShots(ability) * rolls,
+    ]),
+  );
+  const isHeldTwoHanded = classWeaponModifier(
+    item_info(getServerSlot("mainhand")),
+  ).doublehand;
+
+  const procOf = (info, ability) =>
+    info?.ability === ability ? info.attr0 ?? 0 : 0;
+  const piercingOf = (info, slot) =>
+    !pierce || !info
+      ? 0
+      : slot === "mainhand"
+      ? weaponPiercing(info)
+      : info[pierce] ?? 0;
+
+  const valueOf = (info, slot) => {
+    const worn = item_info(getServerSlot(slot));
+    const procValue = Object.keys(IMPACT_PROCS).reduce(
+      (sum, ability) =>
+        sum +
+        ((procOf(info, ability) - procOf(worn, ability)) / 100) *
+          procShots[ability],
+      0,
+    );
+    const gain = piercingOf(info, slot) - piercingOf(worn, slot);
+    const isCounted =
+      gain < 0 || (piercing && gain >= PIERCING_SWAP_MIN_GAIN);
+    return procValue + (isCounted ? impactPiercingValue(targets, gain) : 0);
+  };
+
+  const slotsFor = (info) => {
+    if (info.class && !info.class.includes(character.ctype)) return [];
+    if (info.type !== "weapon")
+      return getGearSlots().filter((slot) => fitsSlot(info, slot));
+    if (!canMoveWeapons) return [];
+
+    const isTwoHanded = classWeaponModifier(info).doublehand;
+    const hasProc = info.ability in IMPACT_PROCS;
+    return [
+      fitsMainhand(info) && (!isTwoHanded || hasProc) && "mainhand",
+      !isTwoHanded &&
+        !isHeldTwoHanded &&
+        info.wtype in (classData.offhand ?? {}) &&
+        "offhand",
+    ].filter(Boolean);
+  };
+
+  const swapIns = [];
+  character.items.forEach((_, num) => {
+    const item = getServerItem(num);
+    const info = item_info(item);
+    if (!info) return;
+    if (!(info.ability in IMPACT_PROCS) && !piercingOf(info, "mainhand"))
+      return;
+
+    for (const slot of slotsFor(info)) {
+      if (
+        (!canMoveWeapons && slot === "offhand") ||
+        isAnySlotBusy([slot]) ||
+        hasKillBonus(getServerSlot(slot))
+      )
+        continue;
+
+      const value = valueOf(info, slot);
+      if (value >= IMPACT_SWAP_MIN_VALUE)
+        swapIns.push({
+          slot,
+          num,
+          value,
+          isTwoHanded: classWeaponModifier(info).doublehand,
+        });
+    }
+  });
+  return swapIns.sort((lhs, rhs) => rhs.value - lhs.value);
+}
+
+/**
+ * Holds the gear worth the most when the hit lands — piercing, sugarrush and
+ * frenzy rolls — on as many slots as the shot's cooldown clears.
  * @param {Object|Object[]} targets
- * @param {() => Object<string, string>} getWantedGear - slot → item name
  * @param {Object} [options]
+ * @param {number} [options.rolls] - hits that roll the procs; defaults to the mobs shot
+ * @param {string[]} [options.weaponsFrom] - held weapons a hand swap may ride on; any if omitted
+ * @param {Object<string, boolean>} [options.procs] - ability → false to leave it out
+ * @param {boolean} [options.piercing] - false leaves piercing out
+ * @param {() => Object<string, string>} [options.getWantedGear] - slot → item name, to keep budget for gear still waiting
  * @param {boolean} [options.mustLand] - skip a hit landing after the hold
  * @param {boolean} [options.isEnergizing] - self-energize sent with this shot
+ * @param {Function} [options.restore] - re-equips the real gear after the hold; defaults to what the slots held
  * @returns {Promise|undefined} the swap, if any
  */
-function maybePiercingSwap(
+function maybeImpactSwap(
   targets,
-  getWantedGear,
-  { mustLand = false, isEnergizing = false } = {},
+  {
+    rolls,
+    weaponsFrom,
+    procs = {},
+    piercing = true,
+    getWantedGear,
+    mustLand = false,
+    isEnergizing = false,
+    restore,
+  } = {},
 ) {
-  const held = getServerSlot("mainhand");
-  const pierceable = [targets].flat().filter((mob) => mob && !mob["1hp"]);
-  if (!held || !pierceable.length || !canSwapUntilImpact()) return;
+  const shotTargets = [targets].flat().filter(Boolean);
+  if (!shotTargets.length || !canSwapUntilImpact()) return;
 
-  const swapIn = findPiercingSwapIn();
-  if (
-    !swapIn ||
-    swapIn.name === held.name ||
-    swapIn.piercing - weaponPiercing(item_info(held)) < PIERCING_SWAP_MIN_GAIN
-  )
-    return;
+  const swapIns = withItemInfoMemo(() =>
+    getImpactSwapIns(shotTargets, {
+      rolls:
+        rolls ?? shotTargets.filter((mob) => mob.type === "monster").length,
+      canMoveWeapons: !weaponsFrom || isHoldingOnly(weaponsFrom),
+      procs,
+      piercing,
+    }),
+  );
+  if (!swapIns.length) return;
 
   // 0 until the shot's reply re-bases it
-  const msToNextAttack = isEnergizing
+  const cycleMs = isEnergizing
     ? shotCycleMs(true)
     : ms_to_next_skill("attack") || shotCycleMs();
-  const reservedSlots = Math.max(
-    1,
-    Math.ceil(countWaitingGear(getWantedGear()) / 2),
-  );
-  // Swap in, then the slots kept for the swap back and waiting gear
-  const restoreBy =
-    msToNextAttack - character.ping - (1 + reservedSlots) * EQUIP_PENALTY_MS;
-
-  const farthest = pierceable.reduce((best, mob) =>
+  const reservedSlots = getWantedGear
+    ? Math.max(1, Math.ceil(countWaitingGear(getWantedGear()) / 2))
+    : 0;
+  const farthest = shotTargets.reduce((best, mob) =>
     projectileEtaMs(mob) > projectileEtaMs(best) ? mob : best,
   );
-  if (mustLand && projectileEtaMs(farthest) >= restoreBy) return;
+  const etaMs = projectileEtaMs(farthest);
+  const holdLimitFor = (slots) =>
+    cycleMs - character.ping - (slots + reservedSlots) * EQUIP_PENALTY_MS;
 
-  return swapUntilImpact(farthest, [{ num: swapIn.num, slot: "mainhand" }], {
-    holdLimitMs: restoreBy,
-    restore: () =>
-      equipBatch(
-        { mainhand: held.name },
-        { preventPenaltizeNextAttack: false, preventKeySnatch: false },
-      ),
-  });
+  const heldOffhand = getServerSlot("offhand");
+  const canFreeOffhand =
+    !!heldOffhand &&
+    !isAnySlotBusy(["offhand"]) &&
+    !hasKillBonus(heldOffhand) &&
+    character.items.some((_, num) => !getServerItem(num));
+
+  const equips = [];
+  let freeSlot;
+  for (const swapIn of swapIns) {
+    if (equips.some(({ slot, num }) => slot === swapIn.slot || num === swapIn.num))
+      continue;
+
+    const isMainhandTwoHanded = equips.some(
+      ({ slot, isTwoHanded }) => slot === "mainhand" && isTwoHanded,
+    );
+    const hasOffhandSwap = equips.some(({ slot }) => slot === "offhand");
+    if (swapIn.slot === "offhand" && isMainhandTwoHanded) continue;
+    if (swapIn.isTwoHanded && hasOffhandSwap) continue;
+
+    const mustFreeOffhand = swapIn.isTwoHanded && !!heldOffhand;
+    if (mustFreeOffhand && !canFreeOffhand) continue;
+
+    const slots = equips.length + 1;
+    const freed = freeSlot || mustFreeOffhand ? 1 : 0;
+    if (
+      !impactSwapFits(slots, freed, cycleMs) ||
+      (mustLand && etaMs >= holdLimitFor(slots + freed))
+    )
+      continue;
+
+    equips.push(swapIn);
+    if (mustFreeOffhand) freeSlot = "offhand";
+  }
+  if (!equips.length) return;
+
+  return swapUntilImpact(
+    farthest,
+    equips.map(({ num, slot }) => ({ num, slot })),
+    {
+      freeSlot,
+      restore,
+      cycleMs,
+      holdLimitMs: holdLimitFor(equips.length + (freeSlot ? 1 : 0)),
+    },
+  );
 }
 
 function calculateHeal(fromEntity, toEntity) {
@@ -2221,6 +2525,10 @@ function isAssignedAsTanker() {
 /** Serializes shelters so a slow swap can't send a second one */
 let isSheltering = false;
 
+const SHELTER_LEASE = "shelter";
+const SHELTER_SLOTS = ["mainhand", "offhand"];
+const SHELTER_LEASE_MS = 2500;
+
 /**
  * Swaps the lantern shield into the offhand for its shelter, then puts the
  * old offhand straight back. Any class can wear it.
@@ -2229,7 +2537,7 @@ let isSheltering = false;
 async function useShelter() {
   if (
     isSheltering ||
-    isEquipingItems ||
+    isAnySlotBusy(SHELTER_SLOTS) ||
     character.s.sheltered ||
     is_on_cooldown("shelter") ||
     character.mp < G.skills["shelter"].mp ||
@@ -2246,7 +2554,12 @@ async function useShelter() {
   if (G.classes[character.ctype].doublehand?.[mainhandType]) return false;
 
   isSheltering = true;
-  isEquipingItems = true;
+  takeEquipLease(
+    SHELTER_LEASE,
+    SHELTER_SLOTS,
+    SHELTER_LEASE_MS,
+    isWorn ? 0 : EQUIP_PENALTY_MS,
+  );
 
   const promises = [];
   if (!isWorn) promises.push(sendEquips([{ num: shieldNum, slot: "offhand" }]));
@@ -2261,7 +2574,7 @@ async function useShelter() {
 
   return Promise.allSettled(promises).finally(() => {
     isSheltering = false;
-    isEquipingItems = false;
+    dropEquipLease(SHELTER_LEASE);
   });
 }
 
@@ -2501,9 +2814,9 @@ function canActOnAttackCooldown() {
  * @param {Object} [target]
  */
 function onAttackError(error, target) {
-  if (isEquipingItems)
+  if (isEquipBusy())
     console.warn(
-      `[candySwap] ${character.name} attack rejected:`,
+      `[impactSwap] ${character.name} attack rejected:`,
       error?.response ?? error?.reason,
       error?.ms != null ? `${error.ms}ms left` : "",
       error,
@@ -2607,7 +2920,10 @@ async function scareAwayMobs() {
     locate_item("jacko") !== -1 || character.slots["orb"]?.name === "jacko";
 
   const isMobTargetingMe = Object.values(parent.entities).some(
-    (mob) => mob?.target === character.name && mob?.type === "monster",
+    (mob) =>
+      mob?.target === character.name &&
+      mob?.type === "monster" &&
+      !mob.immune,
   );
 
   if (

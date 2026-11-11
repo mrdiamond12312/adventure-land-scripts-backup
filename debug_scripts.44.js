@@ -91,7 +91,7 @@ function checkFrequency(seconds = 120, targetPercent = 95) {
 
       readyMs += dt;
       if (character.s.penalty_cd) lost.penalty += dt;
-      else if (isEquipingItems) lost.swapping += dt;
+      else if (isEquipBusy()) lost.swapping += dt;
       else if (character.mp < character.mp_cost) lost.mp += dt;
       else if (Object.keys(character.c).length) lost.channel += dt;
       else lost.other += dt;
@@ -115,7 +115,7 @@ function checkAttacks(seconds = 120) {
     let late = 0;
     const rejects = {};
     const state = () =>
-      `hand ${character.slots.mainhand?.name} swapping ${isEquipingItems} mp ${Math.round(character.mp)} pen ${character.s.penalty_cd?.ms ?? 0} frozen ${!!character.s.frozen} ping ${Math.round(character.ping)}`;
+      `hand ${character.slots.mainhand?.name} swapping ${isEquipBusy()} mp ${Math.round(character.mp)} pen ${character.s.penalty_cd?.ms ?? 0} frozen ${!!character.s.frozen} ping ${Math.round(character.ping)}`;
 
     on("game_response", (d) => {
       if (d?.place !== "attack" || !d.failed) return;
@@ -203,7 +203,7 @@ function checkPiercingSwap(seconds = 30) {
       samples++;
       const name = character.slots.mainhand?.name ?? "none";
       held[name] = (held[name] ?? 0) + 1;
-      if (isEquipingItems) swapping++;
+      if (isEquipBusy()) swapping++;
       const target = get_target();
       if (target) distances.push(Math.round(distance(character, target)));
     });
@@ -211,7 +211,7 @@ function checkPiercingSwap(seconds = 30) {
     return (label) => {
       distances.sort((lhs, rhs) => lhs - rhs);
       console.warn(
-        `checkPiercingSwap ${label}: held ${JSON.stringify(held)} | latch on ${((swapping / Math.max(samples, 1)) * 100).toFixed(0)}% | target distance median ${distances[distances.length >> 1]}`,
+        `checkPiercingSwap ${label}: held ${JSON.stringify(held)} | equip busy ${((swapping / Math.max(samples, 1)) * 100).toFixed(0)}% | target distance median ${distances[distances.length >> 1]}`,
       );
     };
   });

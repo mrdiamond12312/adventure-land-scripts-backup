@@ -526,7 +526,7 @@ respawnOnceDead();
 
 setInterval(() => {
   suicide();
-  if (!MIDAS_CHARACTER.includes(character.name) || !isEquipingItems) {
+  if (!MIDAS_CHARACTER.includes(character.name) || !isEquipBusy()) {
     midasLooting();
   }
 }, 100);
