@@ -71,6 +71,7 @@ function calculateWarriorItems() {
       amulet: "spookyamulet",
       chest: "cdragon",
       helmet: "oxhelmet",
+      shoes: "wingedboots",
     };
   }
 
@@ -79,6 +80,7 @@ function calculateWarriorItems() {
     mainhand: getWarriorMainhand(currentTarget, shouldUseBlaster),
     offhand: getWarriorOffhand(shouldUseBlaster, feelingLucky),
     amulet: getWarriorAmulet(feelingLucky, isTanker),
+    shoes: "wingedboots",
     orb: feelingLucky
       ? "rabbitsfoot"
       : feelingWise
@@ -272,8 +274,7 @@ function isCleaveDue() {
   const attackCycleMs = 1000 / character.frequency;
 
   // Ready a whole attack cycle without swinging: something else is holding it
-  const readySinceMs =
-    Date.now() - (parent.next_skill.cleave?.getTime() ?? 0);
+  const readySinceMs = Date.now() - (parent.next_skill.cleave?.getTime() ?? 0);
   if (readySinceMs > attackCycleMs) return false;
 
   return (
