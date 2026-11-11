@@ -1923,7 +1923,7 @@ function impactPiercingValue(targets, gain) {
  * @param {boolean} options.canMoveWeapons - whether the hands may be swapped
  * @param {Object<string, boolean>} options.procs - ability → false to leave it out
  * @param {boolean} options.piercing - whether piercing counts
- * @returns {{slot: string, num: number, value: number, isTwoHanded: boolean}[]} best first
+ * @returns {{slot: string, num: number, value: number, ability: (string|undefined), isTwoHanded: boolean}[]} best first
  */
 function getImpactSwapIns(targets, { rolls, canMoveWeapons, procs, piercing }) {
   const [, pierce] = mitigationStats(damageTypeOf(character));
@@ -2001,6 +2001,7 @@ function getImpactSwapIns(targets, { rolls, canMoveWeapons, procs, piercing }) {
           slot,
           num,
           value,
+          ability: info.ability,
           isTwoHanded: classWeaponModifier(info).doublehand,
         });
     }
@@ -2016,6 +2017,7 @@ function getImpactSwapIns(targets, { rolls, canMoveWeapons, procs, piercing }) {
  * @param {number} [options.rolls] - hits that roll the procs; defaults to the mobs shot
  * @param {string[]} [options.weaponsFrom] - held weapons a hand swap may ride on; any if omitted
  * @param {Object<string, boolean>} [options.procs] - ability → false to leave it out
+ * @param {string[]} [options.prefer] - abilities whose swap-ins take a slot first
  * @param {boolean} [options.piercing] - false leaves piercing out
  * @param {() => Object<string, string>} [options.getWantedGear] - slot → item name, to keep budget for gear still waiting
  * @param {boolean} [options.mustLand] - skip a hit landing after the hold
@@ -2029,6 +2031,7 @@ function maybeImpactSwap(
     rolls,
     weaponsFrom,
     procs = {},
+    prefer = [],
     piercing = true,
     getWantedGear,
     mustLand = false,
@@ -2049,6 +2052,9 @@ function maybeImpactSwap(
     }),
   );
   if (!swapIns.length) return;
+
+  const isPreferred = ({ ability }) => prefer.includes(ability);
+  swapIns.sort((lhs, rhs) => isPreferred(rhs) - isPreferred(lhs));
 
   // 0 until the shot's reply re-bases it
   const cycleMs = isEnergizing

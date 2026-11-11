@@ -5740,3 +5740,17 @@ latch described in the older sections above; the timing in `swapUntilImpact` is 
   amulet (attack x frequency through `projectStatsWith`). With room they value it at 0.
 - **Mage model.** `impactSwapPiercing` still assumes the piercing weapon rides every shot. With room
   for one slot and frenzy worth more, the paleclaw rides instead and the model reads slightly high.
+
+### Warrior: frenzy first, and never in cleave's way (2026-11-12)
+
+- `prefer: ["frenzy"]` puts the paleclaw ahead of the value order in `maybeImpactSwap`; the other
+  classes still pick by value.
+- `isCleaveDue()` now gates the whole swap, not only the paleclaw: when cleave is able to swing
+  before the next attack (off cooldown by then, and `getSafeCleaveWeapon`: mp floor, weapon, safe
+  to aggro), the attack carries no swap-in. Cleave waits on any live lease, and it rolls frenzy
+  and sugarrush once per mob it hits, so its swing is worth more than the attack's one roll. The
+  user asked for able-or-not, not a countdown to fit the swap into.
+- It is false when cleave has sat ready for a whole attack cycle without swinging: then something
+  else holds it back (ping, penalty, call cost) and the attack's swap should not wait for it.
+- The pull-mode `hasCleaveRoom` / mp-floor conditions the paleclaw had are gone: below the mp
+  floor `getSafeCleaveWeapon` already says cleave is not able.

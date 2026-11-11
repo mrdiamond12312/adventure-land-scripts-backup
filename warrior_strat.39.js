@@ -267,10 +267,17 @@ function mobsLeftAfterCleave(mobs) {
   );
 }
 
-/** @returns {boolean} whether a cleave that will swing comes off cooldown before the next attack */
+/** @returns {boolean} whether cleave is able to swing before the next attack */
 function isCleaveDue() {
+  const attackCycleMs = 1000 / character.frequency;
+
+  // Ready a whole attack cycle without swinging: something else is holding it
+  const readySinceMs =
+    Date.now() - (parent.next_skill.cleave?.getTime() ?? 0);
+  if (readySinceMs > attackCycleMs) return false;
+
   return (
-    ms_to_next_skill("cleave") < 1000 / character.frequency &&
+    ms_to_next_skill("cleave") < attackCycleMs &&
     !!getSafeCleaveWeapon(
       currentStrategy === usePullStrategies ? "pull" : "normal",
     )

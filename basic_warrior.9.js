@@ -162,17 +162,12 @@ function getWarriorCast() {
     Promise.allSettled(
       [
         castOnAttackCooldown("attack", attackTarget),
-        // Cleave carries the paleclaw itself when it is about to swing
-        maybeImpactSwap(attackTarget, {
-          weaponsFrom: IMPACT_SWAP_WEAPON_ALLOW_LIST,
-          procs: {
-            frenzy:
-              !isCleaveDue() &&
-              (currentStrategy !== usePullStrategies ||
-                !hasCleaveRoom() ||
-                character.mp < warriorAoeMpFloor()),
-          },
-        }),
+        // Cleave rolls the procs on every mob it hits, so the swap never holds it up
+        !isCleaveDue() &&
+          maybeImpactSwap(attackTarget, {
+            weaponsFrom: IMPACT_SWAP_WEAPON_ALLOW_LIST,
+            prefer: ["frenzy"],
+          }),
       ].filter(Boolean),
     );
 }
