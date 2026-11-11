@@ -5754,3 +5754,19 @@ latch described in the older sections above; the timing in `swapUntilImpact` is 
   else holds it back (ping, penalty, call cost) and the attack's swap should not wait for it.
 - The pull-mode `hasCleaveRoom` / mp-floor conditions the paleclaw had are gone: below the mp
   floor `getSafeCleaveWeapon` already says cleave is not able.
+
+## A/B testing disconnects: move spam while roaming (`roamAbtesting`, 2026-11-12)
+
+Diagnosed from the code against the server's call limit (200 cost per 4s, a `move` is 2.5); no
+`limitdcreport` was read, so confirm on the next event.
+
+- With no enemy in sight the fighter walked to any teammate whose `target` was not in
+  `parent.entities`. Our own character is never in there, so a priest healing us, or a teammate
+  targeting another teammate, counted as a fight out of sight, and the branch had no distance
+  check. Standing on that teammate, each `move` ended at once, `getLoopInterval()` is 1 ms with no
+  target and the attack ready, and the main loop sent the next one.
+- Now a target on the team is not a fight, the teammate must be farther than
+  `ABTESTING_REGROUP_RANGE` (80, the tanker branch's own number), and `moveInAbtesting` sends
+  nothing at `cc >= 125`, like the kite loop.
+- Not the cause: harakiri (`suicide()` fires in PvP but the server only kills), and the 1000 ms
+  minimum-ping shutdown in `basic_function.7.js` (not specific to the event, same symptom if it lags).

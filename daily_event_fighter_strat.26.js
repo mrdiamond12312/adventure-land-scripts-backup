@@ -873,6 +873,9 @@ const ABTESTING_PATROL = [
 ];
 
 const ABTESTING_SIGHTING_TTL = 20000;
+/** Closer than this to a teammate, a walk to them is not worth a move */
+const ABTESTING_REGROUP_RANGE = 80;
+const ABTESTING_MOVE_MAX_CC = 125;
 
 /** @type {{x: number, y: number, time: number}|undefined} */
 let abtestingLastSighting;
@@ -963,10 +966,19 @@ function selectAbtestingTarget() {
 async function roamAbtesting() {
   if (isTripHeld()) return;
 
-  const allies = getAbtestingAllies().filter((ally) => ally !== character);
+  const team = getAbtestingAllies();
+  const teamNames = new Set(team.map((ally) => ally.name));
+  const allies = team.filter((ally) => ally !== character);
 
+  // A target on the team is a heal or a buff, not a fight out of sight
   const allyInFight = allies
-    .filter((ally) => ally.target && !parent.entities[ally.target])
+    .filter(
+      (ally) =>
+        ally.target &&
+        !teamNames.has(ally.target) &&
+        !parent.entities[ally.target] &&
+        distance(character, ally) > ABTESTING_REGROUP_RANGE,
+    )
     .sort((lhs, rhs) => distance(character, lhs) - distance(character, rhs))[0];
   if (allyInFight) {
     return moveInAbtesting(allyInFight.real_x, allyInFight.real_y);
@@ -984,7 +996,7 @@ async function roamAbtesting() {
 
   const tanker = allies.find((ally) => ally.name === TANKER);
   if (tanker && character.name !== TANKER) {
-    if (distance(character, tanker) > 80) {
+    if (distance(character, tanker) > ABTESTING_REGROUP_RANGE) {
       await moveInAbtesting(tanker.real_x, tanker.real_y);
     }
     return;
@@ -1014,6 +1026,7 @@ async function roamAbtesting() {
  * dropping the walk the moment an enemy comes into sight.
  */
 async function moveInAbtesting(x, y) {
+  if (character.cc >= ABTESTING_MOVE_MAX_CC) return;
   if (can_move_to(x, y)) return move(x, y);
 
   await advanceSmartMove(
