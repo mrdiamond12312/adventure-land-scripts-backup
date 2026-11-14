@@ -259,12 +259,23 @@ async function restockFromBankOrVendor(itemId, shortfall, npcId) {
   return buy(itemId, stillMissing);
 }
 
-/** Opens a crypt at home when CRYPT.autoOpen is on, none is ageing or running, and a key is at hand */
+/**
+ * Keeps enough fresh crypts ageing at home that one matures per run cleared,
+ * at most CRYPT.autoOpen, while a key is at hand.
+ */
 function maybeOpenCrypt() {
-  if (!CRYPT.autoOpen || !isAtHomeServer() || get("cryptInstance")) return;
+  if (!CRYPT.autoOpen || !isAtHomeServer()) return;
 
-  const visit = get("cryptVisit");
-  if (visit && !visit.isStarted && visit.realm === getCurrentServer()) return;
+  const clearMs = get("cryptClearMs") ?? CRYPT.clearMs;
+  const batch = Math.min(
+    CRYPT.autoOpen,
+    Math.max(1, Math.ceil(CRYPT.ageMs / clearMs)),
+  );
+  const ageing = getCryptVisits().filter(
+    (visit) =>
+      visit.realm === getCurrentServer() && !visit.startedAt && !visit.leftAt,
+  );
+  if (ageing.length >= batch) return;
 
   if (
     locate_item("cryptkey") === -1 &&
@@ -294,13 +305,14 @@ async function openCryptInstance() {
     await smart_move(CRYPT_DOOR);
     await enter("crypt");
 
-    set("cryptVisit", {
-      instance: character.in,
-      openedAt: Date.now(),
-      realm: getCurrentServer(),
-      isStarted: !CRYPT.ageMs,
-    });
-    if (!CRYPT.ageMs) set("cryptInstance", character.in);
+    set("cryptVisits", [
+      ...getCryptVisits(),
+      {
+        instance: character.in,
+        openedAt: Date.now(),
+        realm: getCurrentServer(),
+      },
+    ]);
     set("lastCryptInstance", new Date());
   } finally {
     releaseDuty(lock);

@@ -440,8 +440,8 @@ already budgeted. A lineup entry is read only when `scheduled` or `live`: `misse
 whole feature: the settle band is only `HOME_SETTLE_MARGIN_MS` wide and it expires, so a boss
 softened on the realm we happen to be standing on would hold us there through the entire window
 and we would arrive home fatigued with nothing to show. A foreign boss pays no home drops; the
-scheduled home one does. Only an open `cryptInstance` outranks the settle hop — that is paid-for
-content we would forfeit. The at-home path is unaffected either way, since
+scheduled home one does. An open crypt no longer outranks the settle hop (2026-11-15): the crypt
+keeps until the party is home again, a window does not. The at-home path is unaffected either way, since
 `shouldReturnHomeToSettle` returns false the moment `isAtHomeServer()` is true.
 
 - `homeDropRank()` reweights the candidate sort. A home-table boss on our own realm jumps ahead of
@@ -4685,7 +4685,7 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   returns 99999999 across maps and instances, so the same check covers the wrong map. Beyond it,
   the target is the plan's own mtype or the walk.
 - **Fighters**: `useWitchGatheringStrategy` ranks right after the cave run, above every event. It
-  stands aside for an open crypt or a cave run. The 06:00/18:00 slots don't collide with the
+  stands aside for a cave run, not an open crypt (2026-11-15). The 06:00/18:00 slots don't collide with the
   scheduled events, so in practice it outranks only the always-up Mr. Pumpkin and Mr. Green.
 - **Party** (`witch` preset, 2026-10-22): the drop is 0.3% per 1k HP, so at equal damage every
   mob pays the same. A plantoid's 36% per kill is 120k HP of work. Every gather spot's HP
@@ -4698,8 +4698,7 @@ its best farmable spawn: spider/main, wolfie/winterland, plantoid/desertland, gh
   walk slowly (speed 24), so a melee warrior loses time reaching each one. Embercoal and wolfie
   (Dark Hound) slots keep the default warrior party: plantoids hit for 640, and wolfie went to
   the warrior on 2026-11-01 at the user's request. The preset ranks just below `cave` and
-  above Horseman, the same order `useWitchGatheringStrategy` takes, and it also stands aside for
-  an open crypt. A swap costs one `deployCharacters` cycle (≤30s plus login), once per kind change.
+  above Horseman, the same order `useWitchGatheringStrategy` takes. A swap costs one `deployCharacters` cycle (≤30s plus login), once per kind change.
   `isRangerWitchSlot` runs from `dynamicParty()`'s load-time call, before the witch section's
   `const`s exist, so it only touches hoisted functions (`getWitchRoundKey` is one for that reason).
   Luck was already covered: `shouldWearLuckGear` swaps in luck gear for the killing blow.
@@ -5122,7 +5121,7 @@ and publishes it. The others carry it out. Every character loads the file.
 - **Owner:** under caracAL, the first enabled character, as before. Natively, the merchant main
   always owns. A fighter main owns only while no fresh plan comes from someone else
   (`shouldOwnRealmSockets`), so a second window follows instead of opening its own sockets.
-- **caracAL fighters** (`followPartyPlan` → `fitPartyRoster`, every 5s, not in a cave or crypt):
+- **caracAL fighters** (`followPartyPlan` → `fitPartyRoster`, every 5s, not in a cave run):
   - Off-roster fighters, on any realm, sorted, pair with the missing members, sorted. Each one
     deploys its partner straight onto the plan's realm and shuts itself down.
   - A rostered fighter on the wrong realm redeploys itself there (`moveToPartyRealm`).
@@ -5850,21 +5849,37 @@ priest inside the crypt: a ranged tank can kite, a melee one cannot. Server fact
 - Snowballs are optional: the merchant sells them, and without any the freeze credit falls back
   to the frost staff's chance per hit.
 
-**An opened crypt is left to age (`cryptVisit`, 2026-11-15).** Untargeted monsters level on a
+**An opened crypt is left to age (`cryptVisits`, 2026-11-15).** Untargeted monsters level on a
 server timer that runs for every instance, paused or not: one level per
 `max(3min, max_hp * 30ms) * 2^(0.3 * (level - 1))`, each worth +0.25 `luckx`, half the base hp,
 12.5% attack and 0.034 frequency. After 54h (earthiverse's wait) that is Lestat level 6, Bill 5,
 Elena 7, and the vbats level 8 at double attack; Spike never levels in that time (18.7M hp).
-- `openCryptInstance` writes `cryptVisit = { instance, openedAt, realm, isStarted }` and only sets
-  `cryptInstance` itself when `CRYPT.ageMs` is 0. A fighter promotes it (`startAgedCrypt`) once
-  aged, on the visit's realm, with the whole party on that realm: `cryptInstance` stops server
-  hops wherever a character stands, so it must not be raised while someone is away.
+- Crypts are opened in batches, since the instances outlive their visitors (only paused) and
+  keep levelling. `openCryptInstance` appends `{ instance, openedAt, realm }` to `cryptVisits` and
+  never sets `cryptInstance` itself. A fighter promotes the oldest aged one of its realm
+  (`startAgedCrypt`) once the whole party is on that realm, since a priest alone at home would
+  otherwise start the run by itself.
+- **Hops and events go first, and the crypt waits for us (2026-11-15).** An open `cryptInstance` no
+  longer holds the hop (`HOP_RULES` "instance" keeps only the cave run), the party plan, or the
+  Witch gathering; events already outranked the crypt in `fighterStrategies`. Nothing has to be
+  saved to resume: `cryptInstance`, the kill ledgers and `cryptMemory` all stay, the crypt strategy
+  answers nothing on a realm other than the crypt's own, and once home with nothing above it
+  claiming the tick it walks back in through `enter("crypt", name)`, which costs no key.
+- Re-entering an existing instance by name costs no key, so `closeCryptRun` keeps a crypt with
+  mobs left on the list as a record, never run again on its own: `leftAt`, its `killed` ledger and
+  `isMinionsSwept` (which `readCryptRun` merges back in if it is ever entered again), and
+  `bossLevels` for each boss still alive, the level a sighting last carried (shared between us),
+  else the one `agedCryptBoss` predicts from its age. Only a crypt with every boss and vbat dead,
+  or one that is gone (`isGone`), is dropped.
 - Bosses in view carry their live stats; the ones not seen yet are judged at the level the timer
   predicts (`agedCryptBoss`), not at G's level 1.
 - A server restart wipes instances. `enter` then fails with an `invalid` response, and
-  `isCryptGone` clears `cryptInstance` (only on the visit's own realm).
-- `CRYPT.autoOpen` (off) lets the merchant open one from his idle routine (`maybeOpenCrypt`) when
-  none is ageing or running and a key is in the bag or bank.
+  `isCryptGone` closes the run (only on the visit's own realm), and the next aged entry is tried.
+- The batch is sized by clear time, not a fixed count: the merchant keeps
+  `min(CRYPT.autoOpen, ceil(ageMs / cryptClearMs))` fresh crypts ageing at home (`maybeOpenCrypt`),
+  so about one matures per run finished, and refills after each one. A server restart wipes every
+  instance, so a smaller batch loses fewer keys. `cryptClearMs` is a moving average of first
+  runs' lengths; `CRYPT.clearMs` (1h) stands in until one is timed. `autoOpen` 0 opens none.
 
 **Sightings are shared.** The mage blinks ahead, so each character publishes its sightings through
 `publishCharacterInfo` once a second and merges the party's by newest `at`. A spot found empty is
@@ -5906,3 +5921,18 @@ Mr. Green (620) never limits anything. `angle` is the direction it last walked
 for every idle aggressive monster other than the kite target, sweeping around the orbit as it
 already did for walls. If no clear spot is reachable it falls back to the plain orbit spot. This
 was a rogue circling Franky or Mr. Green and walking through the front of another boss.
+
+**No partners in a cave or crypt party (2026-11-15).** The 10s party loop (basic_function.7.js) already
+left an `earth*` party and stopped asking to join one while `isPreparingCave`. It now does the same
+for the whole cave run (`isCaveUnderway()`, so a member respawning mid-run doesn't rejoin
+the partners) and while a crypt run is open on this realm (`isCryptRunHere`). The partners are
+welcome again once we are off on a hop or event, since `isCryptRunHere` reads the crypt's realm.
+
+**The caracAL mover enters our crypt by name (strategic_smart_move.21.js, 2026-11-15).** In G the
+crypt door is keyed (`["crypt", 0, 2, "key", "cryptkey"]` on the cave map), so ALPathfinder plans an
+`enter` segment carrying `key: "cryptkey"`, and the mover ran it as `enter("crypt")`. That
+either threw "needs a cryptkey" for a fighter without one, or spent its key on a brand new
+instance. Only the native mover (advance_smart_move.20.js) passed the name. The `enter` step now
+enters `cryptInstance` when `isCryptRunHere()`, which needs no key. If the server answers
+`transport_cant_invalid`, the instance is gone and the run is closed (`isCryptGone`).
+The merchant opens crypts with his own `smart_move` + `enter("crypt")` and is unaffected.

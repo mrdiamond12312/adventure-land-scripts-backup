@@ -169,7 +169,7 @@ let isMovingToPartyRealm = false;
 /** A fighter follows the hop owner's plan: its realm, and under caracAL its roster */
 async function followPartyPlan() {
   if (isMerchant() || !isPartyPlanFollower() || isMovingToPartyRealm) return;
-  if (character.cave || get("cryptInstance")) return;
+  if (character.cave) return;
 
   const plan = getPartyPlan();
   if (parent.caracAL) return fitPartyRoster(plan);
@@ -416,7 +416,7 @@ const WITCH_RANGER_KINDS = ["verdantspore", "gloomfeather", "frostscale"];
 /** @returns {boolean} whether this round's gathering slot wants the witch preset */
 function isRangerWitchSlot(status = server.status) {
   const cipher = status.witchcipher;
-  if (!isWitchGathering(cipher) || get("cryptInstance")) return false;
+  if (!isWitchGathering(cipher)) return false;
 
   const plan = get("witchGatherPlan");
   return (

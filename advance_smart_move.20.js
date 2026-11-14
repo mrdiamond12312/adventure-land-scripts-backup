@@ -130,7 +130,7 @@ async function oldAdvanceSmartMove(
         await smart_move(CRYPT_DOOR).catch((e) => e);
 
       await enter("crypt", get("cryptInstance")).catch((error) => {
-        if (isCryptGone(error)) set("cryptInstance", undefined);
+        if (isCryptGone(error)) closeCryptRun({ isGone: true });
         throw error;
       });
       await sleep(character.ping * 3 + 3000);

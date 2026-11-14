@@ -14,7 +14,8 @@ const CRYPT = {
   pairPatienceMs: 45_000,
   planStaleMs: 2000,
   ageMs: 54 * 3_600_000, // an opened crypt levels this long before the run; 0 runs at once
-  autoOpen: false, // whether the merchant opens a crypt on his own
+  autoOpen: 0, // most crypts the merchant keeps ageing on his own; 0 opens none
+  clearMs: 3_600_000, // run length assumed until a run has been timed
 };
 
 /** Corridor junctions in lap order, the entrance first */
@@ -110,7 +111,12 @@ function nearestCryptSpot(from, spots) {
  */
 function readCryptRun() {
   const instance = get("cryptInstance");
-  const run = { killed: {}, isMinionsSwept: false, isSupportGivenUp: false };
+  const saved = getActiveCryptVisit();
+  const run = {
+    killed: { ...saved?.killed },
+    isMinionsSwept: !!saved?.isMinionsSwept,
+    isSupportGivenUp: false,
+  };
 
   for (const name of partyMems) {
     const record = get(`cryptRun:${name}`);
@@ -210,6 +216,7 @@ function noteCryptMobs() {
       map: "crypt",
       x: mob.x,
       y: mob.y,
+      level: mob.level,
       at: Date.now(),
     };
   }
@@ -414,7 +421,7 @@ function agedCryptBoss(mtype, ageMs) {
  */
 function getWantedCryptBosses(run, fight) {
   const killed = Object.values(run.killed);
-  const openedAt = get("cryptVisit")?.openedAt;
+  const openedAt = getActiveCryptVisit()?.openedAt;
   const ageMs = openedAt ? Date.now() - openedAt : 0;
 
   return CRYPT_MOBS.bosses.filter((mtype) => {
@@ -762,7 +769,7 @@ function patrolCrypt(wanted) {
   const stop = getCryptPatrolStop(wanted);
   if (!stop) {
     log("Crypt: nothing left to fight");
-    set("cryptInstance", undefined);
+    closeCryptRun();
     return;
   }
 
@@ -908,25 +915,103 @@ function useCryptSkills() {
   }
 }
 
+/** @returns {{instance: string, openedAt: number, realm: string}[]} the crypts opened and not run yet, or running */
+const getCryptVisits = () => get("cryptVisits") ?? [];
+
+const getActiveCryptVisit = () =>
+  getCryptVisits().find((visit) => visit.instance === get("cryptInstance"));
+
+/** @returns {boolean} whether a crypt run is open on this realm */
+function isCryptRunHere() {
+  const realm = getActiveCryptVisit()?.realm;
+  return !!get("cryptInstance") && (!realm || realm === getCurrentServer());
+}
+
 /**
- * Starts the run on a crypt that has aged enough, once the whole party is on
- * its realm.
+ * Ends the run under way. A crypt with mobs left stays on the list, never run
+ * again, with its kills and the level of each boss still in it (`bossLevels`:
+ * as last seen, else as its age predicts); a cleared or vanished one is
+ * forgotten. A run's length feeds the batch size (cryptClearMs).
+ * @param {Object} [options]
+ * @param {boolean} [options.isGone] - the instance no longer exists
+ */
+function closeCryptRun({ isGone = false } = {}) {
+  const instance = get("cryptInstance");
+  const visit = getActiveCryptVisit();
+  const run = readCryptRun();
+  const killed = Object.values(run.killed);
+  const hasMobsLeft =
+    CRYPT_MOBS.bosses.some((mtype) => !killed.includes(mtype)) ||
+    getCryptMinionsLeft(run) > 0;
+
+  if (visit?.startedAt && !visit.leftAt && !isGone) {
+    const took = Date.now() - visit.startedAt;
+    const average = get("cryptClearMs");
+    set("cryptClearMs", average ? average * 0.7 + took * 0.3 : took);
+  }
+
+  const kept =
+    visit && hasMobsLeft && !isGone
+      ? [
+          {
+            instance,
+            openedAt: visit.openedAt,
+            realm: visit.realm,
+            leftAt: Date.now(),
+            killed: run.killed,
+            isMinionsSwept: run.isMinionsSwept,
+            bossLevels: Object.fromEntries(
+              CRYPT_MOBS.bosses
+                .filter((mtype) => !killed.includes(mtype))
+                .map((mtype) => [
+                  mtype,
+                  cryptMemory.sightings?.[mtype]?.level ??
+                    agedCryptBoss(mtype, Date.now() - visit.openedAt).level,
+                ]),
+            ),
+          },
+        ]
+      : [];
+  set("cryptVisits", [
+    ...getCryptVisits().filter((other) => other.instance !== instance),
+    ...kept,
+  ]);
+  set("cryptInstance", undefined);
+}
+
+/**
+ * Starts the run on a ready crypt of this realm, fresh ones first, once the
+ * whole party is on the realm.
  */
 function startAgedCrypt() {
-  const visit = get("cryptVisit");
-  if (!visit || visit.isStarted || get("cryptInstance")) return;
-  if (visit.realm !== getCurrentServer()) return;
-  if (Date.now() - visit.openedAt < CRYPT.ageMs) return;
+  if (get("cryptInstance")) return;
+
+  const visit = getCryptVisits()
+    .filter(
+      (visit) =>
+        !visit.leftAt &&
+        visit.realm === getCurrentServer() &&
+        Date.now() - visit.openedAt >= CRYPT.ageMs,
+    )
+    .sort((lhs, rhs) => lhs.openedAt - rhs.openedAt)[0];
+  if (!visit) return;
   if (!partyMems.every((name) => get_entity(name) || parent.party?.[name]))
     return;
 
-  set("cryptVisit", { ...visit, isStarted: true });
+  set(
+    "cryptVisits",
+    getCryptVisits().map((other) =>
+      other.instance === visit.instance
+        ? { ...other, startedAt: Date.now() }
+        : other,
+    ),
+  );
   set("cryptInstance", visit.instance);
 }
 
 /** @returns {boolean} whether the error says the instance no longer exists on this realm */
 function isCryptGone(error) {
-  const realm = get("cryptVisit")?.realm;
+  const realm = getActiveCryptVisit()?.realm;
   return (
     (!realm || realm === getCurrentServer()) &&
     /invalid/.test(`${error?.response} ${error?.reason}`)
@@ -940,7 +1025,7 @@ async function useCryptStrategy() {
   const instance = get("cryptInstance");
   if (!instance) return undefined;
 
-  const realm = get("cryptVisit")?.realm;
+  const realm = getActiveCryptVisit()?.realm;
   if (realm && realm !== getCurrentServer()) return undefined;
 
   if (character.map !== "crypt") {
@@ -983,7 +1068,7 @@ async function useCryptStrategy() {
 
   if (!minionsLeft && !wanted.length) {
     log("Crypt: cleared");
-    set("cryptInstance", undefined);
+    closeCryptRun();
     return undefined;
   }
 

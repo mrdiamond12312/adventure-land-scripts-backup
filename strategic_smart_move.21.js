@@ -1096,11 +1096,19 @@ class StrategicSmartMove {
         }
 
         if (segment.method === "enter") {
-          if (segment.key && locate_item(segment.key) === -1) {
+          // Our open crypt is entered by name, which needs no key
+          const instance =
+            segment.map === "crypt" && isCryptRunHere()
+              ? get("cryptInstance")
+              : undefined;
+          if (!instance && segment.key && locate_item(segment.key) === -1) {
             throw new Error(`Entering ${segment.map} needs a ${segment.key}`);
           }
           const waitPromise = this.waitForNewMap();
-          await enter(segment.map);
+          await enter(segment.map, instance).catch((error) => {
+            if (instance && isCryptGone(error)) closeCryptRun({ isGone: true });
+            throw error;
+          });
           await waitPromise.catch(() =>
             console.warn("Enter timeout! Current map:", character.map),
           );

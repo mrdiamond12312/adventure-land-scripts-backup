@@ -702,8 +702,12 @@ setInterval(async () => {
   if (isSittingOutCave) {
     if (parent.party_list.some((name) => partyMems.includes(name)))
       leave_party();
-  } else if (isPreparingCave) {
-    // The cave takes the current party in, and an outsider needs their own visit
+  } else if (
+    isPreparingCave ||
+    (USE_CAVE_STRATEGY && isCaveUnderway()) ||
+    isCryptRunHere()
+  ) {
+    // The cave and the crypt are ours alone: partners neither stay nor get asked
     if (hasWhitelistedMember) leave_party();
   } else if (
     inviteTarget &&

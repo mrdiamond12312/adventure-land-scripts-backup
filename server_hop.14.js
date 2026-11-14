@@ -86,12 +86,11 @@ const FATIGUE_EXEMPT_BOSSES = Object.keys(HOP_BOSSES).filter(
 
 /** @type {HopRule[]} the hop loop's priorities, top first; the first rule to decide wins the tick */
 const HOP_RULES = [
-  /** An open crypt or a cave run holds every move */
+  /** A cave run holds every move; an open crypt waits for the party to come home */
   {
     name: "instance",
     enabled: true,
     decide: () => {
-      if (get("cryptInstance")) return stayPut("crypt instance open");
       if (get("caveRun") > Date.now()) return stayPut("cave run under way");
     },
   },
