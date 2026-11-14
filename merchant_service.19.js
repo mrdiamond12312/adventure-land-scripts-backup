@@ -21,7 +21,11 @@ character.on("cm", async function ({ name, message }) {
   if (!lock) return;
 
   try {
-    if (!canServeInPlace(name, message)) equipBroom();
+    if (!canServeInPlace(name, message)) {
+      equipBroom();
+      // A lockless walk (gathering, crafting) would block the restock's bank trip
+      await abandonTrip();
+    }
     await serveDuty(name, message);
   } finally {
     releaseDuty(lock);

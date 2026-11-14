@@ -80,6 +80,15 @@ try { ... } finally { releaseDuty(lock); }
   `exchangeSomething`'s bank-retrieval/npc-travel paths, `craft`) must check `isOnDuty()` before
   moving. Exchanging items already in inventory is allowed while on duty — with a computer that
   needs no movement.
+- **Check again after every await, not just on entry (2026-11-14).** A duty can be taken while
+  a lockless routine is mid-walk. Under caracAL, a newer `smartMove` *replaces* the old session,
+  which then resolves normally instead of rejecting. So `goFishing` used to wake up after its
+  replaced walk and equip the rod + `use_skill("fishing")` in the middle of an elixir delivery.
+  The reverse also broke: the errand's `restockFromBankOrVendor` → `goToBankFloor` saw the
+  gathering walk still in flight and aborted ("Prevent moving to bank_b while smartMoving"), so
+  the restock was silently skipped. Now the cm handler `abandonTrip()`s before any serve that has
+  to move, and `goFishing`/`goMining` bail on `isGatherPreempted()` (`isOnDuty() || isOnTrip()`)
+  after `equipBroom` and after the walk.
 - **Not the duty lock:** `inventoryLock` guards inventory slot order (shared with the fighters,
   see "Sorting must not run between picking a slot and spending it"), `isAdvanceSmartMoving` is the pathfinder's own state, and
   `invJammed` is a request for an emergency bank trip.

@@ -43,6 +43,11 @@ function shouldGoChilling() {
   );
 }
 
+/** @returns {boolean} whether a duty or another trip took the merchant over mid-gather */
+function isGatherPreempted() {
+  return isOnDuty() || isOnTrip();
+}
+
 async function goFishing() {
   if (
     isInvFull(GATHER_FREE_SLOTS) ||
@@ -88,11 +93,13 @@ async function goFishing() {
     character.map !== fishingLocation.map
   ) {
     await equipBroom();
+    if (isGatherPreempted()) return;
     await advanceSmartMove(fishingLocation, {
       useBlink: false,
       useMagiport: false,
       exact: true,
     });
+    if (isGatherPreempted()) return;
   }
 
   if (character.mp > 120) {
@@ -152,11 +159,13 @@ async function goMining() {
     character.map !== miningLocation.map
   ) {
     await equipBroom();
+    if (isGatherPreempted()) return;
     await advanceSmartMove(miningLocation, {
       useBlink: false,
       useMagiport: false,
       exact: true,
     });
+    if (isGatherPreempted()) return;
   }
 
   if (character.mp > 120) {
