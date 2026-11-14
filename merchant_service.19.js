@@ -259,6 +259,22 @@ async function restockFromBankOrVendor(itemId, shortfall, npcId) {
   return buy(itemId, stillMissing);
 }
 
+/** Opens a crypt at home when CRYPT.autoOpen is on, none is ageing or running, and a key is at hand */
+function maybeOpenCrypt() {
+  if (!CRYPT.autoOpen || !isAtHomeServer() || get("cryptInstance")) return;
+
+  const visit = get("cryptVisit");
+  if (visit && !visit.isStarted && visit.realm === getCurrentServer()) return;
+
+  if (
+    locate_item("cryptkey") === -1 &&
+    !getItemBankSlots("cryptkey", true).length
+  )
+    return;
+
+  return openCryptInstance();
+}
+
 async function openCryptInstance() {
   if (isAdvanceSmartMoving || smart.moving) return;
 
@@ -278,10 +294,14 @@ async function openCryptInstance() {
     await smart_move(CRYPT_DOOR);
     await enter("crypt");
 
-    set("cryptInstance", character.in);
+    set("cryptVisit", {
+      instance: character.in,
+      openedAt: Date.now(),
+      realm: getCurrentServer(),
+      isStarted: !CRYPT.ageMs,
+    });
+    if (!CRYPT.ageMs) set("cryptInstance", character.in);
     set("lastCryptInstance", new Date());
-    set("cryptDefeatedMobs", []);
-    set("lastSeenDefeatableCryptBoss", undefined);
   } finally {
     releaseDuty(lock);
   }

@@ -322,6 +322,13 @@ async function resolveKiteTarget(target) {
   const kaneSpot = typeof getKaneParkSpot === "function" && getKaneParkSpot();
   if (kaneSpot) return withParkSpot(target, kaneSpot);
 
+  const cryptAnchor =
+    typeof getCryptKiteAnchor === "function" && getCryptKiteAnchor(target);
+  if (cryptAnchor)
+    return cryptAnchor.isDrag
+      ? dragToSpot(target, cryptAnchor.spot, get_entity(target.id))
+      : withFixedSpot(target, cryptAnchor.spot);
+
   const dragRoute = isAssignedAsTanker() && getBossDragRoute(target);
   if (dragRoute && !isDragReleased(dragRoute)) {
     const [bossType, route] = dragRoute;
@@ -581,12 +588,42 @@ async function smartMoveAroundWall(position, options = {}) {
   }
 }
 
-// Returns the actual point to move to: the desired orbit spot if reachable, an
-// alternative point swept around the same radius if not, else the next corner
-// of the taut path toward the spot (flagged isDetour). Null after falling back
-// to a smart move, or when nothing is reachable.
+/**
+ * Whether an idle monster other than the target would aggro us at the spot, by
+ * the server's rule: we share or touch its 32px aggro cell and stand within 45°
+ * of where it faces. A monster whose facing we don't know counts as facing us.
+ * @param {{x: number, y: number}} spot
+ * @param {Object} [target] - the monster we mean to fight
+ * @returns {boolean}
+ */
+function isAggroSpot(spot, target) {
+  const cell = (value) => Math.floor(value / 32);
+
+  return Object.values(parent.entities).some((mob) => {
+    if (mob.type !== "monster" || mob.dead || mob.target) return false;
+    if (mob.id === target?.id || !(G.monsters[mob.mtype]?.aggro > 0))
+      return false;
+    if (
+      Math.abs(cell(mob.x) - cell(spot.x)) > 1 ||
+      Math.abs(cell(mob.y) - cell(spot.y)) > 1
+    )
+      return false;
+    if (mob.angle === undefined) return true;
+
+    const toSpot =
+      (Math.atan2(spot.y - mob.y, spot.x - mob.x) * 180) / Math.PI;
+    return Math.abs(mob.angle - toSpot) <= 45;
+  });
+}
+
+// Returns the actual point to move to: the desired orbit spot if reachable and
+// clear of idle monsters' aggro, an alternative point swept around the same
+// radius if not, else the next corner of the taut path toward the spot (flagged
+// isDetour). Null after falling back to a smart move, or when nothing is reachable.
 async function resolveDestination(desired, orbit, radiusTotal, target) {
-  if (can_move_to(desired.x, desired.y)) return desired;
+  const isClear = (spot) =>
+    can_move_to(spot.x, spot.y) && !isAggroSpot(spot, target);
+  if (isClear(desired)) return desired;
 
   if (!orbit.isTankerHoldingFarmMob) {
     if (flipRotationCooldown < 0) {
@@ -599,12 +636,15 @@ async function resolveDestination(desired, orbit, radiusTotal, target) {
         x: orbit.orbitCenter.x + radiusTotal * Math.cos(adjustedAngle),
         y: orbit.orbitCenter.y + radiusTotal * Math.sin(adjustedAngle),
       };
-      if (can_move_to(alt.x, alt.y)) {
+      if (isClear(alt)) {
         angle = adjustedAngle;
         return alt;
       }
     }
   }
+
+  // Nowhere clear of aggro: the plain orbit spot still beats standing still
+  if (can_move_to(desired.x, desired.y)) return desired;
 
   const detour = getTautStep(desired) ?? getTautStep(target);
   if (detour) return { x: detour.x, y: detour.y, isDetour: true };

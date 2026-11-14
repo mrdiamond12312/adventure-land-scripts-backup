@@ -432,6 +432,8 @@ setInterval(async function () {
 
   const canGather = !hasEventToJoin && !isInvFull(GATHER_FREE_SLOTS);
 
+  if (!hasEventToJoin) maybeOpenCrypt();
+
   if (canGather && !is_on_cooldown("mining")) goMining();
   else if (canGather && !is_on_cooldown("fishing")) goFishing();
   else if (

@@ -2478,6 +2478,13 @@ function isOnPartyFarmSpot() {
 function assignRoles() {
   const dragRoute = getBossDragRoute(get_targeted_monster());
 
+  // The crypt is kited from range
+  if (character.map === "crypt" && partyMems.includes(PRIEST)) {
+    TANKER = PRIEST;
+    partyMems = rotateLeader(partyMems, TANKER);
+    return;
+  }
+
   if (
     server.status[dragRoute?.[0]]?.live &&
     partyMems.includes(PRIEST) &&

@@ -5779,3 +5779,130 @@ Diagnosed from the code against the server's call limit (200 cost per 4s, a `mov
   nothing at `cc >= 125`, like the kite loop.
 - Not the cause: harakiri (`suicide()` fires in PvP but the server only kills), and the 1000 ms
   minimum-ping shutdown in `basic_function.7.js` (not specific to the event, same symptom if it lags).
+
+## The crypt run is judged, not listed (`crypt_fighter_strat.16.js`, 2026-11-15)
+
+**No instance info exists.** A crypt's `instance.info` is created empty and only duels fill it, so
+the client only knows what is in view. What makes a ledger exact instead: every crypt mob has
+`respawn: -1`, and the spawn table (`G.maps.crypt.monsters`) gives the counts and types.
+
+**Kills come from the `death` game event, keyed by monster id.** `target_hit` with `kill` only fires
+for our own direct hit. The party-wide `game_log` kill line (`server.kill.player.*`) reaches all three
+characters and carries a display name but no id, so shared storage would count it three times.
+`death` reaches everyone in view with the id; each character writes its own `cryptRun:<name>` record
+(`{ instance, killed: { id: mtype }, isMinionsSwept }`) and `readCryptRun` merges them by id. Own keys
+mean no read-modify-write race, and the `instance` field (a random 24-char name per opening) retires
+old records without the merchant resetting anything.
+
+**One model for all eight bosses** (`canHoldCryptBosses`, `isCryptKillable`). Nothing is listed as
+killable; a boss is wanted when its dps on the tanker stays under `CRYPT.holdShare` of the party's
+heal per second and the kill fits in `CRYPT.maxKillS`. Server facts the model leans on:
+- `anger` (Bill, Lestat) re-targets a random player within 300 every 8s, so those are judged on
+  whoever they hurt most, not on the tanker.
+- Orlok's zappers hit everyone within 300 for pure damage and stack up for their whole degen
+  lifetime (`cryptSpawnDps`). That is what rules him out, not his own attack.
+- Aura conditions with `incdmgamp` (Angel's curse) multiply the whole cluster's damage here, since
+  `calculateDamage` does not read it yet.
+- Elena heals her focus only within 120 of it, herself otherwise (66k per 0.8s). Alone she cannot
+  be out-damaged, so she is never hunted and never counts toward "bosses left". Next to a tankable
+  boss the tanker's kite is anchored on her (`pairWith`), and she becomes the target the moment
+  her heal goes to the partner.
+
+**A cluster too strong is pulled apart, not fled from.** `planCryptFight` drags one holdable boss to
+the nearest junction clear of the others through `dragToSpot` (the franky drag), via the
+`getCryptKiteAnchor` hook in `resolveKiteTarget`. Arriving with the cluster still too strong, or
+having nothing holdable, is a retreat: scare, block those types for `CRYPT.memoryMs`, walk to a clear
+junction. The block is what stops patrol → retreat → patrol flapping.
+
+**Trips need a stop watcher.** `selectFightTarget` does not run the crypt strategy while its own trip
+is under way, so a patrol or nest walk passes `stopWatcher` (`shouldStopCryptTrip`) to notice a boss.
+The old per-tick `setInterval` did that job and stacked up.
+
+**The tanker leads, the rest follow** (`followCryptLeader`, by `parent.party[TANKER]` when out of
+view). Nothing is judged without tanker and healer in view (`fight.isReady`): otherwise the holder
+falls back to ourselves, nothing looks holdable, and the run would close itself. A full junction lap
+with nothing fought closes the run, which covers a missed kill.
+
+**Priest tanks the crypt, and freezing is part of the model (2026-11-15).** `assignRoles` pins the
+priest inside the crypt: a ranged tank can kite, a melee one cannot. Server facts behind it:
+- `frozen` is `frequencym: 0.3` and `speed: -40` for 5s. A snowball freezes a monster every time
+  (720 range, any class); a freeze weapon only by `attr0` percent per hit. Each character publishes
+  its own uptime (`cryptFreeze`) and the model takes the party's best.
+- A frozen melee boss is slower than any of us, so a ranged victim that outranges it takes nothing
+  for that share of the time (`isCryptKitable`); anyone else takes 30%. This is what lets
+  Marceline (8960 x 2) and Angel (2680 x 4) pass the hold check at all.
+- A boss's spawns (`stype: "spawn"`) each target one player and are removed outright when that
+  player's target drops, so a scare deletes them. Nobody needs a call: each character scares on its
+  own when a zapper is on it. With the whole party able to scare, a zapper's modelled life is the
+  scare cooldown instead of its 64s degen; the zap still hits everyone in 300, so it is charged
+  once per party member.
+- Spike's bats are the same kind of spawn, five a second. They are left out of the hold check
+  (splash and the heal guard's scare deal with them), and a boss with fighting spawns is fought
+  under the pull strategies. Spike never roams, so his spawn box is seeded as a sighting.
+- **Zappers and bats only land on players in the boss's `points`**, and any hit of 1 or more adds
+  one (a snowball counts). So the tanker never damages a zapper boss: it holds it by absorb alone,
+  never gets a zapper, and never has to scare the boss off itself.
+- **The last tankable boss is bait while a supporter lives** (`baitCryptSupporter`). Nobody hits
+  it; the tanker walks it to the supporter with the same drag, and it is only fought again once
+  the supporter is dead or given up (`isSupportGivenUp`: a full lap without finding her, or
+  `CRYPT.pairPatienceMs` next to her without the heal moving over). Before the last boss the
+  party still hits a partner freely, since another one is left if it dies.
+- Snowballs are optional: the merchant sells them, and without any the freeze credit falls back
+  to the frost staff's chance per hit.
+
+**An opened crypt is left to age (`cryptVisit`, 2026-11-15).** Untargeted monsters level on a
+server timer that runs for every instance, paused or not: one level per
+`max(3min, max_hp * 30ms) * 2^(0.3 * (level - 1))`, each worth +0.25 `luckx`, half the base hp,
+12.5% attack and 0.034 frequency. After 54h (earthiverse's wait) that is Lestat level 6, Bill 5,
+Elena 7, and the vbats level 8 at double attack; Spike never levels in that time (18.7M hp).
+- `openCryptInstance` writes `cryptVisit = { instance, openedAt, realm, isStarted }` and only sets
+  `cryptInstance` itself when `CRYPT.ageMs` is 0. A fighter promotes it (`startAgedCrypt`) once
+  aged, on the visit's realm, with the whole party on that realm: `cryptInstance` stops server
+  hops wherever a character stands, so it must not be raised while someone is away.
+- Bosses in view carry their live stats; the ones not seen yet are judged at the level the timer
+  predicts (`agedCryptBoss`), not at G's level 1.
+- A server restart wipes instances. `enter` then fails with an `invalid` response, and
+  `isCryptGone` clears `cryptInstance` (only on the visit's own realm).
+- `CRYPT.autoOpen` (off) lets the merchant open one from his idle routine (`maybeOpenCrypt`) when
+  none is ageing or running and a key is in the bag or bank.
+
+**Sightings are shared.** The mage blinks ahead, so each character publishes its sightings through
+`publishCharacterInfo` once a second and merges the party's by newest `at`. A spot found empty is
+a tombstone (`isGone`), not a delete, or a stale copy from someone else would bring it back.
+
+**From earthiverse's crypt setup:** supporters are never frozen (a slowed Elena can't stay within
+heal range of her partner), and the priest curses a partner that is outrunning her. Kill order is
+supporter first, then whatever is nearest. His warrior's splash/single weapon swap is what
+`getWarriorMainhand` already does under the pull strategies.
+
+**When the tanker is down, nobody fights (`escapeCrypt`, 2026-11-15).** The tanker counts as down
+when it is dead in view, publishes `rip`, or its party entry is in another instance (respawned and
+walking back). Followers then hold fire: a boss on us is kited to the entrance through the same
+`dragToSpot` anchor (`cryptPlan.isEscape`), one on an ally is kept in front of us from its far side
+(`holdBehindCryptBoss`), otherwise we wait at the entrance. Before this they walked to the dead
+tanker's last party position, straight into whatever killed it; a simulated run wiped that way
+every time.
+
+**Scares split by role.** Damage dealers scare whatever is on them. The tanker scares zappers, and
+bosses only when `canHoldCryptBosses` says it can't hold them, so it no longer scares off a boss
+the plan just chose because raw dps ignored the freeze and kite credit.
+
+**Stop checks on every crypt walk.** A boss on one of us ends a follow, nest, patrol or entrance
+walk. The retreat walk ignores the bosses it is backing off from (`isCryptBlocked`), or it stops
+on its first step and never leaves.
+
+## The kite steps around idle monsters' aggro (`isAggroSpot`, basic_function_kiting.47.js, 2026-11-15)
+
+The server aggros an idle monster onto a player through a 32px grid: the monster sits in one cell,
+and only players in that cell or the 8 around it are checked (32–64px per axis, depending on where
+the cell edges fall). Of those, only a player within 45° of the monster's `angle` gets it
+(`is_in_front`), and only within its attack range, which for bosses like Franky (948) or
+Mr. Green (620) never limits anything. `angle` is the direction it last walked
+(`calculate_vxy`) or attacked (`direction_logic`), and the client keeps the same field on
+`parent.entities`. The server compares the raw difference, without wrapping around ±180°, and so does
+`isAggroSpot`. A monster with no `angle` yet counts as facing us.
+
+`resolveDestination` now takes an orbit spot only when it is both reachable and clear of that rule
+for every idle aggressive monster other than the kite target, sweeping around the orbit as it
+already did for walls. If no clear spot is reachable it falls back to the plain orbit spot. This
+was a rogue circling Franky or Mr. Green and walking through the front of another boss.
