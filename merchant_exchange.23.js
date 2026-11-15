@@ -125,7 +125,7 @@ function isExchangeQueued(itemName) {
 function getExchangeNpc(entry) {
   if (entry.holidayNpc && server.status["holidayseason"])
     return entry.holidayNpc;
-  if (entry.npc && !canUseNpcsRemotely()) return entry.npc;
+  if (entry.npc && !haveAComputer()) return entry.npc;
 }
 
 /**

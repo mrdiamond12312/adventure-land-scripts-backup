@@ -397,10 +397,12 @@ async function craft(item, craftQuantity = 1, place = find_npc("craftsman")) {
   }
 
   if (isEnoughIngredients) {
-    if (
+    if (haveAComputer()) {
+      // The bank refuses the craft; the tick walks us out and the computer does the rest
+      if (isInBank()) return;
+    } else if (
       !isAdvanceSmartMoving &&
       !smart.moving &&
-      !canUseNpcsRemotely() &&
       get_nearest_npc()?.name !== "Leo"
     ) {
       await advanceSmartMove(place, { useBlink: false, useMagiport: false });

@@ -6029,3 +6029,13 @@ read it. Primlings work the same way: `planGraceStep` no longer stops whenever o
 leaving `requestPrimling()` for the bank loop to bring out with the scrolls. A rare compound set
 waiting on its primling asks the same way. `isPoolFodder` also skips `IGNORE` names, which the
 sets and vendor test would otherwise take (`supermittens`, `carrotsword`, `staff`, `blade`).
+
+## A computer in the bank waits, it does not walk (2026-11-15)
+
+`canUseNpcsRemotely()` is false inside the bank even with a computer, since the bank refuses every
+trade. `getExchangeNpc` and `craft()` read that as "no computer" and walked to the NPC: every
+`fetchExchangeStock` for seashells or leather ended at the fisherman or the leather merchant, and
+every craft that pulled an ingredient from the bank ended at the craft spot. Both now ask
+`haveAComputer()`. In the bank with one they do nothing that tick: `exchangeSomething` already
+skips there, `craft()` returns, and the tick's idle `moveHome` walks the merchant out, where the
+computer reaches the NPC from wherever he stands.
