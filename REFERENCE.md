@@ -3620,6 +3620,20 @@ that can never fire. Both now use `countBagKeyAtLevel`. `countInventoryAtLevel` 
 raw, so a copy with no level field (`oxhelmet`) landed under `"undefined"` and `Number(level)` came
 back `NaN`, zeroing its `inBag`.
 
+**Titled compoundables join the plain line (2026-11-15).** A compound or craft result inherits the
+title (`p`) of any titled ingredient, so a shiny ring or earring tracked as its own `name#shiny` line
+just waited for two more shinies that rarely came. `getItemKey` now drops the title for compoundables
+only — titled upgradeables still keep their own line, since an upgrade never mixes copies. All the
+keyed accounting above (keep thresholds, pulls, the store fodder test) then sees a shiny as part of
+the line. A set holds at most one titled copy, so each title moves on to its own result rather than
+two shinies merging into one; three shinies with no plain copies never compound. Every count follows
+the same rule, `countCompoundableCopies` = plain + min(titled, ⌊plain/2⌋), because a count that
+took 2 shiny + 1 plain as a set would pull for it and then stash it back, the churn described above.
+`pickCompoundPull` tries every plain/titled split of a pull and keeps the smallest one that
+completes the most sets, and `hasBagCompoundSet` stores a shiny that has no two plain partners in
+the bag. `isSaleableItem` no longer spares titled items: anything in `SALE_ABLE` is sold whether or
+not it has a title.
+
 **The gather gate and the purge valve fought over the same slot.** `freeBagSlotForWork` sells until
 `esize` passes `RETRIEVE_SCROLL_SLOTS`, but `canGather` and both `goFishing`/`goMining` guards read
 plain `isInvFull()`, which is `esize <= 1`. The freed slot therefore made gathering viable before
@@ -5649,7 +5663,15 @@ attempt, feeds only on very expensive items. Without a primling the stack is div
 only pays on dearer items — the planner decides, nothing is hard-coded.
 
 **How it runs.** `findAndUpgrade` hands an item to `planGraceStep` when `UPGRADE_CONFIG` lists it
-with `graceFromLevel` at or under its level and no craft is climbing it. Each tick:
+with `graceFromLevel` at or under its level and no craft is climbing it, and (since 2026-11-15)
+for every `isRareItem` upgrade too. Before that, a rare item simply took a primling whenever one
+existed and waited for one that was still banked, so primlings went on everything and failstacking
+never ran off the list. Now the planner prices that choice like any other, and with no primling
+it still upgrades, or failstacks when that is cheaper. An unlisted item's worth falls back to
+`item_value × 2`. The plain climb cost is no good there: it blows up at rare grades
+(`handofmidas` +9 comes to ~49b), which would push every plan to feed and stack. A line worth more
+gets a `value` in `UPGRADE_CONFIG`. Offering lookups include the personal pack (`items24` on
+`bank_u`), where primlings are kept. Each tick:
 
 1. One calculate-only upgrade (same-grade scroll, plus a primling if one is on hand) gives the
    chance; `estimateGraceNum` inverts the model to the grace number, hidden counters included.
@@ -5936,3 +5958,63 @@ instance. Only the native mover (advance_smart_move.20.js) passed the name. The 
 enters `cryptInstance` when `isCryptRunHere()`, which needs no key. If the server answers
 `transport_cant_invalid`, the instance is gone and the run is closed (`isCryptGone`).
 The merchant opens crypts with his own `smart_move` + `enter("crypt")` and is unaffected.
+
+## The merchant banks on bank_u, entering each floor at its door (`getBankFloorEntry`, 2026-11-15)
+
+The server checks only that a pack's floor (`bank_packs[pack][0]`) is the map we stand on, never
+the distance, so any spot on a floor reaches all its packs. `goToBankFloor` therefore aims for the
+spawn the door it walks through opens onto, rather than the middle of the floor: a hop between
+floors ends the moment the door transports us. The floors run `bank` → `bank_b` → `bank_u`
+(`BANK_FLOORS` maps each to the map whose door leads down into it). Walking down, or in from town,
+we land at the door from the floor above (main's door → `bank` (0, -37), `bank_b` (-264, -412),
+`bank_u` (0, -41)); walking up, at the door from the floor below (`bank` (1, -436), `bank_b`
+(-104, -171)). Spawn indices come from the doors in `G.maps`, so a moved door follows by itself.
+
+`bank_u` holds `items24`–`items47`. `DEFAULT_AVOID_MAPS` keeps it out of fighters' paths only, so
+the merchant may also route through it, including its `level2` door. Every store pass now visits
+all three floors, adding a `bank_b` ↔ `bank_u` round trip per bank loop. `items24` stays in
+`IGNORE_BANK_SLOTS` as the personal pack.
+
+## Failstack fodder from the bank (`FAILSTACK_POOL`, merchant_grace.56.js, 2026-11-15)
+
+Checked against the server's `socket.on("upgrade")` in `node/server.js`. The pity counters
+`p.ugrace[n]` / `S.ugrace[n]` are keyed by the target level alone. Any upgradeable item that
+fails at N adds +1 at N and N-1, and when 8 ≤ N ≤ 15 another +1 at N-1, +2 at N-2 and +2 at N-3
+(realm +3). The item's name, grade and value never enter it. Any success at N zeroes N. A
+fodder's own chance comes from its base grade (`D.upgrades[igrade][N]`). So for a stack at N,
+any spare copy sitting at exactly N-1 is as good as a helmet climbed there.
+
+`listPoolFodder` takes copies at N-1, grade ≤ 1 at that level, that are vendor gear or in the
+`bunny` / `holidays` / `wanderers` sets. It skips locked, titled, craft-ingredient,
+merchant-gear and `UPGRADE_CONFIG` items, and the slot being upgraded. Each line gives only what
+it holds above `getKeepThreshold`. A pool copy is priced at `item_value` (its sale price, the
+only other thing it would ever earn) plus its scroll. A helmet is priced at the full climb.
+`pickFailstackFodder` takes the lower gold per fail. Against live `G` 18285, gloves/shoes/wshoes
+already beat a fresh helmet from a +6 stack. The gap grows fast: a helmet climbed for a +9 stack
+costs ~1.7m, while a spare gloves +8 costs ~250k. Grade ≤ 1 runs out by +9 for these sets, so
++10 stacks still buy helmets.
+
+A pool copy in the bank is not reachable from the tick (the bank refuses upgrades), so
+`runFailstackStep` waits, and `retrievedBankItemToUpgrade` pulls up to `FAILSTACK_POOL.pull`
+copies right after craft ingredients while `isFailstacking()`. While the stack runs,
+`isHeldFailstackFodder` keeps every eligible N-1 copy in the bag (store routine, purge, and
+`findAndUpgrade` all skip it), except `failstackSlot`, the item the stack is for. A wanderers +6
+can be both. After `FAILSTACK_HOLD_MS` without a step, leftovers go back through the normal
+store pass.
+
+Leveling vendor items ahead of time to stock the bank saves no gold: that is the same climb a
+helmet pays on demand. Only copies that come in from loot are cheap, and the purge already sells
+vendor gear below `PURGE_GEAR_LEVEL` (8) once the bank is full, keeping the +8s, which are the
+valuable ones (+9 stacks).
+
+**Requests to the bank loop outlive the hold (`bankRequests`, same day).** The first version pulled
+fodder only while `isFailstacking()`, a 60s hold the upgrade tick refreshes. Inside the bank the
+tick cannot refresh it (`planGraceStep` returns at `isInBank()` first), and the pull is the bank
+loop's last step, so a visit over 60s pulled nothing and the stack waited on a bank copy for good,
+with every other upgrade queued behind it. A stack whose fodder is banked now leaves
+`bankRequests.fodderLevel` standing for `BANK_REQUEST_MS` (10 min); the pull and the bag hold both
+read it. Primlings work the same way: `planGraceStep` no longer stops whenever one is banked (with
+`items24` visible that was always), it plans first and waits only when the chosen send uses one,
+leaving `requestPrimling()` for the bank loop to bring out with the scrolls. A rare compound set
+waiting on its primling asks the same way. `isPoolFodder` also skips `IGNORE` names, which the
+sets and vendor test would otherwise take (`supermittens`, `carrotsword`, `staff`, `blade`).

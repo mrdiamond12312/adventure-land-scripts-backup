@@ -1,7 +1,9 @@
 const MAGIPORT_IGNORE_LIST = ["bank", "bank_u", "bank_b", "jail"];
 
-/** Maps a path may not enter, pass through, or end on, unless smartMove is given its own */
-const DEFAULT_AVOID_MAPS = Object.freeze(["bank_u"]);
+/** Maps a path may not enter, pass through, or end on, unless smartMove is given its own; the merchant banks on bank_u */
+const DEFAULT_AVOID_MAPS = Object.freeze(
+  character.ctype === "merchant" ? [] : ["bank_u"],
+);
 
 /** What ALPathfinder's deserializer wants on every map in G, and its stand-ins */
 const PATHFINDER_MAP_DEFAULTS = Object.freeze({

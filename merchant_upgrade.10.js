@@ -7,22 +7,21 @@ if (parent.caracAL) {
 }
 
 const KEEP_THRESHOLD = {
-  firestars: 12,
-  harbringer: 12,
-  oozingterror: 12,
+  firestars: 8,
+  harbringer: 6,
+  oozingterror: 6,
   pouchbow: 4,
-  daggerofthedead: 12,
-  bowofthedead: 12,
+  daggerofthedead: 6,
+  bowofthedead: 8,
   froststaff: 8,
   frankypants: 6,
-  gphelmet: 6,
-  ololipop: 12,
-  glolipop: 12,
+  gphelmet: 4,
+  ololipop: 6,
+  glolipop: 6,
   fallen: 16,
 
   // new stuffs!
-  cloverstud: 8,
-  horsemanpumpkin: 7,
+  cloverstud: 6,
   handofmidas: 7,
 
   // lifted later
@@ -86,12 +85,15 @@ var lastRetrievePull = { at: 0, signatures: {} };
 // ---------------------------------------------------------------------------
 
 /**
- * An item's line in itemsHighestLevel: titled copies (.p) are tracked apart.
+ * An item's line in itemsHighestLevel. Titled (.p) upgradeables are tracked apart;
+ * a titled compoundable joins the plain line, since a compound inherits the title.
  * @param {{ name: string, p?: string }} item
  * @returns {string} name, or name#p
  */
 function getItemKey(item) {
-  return item.p ? `${item.name}#${item.p}` : item.name;
+  return item.p && !G.items[item.name]?.compound
+    ? `${item.name}#${item.p}`
+    : item.name;
 }
 
 /** @returns {string} the item name behind a getItemKey key */
@@ -105,20 +107,45 @@ function matchesItemKey(item, itemKey) {
 }
 
 /**
- * Unlocked bag copies of one line at one level. Keyed like findCompoundSet, so a
- * titled copy never counts towards the plain line's set.
+ * Unlocked bag slots of one line at one level, split by title.
  * @param {string} itemKey - see getItemKey
  * @param {number} level
- * @returns {number}
+ * @returns {{ plain: number[], titled: number[] }}
  */
-function countBagKeyAtLevel(itemKey, level) {
-  return character.items.filter(
-    (item) =>
-      item &&
-      !item.l &&
-      matchesItemKey(item, itemKey) &&
-      (item.level ?? 0) === level,
-  ).length;
+function getBagCopiesAtLevel(itemKey, level) {
+  const copies = { plain: [], titled: [] };
+  character.items.forEach((item, index) => {
+    if (!item || item.l) return;
+    if (!matchesItemKey(item, itemKey) || (item.level ?? 0) !== level) return;
+    (item.p ? copies.titled : copies.plain).push(index);
+  });
+  return copies;
+}
+
+/**
+ * Copies that fit into compound sets holding at most one titled copy each.
+ * @param {number} plain
+ * @param {number} titled
+ * @returns {number} a third of it, rounded down, is the set count
+ */
+function countCompoundableCopies(plain, titled) {
+  return plain + Math.min(titled, Math.floor(plain / 2));
+}
+
+/**
+ * @param {object} item - a compoundable bag item
+ * @param {number} index - its bag slot
+ * @returns {boolean} whether the bag holds a set this copy can go into
+ */
+function hasBagCompoundSet(item, index) {
+  const { plain, titled } = getBagCopiesAtLevel(
+    getItemKey(item),
+    item.level ?? 0,
+  );
+  if (!item.p) return countCompoundableCopies(plain.length, titled.length) >= 3;
+
+  const rank = titled.indexOf(index);
+  return rank !== -1 && rank < Math.floor(plain.length / 2);
 }
 
 /**
@@ -213,7 +240,7 @@ async function ensureOffering(isRareItem) {
   if (
     isRareItem &&
     locate_item("offeringp") === -1 &&
-    getItemBankSlots("offeringp").length > 0 &&
+    getItemBankSlots("offeringp", true).length > 0 &&
     !smart.moving
   ) {
     await retrieveBankItem("offeringp", 0, { travel: false });
@@ -310,6 +337,41 @@ function groupItemsByLevel(items) {
 }
 
 /**
+ * The smallest pull that completes the most new sets, more titled copies on a tie.
+ * Whole sets only: a short pull can never compound and gets stashed back.
+ * @param {{ plain: number, titled: number }} bag - copies already in the bag
+ * @param {{ plain: number, titled: number }} bank - copies available to pull
+ * @param {number} room - bag slots the pull may fill
+ * @returns {{ plain: number, titled: number } | undefined}
+ */
+function pickCompoundPull(bag, bank, room) {
+  const setsOf = (plain, titled) =>
+    Math.floor(countCompoundableCopies(bag.plain + plain, bag.titled + titled) / 3);
+
+  let best;
+  let bestSets = setsOf(0, 0);
+
+  for (let plain = 0; plain <= Math.min(bank.plain, room); plain++) {
+    for (let titled = 0; titled <= Math.min(bank.titled, room - plain); titled++) {
+      const sets = setsOf(plain, titled);
+      const size = plain + titled;
+      const isBetter =
+        sets > bestSets ||
+        (best &&
+          sets === bestSets &&
+          (size < best.plain + best.titled ||
+            (size === best.plain + best.titled && titled > best.titled)));
+      if (!isBetter) continue;
+
+      best = { plain, titled };
+      bestSets = sets;
+    }
+  }
+
+  return best;
+}
+
+/**
  * Returns the copies needed to complete sets of 3, counting what the bag holds.
  * @param {Array} items
  * @param {number} inventoryEmptySlots
@@ -322,16 +384,19 @@ function filterCompoundableSets(items, inventoryEmptySlots) {
 
   for (const level in byLevel) {
     const group = byLevel[level];
-    const inBag = countBagKeyAtLevel(getItemKey(group[0]), Number(level));
-    const sets = Math.floor((inBag + group.length) / 3);
-    let take = Math.min(group.length, Math.max(0, sets * 3 - inBag));
+    const plain = group.filter((item) => !item.p);
+    const titled = group.filter((item) => item.p);
+    const inBag = getBagCopiesAtLevel(getItemKey(group[0]), Number(level));
 
-    // Whole sets only: a short pull can never compound and gets stashed back
-    while (take > room) take -= 3;
-    if (take <= 0) continue;
+    const pull = pickCompoundPull(
+      { plain: inBag.plain.length, titled: inBag.titled.length },
+      { plain: plain.length, titled: titled.length },
+      room,
+    );
+    if (!pull) continue;
 
-    result.push(...group.slice(0, take));
-    room -= take;
+    result.push(...plain.slice(0, pull.plain), ...titled.slice(0, pull.titled));
+    room -= pull.plain + pull.titled;
   }
 
   return result;
@@ -455,6 +520,11 @@ async function retrievedBankItemToUpgrade() {
     take(id, true);
   }
 
+  // A running failstack's fodder comes next
+  const fodder = selectFailstackPull(budget);
+  budget -= fodder.length;
+  picked.push(...fodder);
+
   const targetedIds = new Set(pickedIds);
   const now = Date.now();
 
@@ -484,7 +554,8 @@ async function retrievedBankItemToUpgrade() {
     take(id, false);
   }
 
-  if (!picked.length) return false;
+  const primling = selectPrimlingPull();
+  if (!picked.length && !primling) return false;
 
   // The scrolls they burn come along in the same visit
   const scrollNames = new Set(
@@ -499,7 +570,7 @@ async function retrievedBankItemToUpgrade() {
     .filter(Boolean)
     .slice(0, Math.max(0, character.esize - picked.length));
 
-  await retrieveAll([...picked, ...scrollSlots]);
+  await retrieveAll([...picked, ...scrollSlots, ...(primling ? [primling] : [])]);
 
   const signatures = {};
   for (const id of pickedIds) {
@@ -517,22 +588,15 @@ async function retrievedBankItemToUpgrade() {
 
 /**
  * Three unlocked inventory slots holding the same item line at the same level.
+ * At most one titled copy per set, so each title carries over to its own result.
  * compound() takes arbitrary slots, so they need not sit side by side.
  * @param {string} itemKey - see getItemKey
  * @param {number} level
  * @returns {number[] | undefined}
  */
 function findCompoundSet(itemKey, level) {
-  const slots = [];
-
-  for (let i = 0; i < character.items.length && slots.length < 3; i++) {
-    const item = character.items[i];
-    if (!item || item.l) continue;
-    if (!matchesItemKey(item, itemKey) || (item.level ?? 0) !== level) continue;
-
-    slots.push(i);
-  }
-
+  const { plain, titled } = getBagCopiesAtLevel(itemKey, level);
+  const slots = [...titled.slice(0, 1), ...plain].slice(0, 3);
   return slots.length === 3 ? slots : undefined;
 }
 
@@ -581,7 +645,7 @@ async function findAndCompound() {
           : itemGrade >= 2
           ? 0
           : itemInfo.grades[0] + 2);
-    const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
+    const havePrimlingInBank = getItemBankSlots("offeringp", true).length > 0;
 
     if (!targeted && !canSpareCompound(itemKey, itemLevel)) continue;
 
@@ -599,7 +663,10 @@ async function findAndCompound() {
     const offeringSlot = getOfferingSlot(wantsPrimling);
     const offeringReady =
       !havePrimlingInBank || !wantsPrimling || offeringSlot !== undefined;
-    if (!offeringReady) continue;
+    if (!offeringReady) {
+      requestPrimling();
+      continue;
+    }
     if (
       isListed &&
       offeringSlot !== undefined &&
@@ -660,6 +727,7 @@ async function findAndUpgrade() {
     if (!targeted && IGNORE.includes(item.name)) continue;
     if (!item_info(item).upgrade) continue;
     if (targeted && itemLevel >= getCraftTargetLevel(item.name)) continue;
+    if (isHeldFailstackFodder(item, i)) continue;
 
     // Don't eat the copy another recipe wants at this exact level
     if (countSpareAtLevel(item.name, itemLevel) < 1) continue;
@@ -687,7 +755,7 @@ async function findAndUpgrade() {
   const item = character.items[itemIndex];
   const itemName = item.name;
   const itemKey = getItemKey(item);
-  // Neither a targeted climb nor vendor gear burns a primling: a break just
+  // Neither a targeted climb nor vendor gear is worth planning: a break just
   // costs another base item, re-bought for a few hundred gold
   const isRareItem =
     !selectedTargeted &&
@@ -695,24 +763,22 @@ async function findAndUpgrade() {
     (item.level >= 6 ||
       (item.level >= 4 && selectedGrade >= 1) ||
       selectedGrade >= 2);
-  const havePrimlingInBank = getItemBankSlots("offeringp").length > 0;
+  // The planner picks primling, failstack or plain by gold per success
+  const isPlanned =
+    isGraceUpgrade(item, selectedTargeted) ||
+    (isRareItem && !!getBaseUpgradeChance(itemName, (item.level ?? 0) + 1));
 
   let scrollSlot;
   let offeringSlot;
-  if (isGraceUpgrade(item, selectedTargeted)) {
+  if (isPlanned) {
     const step = await planGraceStep(itemIndex);
     if (step.scrollSlot === undefined) return step.sent;
     ({ scrollSlot, offeringSlot } = step);
   } else {
     scrollSlot = await ensureScroll(`scroll${selectedGrade}`, selectedGrade);
     if (scrollSlot === -1) return;
-
-    await ensureOffering(isRareItem);
-    // Scrolls and offerings come out of the bank, but it refuses the upgrade
+    // Scrolls come out of the bank, but it refuses the upgrade
     if (isInBank()) return;
-
-    offeringSlot = getOfferingSlot(isRareItem);
-    if (havePrimlingInBank && isRareItem && offeringSlot === undefined) return;
   }
 
   const production = getLeakSafeProduction(item);

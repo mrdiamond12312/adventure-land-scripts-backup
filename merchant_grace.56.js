@@ -15,6 +15,9 @@ const UPGRADE_CONFIG = {
 /** Vendor item failed on purpose */
 const FAILSTACK_FODDER = "helmet";
 
+/** Spare leveled copies failed before a helmet is bought: these sets plus vendor gear, `pull` per bank visit */
+const FAILSTACK_POOL = { sets: ["bunny", "holidays", "wanderers"], pull: 3 };
+
 /** Gold kept before any fodder is bought */
 const FAILSTACK_GOLD_FLOOR = 100_000_000;
 
@@ -50,6 +53,16 @@ const stackFails = {};
 
 /** The probe leaves fodder alone until then */
 var failstackUntil = 0;
+
+/** The level the running failstack builds, and the bag slot it builds for */
+var failstackLevel = 0;
+var failstackSlot = -1;
+
+/** How long a request to the bank loop stands */
+const BANK_REQUEST_MS = 10 * 60_000;
+
+/** What the tick asks the next bank visit to bring out */
+const bankRequests = { fodderLevel: 0, fodderUntil: 0, primlingUntil: 0 };
 
 /** Last feed, `{ key, chance, gain }` */
 var lastGraceFeed = null;
@@ -265,8 +278,9 @@ function planGraceUpgrade(state) {
 function getFailstackCost(state, send) {
   const { item, worth, graceNum, primlings } = state;
   const newLevel = (item.level ?? 0) + 1;
-  const failChance = 1 - getBaseUpgradeChance(FAILSTACK_FODDER, newLevel);
-  const attemptCost = getFodderAttemptCost(newLevel);
+  const fodder = pickFailstackFodder(newLevel, state.itemIndex);
+  if (!fodder) return Infinity;
+  const { failChance, cost: attemptCost } = fodder;
   const chanceAt = (grace) =>
     modelUpgradeChance(item, grace, send.scrollGrade, send.usePrimling);
 
@@ -325,8 +339,6 @@ async function planGraceStep(itemIndex) {
 
   const primlingSlot = locate_item("offeringp");
   const hasPrimling = primlingSlot !== -1;
-  // Banked primlings arrive with the next bank trip
-  if (!hasPrimling && getItemBankSlots("offeringp").length > 0) return {};
 
   const reading = await upgrade(
     itemIndex,
@@ -354,6 +366,7 @@ async function planGraceStep(itemIndex) {
   const worth = getItemWorth(item);
   const plan = planGraceUpgrade({
     item,
+    itemIndex,
     worth,
     graceNum,
     floorGraceNum,
@@ -380,7 +393,13 @@ async function planGraceStep(itemIndex) {
   }
 
   if (plan.action === "stack") {
-    return { sent: await runFailstackStep(newLevel) };
+    return { sent: await runFailstackStep(newLevel, itemIndex) };
+  }
+
+  // A banked primling arrives with the next bank trip
+  if (plan.usePrimling && !hasPrimling) {
+    requestPrimling();
+    return {};
   }
 
   let sendSlot = scrollSlot;
@@ -435,11 +454,159 @@ function findFodderSlot(maxLevel) {
   return best;
 }
 
-/** One fodder upgrade towards a fail at `newLevel`; returns true once something was sent */
-async function runFailstackStep(newLevel) {
-  failstackUntil = Date.now() + FAILSTACK_HOLD_MS;
+/**
+ * A copy the server would fail at `newLevel` for us: it tries that very level,
+ * is low grade, and is vendor gear or in a pool set. Spareness is the caller's.
+ * @param {object} item
+ * @param {number} newLevel
+ * @returns {boolean}
+ */
+function isPoolFodder(item, newLevel) {
+  if (!item || item.l || item.p || item.ach) return false;
+  if ((item.level ?? 0) !== newLevel - 1 || item_grade(item) > 1) return false;
 
-  let slot = findFodderSlot(newLevel);
+  const def = G.items[item.name];
+  if (!def?.upgrade || UPGRADE_CONFIG[item.name]) return false;
+  if (IGNORE.includes(item.name) || isCraftIngredient(item.name)) return false;
+  return FAILSTACK_POOL.sets.includes(def.set) || !!findVendorMerchantOf(item.name);
+}
+
+/**
+ * @param {object} item
+ * @param {number} [slot] - its bag slot; the stack's own target is never held
+ * @returns {boolean} whether the bag keeps this copy for the running failstack
+ */
+function isHeldFailstackFodder(item, slot) {
+  const level = isFailstacking() ? failstackLevel : getRequestedFodderLevel();
+  return level > 0 && slot !== failstackSlot && isPoolFodder(item, level);
+}
+
+/** @returns {number} the level the bank loop was asked to bring fodder for, 0 if none */
+function getRequestedFodderLevel() {
+  return Date.now() < bankRequests.fodderUntil ? bankRequests.fodderLevel : 0;
+}
+
+/** Asks the next bank visit for a primling */
+function requestPrimling() {
+  bankRequests.primlingUntil = Date.now() + BANK_REQUEST_MS;
+}
+
+/** @returns {object | undefined} the banked primling a waiting upgrade or compound asked for */
+function selectPrimlingPull() {
+  if (Date.now() >= bankRequests.primlingUntil) return;
+  if (locate_item("offeringp") !== -1) return;
+  return getItemBankSlots("offeringp", true)[0];
+}
+
+/**
+ * Spare pool copies for a stack at `newLevel`, cheapest fail first. A line
+ * gives only what it holds above its keep threshold.
+ * @param {number} newLevel
+ * @param {number} [excludeSlot] - the bag slot being upgraded
+ * @returns {Array<{ item: object, where: "bag"|"bank", slot: number, pack?: string, floor?: string, cost: number, failChance: number }>}
+ */
+function listPoolFodder(newLevel, excludeSlot) {
+  const gear = getMerchantGearCounts();
+  const level = newLevel - 1;
+  const copies = [];
+  const consider = (item, where, slot, pack, floor) => {
+    if (!isPoolFodder(item, newLevel) || gear.has(item.name)) return;
+    const chance = G.upgrades[item_grade({ name: item.name, level: 0 })]?.[newLevel];
+    if (!chance) return;
+    copies.push({
+      item,
+      where,
+      slot,
+      pack,
+      floor,
+      // A spare copy's only other use is its sale price
+      cost: item_value(item) + getScrollPrice(item_grade(item)),
+      failChance: 1 - chance,
+    });
+  };
+
+  character.items.forEach((item, slot) => {
+    if (slot !== excludeSlot) consider(item, "bag", slot);
+  });
+  forEachBankSlot((item, pack, slot, floor) =>
+    consider(item, "bank", slot, pack, floor),
+  );
+
+  copies.sort(
+    (lhs, rhs) =>
+      lhs.cost / lhs.failChance - rhs.cost / rhs.failChance ||
+      (lhs.where === "bag" ? -1 : 1),
+  );
+
+  const spare = {};
+  return copies.filter(({ item }) => {
+    const key = getItemKey(item);
+    spare[key] ??= countKeyAtOrAbove(key, level) - getKeepThreshold(key);
+    return spare[key]-- > 0;
+  });
+}
+
+/**
+ * The cheapest fodder for one fail at `newLevel`, by gold per fail: a spare
+ * pool copy (bag, or bank while the bag has room to pull it), else a helmet.
+ * @param {number} newLevel
+ * @param {number} [excludeSlot] - the bag slot being upgraded
+ * @returns {{ where: "bag"|"bank"|"buy", slot?: number, cost: number, failChance: number } | undefined}
+ */
+function pickFailstackFodder(newLevel, excludeSlot) {
+  const canPull = !isInvFull(RETRIEVE_SCROLL_SLOTS + FAILSTACK_POOL.pull);
+  const pool = listPoolFodder(newLevel, excludeSlot).find(
+    ({ where }) => where === "bag" || canPull,
+  );
+
+  const helmetChance = getBaseUpgradeChance(FAILSTACK_FODDER, newLevel);
+  const helmet = helmetChance && {
+    where: "buy",
+    cost: getFodderAttemptCost(newLevel),
+    failChance: 1 - helmetChance,
+  };
+
+  if (!pool) return helmet || undefined;
+  if (!helmet) return pool;
+  return pool.cost / pool.failChance <= helmet.cost / helmet.failChance
+    ? pool
+    : helmet;
+}
+
+/**
+ * Bank copies a waiting failstack asked for, up to `limit`, less what the bag
+ * already holds for it.
+ * @param {number} limit
+ * @returns {Array<object>} bank slots, shaped like getItemBankSlots
+ */
+function selectFailstackPull(limit) {
+  const level = getRequestedFodderLevel();
+  if (!level || limit <= 0) return [];
+
+  const pool = listPoolFodder(level);
+  const held = pool.filter(({ where }) => where === "bag").length;
+  return pool
+    .filter(({ where }) => where === "bank")
+    .slice(0, Math.max(0, Math.min(limit, FAILSTACK_POOL.pull - held)))
+    .map(({ item, pack, slot, floor }) => ({ ...item, pack, slot, floor }));
+}
+
+/** One fodder upgrade towards a fail at `newLevel`; returns true once something was sent */
+async function runFailstackStep(newLevel, excludeSlot) {
+  failstackUntil = Date.now() + FAILSTACK_HOLD_MS;
+  failstackLevel = newLevel;
+  failstackSlot = excludeSlot;
+
+  const pick = pickFailstackFodder(newLevel, excludeSlot);
+  // The bank loop brings the copy out on its next visit
+  if (pick?.where === "bank") {
+    bankRequests.fodderLevel = newLevel;
+    bankRequests.fodderUntil = Date.now() + BANK_REQUEST_MS;
+    return false;
+  }
+  bankRequests.fodderUntil = 0;
+
+  let slot = pick?.where === "bag" ? pick.slot : findFodderSlot(newLevel);
   if (slot === -1) {
     if (isInvFull(0)) return;
     try {

@@ -29,7 +29,7 @@ var IGNORE = [
   "supermittens",
 
   // "horsecapeg",
-  // "throwingstars",
+  "throwingstars",
   "computer",
   "ancientcomputer",
 
@@ -62,10 +62,11 @@ const STORE_ABLE = [
   "orbofstr",
   "orbofdex",
   "orboftemporal",
+  "throwingstars",
 ];
 
 const SALE_ABLE = [
-  "smoke",
+  // "smoke",
   "vgloves",
   "mcape",
   "santasbelt",
@@ -130,23 +131,20 @@ const SALE_ABLE = [
   "maceofthedead",
   "staffofthedead",
   "swordofthedead",
-  "throwingstars",
 ];
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-/** Spawn positions for each accessible bank floor */
+/** Bank floors in door order from town, each to the map whose door leads down into it */
 const BANK_FLOORS = {
-  bank: { map: "bank", x: 0, y: -280 },
-  bank_b: { map: "bank_b", x: -210, y: -130 },
+  bank: "main",
+  bank_b: "bank",
+  bank_u: "bank_b",
 };
 
-/**
- * Slots to skip globally (gold, personal storage).
- * items23 is reserved for personal items and is never touched.
- */
+/** Slots to skip globally: gold, and items24, the personal pack */
 const IGNORE_BANK_SLOTS = ["gold", "items24"];
 const IGNORE_RARE_GOLD_THRESHOLD = 20e8;
 
@@ -277,7 +275,7 @@ async function goToBankFloor(floor, forced = false) {
     return false;
   }
 
-  const position = BANK_FLOORS[floor];
+  const position = getBankFloorEntry(floor);
   if (!position) {
     console.warn(`No floor entry for ${floor}`);
     return false;
@@ -286,6 +284,26 @@ async function goToBankFloor(floor, forced = false) {
   await advanceSmartMove(position);
   updateBank();
   return true;
+}
+
+/**
+ * The spawn a walk to a bank floor lands on, just inside the door it comes
+ * through: from the floor above, or below when we stand deeper. Any spot on a
+ * floor reaches all its packs.
+ * @param {string} floor
+ * @returns {{ map: string, x: number, y: number } | undefined}
+ */
+function getBankFloorEntry(floor) {
+  if (!BANK_FLOORS[floor]) return;
+
+  const floors = Object.keys(BANK_FLOORS);
+  const here = floors.indexOf(character.map);
+  const there = floors.indexOf(floor);
+  const from = here > there ? floors[there + 1] : BANK_FLOORS[floor];
+
+  const door = G.maps[from]?.doors?.find((entry) => entry[4] === floor);
+  const spawn = G.maps[floor].spawns[door?.[5] ?? 0];
+  return spawn && { map: floor, x: spawn[0], y: spawn[1] };
 }
 
 /**
@@ -805,6 +823,7 @@ async function runBankStoreRoutine(forced) {
       if (!item) return false;
       if (item.l) return false; // skip locked items
       if (keepIndices.has(index)) return false;
+      if (isHeldFailstackFodder(item, index)) return false;
       if (shouldSellItem(item)) return false;
 
       const info = item_info(item);
@@ -812,7 +831,7 @@ async function runBankStoreRoutine(forced) {
       // A compound wants three at that level, an upgrade wants nothing but the
       // item. Anything else is stranded here and belongs back in the pile.
       const isFodder = info.compound
-        ? countBagKeyAtLevel(getItemKey(item), item.level ?? 0) >= 3
+        ? hasBagCompoundSet(item, index)
         : !!info.upgrade;
 
       // A climb only holds its ingredient back while the climb can still happen
@@ -918,7 +937,7 @@ async function runBankStoreRoutine(forced) {
 
 /** @returns {boolean} whether the sell sweep takes this item */
 function isSaleableItem(item) {
-  if (!item || item.l || item.p) return false;
+  if (!item || item.l) return false;
   if (!SALE_ABLE.includes(item.name) || isCraftIngredient(item.name))
     return false;
 
@@ -932,6 +951,7 @@ function isSaleableItem(item) {
 function isPurgeCandidate(item) {
   if (!item || item.l || item.p || item.ach) return false;
   if (IGNORE.includes(item.name) || item_grade(item) >= 2) return false;
+  if (isHeldFailstackFodder(item)) return false;
 
   const def = G.items[item.name];
   if (!def?.upgrade && !def?.compound) return false;
