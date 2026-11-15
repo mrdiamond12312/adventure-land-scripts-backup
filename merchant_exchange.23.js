@@ -37,7 +37,7 @@ const EXCHANGE_QUEUE = [
   { name: "anniversarygift", quantity: 1, keep: 1 },
   { name: "gift0", quantity: 1, keep: 1 },
   { name: "sixcake", quantity: 1, keep: 1 },
-  { name: "seashell", quantity: 20, npc: "fisherman" },
+  { name: "seashell", quantity: 20, keep: 5000, npc: "fisherman" },
   { name: "leather", quantity: 40, npc: "leathermerchant" },
   // { name: "gemfragment", quantity: 50, npc: "gemmerchant" },
 ];
@@ -48,7 +48,8 @@ function hasExchangeStock(entry) {
     ...character.items,
     ...getItemBankSlots(entry.name, true, true),
   ].reduce(
-    (total, item) => (item?.name === entry.name ? total + (item.q ?? 1) : total),
+    (total, item) =>
+      item?.name === entry.name ? total + (item.q ?? 1) : total,
     0,
   );
   return owned >= entry.quantity + (entry.keep ?? 0);
