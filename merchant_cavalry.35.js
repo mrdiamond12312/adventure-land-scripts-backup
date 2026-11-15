@@ -18,6 +18,8 @@ const CAVALRY_ORBIT = CAVALRY.range - 40;
 const CAVALRY_STEP = 60;
 /** Longest the tagging may run before the call goes out */
 const CAVALRY_TAG_WINDOW_MS = 10_000;
+/** Least `s.stone.ms` left when we shoot, so the cavalry kills before the first stone */
+const CAVALRY_TAG_STONE_MS = G.monsters[CAVALRY_MOB].abilities.stone.cooldown / 2;
 /** Seconds we must outlast the pack in melee: a full stone, then the scare */
 const CAVALRY_MIN_TANK_S = (G.conditions.stoned.duration + 1000) / 1000;
 /** Share of our hp the pack may take over CAVALRY_MIN_TANK_S */
@@ -316,7 +318,10 @@ async function tagCavalryMob(mobId, reach) {
         distance(character, mob) > reach
       )
         await positionForCavalryTag(mobId, reach);
-      else if (!is_on_cooldown("attack"))
+      else if (
+        !is_on_cooldown("attack") &&
+        (mob.s?.stone?.ms ?? 0) >= CAVALRY_TAG_STONE_MS
+      )
         await withTimeout(attack(mob), 300).catch(() => {});
     }
 

@@ -4531,10 +4531,21 @@ snipe, scare and stand all skip on `DUTY.CAVALRY`. Interaction has no stun check
 goes out while stoned. When the run ends, releasing the duty lets the tick's `scareAwayMobs` shed
 whatever is left.
 
-Unverified: oneeye's chase speed (`G.monsters.oneeye.charge` is absent from upstream design data)
-and the cavalry's real damage. A rough estimate from their stats is ~200k/s against oneeye armor,
-about 4s per level 3 oneeye (840k hp). Those two numbers decide how much of a pack of 3 dies
-before it closes to 150px.
+**Tag timing (2026-11-15).** Checked against the server and client 18285:
+
+- **Chase speed is 38.6, not 24.** A monster with no `charge` gets `speed × 1.6` (rounded) in
+  `old_common_functions.js`, plus `level × 0.16` on a `grow` spawn; × 0.7 at night (28). A 4s stone
+  lets it walk ~155px, so `CAVALRY_KITE_GAP` (built on 24) can't keep it past 150 through a stone.
+  At 88 speed the merchant regains ~120px in the 2.4s between stones and loses 155 in each.
+- **The cavalry kills fast:** ~477k/s on one oneeye (`cavalry_prepare` stats; the mage fires 3
+  shots per swing), so a level 4 (1.05M hp) dies ~3.1s after the call, level 6 ~4.0s.
+- **The stone timer is visible.** Monster ability timers live in `monster.s` (`{ms, ability}`),
+  start at a random phase at spawn, and keep cycling with no target (they just stone nobody). `s`
+  goes to the client, which counts `ms` down each frame and deletes it at 0 until the reset arrives.
+- Untimed, a sim of the lv81 merchant (500 armor, 11k hp, 88 speed, 220 reach) on a level 4 lost
+  ~7% of day runs: a stone within ~0.45s of the tag froze him 210px out, the oneeye walked inside
+  150 and stayed there, and the call expired on a ~340k hp oneeye. So `tagCavalryMob` shoots only
+  while `s.stone.ms ≥ CAVALRY_TAG_STONE_MS` (half the cooldown); levels 3–6 need just 0.3–0.7s.
 
 ## Kane's luck on coop bosses (`waitOutBossAtKane`, daily_event_fighter_strat.26.js, 2026-10-20)
 
