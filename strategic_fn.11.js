@@ -2899,7 +2899,7 @@ function shouldAttack(target = get_target()) {
 
   if (isBaitHeld(target)) return false;
 
-  if (character.map === "crypt") {
+  if (isDungeonMap(character.map)) {
     return !!partyHealer && !partyHealer.rip;
   }
 

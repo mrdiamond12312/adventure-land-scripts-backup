@@ -935,6 +935,34 @@ async function runBankStoreRoutine(forced) {
 // Purge
 // ---------------------------------------------------------------------------
 
+/** @returns {{bank: Object<string, number>, bag: Object<string, number>}} dungeon needs no sale takes */
+function getDungeonKeeps() {
+  const keeps = { bank: {}, bag: {} };
+  for (const itemId of DUNGEON_NEED_ITEMS) {
+    const banked = getItemBankSlots(itemId, true, true).reduce(
+      (total, item) => total + (item.q ?? 1),
+      0,
+    );
+    const kept = Math.max(
+      0,
+      getDungeonNeed(itemId) - getCarriedByOthers(itemId),
+    );
+    keeps.bank[itemId] = Math.min(kept, banked);
+    keeps.bag[itemId] = kept - keeps.bank[itemId];
+  }
+  return keeps;
+}
+
+/**
+ * @param {Object<string, number>} keeps - spent as items pass
+ * @returns {boolean} whether the item is a kept copy
+ */
+function takeDungeonKeep(item, keeps) {
+  if (!(keeps[item.name] > 0)) return false;
+  keeps[item.name] -= item.q ?? 1;
+  return true;
+}
+
 /** @returns {boolean} whether the sell sweep takes this item */
 function isSaleableItem(item) {
   if (!item || item.l) return false;
@@ -1094,8 +1122,9 @@ function shouldSellItem(item) {
  */
 function sellMarkedItems(predicate = isSaleableItem) {
   const sales = [];
+  const { bag: keeps } = getDungeonKeeps();
   character.items.forEach((item, index) => {
-    if (predicate(item))
+    if (predicate(item) && !takeDungeonKeep(item, keeps))
       sales.push(
         sell(index, item.q ?? 1).catch((e) =>
           console.warn(`Failed selling ${item.name}`, e),
@@ -1112,8 +1141,10 @@ function sellMarkedItems(predicate = isSaleableItem) {
  */
 async function purgeBank() {
   const slots = [];
+  const { bank: keeps } = getDungeonKeeps();
   forEachBankSlot((item, pack, slot, floor) => {
-    if (shouldSellItem(item)) slots.push({ pack, slot, floor });
+    if (shouldSellItem(item) && !takeDungeonKeep(item, keeps))
+      slots.push({ pack, slot, floor });
   });
   slots.sort((lhs, rhs) => lhs.floor.localeCompare(rhs.floor));
 

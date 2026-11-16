@@ -121,18 +121,23 @@ async function oldAdvanceSmartMove(
     log("Advance Smart Move!");
     isAdvanceSmartMoving = true;
 
+    // An open run enters by name, keyless
+    const dungeon = getDungeonOfMap(props.map ?? props);
     if (
-      (props.map === "crypt" || props === "crypt") &&
-      character.map !== "crypt" &&
-      get("cryptInstance")
+      dungeon &&
+      character.map !== dungeon.map &&
+      isDungeonRunHere(dungeon.id)
     ) {
-      if (distance(character, CRYPT_DOOR) > 100)
-        await smart_move(CRYPT_DOOR).catch((e) => e);
+      if (distance(character, dungeon.door) > 100)
+        await smart_move(dungeon.door).catch((e) => e);
 
-      await enter("crypt", get("cryptInstance")).catch((error) => {
-        if (isCryptGone(error)) closeCryptRun({ isGone: true });
-        throw error;
-      });
+      await enter(dungeon.map, getDungeonInstance(dungeon.id)).catch(
+        (error) => {
+          if (isDungeonGone(dungeon.id, error))
+            closeDungeonRun(dungeon.id, { isGone: true });
+          throw error;
+        },
+      );
       await sleep(character.ping * 3 + 3000);
     }
 

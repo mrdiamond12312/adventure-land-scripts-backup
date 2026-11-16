@@ -294,6 +294,30 @@ function checkRogueWeapons() {
 }
 
 /**
+ * Dungeon odds for the party in view
+ * @param {string} [id] - spider, tomb or darkMage
+ */
+function checkDungeon(id = "spider") {
+  for (const row of getDungeonOdds(id))
+    console.warn(
+      `checkDungeon ${id}: ${row.mtype} lv${row.level} ${row.isHoldable ? "HOLD" : "no hold"} alone | dps ${row.dps} vs hps ${row.hps} | kill ${row.killS}s | victims ${row.victims.join(",")}`,
+    );
+
+  const fight = getDungeonFight();
+  const judged = judgeDungeonBosses(DUNGEONS[id], fight);
+  const plans = {
+    spider: () => [planSpiderDenFight(judged, fight)],
+    tomb: () => planTombFights(judged, fight),
+    darkMage: () =>
+      judged.filter((entry) => canFightDungeonGroup([entry], fight)).map((entry) => [entry]),
+  };
+  const fights = (plans[id]?.() ?? []).filter((group) => group.length);
+  console.warn(
+    `checkDungeon ${id}: fights ${fights.map((group) => group.map(({ mtype }) => mtype).join("+")).join(" > ") || "none"}`,
+  );
+}
+
+/**
  * What the hop loop knows about a realm, and what it would do now. Hop owner only.
  * @param {string} [realm] - e.g. "ASIAI"
  */

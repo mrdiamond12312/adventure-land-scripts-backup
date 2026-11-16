@@ -1,7 +1,7 @@
 /** Duties a passer-by may ask for — buffing and stocking strangers is deliberate */
 const OPEN_DUTIES = ["buy_potions", "buff_mluck"];
 /** Duties that move our own items, so they need one of our characters behind them */
-const OWNED_DUTIES = ["inv_full", "elixir", "xptome"];
+const OWNED_DUTIES = ["inv_full", "elixir", "xptome", "dungeon_item"];
 
 character.on("cm", async function ({ name, message }) {
   const msg = message?.msg;
@@ -61,6 +61,8 @@ function canServeInPlace(name, message) {
       return getTotalQuantityOf(message.elixir) >= ELIXIR_DELIVERY;
     case "xptome":
       return getTotalQuantityOf("xptome") >= 1;
+    case "dungeon_item":
+      return getTotalQuantityOf(message.item) >= message.count;
     default:
       return false;
   }
@@ -118,6 +120,13 @@ async function serveDuty(name, message) {
         restock: (shortfall) =>
           restockFromBankOrVendor("xptome", shortfall, "premium"),
       });
+      break;
+
+    case "dungeon_item":
+      if (!partyMems.includes(name) || !DUNGEON_NEED_ITEMS.includes(message.item))
+        break;
+      console.warn(`Fetching ${message.count} ${message.item} for ${name}`);
+      await deliverItems(name, message.item, message.count, message);
       break;
 
     default:
@@ -221,6 +230,36 @@ async function deliverStock(name, itemId, message, options) {
 
 /**
  * @param {string} name requesting character
+ * @param {string} itemId
+ * @param {number} count
+ * @param {object} message the requester's cm
+ */
+async function deliverItems(name, itemId, count, message) {
+  while (
+    getTotalQuantityOf(itemId) < count &&
+    getItemBankSlots(itemId, true).length &&
+    !isInvFull(2)
+  ) {
+    const before = getTotalQuantityOf(itemId);
+    await retrieveBankItem(itemId);
+    if (getTotalQuantityOf(itemId) === before) break;
+  }
+
+  await moveInReachOf(name, message, DELIVERY_RANGE);
+
+  let sent = 0;
+  for (const [index, item] of character.items.entries()) {
+    if (sent >= count) break;
+    if (item?.name !== itemId) continue;
+    const quantity = Math.min(item.q || 1, count - sent);
+    await send_item(name, index, quantity);
+    sent += quantity;
+  }
+  if (sent < count) console.warn(`Only ${sent} of ${count} ${itemId} for ${name}`);
+}
+
+/**
+ * @param {string} name requesting character
  * @param {string} potionId
  * @param {object} message the requester's cm
  */
@@ -259,61 +298,62 @@ async function restockFromBankOrVendor(itemId, shortfall, npcId) {
   return buy(itemId, stillMissing);
 }
 
-/**
- * Keeps enough fresh crypts ageing at home that one matures per run cleared,
- * at most CRYPT.autoOpen, while a key is at hand.
- */
-function maybeOpenCrypt() {
-  if (!CRYPT.autoOpen || !isAtHomeServer()) return;
+/** Opens the first dungeon short of its DUNGEON_OPENING */
+function maybeOpenDungeon() {
+  publishDungeonKit();
+  if (!isAtHomeServer()) return;
 
-  const clearMs = get("cryptClearMs") ?? CRYPT.clearMs;
-  const batch = Math.min(
-    CRYPT.autoOpen,
-    Math.max(1, Math.ceil(CRYPT.ageMs / clearMs)),
-  );
-  const ageing = getCryptVisits().filter(
-    (visit) =>
-      visit.realm === getCurrentServer() && !visit.startedAt && !visit.leftAt,
-  );
-  if (ageing.length >= batch) return;
+  const id = Object.keys(DUNGEONS).find((id) => {
+    const { autoOpen, ageMs, clearMs } = DUNGEON_OPENING[id];
+    if (!autoOpen) return false;
 
-  if (
-    locate_item("cryptkey") === -1 &&
-    !getItemBankSlots("cryptkey", true).length
-  )
-    return;
+    const open = getDungeonVisits(id).filter(
+      (visit) => visit.realm === getCurrentServer() && !visit.leftAt,
+    );
+    const waiting = open.filter((visit) => !visit.startedAt).length;
+    const waitingCap = ageMs
+      ? Math.max(1, Math.ceil(ageMs / (get(`${id}ClearMs`) ?? clearMs)))
+      : autoOpen;
+    const { key } = DUNGEONS[id];
+    return (
+      open.length < autoOpen &&
+      waiting < waitingCap &&
+      hasDungeonNeeds(id) &&
+      (locate_item(key) !== -1 || getItemBankSlots(key, true).length > 0)
+    );
+  });
 
-  return openCryptInstance();
+  if (id) return openDungeonInstance(id);
 }
 
-async function openCryptInstance() {
+async function openDungeonInstance(id) {
   if (isAdvanceSmartMoving || smart.moving) return;
 
   const lock = takeDuty(DUTY.ERRAND);
   if (!lock) return;
 
+  const { key, door, map } = DUNGEONS[id];
   try {
-    if (locate_item("cryptkey") === -1) {
-      await retrieveBankItem("cryptkey");
+    if (locate_item(key) === -1) {
+      await retrieveBankItem(key);
       await sleep(1000 + character.ping);
 
-      if (locate_item("cryptkey") === -1) {
+      if (locate_item(key) === -1) {
         return;
       }
     }
 
-    await smart_move(CRYPT_DOOR);
-    await enter("crypt");
+    await smart_move(door);
+    await enter(map);
 
-    set("cryptVisits", [
-      ...getCryptVisits(),
+    set(`${id}Visits`, [
+      ...getDungeonVisits(id),
       {
         instance: character.in,
         openedAt: Date.now(),
         realm: getCurrentServer(),
       },
     ]);
-    set("lastCryptInstance", new Date());
   } finally {
     releaseDuty(lock);
   }

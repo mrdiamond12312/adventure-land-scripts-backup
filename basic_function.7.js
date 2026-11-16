@@ -128,7 +128,7 @@ function getHomeSetRetryDelay(error) {
  * @returns {Promise<boolean>} whether it is still at it
  */
 async function settleHome() {
-  if (!isHomeUnset() || character.cave || get("cryptInstance")) return false;
+  if (!isHomeUnset() || character.cave || getRunningDungeonId()) return false;
 
   const bean = getBeanSpot();
   if (distance(character, bean) > BEAN_REACH) {
@@ -484,12 +484,20 @@ var smartmoveDebug = false;
 var isAdvanceSmartMoving = false;
 if (parent.caracAL) {
   parent.caracAL.load_scripts([
+    "adventure-land-scripts-backup/dungeon_fighter_strat.57.js",
+    "adventure-land-scripts-backup/spider_den_fighter_strat.58.js",
+    "adventure-land-scripts-backup/tomb_fighter_strat.59.js",
+    "adventure-land-scripts-backup/dark_mage_fighter_strat.61.js",
     "adventure-land-scripts-backup/crypt_fighter_strat.16.js",
     "adventure-land-scripts-backup/taut_path.33.js",
     "adventure-land-scripts-backup/strategic_smart_move.21.js",
     "adventure-land-scripts-backup/advance_smart_move.20.js",
   ]);
 } else {
+  load_code(57);
+  load_code(58);
+  load_code(59);
+  load_code(61);
   load_code(16);
   load_code(33);
   load_code(21);
@@ -595,6 +603,7 @@ setInterval(async function () {
             "goldbooster",
             "luckbooster",
             "suckerpunch",
+            "fieldgen0",
             desiredElixir,
             "elixirluck",
           ].includes(item.name)
@@ -705,9 +714,9 @@ setInterval(async () => {
   } else if (
     isPreparingCave ||
     (USE_CAVE_STRATEGY && isCaveUnderway()) ||
-    isCryptRunHere()
+    isDungeonRunHere()
   ) {
-    // The cave and the crypt are ours alone: partners neither stay nor get asked
+    // The cave and the dungeons are ours alone: partners neither stay nor get asked
     if (hasWhitelistedMember) leave_party();
   } else if (
     inviteTarget &&
@@ -797,6 +806,9 @@ if (character.ctype !== "merchant") {
     useEventStrategy,
     ...(USE_CAVE_STRATEGY ? [useCaveEntryStrategy] : []),
     useCryptStrategy,
+    useSpiderDenStrategy,
+    useTombStrategy,
+    useDarkMageStrategy,
     useTrickOrTreatStrategy,
     useSpecialMobStrategy,
     useFarmingStrategy,

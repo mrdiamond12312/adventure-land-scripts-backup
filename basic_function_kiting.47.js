@@ -329,6 +329,10 @@ async function resolveKiteTarget(target) {
       ? dragToSpot(target, cryptAnchor.spot, get_entity(target.id))
       : withFixedSpot(target, cryptAnchor.spot);
 
+  const dungeonDrag = getDungeonKiteAnchor(target);
+  if (dungeonDrag)
+    return dragToSpot(target, dungeonDrag, get_entity(target.id));
+
   const dragRoute = isAssignedAsTanker() && getBossDragRoute(target);
   if (dragRoute && !isDragReleased(dragRoute)) {
     const [bossType, route] = dragRoute;

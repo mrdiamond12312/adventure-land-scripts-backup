@@ -152,6 +152,9 @@ function getNextAction() {
   if (isAwaitingPinkie(healee)) return undefined;
   if (healee) return { skill: "heal", target: healee };
 
+  const field = getFieldToHeal();
+  if (field) return { skill: "heal", target: field };
+
   const mob = isOnTrip()
     ? getEnRouteTarget()
     : refineTarget(fightTarget).attackTarget;
@@ -325,7 +328,7 @@ function getAbsorbTarget() {
     if (
       member &&
       is_in_range(member, "absorb") &&
-      (character.map !== "crypt" || canAbsorbInCrypt(member))
+      canAbsorbInDungeon(member)
     ) {
       const hasAggro = Object.values(parent.entities).some(
         (e) => e.target === memberId,

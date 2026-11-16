@@ -90,7 +90,8 @@ basic_function.7.js          [SHARED — the core library]
                                  iframe in the browser, so readers don't branch
     debug_scripts.44.js          checks called by name from the Hub, results in console.warn
                                  (checkFrequency, checkAttacks, checkEnergize, checkPiercingSwap,
-                                 checkShotGaps, checkRogueBurn, checkRogueWeapons, checkRealmMobs)
+                                 checkShotGaps, checkRogueBurn, checkRogueWeapons, checkRealmMobs,
+                                 checkDungeon)
   A part never runs code at load: a definition moved below a slot load would vanish for any
   file that slot pulls in. Merchant-only item lists live in their merchant modules
   (STORE_ABLE/SALE_ABLE/IGNORE in 17, BUYABLE in 18, DISMANTLE_LIST in 22).
@@ -132,8 +133,21 @@ basic_function.7.js          [SHARED — the core library]
     cave_fighter_strat.15.js         \_ the fighter targeting chain, walked in this
     daily_event_fighter_strat.26.js   | order by selectFightTarget(); each one carries
     crypt_fighter_strat.16.js         | its own smart move and owns the tick or defers
+    spider_den_fighter_strat.58.js    |
+    tomb_fighter_strat.59.js          |
+    dark_mage_fighter_strat.61.js     |
     special_mob_fighter_strat.28.js   |
     farming_fighter_strat.27.js      /
+    dungeon_fighter_strat.57.js  what every keyed dungeon shares, the crypt included:
+                                 DUNGEON_OPENING (autoOpen/ageMs/needs per dungeon), the DUNGEONS
+                                 registry read from G, the visits / running instance / kill ledger
+                                 under `${id}Visits`, `${id}Instance`, `${id}Run:<name>`, entering an
+                                 open run by name, stock and supply, the boss hold/kill model, and
+                                 the moves the dungeon fights share (isOurDungeonRun,
+                                 approachDungeon, engageDungeonBoss, giveUpDungeonFight, ...).
+                                 Each of 58/59/61 owns its whole fight tick, as 16 does; 16 keeps
+                                 its own fight too. Loaded just before 58/59/61 and 16, for every
+                                 character and the merchant
     taut_path.33.js              corner-to-corner same-map planner over G.geometry (both
                                  environments): the kite's wall detour, and smartMove's walking when
                                  passed useTautPath (kiting/engaging only)
@@ -159,7 +173,7 @@ Merchant entry script:
     merchant_bank.17.js      bankCache, floors, retrieve/store, bankStoreRoutine/bankLoop, syncBankData
     merchant_craft.18.js     craftLevelTargets registry, ingredient counting, craft()
     merchant_service.19.js   duty fulfillment for fighters' cm requests (potions, elixir, item pickup)
-                              and crypt-opening
+                              and dungeon opening (maybeOpenDungeon, per DUNGEON_OPENING)
     merchant_gathering.22.js equipBroom/shouldGoChilling, goFishing, goMining, dismantleSomething
     merchant_exchange.23.js  holidayExchange, exchangeSomething
     merchant_luring.24.js    lureMechaGnome, and the ent train (dragEnt and friends)

@@ -6064,3 +6064,117 @@ every craft that pulled an ingredient from the bank ended at the craft spot. Bot
 `haveAComputer()`. In the bank with one they do nothing that tick: `exchangeSomething` already
 skips there, `craft()` returns, and the tick's idle `moveHome` walks the merchant out, where the
 computer reaches the NPC from wherever he stands.
+
+## Keyed dungeons beyond the crypt (`dungeon_fighter_strat.57.js`, 2026-11-16)
+
+**One bookkeeping for every keyed dungeon, the crypt included.** `DUNGEONS` is read from G: the
+door is the spot the server measures `enter` from (`G.maps[from].spawns[door[6]]`, within 120),
+bosses are the `respawn: -1` packs plus phase chains (`respawn_as`). Storage keys are
+`${id}Visits`, `${id}Instance`, `${id}Run:<name>`, `${id}ClearMs`; with id `crypt` they are the
+crypt's old keys, so crypts already ageing carry over. One run at a time across all dungeons:
+`startNextDungeonRun` starts the oldest ready visit of any dungeon (the user's call: "equal with
+the crypt"). Kills are ledgered for every dungeon by the one `death` listener.
+
+**Opening (`DUNGEON_OPENING`, the user's call 2026-11-16).** Spider Den and Tomb: autoOpen 2, ageMs 0;
+the Dark Mage's lair 0/0 (hardest). `autoOpen` caps instances open and not finished (waiting +
+running) per dungeon, so with no age one waits while one runs. For the crypt this is a change: its
+cap used to count only the ageing ones. Always the merchant opens; bosses don't attack until hit
+(the user), so standing in the instance is safe.
+
+**Server facts the model leans on** (GitHub server.js, which lags live):
+- Untargeted, non-stationary monsters level in every instance (same formula as the crypt), so the
+  Tomb and the lair are run at once. Spider queens are `stationary`: never level (`agedBoss`).
+- `anger` / `deepfreeze` / `warpstomp` pick a random player within their radius (300/300/160 for
+  xmagex, 100 for gpurplepro). Whoever can do their job from outside it (range x 0.95 past the
+  radius + 40; the healer also needs the boss's range on top) is not a victim; everyone else is,
+  and the boss is judged on the worst victim, as the crypt's anger is.
+- `warpstomp` is skipped while a `fieldgen0` monster is within 300 of the boss. The item
+  (`type: "spawner"`, 2M) is used through `equip(num)` and spawns at our feet; 6400 hp with degen
+  60/200ms, so it lasts ~21s. The tanker deploys one when a warpstomper on it is within 200 and
+  its last one has expired or is out of reach (tracked by our own record; the generator is `hide`
+  and may not be in `parent.entities`). `canDampen` (holder publishes `hasFieldgen`) drops
+  warpstomp from the retarget radius. The aura also dampens us: no blink/town within 300.
+- `burn` (gredpro, attr0 100, unlimited): intensity becomes kept/1.5 + hit, settling at
+  hit / (1 - scale/1.5) per second, ~3x the hit; `firesistance` both resists it (chance) and scales it.
+- `multi_burn` (xmagefi) hits everyone in the instance within 480 for 4000; `multi_freeze`
+  (gbluepro) everyone in its points within 480 for 800. Both charged on every party member.
+- `poisonous` (xmagen) poisons on hit: heals on the victim land at 25% (`healm`), resisted by
+  `pnresistance`. Every condition with a `defense` is resisted with chance stat/100.
+- `deepfreezed`: 12s of nothing, every 6s on a random player within 300. A healer inside it loses
+  its share of the freezes (`getHealShare`).
+- `tangle` on ggreenpro has no handler on GitHub (only `mtangle`); either way it only slows its
+  target, which is the tank.
+- Queen spawns (spiders) land on damagers within 400, like the crypt's. All xmage phases are `immune`.
+
+**Counters, as for the crypt.** Snowball freeze on any non-immune boss on us (`freezeDungeonBoss`,
+frequency x0.3; credited via each character's published `freezeUptime`), field generator on
+warpstompers, priest absorb only what it heals through (`canAbsorbInDungeon`, the crypt keeps
+`canAbsorbInCrypt`), splash for fighting adds (pull strategies, as the crypt does), and attacks
+only with the healer up (`shouldAttack`). Gear counters, not automated: firesistance vs gredpro and
+multi_burn (elixirfires 30, orboffire 15, candleboots 15, groundingstrap 15), fzresistance vs
+deepfreeze (elixirfzres 30, orboffrost 15), pnresistance vs xmagen (elixirpnres 30, orbofplague
+15), phresistance vs warpstomp stun (orbofresolve 15). The Tomb drops all four orbs at 100%.
+
+**Flow, common to the three fights.** Without tanker and healer in view nobody fights: scare what is on
+us, wait at the entrance. The tanker leads to each fight and everyone hits on their own logic: the
+priest's absorb or the warrior's taunt takes the boss back (the user, 2026-11-17). A follower only
+waits for the tanker to open when one boss hit would take `burstShare` of its max hp, since it
+takes that hit before the take-back lands (`engageDungeonBoss`; red queen, xmagex). Bosses on us we can't hold send
+everyone back to the entrance; nothing left to hold closes the run, kept with its kills
+(`giveUpDungeonFight`). A kept run is never started again and its key is spent, so the close is
+slow on purpose: kill time is summed over the members in view and alive, and one damage dealer
+dead or out of sight for a tick pushed `killS` past `maxKillS`. Only the tanker closes, and only
+after the verdict has held for `giveUpAfterMs` of consecutive ticks; until then everyone waits at
+the entrance. `${id}ClearMs` takes real clears only, since a give-up folded in as a clear raised
+the merchant's waiting cap.
+`checkDungeon(id)` prints the odds per boss for the party in view, before opening keys.
+
+### Warpstomp, field generators and the lair's stock (2026-11-16)
+
+- **Warpstomp deals no damage.** It picks a random player within its `radius` (100 gpurplepro,
+  160 xmagex), retargets onto them and magiports there; the landing stuns everyone within 160 for
+  1500ms (hard-coded, the G `stun` is unused), resisted by phresistance. So it costs heals, not hp:
+  a healer within radius + 160 of the boss loses 1.5s per cooldown (18.75% vs gpurplepro, 37.5% vs
+  xmagex) unless a field generator holds the stomp (`getHealShare`).
+- `deepfreeze` also hits for 1200 pure (`G.skills.deepfreeze.damage`), now in `dungeonBossDps`.
+- **The lair needs field generators in stock** (`DUNGEON_OPENING.darkMage.needs`, the user's call):
+  the bank as last cached plus every online character's published `dungeonStock`. Neither the
+  merchant opens nor a fighter starts the run below it. `fieldgen0` does not stack, one per slot,
+  so the tanker takes what fits (`DUNGEON.freeSlots` kept free): it waits at the door up to
+  `supplyPatienceMs` and asks the merchant (`dungeon_item`, delivered from the bank a slot at a
+  time); anyone else in the party carrying some hands it over. Both inventory dumps keep it.
+  Past the patience the tanker shelves the run (`shelveDungeonRun`: back among the waiting
+  visits, retried after `supplyRetryMs`) rather than going in short, which judged the mage
+  unholdable and closed the run for good. With nothing left in the bank or on our other
+  characters it shelves after `supplyGraceMs` instead (the user, 2026-11-17): the instance stays
+  in `${id}Visits` for later and the party moves on to another dungeon or the farm. The grace
+  covers an item in flight, out of the bank cache but not yet in the merchant's published stock.
+- **A heal keeps a generator up** (the user). Heals land on monsters through the same path as
+  ghost heals, mitigated by its 1600 resistance at half (~35% lands): a 1900 heal outpaces the 300/s
+  degen. The priest heals one under `fieldHealAt` once none of us needs a heal (`getFieldToHeal`).
+  The tanker counts a generator in view as cover, and only falls back to its ~21s estimate when it
+  sees none.
+- **Sales keep what a dungeon needs** (`getDungeonKeeps`, merchant_bank.17.js, the user's call).
+  `fieldgen0` stays in `SALE_ABLE`, but the bag sweep and `purgeBank` (which pulls bank saleables
+  out to sell) both spend one budget per item: the dungeon need less what our other online
+  characters carry, protected in the bank first, then in the bag. Only the surplus sells. Without
+  it the purge sold the bank's generators and the sweep sold the ones pulled for the tanker.
+
+### One strategy file per dungeon (2026-11-17, the user's calls)
+
+Like the crypt (16), each dungeon file owns its whole fight tick in its chain step; 57 holds only
+what they share. A fight holding several bosses at once is judged together (`canFightDungeonGroup`
+sums their dps against the heal).
+- **Spider Den (58):** queens all join once one is hit (the user), so one fight that is never
+  split (`planSpiderDenFight`), highest `attack` first (spiderr > spiderbl > spiderbr), always under the pull strategies; whoever
+  but the tanker gathers `scareAddsAt` spawned spiders scares.
+- **Tomb (59):** frost alone, then fire + nature together, then darkness last (`TOMB.order`); a pair
+  we can't hold together is fought one at a time. Within a fight the tanker opens on the first
+  boss, drags it to an idle one out of `TOMB.tagReach` with the franky drag
+  (`getDungeonKiteAnchor` in `resolveKiteTarget`), tags it on arrival, then hits in group order.
+  Fire is the one dragged: a tangle on the tanker would slow a drag the other way.
+- **Dark Mage (61):** each phase alone. The field generator only goes down in a warpstomp phase
+  (xmagex). While the lair runs, `pickPartyMembers` takes the `darkMage` preset (warrior, priest,
+  rogue; live events still win), and the party waits at the door until all of it is on the realm.
+- The field generator is in `parent.entities` (the user confirmed), so the tanker's cover check
+  reads it there; the lifetime estimate is gone.

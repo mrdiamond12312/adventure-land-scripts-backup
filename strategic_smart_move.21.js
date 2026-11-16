@@ -1098,17 +1098,19 @@ class StrategicSmartMove {
         }
 
         if (segment.method === "enter") {
-          // Our open crypt is entered by name, which needs no key
+          // An open run enters by name, keyless
+          const dungeon = getDungeonOfMap(segment.map);
           const instance =
-            segment.map === "crypt" && isCryptRunHere()
-              ? get("cryptInstance")
+            dungeon && isDungeonRunHere(dungeon.id)
+              ? getDungeonInstance(dungeon.id)
               : undefined;
           if (!instance && segment.key && locate_item(segment.key) === -1) {
             throw new Error(`Entering ${segment.map} needs a ${segment.key}`);
           }
           const waitPromise = this.waitForNewMap();
           await enter(segment.map, instance).catch((error) => {
-            if (instance && isCryptGone(error)) closeCryptRun({ isGone: true });
+            if (instance && isDungeonGone(dungeon.id, error))
+              closeDungeonRun(dungeon.id, { isGone: true });
             throw error;
           });
           await waitPromise.catch(() =>
