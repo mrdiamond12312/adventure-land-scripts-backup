@@ -243,11 +243,12 @@ function curseValue(mob, prioritized) {
 
 /** @returns {Object|null} the uncursed mob worth the most to curse */
 function getCurseTarget() {
-  if (
-    is_on_cooldown("curse") ||
-    character.mp - G.skills["curse"].mp < curseMpFloor()
-  )
-    return null;
+  if (is_on_cooldown("curse")) return null;
+  if (character.map === "crypt") {
+    const strayPartner = getStrayCryptPartner();
+    if (strayPartner) return strayPartner;
+  }
+  if (character.mp - G.skills["curse"].mp < curseMpFloor()) return null;
   const prioritized = prioritizedNames();
 
   return (
@@ -321,7 +322,11 @@ function getAbsorbTarget() {
   );
   for (const memberId of vulnerableMems) {
     const member = get_entity(memberId);
-    if (member && is_in_range(member, "absorb")) {
+    if (
+      member &&
+      is_in_range(member, "absorb") &&
+      (character.map !== "crypt" || canAbsorbInCrypt(member))
+    ) {
       const hasAggro = Object.values(parent.entities).some(
         (e) => e.target === memberId,
       );

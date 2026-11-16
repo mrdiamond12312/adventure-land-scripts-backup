@@ -16,6 +16,7 @@ const CRYPT = {
   ageMs: 54 * 3_600_000, // an opened crypt levels this long before the run; 0 runs at once
   autoOpen: 0, // most crypts the merchant keeps ageing on his own; 0 opens none
   clearMs: 3_600_000, // run length assumed until a run has been timed
+  untouchedSpawns: ["nerfedbat", "zapper0"], // the tanker holds their boss by absorb alone
 };
 
 /** Corridor junctions in lap order, the entrance first */
@@ -85,6 +86,7 @@ function resetCryptMemory(instance) {
     patrol: { index: undefined, emptyStops: 0 },
     drag: undefined, // { id, spot }
     pairingSince: undefined,
+    isScoutDone: false,
   };
 }
 
@@ -762,10 +764,8 @@ function getCryptPatrolStop(sought, reach = CRYPT.arrival) {
   return { map: "crypt", x, y };
 }
 
-/** The tanker walks the search; a full lap with nothing to fight closes the run. */
+/** Everyone walks the search lap; a full lap with nothing to fight closes the run. */
 function patrolCrypt(wanted) {
-  if (!isAssignedAsTanker()) return followCryptLeader();
-
   const stop = getCryptPatrolStop(wanted);
   if (!stop) {
     log("Crypt: nothing left to fight");
@@ -773,10 +773,70 @@ function patrolCrypt(wanted) {
     return;
   }
 
+  const known = Object.keys(knownCryptSightings());
+  const unknown = wanted.filter((mtype) => !known.includes(mtype));
   advanceSmartMove(stop, {
     useScare: true,
-    stopWatcher: () => shouldStopCryptTrip(wanted),
+    stopWatcher: () =>
+      shouldStopCryptTrip(wanted) || hasNewCryptSighting(unknown),
   }).catch(() => {});
+}
+
+/**
+ * Read mid-trip, when our own sightings are not merged.
+ * @param {string[]} types - boss types
+ * @returns {boolean} whether one of us has seen one of them since our last word on it
+ */
+function hasNewCryptSighting(types) {
+  return partyMems.some((name) => {
+    if (name === character.name) return false;
+    const shared = getCharacterInfo(name)?.cryptSightings;
+    if (shared?.instance !== cryptMemory.instance) return false;
+
+    return types.some((mtype) => {
+      const spot = shared.spots[mtype];
+      return (
+        spot &&
+        !spot.isGone &&
+        !isCryptBlocked(mtype) &&
+        spot.at > (cryptMemory.sightings[mtype]?.at ?? -1)
+      );
+    });
+  });
+}
+
+/**
+ * The mage blinks ahead on the lap while a boss is unaccounted for, and turns
+ * back on sighting one; the sighting is shared. A lap with nothing ends it.
+ * @returns {boolean} whether it is scouting
+ */
+function scoutCrypt() {
+  if (character.ctype !== "mage" || cryptMemory.isScoutDone) return false;
+
+  const run = readCryptRun();
+  if (getCryptMinionsLeft(run) > 0) return false;
+
+  const killed = Object.values(run.killed);
+  const known = knownCryptSightings();
+  const unseen = CRYPT_MOBS.bosses.filter(
+    (mtype) => !killed.includes(mtype) && !known[mtype],
+  );
+  if (!unseen.length) return false;
+
+  const stop = getCryptPatrolStop(unseen);
+  if (!stop) {
+    cryptMemory.isScoutDone = true;
+    return false;
+  }
+
+  advanceSmartMove(stop, {
+    useScare: true,
+    stopWatcher: () =>
+      Object.values(parent.entities).some(
+        (mob) => mob.type === "monster" && !mob.dead && isCryptBoss(mob),
+      ),
+  }).catch(() => {});
+  return true;
 }
 
 /**
@@ -788,8 +848,6 @@ function patrolCrypt(wanted) {
  * @returns {Object} travelling
  */
 function baitCryptSupporter(plan) {
-  useCryptSkills(plan.target);
-
   if (!isAssignedAsTanker()) {
     if (plan.target.target === TANKER) holdBehindCryptBoss(plan.target);
     else followCryptLeader();
@@ -838,81 +896,45 @@ function freezeCryptBosses(bosses, target) {
 }
 
 /**
- * The warrior taunts off allies when it tanks; the priest absorbs off allies,
- * and curses a supporter's partner that is outrunning its heal.
+ * Read by the priest's absorb picker: only a pile we can hold on top of what
+ * is on us is taken; the ally scares the rest.
+ * @returns {boolean}
  */
-function useCryptSkills() {
-  const mobOnAlly = Object.values(parent.entities).find(
-    (mob) =>
-      mob.type === "monster" &&
-      (isCryptBoss(mob) || isCryptMinion(mob)) &&
-      partyMems.includes(mob.target) &&
-      mob.target !== character.name,
+function canAbsorbInCrypt(ally) {
+  const pile = [
+    ...listOfMonsterAttacking(character),
+    ...listOfMonsterAttacking(ally),
+  ];
+  return canHoldCryptBosses(
+    pile.filter(isCryptBoss),
+    getCryptFight(),
+    pile.filter(
+      (mob) => !isCryptBoss(mob) && !CRYPT_MOBS.spawned.includes(mob.mtype),
+    ),
   );
+}
 
-  const canCast = (skill) =>
-    character.mp > G.skills[skill].mp && !is_on_cooldown(skill);
+/**
+ * Read by the priest's curse picker: a supporter's partner outrunning its heal.
+ * @returns {Object|undefined}
+ */
+function getStrayCryptPartner() {
+  if (character.mp < G.skills.curse.mp) return undefined;
 
-  switch (character.ctype) {
-    case "warrior":
-      if (
-        isAssignedAsTanker() &&
-        mobOnAlly &&
-        canCast("taunt") &&
-        character.hp > character.max_hp * 0.4
-      )
-        use_skill("taunt", mobOnAlly);
-      break;
-
-    case "priest": {
-      const allyUnderMob =
-        isAssignedAsTanker() && mobOnAlly && get_player(mobOnAlly.target);
-      const lowHpMember = partyMems
-        .map((id) => get_entity(id))
-        .find((member) => member && member.hp < member.max_hp * 0.3);
-      // Only what we can hold on top of what is on us; the ally scares the rest
-      const canHoldAbsorbed = (ally) => {
-        const pile = [
-          ...listOfMonsterAttacking(character),
-          ...listOfMonsterAttacking(ally),
-        ];
-        return canHoldCryptBosses(
-          pile.filter(isCryptBoss),
-          getCryptFight(),
-          pile.filter(
-            (mob) =>
-              !isCryptBoss(mob) && !CRYPT_MOBS.spawned.includes(mob.mtype),
-          ),
-        );
-      };
-      const allyToAbsorb = [allyUnderMob, lowHpMember].find(
-        (ally) =>
-          ally &&
-          ally.name !== character.name &&
-          is_in_range(ally, "absorb") &&
-          canHoldAbsorbed(ally),
-      );
-
-      if (allyToAbsorb && canCast("absorb")) use_skill("absorb", allyToAbsorb);
-
-      const strayPartner = Object.values(parent.entities)
-        .filter((mob) => mob.type === "monster" && isCryptBoss(mob))
-        .filter(isCryptSupporter)
-        .map((supporter) => ({
-          supporter,
-          partner: parent.entities[supporter.focus],
-        }))
-        .find(
-          ({ supporter, partner }) =>
-            partner &&
-            !partner.s?.cursed &&
-            distance(supporter, partner) > CRYPT.supportHealRange * 0.75 &&
-            is_in_range(partner, "curse"),
-        )?.partner;
-      if (strayPartner && canCast("curse")) use_skill("curse", strayPartner);
-      break;
-    }
-  }
+  return Object.values(parent.entities)
+    .filter((mob) => mob.type === "monster" && isCryptBoss(mob))
+    .filter(isCryptSupporter)
+    .map((supporter) => ({
+      supporter,
+      partner: parent.entities[supporter.focus],
+    }))
+    .find(
+      ({ supporter, partner }) =>
+        partner &&
+        !partner.s?.cursed &&
+        distance(supporter, partner) > CRYPT.supportHealRange * 0.75 &&
+        is_in_range(partner, "curse"),
+    )?.partner;
 }
 
 /** @returns {{instance: string, openedAt: number, realm: string}[]} the crypts opened and not run yet, or running */
@@ -1058,6 +1080,7 @@ async function useCryptStrategy() {
       : getCharacterInfo(TANKER)?.rip ||
         parent.party?.[TANKER]?.in !== character.in;
     if (isTankerDown) return escapeCrypt();
+    if (!bosses.length && !mobsOnMe.length && scoutCrypt()) return travelling();
     followCryptLeader();
     return travelling();
   }
@@ -1109,11 +1132,13 @@ async function useCryptStrategy() {
       return travelling();
     }
 
-    // Zappers only land on whoever damaged the boss, so the tanker never does
+    // Spawns only land on whoever damaged the boss, so the tanker never does
     const spawns = cryptSpawnsOf(target);
-    if (isAssignedAsTanker() && spawns.some((def) => def?.abilities?.zap)) {
+    const isHeldUntouched = (G.monsters[target.mtype].spawns ?? []).some(
+      ([, mtype]) => CRYPT.untouchedSpawns.includes(mtype),
+    );
+    if (isAssignedAsTanker() && isHeldUntouched) {
       change_target(target);
-      useCryptSkills();
       return travelling();
     }
 
@@ -1132,7 +1157,6 @@ async function useCryptStrategy() {
     return travelling();
   }
 
-  useCryptSkills();
   return engage(target);
 }
 

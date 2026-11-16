@@ -5854,6 +5854,27 @@ The old per-tick `setInterval` did that job and stacked up.
 view). Nothing is judged without tanker and healer in view (`fight.isReady`): otherwise the holder
 falls back to ourselves, nothing looks holdable, and the run would close itself. A full junction lap
 with nothing fought closes the run, which covers a missed kill.
+- **The search lap is walked by everyone (`patrolCrypt`, 2026-11-16)**, each from its own
+  `cryptMemory.patrol`, so nobody waits on a tanker that is stuck or busy. Starting from the same
+  spot they pick the same nearest junction and stay together; one that loses the tanker or healer
+  from view drops back to `followCryptLeader` through `fight.isReady`. Whoever finishes an empty
+  lap first closes the run. The nest walk (`pickCryptMinion`) and the supporter bait stay
+  tanker-led.
+- **The mage scouts (`scoutCrypt`).** Out of the tanker's view it would be pulled back, so with no
+  boss in view, none on it and the vbats done, it keeps walking (blinking) the lap after the boss
+  types nobody has a sighting of, and stops on sighting any boss. A lap with none ends the scouting
+  for that instance (`isScoutDone`).
+- **A patrol leg ends on a teammate's sighting (`hasNewCryptSighting`).** The crypt strategy does
+  not tick during its own trip, so the watcher reads the shared sightings directly; it only fires
+  for a wanted type with no sighting when the leg began and only on one newer than ours, so a
+  roaming boss or a tombstone we hold never restarts the leg.
+- **No crypt-only skill caster (2026-11-16).** The class skill loops run in the crypt anyway, so
+  `useCryptSkills` only cast twice, and its absorb hold check lost to the loop that had none. Its
+  two crypt rules live in the priest's pickers: `getAbsorbTarget` skips an ally whose attackers
+  `canAbsorbInCrypt` says we can't hold, and `getCurseTarget` takes `getStrayCryptPartner` first,
+  under the cooldown but ahead of the mp floor. Its warrior taunt never fired (the priest tanks the
+  crypt), and the warrior's own taunt pickers need a bait boss, a farm hold, the farm spot or the
+  tanker role, none of which the crypt gives.
 
 **Priest tanks the crypt, and freezing is part of the model (2026-11-15).** `assignRoles` pins the
 priest inside the crypt: a ranged tank can kite, a melee one cannot. Server facts behind it:
@@ -5874,6 +5895,10 @@ priest inside the crypt: a ranged tank can kite, a melee one cannot. Server fact
 - **Zappers and bats only land on players in the boss's `points`**, and any hit of 1 or more adds
   one (a snowball counts). So the tanker never damages a zapper boss: it holds it by absorb alone,
   never gets a zapper, and never has to scare the boss off itself.
+- **Spike is held the same way (`CRYPT.untouchedSpawns`, 2026-11-16).** Bats are left out of the
+  hold check and the tanker only scares for zappers or what it can't hold, so bats on a priest
+  that hit Spike piled up until the emergency scare, which also drops Spike onto a damage dealer.
+  Kept as a hard-coded list rather than a shared spawn model: these are the crypt's only spawns.
 - **The last tankable boss is bait while a supporter lives** (`baitCryptSupporter`). Nobody hits
   it; the tanker walks it to the supporter with the same drag, and it is only fought again once
   the supporter is dead or given up (`isSupportGivenUp`: a full lap without finding her, or
