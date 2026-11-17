@@ -249,25 +249,27 @@ function isCryptKitable(boss, victim) {
 /**
  * @param {Object} boss - an entity, or a G.monsters entry shaped like one
  * @param {Object} fight - from getCryptFight
- * @returns {number} its dps on the holder; an anger boss re-targets, so on whoever
- * it hurts most. Frozen it swings slower, and misses whoever kites it.
+ * @returns {number} its dps on the holder, plus for an anger boss one hit on
+ * whoever it hurts most per anger: the holder takes it back within a hit.
+ * Frozen it swings slower, and misses whoever kites it.
  */
 function cryptBossDps(boss, fight) {
   const def = G.monsters[boss.mtype];
-  const victims =
-    def.abilities?.anger && fight.party.length ? fight.party : [fight.holder];
   const frozenShare = (victim) =>
     isCryptKitable(boss, victim) ? 0 : G.conditions.frozen.frequencym;
+  const dpsOn = (victim) =>
+    calculateDamage(boss, victim) *
+    (1 - fight.freezeUptime * (1 - frozenShare(victim)));
 
-  return (
-    Math.max(
-      ...victims.map(
-        (victim) =>
-          calculateDamage(boss, victim) *
-          (1 - fight.freezeUptime * (1 - frozenShare(victim))),
-      ),
-    ) + cryptSpawnDps(def, fight)
-  );
+  const anger = def.abilities?.anger;
+  const angerDps =
+    anger && fight.party.length
+      ? Math.max(...fight.party.map(dpsOn)) /
+        (boss.frequency ?? def.frequency) /
+        (anger.cooldown / 1000)
+      : 0;
+
+  return dpsOn(fight.holder) + angerDps + cryptSpawnDps(def, fight);
 }
 
 /**

@@ -1042,6 +1042,23 @@ class StrategicSmartMove {
           continue;
         }
 
+        // A late magiport or blink can land us past the rest of the path
+        if (
+          character.map === toPosition.map &&
+          distance(character, toPosition) <
+            SMART_MOVE_CONFIG.MAGIPORT_ARRIVAL_DISTANCE &&
+          this.pathfinder.canWalkPath(
+            character.map,
+            character.x,
+            character.y,
+            toPosition.x,
+            toPosition.y,
+          )
+        ) {
+          await this.unsafeMove(toPosition.x, toPosition.y);
+          break;
+        }
+
         const idx = progress.segmentIndex;
         const segment = pathFindingResult[idx];
         // Only advance if the blink loop hasn't moved the cursor while we awaited
