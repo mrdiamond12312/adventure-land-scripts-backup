@@ -11,7 +11,7 @@ const CRYPT = {
   snowballGapMs: 1500,
   pairPatienceMs: 45_000,
   planStaleMs: 2000,
-  untouchedSpawns: ["nerfedbat", "zapper0"], // the tanker holds their boss by absorb alone
+  untouchedSpawns: ["zapper0"], // the tanker holds their boss (Orlok) by absorb alone
   behindGap: 60, // waiting at a boss's back; natural aggro reaches ~32-64px, in front only
   batOrbitRate: 0.4, // tanker's orbit on a boss whose spawns fight (Spike), share of its range
   // Hunt order once the vbats are done; a supporter in sight goes before all of them
@@ -1124,22 +1124,22 @@ async function useCryptStrategy() {
       return travelling();
     }
 
-    // Spawns only land on whoever damaged the boss, so the tanker never does
+    // Spawns only land on whoever damaged the boss, so the tanker never touches an untouched one's
     const spawns = cryptSpawnsOf(target);
     const isHeldUntouched = (G.monsters[target.mtype].spawns ?? []).some(
       ([, mtype]) => CRYPT.untouchedSpawns.includes(mtype),
     );
-    // Bats land by his hitters: a tight orbit keeps him in their splash, and they stay on him
-    isSpawnPinned = spawns.some((def) => def?.attack > 0);
     if (isAssignedAsTanker() && isHeldUntouched) {
       change_target(target);
-      if (isSpawnPinned) rangeRate = CRYPT.batOrbitRate;
       return travelling();
     }
 
+    // Bats land by his hitters: everyone stays on him, the tanker circling tight to keep him in their splash
+    isSpawnPinned = spawns.some((def) => def?.attack > 0);
     if (isSpawnPinned) changeToPullStrategies();
     if (!plan.pairWith && !isMelee() && isCryptKitable(target, character))
       rangeRate = CRYPT.kiteRangeRate;
+    if (isSpawnPinned && isAssignedAsTanker()) rangeRate = CRYPT.batOrbitRate;
     freezeCryptBosses(bosses, target);
   } else if (minionsLeft) {
     target = pickCryptMinion(fight, wanted);

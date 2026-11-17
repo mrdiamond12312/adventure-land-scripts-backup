@@ -5941,10 +5941,10 @@ priest inside the crypt: a ranged tank can kite, a melee one cannot. Server fact
 - **Zappers and bats only land on players in the boss's `points`**, and any hit of 1 or more adds
   one (a snowball counts). So the tanker never damages a zapper boss: it holds it by absorb alone,
   never gets a zapper, and never has to scare the boss off itself.
-- **Spike is held the same way (`CRYPT.untouchedSpawns`, 2026-11-16).** Bats are left out of the
-  hold check and the tanker only scares for zappers or what it can't hold, so bats on a priest
-  that hit Spike piled up until the emergency scare, which also drops Spike onto a damage dealer.
-  Kept as a hard-coded list rather than a shared spawn model: these are the crypt's only spawns.
+- **Spike was held the same way (2026-11-16), undone 2026-11-18.** Bats on a priest that hit Spike
+  piled up until the emergency scare, which also drops Spike onto a damage dealer. The user wants
+  the priest hitting him; a bat is 50 attack at 0.7/s (~16/s on 600 armor), so the pile is cheap
+  until the scare. `CRYPT.untouchedSpawns` is now Orlok's `zapper0` alone.
 - **The last tankable boss is bait while a supporter lives** (`baitCryptSupporter`). Nobody hits
   it; the tanker walks it to the supporter with the same drag, and it is only fought again once
   the supporter is dead or given up (`isSupportGivenUp`: a full lap without finding her, or
@@ -6069,10 +6069,10 @@ one (an empty instance is only paused; only solo ones are destroyed). The crypt'
 "nothing left to fight", and `giveUpDungeonFight`, now wait for every member in view.
 
 **Spike's bats.** His `nerfedbat` spawns land beside whoever damaged him and go for that player,
-so they crowd the damage dealers. The damage dealers engage him pinned (`isSpawnPinned`), so the
-class target pick never swaps to a bat; the bats die to the splash. The tanker, which never hits
-him, orbits him at `CRYPT.batOrbitRate` (0.4 of its range) instead of its usual kite, keeping him in
-the middle of the party and its splash.
+so they crowd his hitters. Everyone engages him pinned (`isSpawnPinned`), so the class target
+pick never swaps to a bat; the bats die to the splash. The tanker orbits him at
+`CRYPT.batOrbitRate` (0.4 of its range) instead of its usual kite, keeping him in the middle of
+the party and its splash.
 
 **Goal kinds (`setDungeonGoal`).** `fight` (a boss being hit, or one on an ally) outranks `found`
 (a boss waited at) outranks `walk`. A follower out of the tanker's view joins a `fight` before
