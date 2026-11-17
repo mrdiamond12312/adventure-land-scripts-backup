@@ -13,6 +13,7 @@ const CRYPT = {
   planStaleMs: 2000,
   untouchedSpawns: ["nerfedbat", "zapper0"], // the tanker holds their boss by absorb alone
   behindGap: 60, // waiting at a boss's back; natural aggro reaches ~32-64px, in front only
+  batOrbitRate: 0.4, // tanker's orbit on a boss whose spawns fight (Spike), share of its range
   // Hunt order once the vbats are done; a supporter in sight goes before all of them
   bossOrder: ["a3", "a7", "a2", "a8", "a4", "a6", "a1"],
 };
@@ -565,7 +566,7 @@ const gatherInCrypt = (wanted = []) =>
  * front of it (±45° of its `angle`), so its back is safe at any gap.
  */
 function standBehindCryptBoss(boss) {
-  setDungeonGoal(boss, true);
+  setDungeonGoal(boss, "found");
   const facing =
     boss.angle !== undefined
       ? (boss.angle * Math.PI) / 180
@@ -592,9 +593,10 @@ function walkToCryptNest(wanted) {
 
 /**
  * Out of a fight: a boss on me sends me to a clear junction; one busy with an
- * ally close by, or a free one the tanker wants anywhere in view, is waited at
- * from its back until the tanker comes. Else we go to the gather point, else
- * set it ourselves: the nest while minions are left, the lap after.
+ * ally close by is waited at from its back. A fight one of us is in comes
+ * next, walked to past any free boss; then a free one the tanker wants in
+ * view, held at its back; then the gather point; else we set it ourselves:
+ * the nest while minions are left, the lap after.
  * @returns {Object} travelling
  */
 function walkCryptAlone() {
@@ -616,8 +618,13 @@ function walkCryptAlone() {
       distance(character, boss) < CRYPT.bossRange,
   );
   if (busyBoss) {
-    setDungeonGoal(busyBoss, true);
+    setDungeonGoal(busyBoss, "fight");
     holdBehindCryptBoss(busyBoss);
+    return travelling();
+  }
+
+  if (getDungeonGatherPoint()?.kind === "fight") {
+    gatherInDungeon(isCryptBossOnUs);
     return travelling();
   }
 
@@ -1085,9 +1092,10 @@ async function useCryptStrategy() {
   }
 
   let target = plan?.target;
+  let isSpawnPinned = false;
   if (target) {
     cryptPlan = { ...plan, at: Date.now() };
-    setDungeonGoal(plan.dragTo ?? target, true);
+    setDungeonGoal(plan.dragTo ?? target, "fight");
     changeToNormalStrategies();
 
     const isSupporterLeft =
@@ -1121,20 +1129,22 @@ async function useCryptStrategy() {
     const isHeldUntouched = (G.monsters[target.mtype].spawns ?? []).some(
       ([, mtype]) => CRYPT.untouchedSpawns.includes(mtype),
     );
+    // Bats land by his hitters: a tight orbit keeps him in their splash, and they stay on him
+    isSpawnPinned = spawns.some((def) => def?.attack > 0);
     if (isAssignedAsTanker() && isHeldUntouched) {
       change_target(target);
+      if (isSpawnPinned) rangeRate = CRYPT.batOrbitRate;
       return travelling();
     }
 
-    // Spawns that fight are splashed down
-    if (spawns.some((def) => def?.attack > 0)) changeToPullStrategies();
+    if (isSpawnPinned) changeToPullStrategies();
     if (!plan.pairWith && !isMelee() && isCryptKitable(target, character))
       rangeRate = CRYPT.kiteRangeRate;
     freezeCryptBosses(bosses, target);
   } else if (minionsLeft) {
     target = pickCryptMinion(fight, wanted);
     if (!target) return travelling();
-    setDungeonGoal(target, true);
+    setDungeonGoal(target, "fight");
     changeToPullStrategies();
   } else {
     changeToNormalStrategies();
@@ -1142,5 +1152,5 @@ async function useCryptStrategy() {
     return travelling();
   }
 
-  return engage(target);
+  return engage(target, { isPinned: isSpawnPinned });
 }

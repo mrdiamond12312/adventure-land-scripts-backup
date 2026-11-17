@@ -6063,6 +6063,17 @@ resumes a `leftAt` visit: they moved on to the next pre-opened instance. The ser
 one (an empty instance is only paused; only solo ones are destroyed). The crypt's "cleared" and
 "nothing left to fight", and `giveUpDungeonFight`, now wait for every member in view.
 
+**Spike's bats.** His `nerfedbat` spawns land beside whoever damaged him and go for that player,
+so they crowd the damage dealers. The damage dealers engage him pinned (`isSpawnPinned`), so the
+class target pick never swaps to a bat; the bats die to the splash. The tanker, which never hits
+him, orbits him at `CRYPT.batOrbitRate` (0.4 of its range) instead of its usual kite, keeping him in
+the middle of the party and its splash.
+
+**Goal kinds (`setDungeonGoal`).** `fight` (a boss being hit, or one on an ally) outranks `found`
+(a boss waited at) outranks `walk`. A follower out of the tanker's view joins a `fight` before
+holding at a free boss it sees itself, walking past it, so a warrior no longer parks behind an idle
+Spike or Orlok while the priest fights Bill elsewhere.
+
 **Who is in a fight (`planCryptFight`).** Abilities are armed at spawn (line 13610) and tick with or
 without a target, so an idle boss still angers (random player in its radius, Lestat and Bill) and
 keeps its auras up. Natural aggro needs ~64px in front. So a boss joins the hold check only when it

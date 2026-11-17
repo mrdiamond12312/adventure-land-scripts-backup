@@ -2,7 +2,8 @@
 
 /** Merchant opening per dungeon; autoOpen 0 opens none */
 const DUNGEON_OPENING = {
-  crypt: { autoOpen: 2, ageMs: 0 * 3_600_000, clearMs: 3_600_000 },
+  // 24h: Lestat L4 (1.75x vhammer luck), Marceline holdable at ~75% freeze
+  crypt: { autoOpen: 2, ageMs: 24 * 3_600_000, clearMs: 3_600_000 },
   spider: { autoOpen: 0, ageMs: 0 },
   tomb: { autoOpen: 0, ageMs: 0 },
   darkMage: { autoOpen: 0, ageMs: 0, needs: { fieldgen0: 10 } },
@@ -723,16 +724,19 @@ function giveUpDungeonFight(dungeon, isBossOnUs) {
 let dungeonGoal; // { instance, map, x, y, at }
 let dungeonGoalPublishedAt = 0;
 
+/** Goal kinds, best first: a boss being fought, a boss found and waited at, a walk */
+const DUNGEON_GOAL_RANK = { fight: 0, found: 1, walk: 2 };
+
 /**
  * Sets our goal; a move past DUNGEON.reach is published at once, a refresh once a second.
  * @param {{x: number, y: number}} spot
- * @param {boolean} [isFight] - at a boss: found, held or fought, which outranks a walk
+ * @param {"fight"|"found"|"walk"} [kind]
  */
-function setDungeonGoal(spot, isFight = false) {
+function setDungeonGoal(spot, kind = "walk") {
   const isMoved =
     !dungeonGoal ||
     dungeonGoal.instance !== character.in ||
-    dungeonGoal.isFight !== isFight ||
+    dungeonGoal.kind !== kind ||
     distance(dungeonGoal, spot) > DUNGEON.reach;
   dungeonGoal = {
     owner: character.name,
@@ -740,7 +744,7 @@ function setDungeonGoal(spot, isFight = false) {
     map: character.map,
     x: spot.x,
     y: spot.y,
-    isFight,
+    kind,
     at: Date.now(),
   };
   if (!isMoved && Date.now() - dungeonGoalPublishedAt < 1000) return;
@@ -755,15 +759,19 @@ function clearDungeonGoal() {
 }
 
 /**
- * Another of us's fresh goal in this instance: a boss before a walk, the
- * nearest boss to us, the tanker's walk before the rest. Ranked, not by
- * freshness, so two goals refreshed in turn don't flip us between them.
- * @returns {Object|undefined}
+ * Another of us's fresh goal in this instance: a fight before a found boss
+ * before a walk; the nearest boss to us, the tanker's walk before the rest.
+ * Ranked, not by freshness, so two goals refreshed in turn don't flip us.
+ * @returns {{map: string, x: number, y: number, kind: string}|undefined}
  */
 function getDungeonGatherPoint() {
   const rank = (goal) => [
-    goal.isFight ? 0 : 1,
-    goal.isFight ? distance(character, goal) : goal.owner === TANKER ? 0 : 1,
+    DUNGEON_GOAL_RANK[goal.kind] ?? DUNGEON_GOAL_RANK.walk,
+    goal.kind === "walk"
+      ? goal.owner === TANKER
+        ? 0
+        : 1
+      : distance(character, goal),
     -goal.at,
   ];
   const goal = partyMems
@@ -778,7 +786,7 @@ function getDungeonGatherPoint() {
       const [a, b] = [rank(lhs), rank(rhs)];
       return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
     })[0];
-  return goal && { map: goal.map, x: goal.x, y: goal.y };
+  return goal && { map: goal.map, x: goal.x, y: goal.y, kind: goal.kind };
 }
 
 /**
@@ -817,14 +825,21 @@ function isDungeonTankerDown() {
 }
 
 /**
- * The tanker or the healer out of view: a boss left in sight is waited at,
- * else we go by the gather point, else walk to the nearest boss box left.
+ * The tanker or the healer out of view: a fight one of us is in is joined
+ * first, then a boss left in sight is waited at, else we go by the gather
+ * point, else walk to the nearest boss box left.
  * @returns {Promise<Object>} travelling
  */
 async function waitForDungeonParty(dungeon) {
   if (isDungeonTankerDown()) return leaveDungeonFight(dungeon);
   changeToNormalStrategies();
   if (listOfMonsterAttacking(character).length) await scareAwayMobs();
+
+  if (getDungeonGatherPoint()?.kind === "fight") {
+    dungeonLog(dungeon.id, "joining the fight");
+    gatherInDungeon(() => listOfMonsterAttacking(character).length > 0);
+    return travelling();
+  }
 
   const killed = Object.values(readDungeonRun(dungeon.id).killed);
   const boxes = dungeon.bosses
@@ -838,7 +853,7 @@ async function waitForDungeonParty(dungeon) {
   const inSight = boxes.find(({ mtype }) => get_nearest_monster({ type: mtype }));
   if (inSight) {
     dungeonLog(dungeon.id, `waiting for the party at ${inSight.mtype}`);
-    setDungeonGoal({ x: character.real_x, y: character.real_y }, true);
+    setDungeonGoal({ x: character.real_x, y: character.real_y }, "found");
     return travelling();
   }
 
@@ -965,7 +980,7 @@ function engageDungeonBoss(dungeon, target, fight, dragTo) {
     return travelling();
   }
   dungeonState.plan = { target, dragTo, at: Date.now() };
-  setDungeonGoal(dragTo ?? target, true);
+  setDungeonGoal(dragTo ?? target, "fight");
   dungeonLog(
     dungeon.id,
     dragTo

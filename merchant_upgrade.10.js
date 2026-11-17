@@ -20,6 +20,13 @@ const KEEP_THRESHOLD = {
   glolipop: 6,
   fallen: 16,
 
+  // crypt
+  cearrings: 6,
+  cring: 6,
+  vdagger: 6,
+  vattire: 6,
+  vhammer: 6,
+
   // new stuffs!
   cloverstud: 6,
   handofmidas: 7,
@@ -346,13 +353,19 @@ function groupItemsByLevel(items) {
  */
 function pickCompoundPull(bag, bank, room) {
   const setsOf = (plain, titled) =>
-    Math.floor(countCompoundableCopies(bag.plain + plain, bag.titled + titled) / 3);
+    Math.floor(
+      countCompoundableCopies(bag.plain + plain, bag.titled + titled) / 3,
+    );
 
   let best;
   let bestSets = setsOf(0, 0);
 
   for (let plain = 0; plain <= Math.min(bank.plain, room); plain++) {
-    for (let titled = 0; titled <= Math.min(bank.titled, room - plain); titled++) {
+    for (
+      let titled = 0;
+      titled <= Math.min(bank.titled, room - plain);
+      titled++
+    ) {
       const sets = setsOf(plain, titled);
       const size = plain + titled;
       const isBetter =
@@ -608,7 +621,11 @@ async function retrievedBankItemToUpgrade() {
     .filter(Boolean)
     .slice(0, Math.max(0, character.esize - picked.length));
 
-  await retrieveAll([...picked, ...scrollSlots, ...(primling ? [primling] : [])]);
+  await retrieveAll([
+    ...picked,
+    ...scrollSlots,
+    ...(primling ? [primling] : []),
+  ]);
 
   const signatures = {};
   for (const id of pickedIds) {
