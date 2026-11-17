@@ -15,6 +15,8 @@ const STUCK_WINDOW = 4;
 const STUCK_STEP_STALE_MS = 2000;
 /** Below this reach a step is noise, not a test */
 const STUCK_MIN_REACH = 3;
+/** A move() to within this of where we already head is not resent */
+const MOVE_RESEND_GAP = 10;
 
 /** @type {{map: string, x: number, y: number, length: number, at: number}|undefined} the last kite step asked for */
 var lastKiteStep;
@@ -685,6 +687,14 @@ function moveTowardDestination(destination) {
     x = character.real_x + dx * scale;
     y = character.real_y + dy * scale;
   }
+
+  // Already walking there: a repeat move() only burns call cost
+  if (
+    character.moving &&
+    Math.hypot(character.going_x - x, character.going_y - y) <
+      MOVE_RESEND_GAP
+  )
+    return { x, y };
 
   move(x, y);
   lastKiteStep = {

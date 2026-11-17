@@ -496,6 +496,72 @@ function followCryptLeader() {
   ).catch(() => {});
 }
 
+/** @param {string[]} wanted - boss types worth stopping for on the way */
+function walkToCryptNest(wanted) {
+  advanceSmartMove(
+    { ...CRYPT_MOBS.nest },
+    {
+      useScare: true,
+      stopWatcher: () =>
+        Object.values(parent.entities).some(isCryptMinion) ||
+        shouldStopCryptTrip(wanted),
+    },
+  ).catch(() => {});
+}
+
+/**
+ * A follower out of the tanker's sight goes on alone: the nest while minions
+ * are left, else the lap. A boss close by sends it to a clear junction, and
+ * the tanker coming into view ends the walk.
+ * @returns {Object} travelling
+ */
+function walkCryptAlone() {
+  if (get_entity(TANKER)) {
+    followCryptLeader();
+    return travelling();
+  }
+
+  const nearBoss = Object.values(parent.entities).find(
+    (mob) =>
+      mob.type === "monster" &&
+      !mob.dead &&
+      isCryptBoss(mob) &&
+      distance(character, mob) < CRYPT.bossRange,
+  );
+  if (nearBoss) {
+    const spot = getClearCryptJunction([nearBoss], character);
+    if (spot && distance(character, spot) > CRYPT.arrival)
+      advanceSmartMove(spot, { useScare: true }).catch(() => {});
+    else if (!spot) followCryptLeader();
+    return travelling();
+  }
+
+  const run = readCryptRun();
+  const killed = Object.values(run.killed);
+  const unkilled = CRYPT_MOBS.bosses.filter((mtype) => !killed.includes(mtype));
+  const stopWatcher = () =>
+    !!get_entity(TANKER) ||
+    isCryptBossOnUs() ||
+    Object.values(parent.entities).some(
+      (mob) =>
+        isCryptBoss(mob) && distance(character, mob) < CRYPT.bossRange,
+    );
+
+  if (getCryptMinionsLeft(run) > 0) {
+    if (distance(character, CRYPT_MOBS.nest) > CRYPT.reach)
+      advanceSmartMove(
+        { ...CRYPT_MOBS.nest },
+        { useScare: true, stopWatcher },
+      ).catch(() => {});
+    return travelling();
+  }
+
+  const stop = getCryptPatrolStop(unkilled);
+  if (stop) advanceSmartMove(stop, { useScare: true, stopWatcher }).catch(() => {});
+  else followCryptLeader();
+  return travelling();
+}
+
 /** Stands on the far side of a boss from whoever it chases, out of its way */
 function holdBehindCryptBoss(boss) {
   const victim = get_entity(boss.target);
@@ -586,17 +652,7 @@ function pickCryptMinion(fight, wanted) {
   if (!minions.length) {
     if (distance(character, CRYPT_MOBS.nest) < CRYPT.reach)
       writeDungeonRun("crypt", (record) => (record.isMinionsSwept = true));
-    else if (isAssignedAsTanker())
-      advanceSmartMove(
-        { ...CRYPT_MOBS.nest },
-        {
-          useScare: true,
-          stopWatcher: () =>
-            Object.values(parent.entities).some(isCryptMinion) ||
-            shouldStopCryptTrip(wanted),
-        },
-      ).catch(() => {});
-    else followCryptLeader();
+    else walkToCryptNest(wanted);
     return undefined;
   }
 
@@ -911,8 +967,7 @@ async function useCryptStrategy() {
         parent.party?.[TANKER]?.in !== character.in;
     if (isTankerDown) return escapeCrypt();
     if (!bosses.length && !mobsOnMe.length && scoutCrypt()) return travelling();
-    followCryptLeader();
-    return travelling();
+    return walkCryptAlone();
   }
 
   const run = readCryptRun();
