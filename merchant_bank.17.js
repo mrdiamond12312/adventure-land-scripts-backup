@@ -838,6 +838,7 @@ async function runBankStoreRoutine(forced) {
   const keepIndices = getMerchantGearKeepIndices();
   const craftSurplus = getCraftSurplusIndices();
   const craftReserved = getCraftReservedIndices();
+  const { bag: dungeonKeeps } = getDungeonKeeps();
 
   // Determine which items to store
   const toStore = character.items
@@ -847,7 +848,9 @@ async function runBankStoreRoutine(forced) {
       if (item.l) return false; // skip locked items
       if (keepIndices.has(index)) return false;
       if (isHeldFailstackFodder(item, index)) return false;
-      if (shouldSellItem(item)) return false;
+      // A saleable kept for a dungeon (fieldgen0) is banked, where delivery fetches it
+      if (shouldSellItem(item) && !takeDungeonKeep(item, dungeonKeeps))
+        return false;
 
       const info = item_info(item);
 

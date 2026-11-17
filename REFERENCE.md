@@ -6288,6 +6288,8 @@ the merchant's waiting cap.
   out to sell) both spend one budget per item: the dungeon need less what our other online
   characters carry, protected in the bank first, then in the bag. Only the surplus sells. Without
   it the purge sold the bank's generators and the sweep sold the ones pulled for the tanker.
+  `runBankStoreRoutine` spends the bag budget the same way (2026-11-18): it used to skip every
+  `shouldSellItem` outright, so the kept generators were neither sold nor banked and sat in the bag.
 
 ### One strategy file per dungeon (2026-11-17, the user's calls)
 
