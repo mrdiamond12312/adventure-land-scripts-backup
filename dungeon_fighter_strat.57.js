@@ -3,7 +3,7 @@
 /** Merchant opening per dungeon; autoOpen 0 opens none */
 const DUNGEON_OPENING = {
   // Lestat L3 (3x his drop table): 10,260,000 + 18,947,312 ms, plus the server's ±50s per level
-  crypt: { autoOpen: 20, ageMs: 29_400_000, clearMs: 3_600_000 },
+  crypt: { autoOpen: 15, ageMs: 29_400_000, clearMs: 3_600_000 },
   spider: { autoOpen: 0, ageMs: 0 },
   tomb: { autoOpen: 0, ageMs: 0 },
   darkMage: { autoOpen: 0, ageMs: 0, needs: { fieldgen0: 10 } },
