@@ -143,6 +143,22 @@ unhandled rejection there (e.g. `move()` interrupted by the magiport itself land
 parks `smartMove()` forever, which in turn holds whatever duty flags the caller took
 (observed as lureMechaGnome stuck with `onDuty`/`isLuringMobs` true).
 
+### Only a fighter's request cuts a gather short (`isGathering`, 2026-11-17)
+
+Fishing and mining take no duty, so any errand could take the lock mid-walk, and its own smart
+move cancelled the walk to the spot. Banking did this all the time: after a visit that pulled
+upgrade stock, `scheduleNextBankRun` allows the next run after `BANK_MIN_DELAY` (15s), and
+`shouldWakeBankEarly` is nearly always true by then. The merchant would turn back halfway to the
+beach, walk the bank floors, set off again, and get pulled back on the next 15s run.
+
+`walkAndGather` (merchant_gathering.22.js) marks the trip from setting off until the cast lands,
+and `character.c.fishing`/`mining` covers the channel. While `isGathering()` holds, `takeDuty`
+refuses everyone except a caller passing `overGather: true`. Only the cm delivery handler in
+merchant_service.19.js passes it (the user's call). The mark expires after `GATHER_HOLD_MAX_MS`
+so a hung walk can't hold off every duty. `bankLoop` additionally waits while `shouldGoChilling()`
+says a gather is *due* but hasn't set off yet. A bag too full to gather makes that false, so a
+jammed bag still banks. Crafts that walk to their spot take no duty and can still redirect a walk.
+
 ## The merchant cm handler's trust boundary (`merchant_service.19.js`)
 
 Adventure Land's own MCP guidance is explicit that a cm is untrusted input — the sender is
@@ -3005,6 +3021,30 @@ targeted craft climbs skip the gate as before.
 `craft()` builds `isEnoughIngredients` with `.map(...).every(Boolean)` rather than `.every(...)`.
 A short-circuit at the first unsatisfied ingredient would skip the level check on every later one,
 so their targets would never be registered and their climb would never start.
+
+### Reserved copies are pulled by the bank visit (`selectReservedPull`, debugged 2026-11-17)
+
+`craft()` queues its bank ingredients (`fromBank`) and pulls them with
+`retrieveBankItem(…, { travel: false })`. That only fires when the merchant stands on the right
+floor *and* holds no duty, and it is only in the bank while `bankLoop` or the jam store holds
+`DUTY.ERRAND`. So a ready craft was fed only by luck, typically the tick right after a visit that
+ended on the ingredient's floor. Meanwhile the reservation held its other ingredients in the bag
+indefinitely. Seen as fire essence never banked while a +0 throwing star sat in the bank for
+`firestars`.
+
+`bankLoop`'s targeted pull used to take only copies *below* `getCraftTargetLevel`. That's climb
+fodder, which pulls nothing for a level-0 reservation and never pulls the finished copy of a
+levelled one. `selectReservedPull` now pulls, for every reserved level, the exact-level copies the
+bag lacks, ahead of the climb fodder. A plain `<=` comparison was considered and rejected for two
+reasons:
+- it caps nothing, so every visit pulls every copy at the level and the next store pass banks
+  the surplus again;
+- for compound items the targeted list goes through `filterCompoundableSets`, which drops a lone
+  reserved copy because it isn't a set of 3.
+
+On the store side, `getCraftReservedIndices` keeps exactly the reserved count per level in the bag,
+over `STORE_ABLE` and forced stores (`throwingstars` is `STORE_ABLE`, so a pulled star used to go
+straight back).
 
 ## A generated map reaches G after the graph was built (`refreshPathfinderFor`, 2026-09-21)
 

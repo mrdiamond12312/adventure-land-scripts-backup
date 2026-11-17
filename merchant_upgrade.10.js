@@ -411,24 +411,62 @@ function filterCompoundableSets(items, inventoryEmptySlots) {
  */
 function selectRetrievableItems(itemId, isTargeted, inventoryEmptySlots) {
   const name = getKeyName(itemId);
-  let items = getItemBankSlots(name, true, isTargeted).filter(
+  const items = getItemBankSlots(name, true, isTargeted).filter(
     (item) => !item.l && (isTargeted || matchesItemKey(item, itemId)),
   );
 
+  // Copies a craft reserves come first and skip the compound set filter
+  const reserved = isTargeted
+    ? selectReservedPull(items, name, inventoryEmptySlots)
+    : [];
+  const budget = inventoryEmptySlots - reserved.length;
+
+  let pool;
   if (isTargeted) {
+    // Climb fodder: anything below the deepest level a craft wants
     const targetLevel = getCraftTargetLevel(name);
-    items = items.filter((item) => (item.level ?? 0) < targetLevel);
+    pool = items.filter(
+      (item) => !reserved.includes(item) && (item.level ?? 0) < targetLevel,
+    );
   } else {
     // Clamped: a pile under its threshold keeps everything, and a bare
     // slice(0, negative) would count from the end and pull the low copies anyway
     const keep = getKeepThreshold(itemId);
-    items = items.slice(0, Math.max(0, items.length - keep));
+    pool = items.slice(0, Math.max(0, items.length - keep));
   }
 
-  if (item_info({ name }).compound)
-    return filterCompoundableSets(items, inventoryEmptySlots);
+  const workable = item_info({ name }).compound
+    ? filterCompoundableSets(pool, budget)
+    : pool.slice(0, budget);
 
-  return items.slice(0, inventoryEmptySlots);
+  return [...reserved, ...workable];
+}
+
+/**
+ * Bank copies at each reserved craft level that the bag still lacks.
+ * @param {Array<Object>} bankItems - the item's unlocked bank slots
+ * @param {string} name
+ * @param {number} budget - bag slots the pull may fill
+ * @returns {Array<Object>}
+ */
+function selectReservedPull(bankItems, name, budget) {
+  const reservations = Object.entries(craftLevelTargets[name] ?? {});
+  const picked = [];
+
+  for (const [levelKey, quantity] of reservations) {
+    const level = +levelKey;
+    let missing = quantity - countInventoryAtLevel(name, level);
+
+    for (const item of bankItems) {
+      if (missing <= 0 || picked.length >= budget) break;
+      if ((item.level ?? 0) !== level) continue;
+
+      picked.push(item);
+      missing -= item.q ?? 1;
+    }
+  }
+
+  return picked;
 }
 
 /**

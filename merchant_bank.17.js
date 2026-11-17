@@ -782,6 +782,29 @@ function getCraftSurplusIndices() {
 }
 
 /**
+ * Bag indices covering what pending crafts reserve at each level, no more.
+ * @returns {Set<number>}
+ */
+function getCraftReservedIndices() {
+  const left = {};
+  const kept = new Set();
+
+  character.items.forEach((item, index) => {
+    if (!item || item.l) return;
+
+    const level = item.level ?? 0;
+    const key = `${item.name}:${level}`;
+    if (left[key] === undefined) left[key] = getCraftReserved(item.name, level);
+    if (left[key] <= 0) return;
+
+    left[key] -= item.q ?? 1;
+    kept.add(index);
+  });
+
+  return kept;
+}
+
+/**
  * Whether an item is something upgradeInv/compoundInv may still work on.
  * @param {Set<number>} skip - bag indices already leaving the bag
  */
@@ -815,6 +838,7 @@ async function runBankStoreRoutine(forced) {
   // Indices stay valid for the whole routine: storing leaves a hole behind
   const keepIndices = getMerchantGearKeepIndices();
   const craftSurplus = getCraftSurplusIndices();
+  const craftReserved = getCraftReservedIndices();
 
   // Determine which items to store
   const toStore = character.items
@@ -849,6 +873,9 @@ async function runBankStoreRoutine(forced) {
         );
 
       if (craftSurplus.has(index)) return true;
+
+      // A reserved craft ingredient waits in the bag, STORE_ABLE or forced
+      if (craftReserved.has(index)) return false;
 
       // A supply would only be pulled straight back out, STORE_ABLE or not
       if (!isEquipable && isBagSupply(item)) return false;
