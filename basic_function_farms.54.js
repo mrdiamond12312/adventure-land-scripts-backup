@@ -59,7 +59,8 @@ const FARMS = {
   },
   xscorpion: {
     map: "halloween",
-    at: { x: -219, y: 681 },
+    at: { x: -244, y: 726 },
+    tanker: PRIEST,
     mobs: ["phoenix", "xscorpion", "minimush"],
   },
   croc: {
