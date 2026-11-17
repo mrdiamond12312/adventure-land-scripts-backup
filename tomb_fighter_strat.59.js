@@ -48,7 +48,7 @@ async function useTombStrategy() {
 
   const fight = getDungeonFight();
   const bosses = noteDungeonBosses(dungeon);
-  if (!fight.isReady) return leaveDungeonFight(dungeon);
+  if (!fight.isReady) return waitForDungeonParty(dungeon);
 
   const judged = judgeDungeonBosses(dungeon, fight);
   if (!judged.length) {

@@ -34,6 +34,7 @@ const DUNGEON = {
   supplyGraceMs: 10_000, // with none left in stock
   supplyRetryMs: 1_800_000,
   giveUpAfterMs: 15_000,
+  goalStaleMs: 30_000, // a gather point, or the tanker's live info, older than this is ignored
 };
 
 const DUNGEON_MAPS = {
@@ -704,35 +705,127 @@ function giveUpDungeonFight(dungeon, isBossOnUs) {
   return undefined;
 }
 
-/** Keeps followers on the tanker */
-function followDungeonTanker(dungeon) {
-  const tanker = get_entity(TANKER);
-  if (tanker) {
-    if (distance(character, tanker) > DUNGEON.reach) parkAt(tanker);
-    return;
-  }
+/** Where we head of our own accord: the party's gather point, any role */
+let dungeonGoal; // { instance, map, x, y, at }
+let dungeonGoalPublishedAt = 0;
 
-  const info = parent.party?.[TANKER];
-  if (info?.in !== character.in) return;
-  advanceSmartMove(
-    { map: dungeon.map, x: info.x, y: info.y },
-    { stopWatcher: () => !!get_entity(TANKER) },
-  ).catch(() => {});
+/** Sets our goal; a move past DUNGEON.reach is published at once, a refresh once a second */
+function setDungeonGoal(spot) {
+  const isMoved =
+    !dungeonGoal ||
+    dungeonGoal.instance !== character.in ||
+    distance(dungeonGoal, spot) > DUNGEON.reach;
+  dungeonGoal = {
+    instance: character.in,
+    map: character.map,
+    x: spot.x,
+    y: spot.y,
+    at: Date.now(),
+  };
+  if (!isMoved && Date.now() - dungeonGoalPublishedAt < 1000) return;
+  dungeonGoalPublishedAt = Date.now();
+  publishCharacterInfo({ dungeonGoal });
+}
+
+function clearDungeonGoal() {
+  if (!dungeonGoal) return;
+  dungeonGoal = undefined;
+  publishCharacterInfo({ dungeonGoal: undefined });
+}
+
+/** @returns {Object|undefined} the freshest goal another of us has published in this instance */
+function getDungeonGatherPoint() {
+  const goal = partyMems
+    .filter((name) => name !== character.name)
+    .map((name) => getCharacterInfo(name)?.dungeonGoal)
+    .filter(
+      (goal) =>
+        goal?.instance === character.in &&
+        Date.now() - goal.at < DUNGEON.goalStaleMs,
+    )
+    .sort((lhs, rhs) => rhs.at - lhs.at)[0];
+  return goal && { map: goal.map, x: goal.x, y: goal.y };
 }
 
 /**
+ * Walks to the party's gather point, dropping our own goal for it.
+ * @param {() => boolean} [isStop] - ends the walk early
+ * @returns {boolean} whether there is a gather point to go by
+ */
+function gatherInDungeon(isStop = () => false) {
+  const point = getDungeonGatherPoint();
+  if (!point) return false;
+  clearDungeonGoal();
+  if (distance(character, point) <= DUNGEON.reach) return true;
+
+  const isPointMoved = () => {
+    const now = getDungeonGatherPoint();
+    return !now || distance(now, point) > DUNGEON.reach;
+  };
+  advanceSmartMove(point, {
+    useScare: true,
+    stopWatcher: () => isStop() || isPointMoved(),
+  }).catch(() => {});
+  return true;
+}
+
+/** @returns {boolean} whether the tanker is dead, gone from the instance or silent */
+function isDungeonTankerDown() {
+  const tanker = get_entity(TANKER);
+  if (tanker) return !!tanker.rip;
+  const info = getCharacterInfo(TANKER);
+  return (
+    !info ||
+    !!info.rip ||
+    info.in !== character.in ||
+    Date.now() - info.at > DUNGEON.goalStaleMs
+  );
+}
+
+/**
+ * The tanker or the healer out of view: we go by the gather point, else walk
+ * to the nearest boss box left and wait there in sight of it.
+ * @returns {Promise<Object>} travelling
+ */
+async function waitForDungeonParty(dungeon) {
+  if (isDungeonTankerDown()) return leaveDungeonFight(dungeon);
+  changeToNormalStrategies();
+  if (listOfMonsterAttacking(character).length) await scareAwayMobs();
+  if (gatherInDungeon(() => listOfMonsterAttacking(character).length > 0)) {
+    dungeonLog(dungeon.id, "going to the gather point");
+    return travelling();
+  }
+
+  const killed = Object.values(readDungeonRun(dungeon.id).killed);
+  const box = dungeon.bosses
+    .map(({ phases, spot }) => ({
+      mtype: phases.find((mtype) => !killed.includes(mtype)),
+      spot,
+    }))
+    .filter(({ mtype }) => mtype)
+    .sort((lhs, rhs) => distance(character, lhs.spot) - distance(character, rhs.spot))[0];
+  if (!box) return leaveDungeonFight(dungeon, "no boss left, meeting at the entrance");
+  if (!get_nearest_monster({ type: box.mtype }))
+    return walkToDungeonBoss(dungeon, box);
+
+  dungeonLog(dungeon.id, `waiting for the party at ${box.mtype}`);
+  setDungeonGoal(box.spot);
+  return travelling();
+}
+
+/**
+ * Everyone walks to the boss's box on its own.
  * @param {Object} entry - a judged boss
  * @returns {Object} travelling
  */
 function walkToDungeonBoss(dungeon, entry) {
   changeToNormalStrategies();
   dungeonLog(dungeon.id, `walking to ${entry.mtype}`);
-  if (isAssignedAsTanker())
-    advanceSmartMove(
-      { ...entry.spot },
-      { stopWatcher: () => !!get_nearest_monster({ type: entry.mtype }) },
-    ).catch(() => {});
-  else followDungeonTanker(dungeon);
+  setDungeonGoal(entry.spot);
+  advanceSmartMove(
+    { ...entry.spot },
+    { stopWatcher: () => !!get_nearest_monster({ type: entry.mtype }) },
+  ).catch(() => {});
   return travelling();
 }
 
@@ -827,10 +920,10 @@ function engageDungeonBoss(dungeon, target, fight, dragTo) {
     isHitTooHeavy
   ) {
     dungeonLog(dungeon.id, `waiting for the tanker to open on ${target.mtype}`);
-    followDungeonTanker(dungeon);
     return travelling();
   }
   dungeonState.plan = { target, dragTo, at: Date.now() };
+  setDungeonGoal(dragTo ?? target);
   dungeonLog(
     dungeon.id,
     dragTo

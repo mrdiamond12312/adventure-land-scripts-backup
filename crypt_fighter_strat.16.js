@@ -13,7 +13,6 @@ const CRYPT = {
   pairPatienceMs: 45_000,
   planStaleMs: 2000,
   untouchedSpawns: ["nerfedbat", "zapper0"], // the tanker holds their boss by absorb alone
-  goalStaleMs: 30_000, // a gather point, or the tanker's live info, older than this is ignored
 };
 
 /** Corridor junctions in lap order, the entrance first */
@@ -83,7 +82,6 @@ function resetCryptMemory(instance) {
     drag: undefined, // { id, spot }
     pairingSince: undefined,
     isScoutDone: false,
-    goal: undefined, // { map, x, y, at } where we head of our own accord
   };
 }
 
@@ -126,10 +124,6 @@ function publishCryptKit() {
     cryptSightings: {
       instance: cryptMemory.instance,
       spots: cryptMemory.sightings,
-    },
-    cryptGoal: cryptMemory.goal && {
-      ...cryptMemory.goal,
-      instance: cryptMemory.instance,
     },
   });
 }
@@ -482,35 +476,6 @@ function shouldStopCryptTrip(wanted) {
 
 const isCryptBossOnUs = () => shouldStopCryptTrip([]);
 
-/**
- * Where we head of our own accord, shared as the party's gather point; a move
- * past CRYPT.reach is published at once.
- * @param {{x: number, y: number}} spot
- */
-function setCryptGoal(spot) {
-  const isMoved =
-    !cryptMemory.goal || distance(cryptMemory.goal, spot) > CRYPT.reach;
-  cryptMemory.goal = { map: "crypt", x: spot.x, y: spot.y, at: Date.now() };
-  if (isMoved) {
-    cryptMemory.publishedAt = 0;
-    publishCryptKit();
-  }
-}
-
-/** @returns {Object|undefined} the freshest goal another of us has published in this instance */
-function getCryptGatherPoint() {
-  const goal = partyMems
-    .filter((name) => name !== character.name)
-    .map((name) => getCharacterInfo(name)?.cryptGoal)
-    .filter(
-      (goal) =>
-        goal?.instance === cryptMemory.instance &&
-        Date.now() - goal.at < CRYPT.goalStaleMs,
-    )
-    .sort((lhs, rhs) => rhs.at - lhs.at)[0];
-  return goal && { map: "crypt", x: goal.x, y: goal.y };
-}
-
 const isCryptBossNear = () =>
   Object.values(parent.entities).some(
     (mob) =>
@@ -520,35 +485,12 @@ const isCryptBossNear = () =>
       distance(character, mob) < CRYPT.bossRange,
   );
 
-/**
- * Walks to the party's gather point, stopping when a boss turns on us or the
- * point moves on.
- * @returns {boolean} whether there is a gather point to go by
- */
-function gatherInCrypt() {
-  const point = getCryptGatherPoint();
-  if (!point) return false;
-  if (cryptMemory.goal) {
-    cryptMemory.goal = undefined;
-    cryptMemory.publishedAt = 0;
-    publishCryptKit();
-  }
-  if (distance(character, point) <= CRYPT.reach) return true;
-
-  const isPointMoved = () => {
-    const now = getCryptGatherPoint();
-    return !now || distance(now, point) > CRYPT.reach;
-  };
-  advanceSmartMove(point, {
-    useScare: true,
-    stopWatcher: () => isCryptBossOnUs() || isPointMoved(),
-  }).catch(() => {});
-  return true;
-}
+/** @returns {boolean} whether there is a gather point, walked to until a boss turns on us */
+const gatherInCrypt = () => gatherInDungeon(isCryptBossOnUs);
 
 /** @param {string[]} wanted - boss types worth stopping for on the way */
 function walkToCryptNest(wanted) {
-  setCryptGoal(CRYPT_MOBS.nest);
+  setDungeonGoal(CRYPT_MOBS.nest);
   advanceSmartMove(
     { ...CRYPT_MOBS.nest },
     {
@@ -587,14 +529,14 @@ function walkCryptAlone() {
   const killed = Object.values(run.killed);
   const unkilled = CRYPT_MOBS.bosses.filter((mtype) => !killed.includes(mtype));
   const stopWatcher = () =>
-    isCryptBossOnUs() || isCryptBossNear() || !!getCryptGatherPoint();
+    isCryptBossOnUs() || isCryptBossNear() || !!getDungeonGatherPoint();
 
   const spot =
     getCryptMinionsLeft(run) > 0
       ? CRYPT_MOBS.nest
       : getCryptPatrolStop(unkilled);
   if (spot && distance(character, spot) > CRYPT.arrival) {
-    setCryptGoal(spot);
+    setDungeonGoal(spot);
     advanceSmartMove(
       { map: "crypt", x: spot.x, y: spot.y },
       { useScare: true, stopWatcher },
@@ -669,7 +611,7 @@ async function retreatInCrypt(cluster) {
 
   log("Crypt: backing off");
   const spot = getClearCryptJunction([], character) ?? CRYPT_JUNCTION[0];
-  setCryptGoal(spot);
+  setDungeonGoal(spot);
   if (distance(character, spot) > CRYPT.arrival)
     advanceSmartMove(spot, {
       useScare: true,
@@ -783,7 +725,7 @@ function patrolCrypt(wanted) {
     return;
   }
 
-  setCryptGoal(stop);
+  setDungeonGoal(stop);
   const known = Object.keys(knownCryptSightings());
   const unknown = wanted.filter((mtype) => !known.includes(mtype));
   advanceSmartMove(stop, {
@@ -881,7 +823,7 @@ function baitCryptSupporter(plan) {
   const stop = getCryptPatrolStop(CRYPT_MOBS.supporters, CRYPT.reach);
   if (stop) {
     cryptPlan = { target: plan.target, dragTo: stop, at: Date.now() };
-    setCryptGoal(stop);
+    setDungeonGoal(stop);
   } else giveUp();
 
   return travelling();
@@ -1008,15 +950,7 @@ async function useCryptStrategy() {
   if (!fight.isReady) {
     changeToNormalStrategies();
     if (isAssignedAsTanker()) return walkCryptAlone();
-    const tanker = get_entity(TANKER);
-    const tankerInfo = getCharacterInfo(TANKER);
-    const isTankerDown = tanker
-      ? tanker.rip
-      : !tankerInfo ||
-        tankerInfo.rip ||
-        tankerInfo.in !== character.in ||
-        Date.now() - tankerInfo.at > CRYPT.goalStaleMs;
-    if (isTankerDown) return escapeCrypt();
+    if (isDungeonTankerDown()) return escapeCrypt();
     if (!bosses.length && !mobsOnMe.length && scoutCrypt()) return travelling();
     return walkCryptAlone();
   }
@@ -1040,7 +974,7 @@ async function useCryptStrategy() {
   let target = plan?.target;
   if (target) {
     cryptPlan = { ...plan, at: Date.now() };
-    setCryptGoal(plan.dragTo ?? target);
+    setDungeonGoal(plan.dragTo ?? target);
     changeToNormalStrategies();
 
     const isSupporterLeft =
@@ -1087,7 +1021,7 @@ async function useCryptStrategy() {
   } else if (minionsLeft) {
     target = pickCryptMinion(fight, wanted);
     if (!target) return travelling();
-    setCryptGoal(target);
+    setDungeonGoal(target);
     changeToPullStrategies();
   } else {
     changeToNormalStrategies();

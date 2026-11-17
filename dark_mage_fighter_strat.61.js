@@ -7,7 +7,7 @@ async function useDarkMageStrategy() {
 
   const fight = getDungeonFight();
   const bosses = noteDungeonBosses(dungeon);
-  if (!fight.isReady) return leaveDungeonFight(dungeon);
+  if (!fight.isReady) return waitForDungeonParty(dungeon);
 
   const [phase] = judgeDungeonBosses(dungeon, fight);
   if (!phase) {
