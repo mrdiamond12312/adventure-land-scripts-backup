@@ -5958,6 +5958,11 @@ server timer that runs for every instance, paused or not: one level per
 `max(3min, max_hp * 30ms) * 2^(0.3 * (level - 1))`, each worth +0.25 `luckx`, half the base hp,
 12.5% attack and 0.034 frequency. After 54h (earthiverse's wait) that is Lestat level 6, Bill 5,
 Elena 7, and the vbats level 8 at double attack; Spike never levels in that time (18.7M hp).
+- **A boss's own drop table scales with its level, not `luckx`** (`shouldItemDrop`, server.js
+  ~2370: `share * luckm * monster.level * monster_mult`). `luckx` only feeds the global and map
+  tables. So Lestat's two 0.5% `vhammer` rolls are ~1% a kill at L1, ~3% at L3 (8.11h), ~4% at L4
+  (16.75h), ~5% at L5 (30h). `DUNGEON_OPENING.crypt.ageMs` is set for L3. Being targeted resets a
+  boss's level timer (`target_player`), so only untouched bosses age.
 - Crypts are opened in batches, since the instances outlive their visitors (only paused) and
   keep levelling. `openCryptInstance` appends `{ instance, openedAt, realm }` to `cryptVisits` and
   never sets `cryptInstance` itself. A fighter promotes the oldest aged one of its realm

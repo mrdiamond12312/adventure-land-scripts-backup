@@ -2,8 +2,8 @@
 
 /** Merchant opening per dungeon; autoOpen 0 opens none */
 const DUNGEON_OPENING = {
-  // 24h: Lestat L4 (1.75x vhammer luck), Marceline holdable at ~75% freeze
-  crypt: { autoOpen: 2, ageMs: 24 * 3_600_000, clearMs: 3_600_000 },
+  // Lestat L3 (3x his drop table): 10,260,000 + 18,947,312 ms, plus the server's ±50s per level
+  crypt: { autoOpen: 20, ageMs: 29_400_000, clearMs: 3_600_000 },
   spider: { autoOpen: 0, ageMs: 0 },
   tomb: { autoOpen: 0, ageMs: 0 },
   darkMage: { autoOpen: 0, ageMs: 0, needs: { fieldgen0: 10 } },
