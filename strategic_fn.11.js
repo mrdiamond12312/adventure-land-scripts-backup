@@ -414,11 +414,13 @@ function isWeakMob(mob, multiplier = 1) {
 
 const EQUIP_IGNORE_MOBS = ["nerfedmummy"];
 
+/** @returns {boolean} whether a mob about to die on us has its own drop table to luck */
 function shouldWearLuckGear() {
   return Object.values(parent.entities).some(
     (mob) =>
       mob.type === "monster" &&
       !EQUIP_IGNORE_MOBS.includes(mob.mtype) &&
+      !!G.drops?.monsters?.[mob.mtype] &&
       !mob.rip &&
       !mob.dead &&
       mob.hp > 0 &&

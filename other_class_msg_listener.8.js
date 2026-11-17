@@ -23,7 +23,6 @@ character.on("cm", async function ({ name, message }) {
               "cdragon",
               "oxhelmet",
               "snowball",
-              "fieldgen0",
               "spookyamulet",
               "xptome",
               "xpbooster",

@@ -595,15 +595,13 @@ setInterval(async function () {
             "mpot1",
             "cdragon",
             "oxhelmet",
-            // Remove for christmas snowman server hopping
-            // "snowball",
+            "snowball",
             "spookyamulet",
             "xptome",
             "xpbooster",
             "goldbooster",
             "luckbooster",
             "suckerpunch",
-            "fieldgen0",
             desiredElixir,
             "elixirluck",
           ].includes(item.name)

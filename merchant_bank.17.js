@@ -73,7 +73,6 @@ const SALE_ABLE = [
   "mushroomstaff",
   "slimestaff",
   "fieldgen0",
-  "snowball",
   "carrotsword",
   // "wshoes",
   "wgloves",
