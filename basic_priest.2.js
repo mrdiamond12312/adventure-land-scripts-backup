@@ -312,6 +312,7 @@ function getAbsorbTarget() {
     get_entity(baitedBoss.target);
   if (baitHolder && is_in_range(baitHolder, "absorb")) return baitHolder;
 
+  const { warriorHeld } = getFarm();
   const isPriestInEmergency = isAllyInEmergency(character.name);
   const vulnerableMems = getMyCharacters().filter(
     (id) =>
@@ -326,8 +327,11 @@ function getAbsorbTarget() {
       is_in_range(member, "absorb") &&
       canAbsorbInDungeon(member)
     ) {
+      // The warrior's held mobs alone don't count: he taunts them back after the absorb
       const hasAggro = Object.values(parent.entities).some(
-        (e) => e.target === memberId,
+        (e) =>
+          e.target === memberId &&
+          !(memberId === WARRIOR && warriorHeld.includes(e.mtype)),
       );
       if (hasAggro) return member;
     }
