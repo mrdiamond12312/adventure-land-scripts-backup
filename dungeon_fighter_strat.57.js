@@ -2,7 +2,7 @@
 
 /** Merchant opening per dungeon; autoOpen 0 opens none */
 const DUNGEON_OPENING = {
-  crypt: { autoOpen: 0, ageMs: 54 * 3_600_000, clearMs: 3_600_000 },
+  crypt: { autoOpen: 2, ageMs: 0 * 3_600_000, clearMs: 3_600_000 },
   spider: { autoOpen: 0, ageMs: 0 },
   tomb: { autoOpen: 0, ageMs: 0 },
   darkMage: { autoOpen: 0, ageMs: 0, needs: { fieldgen0: 10 } },
@@ -125,7 +125,7 @@ const DUNGEON_NEED_ITEMS = [
 /** @returns {string[]} our online characters */
 const getOnlineCharacters = () =>
   parent.caracAL
-    ? (parent.caracAL.siblings ?? [])
+    ? parent.caracAL.siblings ?? []
     : Object.keys(get_active_characters());
 
 /** @returns {number} what our other online characters carry */
@@ -144,7 +144,7 @@ function getDungeonStock(itemId) {
     .filter(Array.isArray)
     .flat()
     .reduce(
-      (total, item) => total + (item?.name === itemId ? (item.q ?? 1) : 0),
+      (total, item) => total + (item?.name === itemId ? item.q ?? 1 : 0),
       0,
     );
   return banked + getTotalQuantityOf(itemId) + getCarriedByOthers(itemId);
@@ -462,7 +462,9 @@ function getDungeonFight() {
     party,
     freezeUptime: Math.max(
       0,
-      ...party.map((member) => getCharacterInfo(member.name)?.freezeUptime ?? 0),
+      ...party.map(
+        (member) => getCharacterInfo(member.name)?.freezeUptime ?? 0,
+      ),
     ),
     canDampen: !!getCharacterInfo(holder.name)?.hasFieldgen,
     hps:
@@ -832,7 +834,9 @@ function engageDungeonBoss(dungeon, target, fight, dragTo) {
   dungeonLog(
     dungeon.id,
     dragTo
-      ? `hitting ${target.mtype}, dragging it to ${Math.round(dragTo.x)},${Math.round(dragTo.y)}`
+      ? `hitting ${target.mtype}, dragging it to ${Math.round(
+          dragTo.x,
+        )},${Math.round(dragTo.y)}`
       : `hitting ${target.mtype}`,
   );
 
@@ -876,10 +880,10 @@ function approachDungeon(dungeon) {
     !isHeld
       ? "going in"
       : isWaitingForSupply
-        ? "waiting at the door for supplies"
-        : isAssignedAsTanker()
-          ? "waiting at the door for the party"
-          : "waiting at the door for the tanker",
+      ? "waiting at the door for supplies"
+      : isAssignedAsTanker()
+      ? "waiting at the door for the party"
+      : "waiting at the door for the tanker",
   );
   const spot = isHeld ? dungeon.door : dungeon.entrance;
   if (distance(character, spot) > DUNGEON.arrival)
