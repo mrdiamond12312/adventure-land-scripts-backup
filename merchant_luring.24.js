@@ -11,6 +11,7 @@ async function lureMechaGnome() {
     shouldGoChilling() ||
     serverCurrentlyHasLiveEvent() ||
     isCaveRunOpen() ||
+    isDungeonRunHere() ||
     !isMyMageOnline() ||
     (!(
       parent.party_list &&
