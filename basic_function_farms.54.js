@@ -61,7 +61,7 @@ const FARMS = {
     map: "halloween",
     at: { x: -244, y: 726 },
     tanker: PRIEST,
-    mobs: ["phoenix", "xscorpion", "minimush"],
+    mobs: ["phoenix", "xscorpion", "minimush", "mechagnome"],
   },
   croc: {
     map: "main",
