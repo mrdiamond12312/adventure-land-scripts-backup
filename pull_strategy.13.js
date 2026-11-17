@@ -1,5 +1,7 @@
 /** Attack below which a cooperative mob is pulled anyway */
 const WEAK_COOP_MOB_ATTACK = 100;
+/** Share of the holder's heal a pulled pile may cost */
+const PULL_HEAL_SHARE = 0.9;
 
 async function usePullStrategies(target) {
   return Promise.all([equipClassGear(target), usePullSkills()]);
@@ -142,13 +144,14 @@ async function usePullSkills() {
         mobsTargetingSelf,
       );
 
-      // Damage Check
-      const currentAggroDamage = mobsInAgitateRange
-        .filter((mob) => !partyMems.includes(mob.target))
-        .reduce((prev, curr) => prev + calculateDamage(curr, pullHolder), 0);
-
+      // Damage Check: the whole pile lands on the holder once the pull is absorbed
+      const pileAfterPull = mobsList.filter(
+        (mob) =>
+          partyMems.includes(mob.target) || mobsInAgitateRange.includes(mob),
+      );
       const damageIsAcceptable =
-        currentAggroDamage < healReceivableAmount - partyDmgRecieved;
+        totalMobDps(pileAfterPull, pullHolder) <
+        healReceivableAmount * PULL_HEAL_SHARE;
 
       if (
         canUseAgitate &&

@@ -13,6 +13,7 @@ const CRYPT = {
   pairPatienceMs: 45_000,
   planStaleMs: 2000,
   untouchedSpawns: ["nerfedbat", "zapper0"], // the tanker holds their boss by absorb alone
+  goalStaleMs: 30_000, // a gather point, or the tanker's live info, older than this is ignored
 };
 
 /** Corridor junctions in lap order, the entrance first */
@@ -82,6 +83,7 @@ function resetCryptMemory(instance) {
     drag: undefined, // { id, spot }
     pairingSince: undefined,
     isScoutDone: false,
+    goal: undefined, // { map, x, y, at } where we head of our own accord
   };
 }
 
@@ -124,6 +126,10 @@ function publishCryptKit() {
     cryptSightings: {
       instance: cryptMemory.instance,
       spots: cryptMemory.sightings,
+    },
+    cryptGoal: cryptMemory.goal && {
+      ...cryptMemory.goal,
+      instance: cryptMemory.instance,
     },
   });
 }
@@ -476,28 +482,73 @@ function shouldStopCryptTrip(wanted) {
 
 const isCryptBossOnUs = () => shouldStopCryptTrip([]);
 
-/** Followers stay on the tanker: a step in view, a trip to its party spot otherwise */
-function followCryptLeader() {
-  const leader = get_entity(TANKER);
-  if (leader) {
-    if (distance(character, leader) > CRYPT.reach) parkAt(leader);
-    return;
+/**
+ * Where we head of our own accord, shared as the party's gather point; a move
+ * past CRYPT.reach is published at once.
+ * @param {{x: number, y: number}} spot
+ */
+function setCryptGoal(spot) {
+  const isMoved =
+    !cryptMemory.goal || distance(cryptMemory.goal, spot) > CRYPT.reach;
+  cryptMemory.goal = { map: "crypt", x: spot.x, y: spot.y, at: Date.now() };
+  if (isMoved) {
+    cryptMemory.publishedAt = 0;
+    publishCryptKit();
   }
+}
 
-  const info = parent.party?.[TANKER];
-  if (info?.in !== character.in || getCharacterInfo(TANKER)?.rip) return;
+/** @returns {Object|undefined} the freshest goal another of us has published in this instance */
+function getCryptGatherPoint() {
+  const goal = partyMems
+    .filter((name) => name !== character.name)
+    .map((name) => getCharacterInfo(name)?.cryptGoal)
+    .filter(
+      (goal) =>
+        goal?.instance === cryptMemory.instance &&
+        Date.now() - goal.at < CRYPT.goalStaleMs,
+    )
+    .sort((lhs, rhs) => rhs.at - lhs.at)[0];
+  return goal && { map: "crypt", x: goal.x, y: goal.y };
+}
 
-  advanceSmartMove(
-    { map: "crypt", x: info.x, y: info.y },
-    {
-      useScare: true,
-      stopWatcher: () => !!get_entity(TANKER) || isCryptBossOnUs(),
-    },
-  ).catch(() => {});
+const isCryptBossNear = () =>
+  Object.values(parent.entities).some(
+    (mob) =>
+      mob.type === "monster" &&
+      !mob.dead &&
+      isCryptBoss(mob) &&
+      distance(character, mob) < CRYPT.bossRange,
+  );
+
+/**
+ * Walks to the party's gather point, stopping when a boss turns on us or the
+ * point moves on.
+ * @returns {boolean} whether there is a gather point to go by
+ */
+function gatherInCrypt() {
+  const point = getCryptGatherPoint();
+  if (!point) return false;
+  if (cryptMemory.goal) {
+    cryptMemory.goal = undefined;
+    cryptMemory.publishedAt = 0;
+    publishCryptKit();
+  }
+  if (distance(character, point) <= CRYPT.reach) return true;
+
+  const isPointMoved = () => {
+    const now = getCryptGatherPoint();
+    return !now || distance(now, point) > CRYPT.reach;
+  };
+  advanceSmartMove(point, {
+    useScare: true,
+    stopWatcher: () => isCryptBossOnUs() || isPointMoved(),
+  }).catch(() => {});
+  return true;
 }
 
 /** @param {string[]} wanted - boss types worth stopping for on the way */
 function walkToCryptNest(wanted) {
+  setCryptGoal(CRYPT_MOBS.nest);
   advanceSmartMove(
     { ...CRYPT_MOBS.nest },
     {
@@ -510,17 +561,12 @@ function walkToCryptNest(wanted) {
 }
 
 /**
- * A follower out of the tanker's sight goes on alone: the nest while minions
- * are left, else the lap. A boss close by sends it to a clear junction, and
- * the tanker coming into view ends the walk.
+ * Out of a fight: a boss close by sends us to a clear junction, else we go to
+ * the gather point, else we set it ourselves, the nest while minions are left
+ * and the lap after.
  * @returns {Object} travelling
  */
 function walkCryptAlone() {
-  if (get_entity(TANKER)) {
-    followCryptLeader();
-    return travelling();
-  }
-
   const nearBoss = Object.values(parent.entities).find(
     (mob) =>
       mob.type === "monster" &&
@@ -532,40 +578,38 @@ function walkCryptAlone() {
     const spot = getClearCryptJunction([nearBoss], character);
     if (spot && distance(character, spot) > CRYPT.arrival)
       advanceSmartMove(spot, { useScare: true }).catch(() => {});
-    else if (!spot) followCryptLeader();
     return travelling();
   }
+
+  if (gatherInCrypt()) return travelling();
 
   const run = readCryptRun();
   const killed = Object.values(run.killed);
   const unkilled = CRYPT_MOBS.bosses.filter((mtype) => !killed.includes(mtype));
   const stopWatcher = () =>
-    !!get_entity(TANKER) ||
-    isCryptBossOnUs() ||
-    Object.values(parent.entities).some(
-      (mob) =>
-        isCryptBoss(mob) && distance(character, mob) < CRYPT.bossRange,
-    );
+    isCryptBossOnUs() || isCryptBossNear() || !!getCryptGatherPoint();
 
-  if (getCryptMinionsLeft(run) > 0) {
-    if (distance(character, CRYPT_MOBS.nest) > CRYPT.reach)
-      advanceSmartMove(
-        { ...CRYPT_MOBS.nest },
-        { useScare: true, stopWatcher },
-      ).catch(() => {});
-    return travelling();
+  const spot =
+    getCryptMinionsLeft(run) > 0
+      ? CRYPT_MOBS.nest
+      : getCryptPatrolStop(unkilled);
+  if (spot && distance(character, spot) > CRYPT.arrival) {
+    setCryptGoal(spot);
+    advanceSmartMove(
+      { map: "crypt", x: spot.x, y: spot.y },
+      { useScare: true, stopWatcher },
+    ).catch(() => {});
   }
-
-  const stop = getCryptPatrolStop(unkilled);
-  if (stop) advanceSmartMove(stop, { useScare: true, stopWatcher }).catch(() => {});
-  else followCryptLeader();
   return travelling();
 }
 
 /** Stands on the far side of a boss from whoever it chases, out of its way */
 function holdBehindCryptBoss(boss) {
   const victim = get_entity(boss.target);
-  if (!victim) return followCryptLeader();
+  if (!victim) {
+    gatherInCrypt();
+    return;
+  }
 
   const dx = boss.x - victim.x;
   const dy = boss.y - victim.y;
@@ -619,12 +663,13 @@ async function retreatInCrypt(cluster) {
   await scareAwayMobs();
 
   if (!isAssignedAsTanker()) {
-    followCryptLeader();
+    gatherInCrypt();
     return travelling();
   }
 
   log("Crypt: backing off");
   const spot = getClearCryptJunction([], character) ?? CRYPT_JUNCTION[0];
+  setCryptGoal(spot);
   if (distance(character, spot) > CRYPT.arrival)
     advanceSmartMove(spot, {
       useScare: true,
@@ -738,6 +783,7 @@ function patrolCrypt(wanted) {
     return;
   }
 
+  setCryptGoal(stop);
   const known = Object.keys(knownCryptSightings());
   const unknown = wanted.filter((mtype) => !known.includes(mtype));
   advanceSmartMove(stop, {
@@ -815,7 +861,7 @@ function scoutCrypt() {
 function baitCryptSupporter(plan) {
   if (!isAssignedAsTanker()) {
     if (plan.target.target === TANKER) holdBehindCryptBoss(plan.target);
-    else followCryptLeader();
+    else gatherInCrypt();
     return travelling();
   }
 
@@ -833,8 +879,10 @@ function baitCryptSupporter(plan) {
   cryptMemory.pairingSince = undefined;
 
   const stop = getCryptPatrolStop(CRYPT_MOBS.supporters, CRYPT.reach);
-  if (stop) cryptPlan = { target: plan.target, dragTo: stop, at: Date.now() };
-  else giveUp();
+  if (stop) {
+    cryptPlan = { target: plan.target, dragTo: stop, at: Date.now() };
+    setCryptGoal(stop);
+  } else giveUp();
 
   return travelling();
 }
@@ -959,12 +1007,15 @@ async function useCryptStrategy() {
   // Nothing is judged without the tanker and the healer in view
   if (!fight.isReady) {
     changeToNormalStrategies();
-    if (isAssignedAsTanker()) return travelling();
+    if (isAssignedAsTanker()) return walkCryptAlone();
     const tanker = get_entity(TANKER);
+    const tankerInfo = getCharacterInfo(TANKER);
     const isTankerDown = tanker
       ? tanker.rip
-      : getCharacterInfo(TANKER)?.rip ||
-        parent.party?.[TANKER]?.in !== character.in;
+      : !tankerInfo ||
+        tankerInfo.rip ||
+        tankerInfo.in !== character.in ||
+        Date.now() - tankerInfo.at > CRYPT.goalStaleMs;
     if (isTankerDown) return escapeCrypt();
     if (!bosses.length && !mobsOnMe.length && scoutCrypt()) return travelling();
     return walkCryptAlone();
@@ -989,6 +1040,7 @@ async function useCryptStrategy() {
   let target = plan?.target;
   if (target) {
     cryptPlan = { ...plan, at: Date.now() };
+    setCryptGoal(plan.dragTo ?? target);
     changeToNormalStrategies();
 
     const isSupporterLeft =
@@ -1013,7 +1065,7 @@ async function useCryptStrategy() {
       !isAssignedAsTanker() &&
       target.target !== fight.holder.name
     ) {
-      followCryptLeader();
+      gatherInCrypt();
       return travelling();
     }
 
@@ -1035,6 +1087,7 @@ async function useCryptStrategy() {
   } else if (minionsLeft) {
     target = pickCryptMinion(fight, wanted);
     if (!target) return travelling();
+    setCryptGoal(target);
     changeToPullStrategies();
   } else {
     changeToNormalStrategies();
