@@ -138,9 +138,9 @@ async function usePullSkills() {
         (mob) => mob.target && !isOwnedCharacter(mob.target),
       );
 
-      // Fear Check
+      // Fear Check: agitate lands everything in range on us before any absorb
       const willNotBeFeared = hasCourageFor(
-        listOfNoTargetMonsterInRange,
+        mobsInAgitateRange.filter((mob) => mob.target !== character.name),
         mobsTargetingSelf,
       );
 
