@@ -783,34 +783,42 @@ function isDungeonTankerDown() {
 }
 
 /**
- * The tanker or the healer out of view: we go by the gather point, else walk
- * to the nearest boss box left and wait there in sight of it.
+ * The tanker or the healer out of view: a boss left in sight is waited at,
+ * else we go by the gather point, else walk to the nearest boss box left.
  * @returns {Promise<Object>} travelling
  */
 async function waitForDungeonParty(dungeon) {
   if (isDungeonTankerDown()) return leaveDungeonFight(dungeon);
   changeToNormalStrategies();
   if (listOfMonsterAttacking(character).length) await scareAwayMobs();
-  if (gatherInDungeon(() => listOfMonsterAttacking(character).length > 0)) {
-    dungeonLog(dungeon.id, "going to the gather point");
-    return travelling();
-  }
 
   const killed = Object.values(readDungeonRun(dungeon.id).killed);
-  const box = dungeon.bosses
+  const boxes = dungeon.bosses
     .map(({ phases, spot }) => ({
       mtype: phases.find((mtype) => !killed.includes(mtype)),
       spot,
     }))
     .filter(({ mtype }) => mtype)
-    .sort((lhs, rhs) => distance(character, lhs.spot) - distance(character, rhs.spot))[0];
-  if (!box) return leaveDungeonFight(dungeon, "no boss left, meeting at the entrance");
-  if (!get_nearest_monster({ type: box.mtype }))
-    return walkToDungeonBoss(dungeon, box);
+    .sort((lhs, rhs) => distance(character, lhs.spot) - distance(character, rhs.spot));
 
-  dungeonLog(dungeon.id, `waiting for the party at ${box.mtype}`);
-  setDungeonGoal(box.spot);
-  return travelling();
+  const inSight = boxes.find(({ mtype }) => get_nearest_monster({ type: mtype }));
+  if (inSight) {
+    dungeonLog(dungeon.id, `waiting for the party at ${inSight.mtype}`);
+    setDungeonGoal({ x: character.real_x, y: character.real_y });
+    return travelling();
+  }
+
+  const isBossInSight = () =>
+    listOfMonsterAttacking(character).length > 0 ||
+    boxes.some(({ mtype }) => get_nearest_monster({ type: mtype }));
+  if (gatherInDungeon(isBossInSight)) {
+    dungeonLog(dungeon.id, "going to the gather point");
+    return travelling();
+  }
+
+  if (!boxes.length)
+    return leaveDungeonFight(dungeon, "no boss left, meeting at the entrance");
+  return walkToDungeonBoss(dungeon, boxes[0]);
 }
 
 /**

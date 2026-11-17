@@ -45,7 +45,7 @@ const SMART_MOVE_CONFIG = Object.freeze({
   STOP_WATCHER_INTERVAL_MS: 500,
 
   // Transport / town
-  TRANSPORT_DOOR_NEAR_DISTANCE: 100, // farther than this from the door, walk up to it first
+  TRANSPORT_DOOR_REACH: 35, // server is_door_close allows 40 from the door's spawn or box
   NEW_MAP_TIMEOUT_MS: 5000, // waitForNewMap default timeout
   TOWN_MAX_RETRIES: 3,
   TOWN_RETRY_DELAY_MS: 300,
@@ -181,11 +181,32 @@ class StrategicSmartMove {
 
     if (!closest) return undefined;
 
+    const spawn = G.maps[fromMap].spawns?.[closest[6]];
     return {
       map: closest[4],
       x: closest[0],
       y: closest[1],
+      raw: closest,
+      spawn: spawn && { map: fromMap, x: spawn[0], y: spawn[1] },
     };
+  }
+
+  /**
+   * The server's is_door_close: within reach of the door's own spawn, or of its
+   * box from our 26x35 one. A door's centre can sit outside the walkable area.
+   * @param {Object} door - from _findDoorTo
+   * @returns {boolean}
+   */
+  _isDoorClose(door) {
+    const reach = SMART_MOVE_CONFIG.TRANSPORT_DOOR_REACH;
+    const x = character.real_x;
+    const y = character.real_y;
+    if (door.spawn && Math.hypot(x - door.spawn.x, y - door.spawn.y) < reach)
+      return true;
+    const [doorX, doorY, width, height] = door.raw;
+    const gapX = Math.max(Math.abs(x - doorX) - (width + 26) / 2, 0);
+    const gapY = Math.max(Math.abs(y - doorY) - (height + 35) / 2, 0);
+    return Math.hypot(gapX, gapY) < reach;
   }
 
   /**
@@ -392,15 +413,10 @@ class StrategicSmartMove {
    */
   _doorWalk(map, avoidMaps) {
     const door = this._findDoorTo(map);
-    if (
-      !door ||
-      distance(character, { x: door.x, y: door.y }) <=
-        SMART_MOVE_CONFIG.TRANSPORT_DOOR_NEAR_DISTANCE
-    )
-      return;
+    if (!door || this._isDoorClose(door)) return;
 
     return this._walkOnlyPath(
-      { map: character.map, x: door.x, y: door.y },
+      door.spawn ?? { map: character.map, x: door.x, y: door.y },
       SMART_MOVE_CONFIG.DOOR_WALK_SPEED,
       avoidMaps,
     );
@@ -734,18 +750,17 @@ class StrategicSmartMove {
   async transport(map, spawn) {
     const door = this._findDoorTo(map);
 
-    if (door) {
-      const distToDoor = distance(character, { x: door.x, y: door.y });
-
-      // If we are too far from the door, move there first
-      if (distToDoor > SMART_MOVE_CONFIG.TRANSPORT_DOOR_NEAR_DISTANCE) {
-        console.warn(
-          `Too far from door to ${map} (${Math.round(
-            distToDoor,
-          )} units). Moving...`,
-        );
-        await smart_move({ x: door.x, y: door.y });
-      }
+    // Walk to the door's spawn first; a failed walk still tries the door
+    if (door && !this._isDoorClose(door)) {
+      const spot = door.spawn ?? door;
+      console.warn(
+        `Too far from door to ${map} (${Math.round(
+          distance(character, spot),
+        )} units). Moving...`,
+      );
+      await smart_move({ x: spot.x, y: spot.y }).catch((e) =>
+        console.warn(`Walk to the door to ${map} failed:`, e),
+      );
     }
 
     const waitPromise = this.waitForNewMap();

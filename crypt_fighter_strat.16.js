@@ -13,6 +13,7 @@ const CRYPT = {
   pairPatienceMs: 45_000,
   planStaleMs: 2000,
   untouchedSpawns: ["nerfedbat", "zapper0"], // the tanker holds their boss by absorb alone
+  behindGap: 60, // waiting at a boss's back; natural aggro reaches ~32-64px, in front only
 };
 
 /** Corridor junctions in lap order, the entrance first */
@@ -26,6 +27,7 @@ const CRYPT_JUNCTION = [
   { x: 1544, y: -879 },
   { x: 2039, y: -879 },
   { x: 2491, y: -681 },
+  { x: 2504, y: -104 }, // looks into Spike's room from ~430px off his box
   { x: 2682, y: -1100 },
   { x: 2732, y: -1729 },
   { x: 1997, y: -1754 },
@@ -78,10 +80,11 @@ function resetCryptMemory(instance) {
     publishedAt: 0,
     blockedUntil: {}, // boss type -> time
     snowballAt: {}, // boss id -> time
-    patrol: { index: undefined, emptyStops: 0 },
+    patrol: { index: undefined, step: 1, emptyStops: 0 },
     drag: undefined, // { id, spot }
     pairingSince: undefined,
     isScoutDone: false,
+    wanted: undefined, // the tanker's own judgement, published for the followers
   };
 }
 
@@ -124,6 +127,7 @@ function publishCryptKit() {
     cryptSightings: {
       instance: cryptMemory.instance,
       spots: cryptMemory.sightings,
+      wanted: cryptMemory.wanted,
     },
   });
 }
@@ -479,17 +483,56 @@ function shouldStopCryptTrip(wanted) {
 
 const isCryptBossOnUs = () => shouldStopCryptTrip([]);
 
-const isCryptBossNear = () =>
-  Object.values(parent.entities).some(
-    (mob) =>
-      mob.type === "monster" &&
-      !mob.dead &&
-      isCryptBoss(mob) &&
-      distance(character, mob) < CRYPT.bossRange,
+/**
+ * What the tanker last judged worth fighting, shared because a follower out of
+ * the healer's view can't judge it; before any word, every boss left but a supporter.
+ * @returns {string[]}
+ */
+function getPartyWantedCryptBosses(run = readCryptRun()) {
+  const shared = getCharacterInfo(TANKER)?.cryptSightings;
+  if (shared?.instance === cryptMemory.instance && shared.wanted)
+    return shared.wanted;
+  const killed = Object.values(run.killed);
+  return CRYPT_MOBS.bosses.filter(
+    (mtype) => !killed.includes(mtype) && !CRYPT_MOBS.supporters.includes(mtype),
   );
+}
 
-/** @returns {boolean} whether there is a gather point, walked to until a boss turns on us */
-const gatherInCrypt = () => gatherInDungeon(isCryptBossOnUs);
+/** @returns {Object|undefined} a free boss in view the party wants, found for the tanker to come to */
+function getFoundCryptBoss(wanted) {
+  return nearestCryptSpot(
+    character,
+    Object.values(parent.entities).filter(
+      (mob) =>
+        mob.type === "monster" &&
+        !mob.dead &&
+        !mob.target &&
+        wanted.includes(mob.mtype) &&
+        !isCryptBlocked(mob.mtype),
+    ),
+  );
+}
+
+/** @returns {boolean} whether there is a gather point, walked to until a boss turns on us or a wanted one shows */
+const gatherInCrypt = (wanted = []) =>
+  gatherInDungeon(() => shouldStopCryptTrip(wanted));
+
+/**
+ * Stands at its back, calling the party to it. Server: natural aggro needs an
+ * untargeted boss, us within its range in the 32px grid around it, and in
+ * front of it (±45° of its `angle`), so its back is safe at any gap.
+ */
+function standBehindCryptBoss(boss) {
+  setDungeonGoal(boss);
+  const facing =
+    boss.angle !== undefined
+      ? (boss.angle * Math.PI) / 180
+      : Math.atan2(boss.y - character.real_y, boss.x - character.real_x);
+  parkAt({
+    x: boss.x - Math.cos(facing) * CRYPT.behindGap,
+    y: boss.y - Math.sin(facing) * CRYPT.behindGap,
+  });
+}
 
 /** @param {string[]} wanted - boss types worth stopping for on the way */
 function walkToCryptNest(wanted) {
@@ -507,22 +550,17 @@ function walkToCryptNest(wanted) {
 
 /**
  * Out of a fight: a boss on me sends me to a clear junction; one busy with an
- * ally is safe behind its back, since rage only picks a target for an
- * untargeted mob; a free one close by makes us hold and call the party here.
- * Else we go to the gather point, else set it ourselves: the nest while
- * minions are left, the lap after.
+ * ally close by, or a free one the tanker wants anywhere in view, is waited at
+ * from its back until the tanker comes. Else we go to the gather point, else
+ * set it ourselves: the nest while minions are left, the lap after.
  * @returns {Object} travelling
  */
 function walkCryptAlone() {
-  const nearBosses = Object.values(parent.entities).filter(
-    (mob) =>
-      mob.type === "monster" &&
-      !mob.dead &&
-      isCryptBoss(mob) &&
-      distance(character, mob) < CRYPT.bossRange,
+  const bosses = Object.values(parent.entities).filter(
+    (mob) => mob.type === "monster" && !mob.dead && isCryptBoss(mob),
   );
 
-  const bossOnMe = nearBosses.find((boss) => boss.target === character.name);
+  const bossOnMe = bosses.find((boss) => boss.target === character.name);
   if (bossOnMe) {
     const spot = getClearCryptJunction([bossOnMe], character);
     if (spot && distance(character, spot) > CRYPT.arrival)
@@ -530,25 +568,33 @@ function walkCryptAlone() {
     return travelling();
   }
 
-  const busyBoss = nearBosses.find((boss) => partyMems.includes(boss.target));
+  const busyBoss = bosses.find(
+    (boss) =>
+      partyMems.includes(boss.target) &&
+      distance(character, boss) < CRYPT.bossRange,
+  );
   if (busyBoss) {
     setDungeonGoal(busyBoss);
     holdBehindCryptBoss(busyBoss);
     return travelling();
   }
 
-  if (nearBosses.length) {
-    setDungeonGoal({ x: character.real_x, y: character.real_y });
+  const run = readCryptRun();
+  const wanted = getPartyWantedCryptBosses(run);
+  const found = getFoundCryptBoss(wanted);
+  if (found) {
+    standBehindCryptBoss(found);
     return travelling();
   }
 
-  if (gatherInCrypt()) return travelling();
+  if (gatherInCrypt(wanted)) return travelling();
 
-  const run = readCryptRun();
   const killed = Object.values(run.killed);
   const unkilled = CRYPT_MOBS.bosses.filter((mtype) => !killed.includes(mtype));
   const stopWatcher = () =>
-    isCryptBossOnUs() || isCryptBossNear() || !!getDungeonGatherPoint();
+    isCryptBossOnUs() ||
+    !!getFoundCryptBoss(wanted) ||
+    !!getDungeonGatherPoint();
 
   const spot =
     getCryptMinionsLeft(run) > 0
@@ -576,8 +622,8 @@ function holdBehindCryptBoss(boss) {
   const dy = boss.y - victim.y;
   const length = Math.hypot(dx, dy) || 1;
   parkAt({
-    x: boss.x + (dx / length) * CRYPT.reach,
-    y: boss.y + (dy / length) * CRYPT.reach,
+    x: boss.x + (dx / length) * CRYPT.behindGap,
+    y: boss.y + (dy / length) * CRYPT.behindGap,
   });
 }
 
@@ -703,17 +749,27 @@ function getCryptPatrolStop(sought, reach = CRYPT.arrival) {
   );
   if (known) return { map: "crypt", x: known.x, y: known.y };
 
-  patrol.index ??= CRYPT_JUNCTION.indexOf(
-    nearestCryptSpot(character, CRYPT_JUNCTION),
-  );
+  // Each of us starts its own share of the lap, every other one walking it backwards
+  const laps = CRYPT_JUNCTION.length;
+  if (patrol.index === undefined) {
+    const rank = Math.max(partyMems.indexOf(character.name), 0);
+    const nearest = CRYPT_JUNCTION.indexOf(
+      nearestCryptSpot(character, CRYPT_JUNCTION),
+    );
+    patrol.step = rank % 2 ? -1 : 1;
+    patrol.index =
+      (nearest + Math.round((rank * laps) / Math.max(partyMems.length, 1))) %
+      laps;
+  }
+  const next = () => (patrol.index = (patrol.index + patrol.step + laps) % laps);
 
   if (distance(character, CRYPT_JUNCTION[patrol.index]) < reach) {
     patrol.emptyStops++;
-    if (patrol.emptyStops >= CRYPT_JUNCTION.length) {
+    if (patrol.emptyStops >= laps) {
       patrol.emptyStops = 0;
       return undefined;
     }
-    patrol.index = (patrol.index + 1) % CRYPT_JUNCTION.length;
+    next();
   }
 
   // Skip the junctions of a pack we backed off from
@@ -726,10 +782,10 @@ function getCryptPatrolStop(sought, reach = CRYPT.arrival) {
     );
   for (
     let skipped = 0;
-    skipped < CRYPT_JUNCTION.length && isAvoided(CRYPT_JUNCTION[patrol.index]);
+    skipped < laps && isAvoided(CRYPT_JUNCTION[patrol.index]);
     skipped++
   )
-    patrol.index = (patrol.index + 1) % CRYPT_JUNCTION.length;
+    next();
 
   const { x, y } = CRYPT_JUNCTION[patrol.index];
   return { map: "crypt", x, y };
@@ -976,6 +1032,7 @@ async function useCryptStrategy() {
 
   const run = readCryptRun();
   const wanted = getWantedCryptBosses(run, fight);
+  if (isAssignedAsTanker()) cryptMemory.wanted = wanted;
   const minionsLeft = getCryptMinionsLeft(run);
 
   if (!minionsLeft && !wanted.length) {
