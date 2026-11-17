@@ -32,6 +32,7 @@ const SMART_MOVE_CONFIG = Object.freeze({
   MAGIPORT_MP_RESERVE_CASTS: 2, // mage keeps mp for this many magiport casts (the other fighters)
   MAGIPORT_WAIT_TIMEOUT: 3500, // wait after send_cm before checking whether the port landed
   MAGIPORT_ARRIVAL_DISTANCE: 300, // landed within this of the destination = the port worked
+  MAGIPORT_INFO_STALE_MS: 2000, // the mage's published spot older than this may not be where the port lands
 
   // Blink (_blinkCheck and the in-path blink segment)
   BLINK_CHECK_INTERVAL_MS: 200,
@@ -473,10 +474,14 @@ class StrategicSmartMove {
     const mageInfo = this.getMageInfo();
     return (
       !!mageInfo &&
+      Date.now() - mageInfo.at < SMART_MOVE_CONFIG.MAGIPORT_INFO_STALE_MS &&
       mageInfo.map === toPosition.map &&
       distance(toPosition, mageInfo) <
         SMART_MOVE_CONFIG.MAGIPORT_MAGE_NEAR_DEST_DISTANCE &&
       distance(character, mageInfo) >=
+        SMART_MOVE_CONFIG.MAGIPORT_MIN_WORTH_DISTANCE &&
+      // Only forward: landing on the mage must leave us nearer the destination
+      distance(character, toPosition) - distance(mageInfo, toPosition) >=
         SMART_MOVE_CONFIG.MAGIPORT_MIN_WORTH_DISTANCE &&
       mageInfo.mp >
         parent.G.skills["magiport"].mp *

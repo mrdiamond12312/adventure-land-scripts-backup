@@ -5994,7 +5994,20 @@ walking back). Followers then hold fire: a boss on us is kited to the entrance t
 `dragToSpot` anchor (`cryptPlan.isEscape`), one on an ally is kept in front of us from its far side
 (`holdBehindCryptBoss`), otherwise we wait at the entrance. Before this they walked to the dead
 tanker's last party position, straight into whatever killed it; a simulated run wiped that way
-every time.
+every time. The tanker's state now comes from its published info (`isDungeonTankerDown`), not
+`parent.party`, whose position lags.
+
+**Nobody follows a leader; the party shares a gather point (2026-11-18).** Trailing the tanker
+stood everyone at the entrance whenever it was out of sight (`parent.party` gave a stale spot or
+none), and `parkAt` on it every 1ms loop got the warrior disconnected for move spam. Now any
+character, of any role, publishes the spot it picked for itself (`setDungeonGoal`: nest, junction,
+boss box, its target, a drag or retreat spot), and whoever can't see the tanker walks to the
+freshest one (`gatherInDungeon`), else roams on its own and publishes that. Shared by all four
+dungeons in 57. Out of sight of the tanker, near a crypt boss (`walkCryptAlone`):
+- on me: back off to a clear junction;
+- on an ally: stand behind it (`holdBehindCryptBoss`). Natural aggro and rage only take an
+  untargeted mob, so a busy boss can't switch to us;
+- free: hold and publish our spot, so the party gathers on the find instead of lapping past it.
 
 **Scares split by role.** Damage dealers scare whatever is on them. The tanker scares zappers, and
 bosses only when `canHoldCryptBosses` says it can't hold them, so it no longer scares off a boss

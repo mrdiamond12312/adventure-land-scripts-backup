@@ -236,10 +236,11 @@ function cryptSpawnDps(def, fight) {
   }, 0);
 }
 
-/** @returns {boolean} whether the victim outranges the boss and outruns it frozen */
+/** @returns {boolean} whether the victim outranges the boss and outruns it frozen; never a supporter */
 function isCryptKitable(boss, victim) {
   const def = G.monsters[boss.mtype];
   return (
+    !def.supporter &&
     victim.range > Math.max(def.range * 2, 75) &&
     victim.speed > (def.charge ?? def.speed) + G.conditions.frozen.speed
   );
@@ -503,23 +504,39 @@ function walkToCryptNest(wanted) {
 }
 
 /**
- * Out of a fight: a boss close by sends us to a clear junction, else we go to
- * the gather point, else we set it ourselves, the nest while minions are left
- * and the lap after.
+ * Out of a fight: a boss on me sends me to a clear junction; one busy with an
+ * ally is safe behind its back, since rage only picks a target for an
+ * untargeted mob; a free one close by makes us hold and call the party here.
+ * Else we go to the gather point, else set it ourselves: the nest while
+ * minions are left, the lap after.
  * @returns {Object} travelling
  */
 function walkCryptAlone() {
-  const nearBoss = Object.values(parent.entities).find(
+  const nearBosses = Object.values(parent.entities).filter(
     (mob) =>
       mob.type === "monster" &&
       !mob.dead &&
       isCryptBoss(mob) &&
       distance(character, mob) < CRYPT.bossRange,
   );
-  if (nearBoss) {
-    const spot = getClearCryptJunction([nearBoss], character);
+
+  const bossOnMe = nearBosses.find((boss) => boss.target === character.name);
+  if (bossOnMe) {
+    const spot = getClearCryptJunction([bossOnMe], character);
     if (spot && distance(character, spot) > CRYPT.arrival)
       advanceSmartMove(spot, { useScare: true }).catch(() => {});
+    return travelling();
+  }
+
+  const busyBoss = nearBosses.find((boss) => partyMems.includes(boss.target));
+  if (busyBoss) {
+    setDungeonGoal(busyBoss);
+    holdBehindCryptBoss(busyBoss);
+    return travelling();
+  }
+
+  if (nearBosses.length) {
+    setDungeonGoal({ x: character.real_x, y: character.real_y });
     return travelling();
   }
 
