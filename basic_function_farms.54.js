@@ -49,7 +49,7 @@ const FARMS = {
   },
   fireroamer: {
     map: "desertland",
-    at: { x: 223, y: -708 },
+    at: { x: 156, y: -982 },
     mobs: ["ent", "fireroamer", "mechagnome"],
     tanker: PRIEST,
     warriorHeld: ["ent"],
