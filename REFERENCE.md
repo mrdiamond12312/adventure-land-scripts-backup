@@ -5927,8 +5927,12 @@ priest inside the crypt: a ranged tank can kite, a melee one cannot. Server fact
 - A boss's spawns (`stype: "spawn"`) each target one player and are removed outright when that
   player's target drops, so a scare deletes them. Nobody needs a call: each character scares on its
   own when a zapper is on it. With the whole party able to scare, a zapper's modelled life is the
-  scare cooldown instead of its 64s degen; the zap still hits everyone in 300, so it is charged
-  once per party member.
+  scare cooldown instead of its 64s degen. Server (line ~14407): one spawn per interval in total,
+  beside a random damager (`points`, within 400); each zapper zaps every player within 300 for 1200
+  pure a second. Cleared with its owner's scare, half a cycle's worth stand on average, each mostly
+  zapping its owner, so Orlok's cost is 1200 x (5000 / 2 / 1600) ~1.9k/s, charged once (2026-11-18;
+  it was ~11k/s, three zappers charged to every member, which kept him off `wanted` and made the
+  party back off him).
 - Spike's bats are the same kind of spawn, five a second. They are left out of the hold check
   (splash and the heal guard's scare deal with them), and a boss with fighting spawns is fought
   under the pull strategies. Spike never roams, so his spawn box is seeded as a sighting.

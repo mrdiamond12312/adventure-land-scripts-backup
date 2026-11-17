@@ -246,10 +246,7 @@ function getCryptFight() {
   };
 }
 
-/**
- * Heal per second a boss's zappers cost: each zaps everyone in its radius, and
- * as many stand as fit in one's life — its degen, or our scare cooldown.
- */
+/** Heal per second a boss's zappers cost, their life being our scare cooldown or, without jackos, their degen */
 function cryptSpawnDps(def, fight) {
   return (def.spawns ?? []).reduce((total, [intervalMs, mtype]) => {
     const { zap, degen } = G.monsters[mtype]?.abilities ?? {};
@@ -261,8 +258,10 @@ function cryptSpawnDps(def, fight) {
     const lifeMs = fight.canScareSpawns
       ? Math.min(degenMs, G.skills.scare.cooldown)
       : degenMs;
-    const zapDps = (zap.amount / zap.cooldown) * 1000 * (lifeMs / intervalMs);
-    return total + zapDps * Math.max(fight.party.length, 1);
+    // Server: one spawn per interval beside a random damager, cleared with its owner's
+    // scare, so half a cycle's worth stand on average, each zapping mostly its owner
+    const standing = lifeMs / 2 / intervalMs;
+    return total + (zap.amount / zap.cooldown) * 1000 * standing;
   }, 0);
 }
 
