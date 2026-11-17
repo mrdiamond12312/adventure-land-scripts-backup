@@ -6030,9 +6030,10 @@ every ~13s. The walk now goes to the door's spawn, and a failed walk still tries
 
 **Patrol shuffle.** Everyone walks `getCryptPatrolStop`'s lap in order first. Only after a full lap
 with nothing does each character take its `partyMems` share of the junctions, every other one
-walking it backwards; a second empty lap ends the search. The lap gained `2504,-104`, which sees
-into Spike's room from ~430px off his box: coverage 72% to 90% of the walkable crypt (±700x500
-vision).
+walking it backwards; a second empty lap ends the search. The lap gained `2168,136`, inside
+Spike's room ~200px off his box (past his 147 range; natural aggro also needs ~64px in front):
+coverage 72% to 100% of the walkable crypt at ±700x500 vision, 91% at ±500x300. Re-run the grid
+coverage check if the crypt's geometry changes.
 
 **One boss map, in the run record (2026-11-18).** Every boss in sight (no distance check; whatever
 the server sends) is written into our own `cryptRun:<name>` record (`sightings`, once a second via
@@ -6050,6 +6051,14 @@ has none (line 14375); she walks to it when >40 away at no more than its speed +
 (line 14195; poison cuts it). Kiting her partner on an orbit around her kept it outside 120, so she
 always healed herself and never became killable. The tanker now parks on her (`withParkSpot`)
 holding the partner still, and the party hits her once her heal is on it.
+
+**Only the whole party calls a run done (`isWholeDungeonPartyHere`, 2026-11-18).** `wanted` and the
+dungeon judgements use the party in view. After the three reconnected, the priest (tanker and
+healer, so `isReady` alone) was back in the crypt first; alone nothing was killable in time, so
+`wanted` came out empty, the run closed as "cleared" with `leftAt`, and `startNextDungeonRun` never
+resumes a `leftAt` visit: they moved on to the next pre-opened instance. The server keeps the old
+one (an empty instance is only paused; only solo ones are destroyed). The crypt's "cleared" and
+"nothing left to fight", and `giveUpDungeonFight`, now wait for every member in view.
 
 **Who is in a fight (`planCryptFight`).** Abilities are armed at spawn (line 13610) and tick with or
 without a target, so an idle boss still angers (random player in its radius, Lestat and Bill) and

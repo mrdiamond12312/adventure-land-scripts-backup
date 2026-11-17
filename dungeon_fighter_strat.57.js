@@ -685,6 +685,17 @@ const getDungeonAdd = (bosses) =>
       partyMems.includes(mob.target),
   );
 
+/**
+ * Fights are judged on the party in view, so a run is only called done with
+ * all of us there: one back first from a reconnect would close it alone.
+ * @param {{party: Object[]}} [fight] - getDungeonFight or getCryptFight
+ * @returns {boolean}
+ */
+const isWholeDungeonPartyHere = (fight = getDungeonFight()) =>
+  partyMems.every((name) =>
+    fight.party.some((member) => member.name === name),
+  );
+
 /** @returns {Promise<Object>|undefined} travelling while backing off, else the tanker closes the run */
 function giveUpDungeonFight(dungeon, isBossOnUs) {
   if (isBossOnUs)
@@ -696,7 +707,8 @@ function giveUpDungeonFight(dungeon, isBossOnUs) {
   dungeonState.giveUpSeenAt = now;
   if (
     !isAssignedAsTanker() ||
-    now - dungeonState.giveUpSince < DUNGEON.giveUpAfterMs
+    now - dungeonState.giveUpSince < DUNGEON.giveUpAfterMs ||
+    !isWholeDungeonPartyHere()
   )
     return leaveDungeonFight(dungeon, "nothing we can hold, waiting it out");
 

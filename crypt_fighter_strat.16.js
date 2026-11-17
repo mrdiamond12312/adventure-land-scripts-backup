@@ -29,7 +29,7 @@ const CRYPT_JUNCTION = [
   { x: 1544, y: -879 },
   { x: 2039, y: -879 },
   { x: 2491, y: -681 },
-  { x: 2504, y: -104 }, // looks into Spike's room from ~430px off his box
+  { x: 2168, y: 136 }, // in Spike's room, ~200px off his box: past his 147 range
   { x: 2682, y: -1100 },
   { x: 2732, y: -1729 },
   { x: 1997, y: -1754 },
@@ -522,7 +522,7 @@ const isCryptBossOnUs = () => shouldStopCryptTrip([]);
 
 /**
  * What the tanker last judged worth fighting, shared because a follower out of
- * the healer's view can't judge it; before any word, every boss left but a supporter.
+ * the healer's view can't judge it; before any word, CRYPT.bossOrder's bosses left.
  * @returns {string[]}
  */
 function getPartyWantedCryptBosses(run = readCryptRun()) {
@@ -530,12 +530,7 @@ function getPartyWantedCryptBosses(run = readCryptRun()) {
   const killed = Object.values(run.killed);
   if (record?.instance === cryptMemory.instance && record.wanted)
     return record.wanted.filter((mtype) => !killed.includes(mtype));
-  return CRYPT_MOBS.bosses
-    .filter(
-      (mtype) =>
-        !killed.includes(mtype) && !CRYPT_MOBS.supporters.includes(mtype),
-    )
-    .sort(byCryptBossOrder);
+  return CRYPT.bossOrder.filter((mtype) => !killed.includes(mtype));
 }
 
 /** @returns {Object|undefined} a free boss in view the party wants, found for the tanker to come to */
@@ -833,6 +828,7 @@ function getCryptPatrolStop(sought, reach = CRYPT.arrival) {
 function patrolCrypt(wanted) {
   const stop = getCryptPatrolStop(wanted);
   if (!stop) {
+    if (!isWholeDungeonPartyHere(getCryptFight())) return;
     log("Crypt: nothing left to fight");
     closeCryptRun();
     return;
@@ -1068,7 +1064,8 @@ async function useCryptStrategy() {
   if (isAssignedAsTanker()) cryptMemory.wanted = wanted;
   const minionsLeft = getCryptMinionsLeft(run);
 
-  if (!minionsLeft && !wanted.length) {
+  // Judged by whoever is in view, so only the whole party may call the run done
+  if (!minionsLeft && !wanted.length && isWholeDungeonPartyHere(fight)) {
     log("Crypt: cleared");
     closeCryptRun();
     return undefined;
