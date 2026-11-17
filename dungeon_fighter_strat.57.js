@@ -247,7 +247,7 @@ function isDungeonGone(id, error) {
   );
 }
 
-/** @returns {{killed: Object<string, string>}} the party's merged ledger and flags */
+/** @returns {{killed: Object<string, string>, sightings: Object<string, Object>}} the party's merged ledger, newest sighting per type, and flags */
 function readDungeonRun(id) {
   const instance = getDungeonInstance(id);
   const records = [
@@ -256,11 +256,13 @@ function readDungeonRun(id) {
       .map((name) => get(`${id}Run:${name}`))
       .filter((record) => record?.instance === instance),
   ];
-  const run = { killed: {} };
+  const run = { killed: {}, sightings: {} };
 
   for (const record of records) {
     if (!record) continue;
     Object.assign(run.killed, record.killed);
+    for (const [mtype, spot] of Object.entries(record.sightings ?? {}))
+      if (spot.at > (run.sightings[mtype]?.at ?? -1)) run.sightings[mtype] = spot;
     for (const [key, value] of Object.entries(record))
       if (typeof value === "boolean") run[key] ||= value;
   }
@@ -709,17 +711,24 @@ function giveUpDungeonFight(dungeon, isBossOnUs) {
 let dungeonGoal; // { instance, map, x, y, at }
 let dungeonGoalPublishedAt = 0;
 
-/** Sets our goal; a move past DUNGEON.reach is published at once, a refresh once a second */
-function setDungeonGoal(spot) {
+/**
+ * Sets our goal; a move past DUNGEON.reach is published at once, a refresh once a second.
+ * @param {{x: number, y: number}} spot
+ * @param {boolean} [isFight] - at a boss: found, held or fought, which outranks a walk
+ */
+function setDungeonGoal(spot, isFight = false) {
   const isMoved =
     !dungeonGoal ||
     dungeonGoal.instance !== character.in ||
+    dungeonGoal.isFight !== isFight ||
     distance(dungeonGoal, spot) > DUNGEON.reach;
   dungeonGoal = {
+    owner: character.name,
     instance: character.in,
     map: character.map,
     x: spot.x,
     y: spot.y,
+    isFight,
     at: Date.now(),
   };
   if (!isMoved && Date.now() - dungeonGoalPublishedAt < 1000) return;
@@ -733,8 +742,18 @@ function clearDungeonGoal() {
   publishCharacterInfo({ dungeonGoal: undefined });
 }
 
-/** @returns {Object|undefined} the freshest goal another of us has published in this instance */
+/**
+ * Another of us's fresh goal in this instance: a boss before a walk, the
+ * nearest boss to us, the tanker's walk before the rest. Ranked, not by
+ * freshness, so two goals refreshed in turn don't flip us between them.
+ * @returns {Object|undefined}
+ */
 function getDungeonGatherPoint() {
+  const rank = (goal) => [
+    goal.isFight ? 0 : 1,
+    goal.isFight ? distance(character, goal) : goal.owner === TANKER ? 0 : 1,
+    -goal.at,
+  ];
   const goal = partyMems
     .filter((name) => name !== character.name)
     .map((name) => getCharacterInfo(name)?.dungeonGoal)
@@ -743,7 +762,10 @@ function getDungeonGatherPoint() {
         goal?.instance === character.in &&
         Date.now() - goal.at < DUNGEON.goalStaleMs,
     )
-    .sort((lhs, rhs) => rhs.at - lhs.at)[0];
+    .sort((lhs, rhs) => {
+      const [a, b] = [rank(lhs), rank(rhs)];
+      return a[0] - b[0] || a[1] - b[1] || a[2] - b[2];
+    })[0];
   return goal && { map: goal.map, x: goal.x, y: goal.y };
 }
 
@@ -804,7 +826,7 @@ async function waitForDungeonParty(dungeon) {
   const inSight = boxes.find(({ mtype }) => get_nearest_monster({ type: mtype }));
   if (inSight) {
     dungeonLog(dungeon.id, `waiting for the party at ${inSight.mtype}`);
-    setDungeonGoal({ x: character.real_x, y: character.real_y });
+    setDungeonGoal({ x: character.real_x, y: character.real_y }, true);
     return travelling();
   }
 
@@ -931,7 +953,7 @@ function engageDungeonBoss(dungeon, target, fight, dragTo) {
     return travelling();
   }
   dungeonState.plan = { target, dragTo, at: Date.now() };
-  setDungeonGoal(dragTo ?? target);
+  setDungeonGoal(dragTo ?? target, true);
   dungeonLog(
     dungeon.id,
     dragTo

@@ -6005,9 +6005,53 @@ boss box, its target, a drag or retreat spot), and whoever can't see the tanker 
 freshest one (`gatherInDungeon`), else roams on its own and publishes that. Shared by all four
 dungeons in 57. Out of sight of the tanker, near a crypt boss (`walkCryptAlone`):
 - on me: back off to a clear junction;
-- on an ally: stand behind it (`holdBehindCryptBoss`). Natural aggro and rage only take an
-  untargeted mob, so a busy boss can't switch to us;
-- free: hold and publish our spot, so the party gathers on the find instead of lapping past it.
+- on an ally close by: stand behind it (`holdBehindCryptBoss`), `CRYPT.behindGap` off;
+- free and in the tanker's published `wanted`: stand at its back (`standBehindCryptBoss`) and make
+  it the gather point, so the party gathers on the find instead of lapping past it.
+
+**Aggro, from `node/server.js` (checked 2026-11-18).** Natural aggro (around line 15288) only
+registers an untargeted boss, in a 32px grid hash; each player checks the 3x3 cells around it, so
+roughly 32-64px. It also needs us within the boss's range and `is_in_front` (within ±45° of
+`monster.angle`, its movement heading, which the client receives too). `rage` is just the chance
+to lock on. So a boss's back is safe at any gap, and 300 was never the number. Anger (line 14288)
+retargets to a random live, visible player in its radius each cooldown; `cryptBossDps` prices it
+as one hit on the worst-off member per cooldown, since the holder takes it straight back. A boss
+left unhit for 20s drops its target with chance `1 - rage * 0.99`, so crypt bosses (rage 1) don't.
+
+**Doors (`transport`, strategic_smart_move.21.js).** The server's `is_door_close` takes 40px from
+the door's own-side spawn (`door[6]`) or from its box, not its centre. The crypt's exit centre is
+106px from its spawn and outside the walkable area, so the old 100px centre check walked there,
+failed, and threw before ever emitting `transport`: everyone stood at the crypt entrance retrying
+every ~13s. The walk now goes to the door's spawn, and a failed walk still tries the door.
+
+**Patrol shuffle.** Everyone walks `getCryptPatrolStop`'s lap in order first. Only after a full lap
+with nothing does each character take its `partyMems` share of the junctions, every other one
+walking it backwards; a second empty lap ends the search. The lap gained `2504,-104`, which sees
+into Spike's room from ~430px off his box: coverage 72% to 90% of the walkable crypt (±700x500
+vision).
+
+**One boss map, in the run record (2026-11-18).** Every boss in sight (no distance check; whatever
+the server sends) is written into our own `cryptRun:<name>` record (`sightings`, once a second via
+`publishCryptKit`), and `readDungeonRun` merges the party's records newest-first. The tanker also
+writes its `wanted` there. The per-character `cryptSightings` info is gone.
+
+**Hunt order.** A supporter in sight goes first, then `CRYPT.bossOrder` (Lestat, Lucinda, Bill,
+Angel, Orlok, Marceline, the old script's order); only bosses the party can hold and kill are
+hunted. Elena and Spike are left out of the list: she goes first anyway, he never passes the kill
+check.
+
+**Elena, from `node/server.js`.** With no focus she takes the first humanoid boss within 300 that
+has none (line 14375); she walks to it when >40 away at no more than its speed +4, and drops it past
+380 (lines 1843, 14104). Every 0.8s she heals 66k to her focus if within 120 of her, else herself
+(line 14195; poison cuts it). Kiting her partner on an orbit around her kept it outside 120, so she
+always healed herself and never became killable. The tanker now parks on her (`withParkSpot`)
+holding the partner still, and the party hits her once her heal is on it.
+
+**Who is in a fight (`planCryptFight`).** Abilities are armed at spawn (line 13610) and tick with or
+without a target, so an idle boss still angers (random player in its radius, Lestat and Bill) and
+keeps its auras up. Natural aggro needs ~64px in front. So a boss joins the hold check only when it
+is on us, or has anger with one of us in its radius; one merely within 300 does not. That is what
+makes Elena a free hit beside an idle partner without anger.
 
 **Scares split by role.** Damage dealers scare whatever is on them. The tanker scares zappers, and
 bosses only when `canHoldCryptBosses` says it can't hold them, so it no longer scares off a boss

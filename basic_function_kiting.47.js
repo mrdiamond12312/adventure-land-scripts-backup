@@ -329,7 +329,7 @@ async function resolveKiteTarget(target) {
   if (cryptAnchor)
     return cryptAnchor.isDrag
       ? dragToSpot(target, cryptAnchor.spot, get_entity(target.id))
-      : withFixedSpot(target, cryptAnchor.spot);
+      : withParkSpot(target, cryptAnchor.spot);
 
   const dungeonDrag = getDungeonKiteAnchor(target);
   if (dungeonDrag)

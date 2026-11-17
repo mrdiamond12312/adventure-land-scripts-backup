@@ -6,9 +6,13 @@ const CLEAVE_ONE_HIT_MULTIPLIER = 0.1;
 const STUN_FOCUS_LIST = ["crabxx", "grinch"];
 const WARRIOR_WEAK_MOB_TYPES = ["pinkgoo", "snowman", "wabbit"];
 
+/** @returns {boolean} whether we tank the crypt; as its damage dealer the crypt pieces stay off */
+const isTankingCrypt = () =>
+  character.map === "crypt" && isAssignedAsTanker();
+
 function getWarriorHelmet(feelingLucky) {
   if (feelingLucky) return "oxhelmet";
-  if (character.map === "crypt") return "xhelmet";
+  if (isTankingCrypt()) return "xhelmet";
   return "fury";
 }
 
@@ -22,7 +26,7 @@ function getWarriorMainhand(currentTarget, shouldUseBlaster) {
 
 function getWarriorOffhand(shouldUseBlaster, feelingLucky) {
   const hasA2InCrypt =
-    character.map === "crypt" &&
+    isTankingCrypt() &&
     Object.values(parent.entities).some(
       (mob) => mob.target === character.name && mob.mtype === "a2",
     );
@@ -41,14 +45,14 @@ function getWarriorAmulet(feelingLucky, isTanker) {
     .filter((entity) => entity.type === "monster")
     .some((mob) => mob.target === character.name);
 
-  if ((isTanker && isBeingTargetedByMonster) || character.map === "crypt")
+  if ((isTanker && isBeingTargetedByMonster) || isTankingCrypt())
     return "snring";
   return pickAmuletWithFrenzy("stramulet");
 }
 
 function getWarriorChest(feelingLucky, isTanker) {
   if (feelingLucky) return "cdragon";
-  if (character.map === "crypt" || isTanker) return "vattire";
+  if (isTankingCrypt() || isTanker) return "vattire";
   return "coat1";
 }
 
