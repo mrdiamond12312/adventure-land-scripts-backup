@@ -16,8 +16,11 @@ character.on("cm", async function ({ name, message }) {
     return;
   }
 
-  // Deliveries step out of an event fight; it rejoins once we release
-  const lock = takeDuty(DUTY.ERRAND, { overEvent: true });
+  // Deliveries step out of an event fight or a gather; both resume once we release
+  const lock = takeDuty(DUTY.ERRAND, {
+    overEvent: true,
+    overGather: true,
+  });
   if (!lock) return;
 
   try {

@@ -1564,6 +1564,8 @@ async function bankLoop() {
   if (isAwaitingParcel() && !hasVisitedBank) return setTimeout(bankLoop, 5_000);
   // A strike right after a hop goes ahead of the first bank walk
   if (!hasVisitedBank && isWitchBrewDue()) return setTimeout(bankLoop, 5_000);
+  // A due or running gather goes first; a bag too full to gather banks anyway
+  if (hasVisitedBank && shouldGoChilling()) return setTimeout(bankLoop, 5_000);
 
   // An event fight holds the duty too, so banking waits for it to end
   const lock = takeDuty(DUTY.ERRAND);

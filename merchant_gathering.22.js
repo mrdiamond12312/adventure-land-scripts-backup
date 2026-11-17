@@ -43,9 +43,64 @@ function shouldGoChilling() {
   );
 }
 
+/** Longest a gather may hold off duties before it reaches its channel */
+const GATHER_HOLD_MAX_MS = 180_000;
+
+/** When the running gather set off for its spot, undefined while none is */
+let gatherStartedAt = undefined;
+
+/** @returns {boolean} whether a gather is walking to its spot or channelling */
+function isGathering() {
+  if (character.c.fishing || character.c.mining) return true;
+  return (
+    gatherStartedAt !== undefined &&
+    Date.now() - gatherStartedAt < GATHER_HOLD_MAX_MS
+  );
+}
+
 /** @returns {boolean} whether a duty or another trip took the merchant over mid-gather */
 function isGatherPreempted() {
   return isOnDuty() || isOnTrip();
+}
+
+/**
+ * Walks to the spot and casts, holding off every duty but a fighter's request.
+ * @param {"fishing"|"mining"} skill
+ * @param {{map: string, x: number, y: number}} location
+ * @param {string} toolId
+ */
+async function walkAndGather(skill, location, toolId) {
+  const startedAt = Date.now();
+  gatherStartedAt = startedAt;
+  try {
+    if (
+      character.real_x != location.x ||
+      character.real_y != location.y ||
+      character.map !== location.map
+    ) {
+      await equipBroom();
+      if (isGatherPreempted()) return;
+      await advanceSmartMove(location, {
+        useBlink: false,
+        useMagiport: false,
+        exact: true,
+      });
+      if (isGatherPreempted()) return;
+    }
+
+    if (character.mp > 120) {
+      log(skill === "fishing" ? "Fishin!" : "Mining!");
+      return await Promise.all([
+        equipBatch({
+          mainhand: toolId,
+          offhand: undefined,
+        }),
+        use_skill(skill),
+      ]);
+    }
+  } finally {
+    if (gatherStartedAt === startedAt) gatherStartedAt = undefined;
+  }
 }
 
 async function goFishing() {
@@ -87,31 +142,7 @@ async function goFishing() {
   )
     return;
 
-  if (
-    character.real_x != fishingLocation.x ||
-    character.real_y != fishingLocation.y ||
-    character.map !== fishingLocation.map
-  ) {
-    await equipBroom();
-    if (isGatherPreempted()) return;
-    await advanceSmartMove(fishingLocation, {
-      useBlink: false,
-      useMagiport: false,
-      exact: true,
-    });
-    if (isGatherPreempted()) return;
-  }
-
-  if (character.mp > 120) {
-    log("Fishin!");
-    return Promise.all([
-      equipBatch({
-        mainhand: rodItemId,
-        offhand: undefined,
-      }),
-      use_skill("fishing"),
-    ]);
-  }
+  return walkAndGather("fishing", fishingLocation, rodItemId);
 }
 
 async function goMining() {
@@ -153,31 +184,7 @@ async function goMining() {
   )
     return;
 
-  if (
-    character.real_x != miningLocation.x ||
-    character.real_y != miningLocation.y ||
-    character.map !== miningLocation.map
-  ) {
-    await equipBroom();
-    if (isGatherPreempted()) return;
-    await advanceSmartMove(miningLocation, {
-      useBlink: false,
-      useMagiport: false,
-      exact: true,
-    });
-    if (isGatherPreempted()) return;
-  }
-
-  if (character.mp > 120) {
-    log("Mining!");
-    return Promise.all([
-      equipBatch({
-        mainhand: pickaxeItemId,
-        offhand: undefined,
-      }),
-      use_skill("mining"),
-    ]);
-  }
+  return walkAndGather("mining", miningLocation, pickaxeItemId);
 }
 
 async function dismantleSomething() {

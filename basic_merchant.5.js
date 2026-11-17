@@ -489,11 +489,13 @@ function isLuring() {
 
 /**
  * @param {string} owner one of DUTY
- * @param {{overEvent?: boolean}} [options] overEvent takes the lock from an event fight
+ * @param {{overEvent?: boolean, overGather?: boolean}} [options] overEvent takes
+ *   the lock from an event fight, overGather from a running gather
  * @returns {Object|null} the lock to hand back to releaseDuty, null when refused
  */
-function takeDuty(owner, { overEvent = false } = {}) {
+function takeDuty(owner, { overEvent = false, overGather = false } = {}) {
   if (duty && !(overEvent && duty.owner === DUTY.EVENT)) return null;
+  if (!overGather && isGathering()) return null;
 
   duty = { owner, since: Date.now() };
   return duty;
