@@ -6,7 +6,6 @@ const CRYPT = {
   reach: 200, // nest, bait stops, follow gap, clearance from the pack when tagging
   supportHealRange: 120, // server: a supporter heals its focus within this
   holdShare: 0.9, // share of party hps a fight may cost
-  maxKillS: 900,
   kiteRangeRate: 0.85,
   memoryMs: 60_000, // backed-off bosses stay blocked, sightings stay fresh
   snowballGapMs: 1500,
@@ -15,7 +14,7 @@ const CRYPT = {
   untouchedSpawns: ["nerfedbat", "zapper0"], // the tanker holds their boss by absorb alone
   behindGap: 60, // waiting at a boss's back; natural aggro reaches ~32-64px, in front only
   // Hunt order once the vbats are done; a supporter in sight goes before all of them
-  bossOrder: ["a3", "a7", "a2", "a8", "a4", "a6"],
+  bossOrder: ["a3", "a7", "a2", "a8", "a4", "a6", "a1"],
 };
 
 /** Corridor junctions in lap order, the entrance first */
@@ -106,6 +105,15 @@ const byCryptBossOrder = (lhs, rhs) => {
   };
   return rank(lhs) - rank(rhs);
 };
+
+/**
+ * Bosses in sight: a supporter first, then whichever is lowest on hp, so a hurt
+ * one is finished before a higher one in CRYPT.bossOrder is started on.
+ */
+const byCryptFightOrder = (lhs, rhs) =>
+  isCryptSupporter(rhs) - isCryptSupporter(lhs) ||
+  lhs.hp / lhs.max_hp - rhs.hp / rhs.max_hp ||
+  byCryptBossOrder(lhs.mtype, rhs.mtype);
 
 /** @returns {Object[]} G entries of what the boss spawns */
 const cryptSpawnsOf = (mob) =>
@@ -348,13 +356,14 @@ function cryptHealOn(boss, bosses) {
   }, 0);
 }
 
+/** @returns {boolean} whether our damage outpaces the heal on it, however long the kill takes */
 function isCryptKillable(boss, bosses, party) {
   const net =
     party.reduce(
       (total, member) => total + calculateDamage(member, boss, false),
       0,
     ) - cryptHealOn(boss, bosses);
-  return net > 0 && boss.hp / net < CRYPT.maxKillS;
+  return net > 0;
 }
 
 /**
@@ -408,8 +417,7 @@ function planCryptFight(bosses, fight, wanted, isHunting) {
         )
         .sort(
           (lhs, rhs) =>
-            isCryptSupporter(rhs) - isCryptSupporter(lhs) ||
-            byCryptBossOrder(lhs.mtype, rhs.mtype) ||
+            byCryptFightOrder(lhs, rhs) ||
             distance(fight.holder, lhs) - distance(fight.holder, rhs),
         )
     : [];
@@ -428,8 +436,7 @@ function planCryptFight(bosses, fight, wanted, isHunting) {
       .filter((boss) => isCryptKillable(boss, bosses, fight.party))
       .sort(
         (lhs, rhs) =>
-          isCryptSupporter(rhs) - isCryptSupporter(lhs) ||
-          byCryptBossOrder(lhs.mtype, rhs.mtype) ||
+          byCryptFightOrder(lhs, rhs) ||
           distance(fight.holder, lhs) - distance(fight.holder, rhs),
       );
 

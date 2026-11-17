@@ -5868,9 +5868,11 @@ old records without the merchant resetting anything.
 
 **One model for all eight bosses** (`canHoldCryptBosses`, `isCryptKillable`). Nothing is listed as
 killable; a boss is wanted when its dps on the tanker stays under `CRYPT.holdShare` of the party's
-heal per second and the kill fits in `CRYPT.maxKillS`. Server facts the model leans on:
-- `anger` (Bill, Lestat) re-targets a random player within 300 every 8s, so those are judged on
-  whoever they hurt most, not on the tanker.
+heal per second and our damage outpaces any heal on it, however long the kill takes (the old
+`CRYPT.maxKillS` cap was dropped 2026-11-18, which also lets Spike in). Server facts the model
+leans on:
+- `anger` (Bill, Lestat) re-targets a random player within 300 every 8s; it is charged as one hit
+  on the worst-off member per cooldown, since the holder takes it straight back.
 - Orlok's zappers hit everyone within 300 for pure damage and stack up for their whole degen
   lifetime (`cryptSpawnDps`). That is what rules him out, not his own attack.
 - Aura conditions with `incdmgamp` (Angel's curse) multiply the whole cluster's damage here, since
@@ -6040,10 +6042,11 @@ the server sends) is written into our own `cryptRun:<name>` record (`sightings`,
 `publishCryptKit`), and `readDungeonRun` merges the party's records newest-first. The tanker also
 writes its `wanted` there. The per-character `cryptSightings` info is gone.
 
-**Hunt order.** A supporter in sight goes first, then `CRYPT.bossOrder` (Lestat, Lucinda, Bill,
-Angel, Orlok, Marceline, the old script's order); only bosses the party can hold and kill are
-hunted. Elena and Spike are left out of the list: she goes first anyway, he never passes the kill
-check.
+**Hunt order.** Among bosses in sight (`byCryptFightOrder`): a supporter first, then the lowest hp%,
+then `CRYPT.bossOrder` (Lestat, Lucinda, Bill, Angel, Orlok, Marceline, the old script's order).
+The hp% step keeps a hurt boss ahead of a fresh higher-ranked one that walks into view, so the
+party doesn't switch mid-kill. Out of sight, the walk goes to the first known sighting in
+`bossOrder`. Only bosses the party can hold and kill are hunted. Elena is left out of the list, since she goes first anyway; Spike is last.
 
 **Elena, from `node/server.js`.** With no focus she takes the first humanoid boss within 300 that
 has none (line 14375); she walks to it when >40 away at no more than its speed +4, and drops it past
