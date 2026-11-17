@@ -24,6 +24,7 @@ const FARMS = {
   bigbird: {
     map: "main",
     at: { x: 1248, y: -63 },
+    tanker: PRIEST,
     mobs: ["grinch", "phoenix", "spider", "bigbird", "scorpion"],
   },
   spider: {
