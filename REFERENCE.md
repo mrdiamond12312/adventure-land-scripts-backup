@@ -5877,6 +5877,10 @@ leans on:
   lifetime (`cryptSpawnDps`). That is what rules him out, not his own attack.
 - Aura conditions with `incdmgamp` (Angel's curse) multiply the whole cluster's damage here, since
   `calculateDamage` does not read it yet.
+- Bill is `poisonous`: every monster hit procs `poisoned` (5s; heals ×0.25, potions ×0.5), and at
+  1.4 hits/s the holder never sheds it. `canHoldCryptBosses` scales the party's hps by
+  `poisonHealShare` (shared with the other dungeons' `getHealShare`, `pnresistance` resisting);
+  without it Bill read as holdable at any level (2026-11-18).
 - Elena heals her focus only within 120 of it, herself otherwise (66k per 0.8s). Alone she cannot
   be out-damaged, so she is never hunted and never counts toward "bosses left". Next to a tankable
   boss the tanker's kite is anchored on her (`pairWith`), and she becomes the target the moment
@@ -6091,7 +6095,10 @@ boss nobody has seen (`leveledBoss` builds the stats for a known level).
 so they crowd his hitters. Everyone engages him pinned (`isSpawnPinned`), so the class target
 pick never swaps to a bat; the bats die to the splash. The tanker orbits him at
 `CRYPT.batOrbitRate` (0.4 of its range) instead of its usual kite, keeping him in the middle of
-the party and its splash.
+the party and its splash. Bats still on the tanker once no boss is on it (Spike dead or off it)
+are scared off (2026-11-18); with Spike on it they are left to the splash, since the server's
+scare drops every monster targeting the caster, Spike included, and he would go to whoever hits
+him next.
 
 **Goal kinds (`setDungeonGoal`).** `fight` (a boss being hit, or one on an ally) outranks `found`
 (a boss waited at) outranks `walk`. A follower out of the tanker's view joins a `fight` before

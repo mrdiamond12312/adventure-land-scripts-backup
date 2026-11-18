@@ -314,7 +314,7 @@ function cryptBossDps(boss, fight) {
  * @param {Object[]} bosses
  * @param {Object} fight - from getCryptFight
  * @param {Object[]} [adds] - what else is on the holder
- * @returns {boolean} whether the party heals through all of them at once
+ * @returns {boolean} whether the party heals through all of them at once, a poisoner's cut included
  */
 function canHoldCryptBosses(
   bosses,
@@ -333,10 +333,15 @@ function canHoldCryptBosses(
       .map((ability) => G.conditions[ability.condition]?.incdmgamp ?? 0),
   );
 
+  const healShare = Math.min(
+    1,
+    ...bosses.map((boss) => poisonHealShare(boss, fight.holder)),
+  );
+
   return (
     (bossDps + totalMobDps(adds, fight.holder)) *
       (1 + Math.max(0, ...auraAmps) / 100) <
-    fight.hps
+    fight.hps * healShare
   );
 }
 
@@ -1063,11 +1068,14 @@ async function useCryptStrategy() {
   const fight = getCryptFight();
   const bosses = noteCryptMobs();
 
-  // Damage dealers shake off anything; the tanker zappers and what it can't hold
+  // Damage dealers shake off anything; the tanker zappers, what it can't hold, and spawns once no boss is on it
   const mobsOnMe = listOfMonsterAttacking(character);
+  const bossesOnMe = mobsOnMe.filter(isCryptBoss);
   const shouldScare = isAssignedAsTanker()
     ? mobsOnMe.some((mob) => G.monsters[mob.mtype]?.abilities?.zap) ||
-      !canHoldCryptBosses(mobsOnMe.filter(isCryptBoss), fight)
+      !canHoldCryptBosses(bossesOnMe, fight) ||
+      (!bossesOnMe.length &&
+        mobsOnMe.some((mob) => CRYPT_MOBS.spawned.includes(mob.mtype)))
     : mobsOnMe.length > 0;
   if (shouldScare) await scareAwayMobs();
 

@@ -567,15 +567,19 @@ function dungeonBossDps(boss, fight) {
   return hits * (1 - frozenShare) + volleys + freezeHits;
 }
 
+/** @returns {number} share of healing that lands on a holder the boss keeps poisoned */
+function poisonHealShare(boss, holder) {
+  if (!G.monsters[boss.mtype].poisonous) return 1;
+  const resist = resistShare(holder, "pnresistance");
+  return resist + (1 - resist) * G.conditions.poisoned.healm;
+}
+
 /** @returns {number} share of the party's healing that lands */
 function getHealShare(boss, fight) {
   const def = G.monsters[boss.mtype];
   const { deepfreeze, warpstomp } = def.abilities ?? {};
   const { healer, holder } = fight;
-  const poisonResist = resistShare(holder, "pnresistance");
-  const poisonShare = def.poisonous
-    ? poisonResist + (1 - poisonResist) * G.conditions.poisoned.healm
-    : 1;
+  const poisonShare = poisonHealShare(boss, holder);
   if (!healer) return poisonShare;
 
   const frozenShare =
