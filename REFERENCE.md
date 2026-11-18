@@ -5965,7 +5965,7 @@ Elena 7, and the vbats level 8 at double attack; Spike never levels in that time
 - **A boss's own drop table scales with its level, not `luckx`** (`shouldItemDrop`, server.js
   ~2370: `share * luckm * monster.level * monster_mult`). `luckx` only feeds the global and map
   tables. So Lestat's two 0.5% `vhammer` rolls are ~1% a kill at L1, ~3% at L3 (8.11h), ~4% at L4
-  (16.75h), ~5% at L5 (30h). `DUNGEON_OPENING.crypt.ageMs` is set for L3. Being targeted resets a
+  (16.75h), ~5% at L5 (30h). `ageMs` was set for L3 (removed 2026-11-18: ripening below). Being targeted resets a
   boss's level timer (`target_player`), so only untouched bosses age.
 - Crypts are opened in batches, since the instances outlive their visitors (only paused) and
   keep levelling. `openCryptInstance` appends `{ instance, openedAt, realm }` to `cryptVisits` and
@@ -5981,18 +5981,15 @@ Elena 7, and the vbats level 8 at double attack; Spike never levels in that time
 - Re-entering an existing instance by name costs no key, so `closeCryptRun` keeps a crypt with
   mobs left on the list as a record, never run again on its own: `leftAt`, its `killed` ledger and
   `isMinionsSwept` (which `readCryptRun` merges back in if it is ever entered again), and
-  `bossLevels` for each boss still alive, the level a sighting last carried (shared between us),
-  else the one `agedCryptBoss` predicts from its age. Only a crypt with every boss and vbat dead,
+  `bossAges` for each boss still alive (was `bossLevels` until 2026-11-18; see ripening). Only a crypt with every boss and vbat dead,
   or one that is gone (`isGone`), is dropped.
 - Bosses in view carry their live stats; the ones not seen yet are judged at the level the timer
   predicts (`agedCryptBoss`), not at G's level 1.
 - A server restart wipes instances. `enter` then fails with an `invalid` response, and
   `isCryptGone` closes the run (only on the visit's own realm), and the next aged entry is tried.
-- The batch is sized by clear time, not a fixed count: the merchant keeps
-  `min(CRYPT.autoOpen, ceil(ageMs / cryptClearMs))` fresh crypts ageing at home (`maybeOpenCrypt`),
-  so about one matures per run finished, and refills after each one. A server restart wipes every
-  instance, so a smaller batch loses fewer keys. `cryptClearMs` is a moving average of first
-  runs' lengths; `CRYPT.clearMs` (1h) stands in until one is timed. `autoOpen` 0 opens none.
+- (Superseded 2026-11-18.) The batch was sized by clear time, `ceil(ageMs / cryptClearMs)` fresh
+  crypts ageing at home. With no whole-crypt ageing, `autoOpen` alone caps the open crypts, and
+  `ageMs`, `clearMs`, the `${id}ClearMs` average and the merchant's waiting cap are gone.
 
 **Sightings are shared.** The mage blinks ahead, so each character publishes its sightings through
 `publishCharacterInfo` once a second and merges the party's by newest `at`. A spot found empty is
@@ -6083,6 +6080,82 @@ map check: off the run's instance it walks out by the door, before anything is n
 written, and the next tick enters the run by name. The server's `leave` only works from jail,
 cyberland or solo instances (`cant_escape` otherwise), so it is the door, not `leave()`; each
 dungeon map's only door leads back to `dungeon.door`.
+
+**Ripening chosen bosses instead of aging the whole crypt (2026-11-18).** A boss's level
+multiplies every item's drop chance (`share × luckm × level`) and its gold, while its hp grows by
+half its base per level and its attack by 12.5% (capped at level 12), so drops per fight-second
+only reach ~2L/(L+1): waiting pays per key, not per hour. The old `ageMs` (8.2h, for Lestat L3)
+aged every boss, and Marceline (unholdable even at L1 on our kit) and Angel (L1 only) came out of
+reach, which kept every run open with her alive. Now `DUNGEON_OPENING.crypt` has no `ageMs` and
+`autoOpen: 2` (one running, one ready, so a waiting instance can't age), and
+`ripenLevels` (Lestat 6, ~50h; Bill 4, ~21h, the hold model allowing him up to 5 with his
+poison) names the bosses left alive. A growing boss is out of `wanted`, and one coming at the
+party is backed off from (`retreatFrom`), so the first visit kills the rest and closes kept with
+`bossAges`. `startNextDungeonRun` resumes a kept visit once a boss it left below its ripen level
+has reached it (`isDungeonVisitRipe`); the resumed run stores an age at or past the target, so a
+ripe boss we still can't take is not resumed again.
+
+What is kept is each boss's idle age on the server's timer (`getCryptBossAge`; `bossAgeAt` and
+`bossLevelAt` convert between age and level), not
+its level: storing a whole level and timing the next one from the close threw away its progress
+into the level, and the sim (scratchpad `cryptsim/sim.js`, the real 57 + 16 in a vm) had Lestat
+killed up to a day after he ripened. The age is the instance's age (or the kept one, grown since),
+pinned by a sighting into its level's span; a boss seen behind the timer (it only runs while the
+boss has no target, plus ±50s jitter per level) is put `CRYPT.ripenRetryMs` short of its next
+level, so it is tried again 30 min on rather than a whole level later. In the sim: on time, held
+bosses die 0.2-0.3h after ripening with no wasted return; 1% behind, ~30% of returns are 30-min
+retries. Ten percent behind (not a server rate: targeted time is minutes) degrades into a retry
+every 30 min. A kill of one of ours levels a boss ahead, which a sighting lifts the age to.
+Returns go oldest-first, so a fresh instance can wait while ripe returns stack (sim: ~2h max).
+
+Lestat and Bill both have `anger` (300, every 8s) and roam, so a held one comes at whoever walks
+near, and neither can be outrun once charging (Bill 96, Lestat 80). Bill also poisons, which is a
+risk to the mage, so only he gets this (the user's call; Lestat's 1520 hits are left to the
+usual back-off once he is on us). It is read from G (`poisonous`; Bill is the crypt's only
+poisoner) rather than listed: while he is held, the party turns from him within
+`CRYPT.safeDistance` (450, past his 300 anger), before he angers. Since he roams and can sit on
+the nest or a corridor the run needs, backing off him for `CRYPT.ripenPatienceMs` in a row (each
+back-off renews his `memoryMs` block, so a lapsed block restarts the count) sets
+`isRipenDropped:a2` in the run record (a boolean, so `readDungeonRun` merges it), and he is
+killed that run at his level then; the key loses its Bill return only. Patience 0 kills him the
+moment he is in the way.
+Empty instances keep levelling (`pause_instance` only sets a flag the level timer never reads);
+a server restart loses the instance, and entering it then fails `invalid`, which drops the
+visit. Visits kept before 2026-11-18 carry no `bossAges` and are never resumed.
+
+**The rogue for Spike (2026-11-18, the user's call).** Spike's 18.7M hp is a rogue job. Once the
+minions are done and only `CRYPT.rogueBosses` (`a1`) are left in the tanker's `wanted`, the
+tanker latches `isRogueTurn` in its run record, and `pickPartyMembers` picks the `cryptRogue`
+preset (warrior, priest, rogue) while that run is under way on our realm; the merchant's
+`deployCharacters` then shuts the mage down and deploys the rogue. The latch is needed because
+`wanted` is judged on the party in view: mid-swap the mage's freeze is gone and Spike could drop
+out of `wanted`, flipping the roster back. It lives on the run's records, so the next run starts
+on the default roster. The priest still tanks: `assignRoles` makes them tanker in the crypt.
+Spike is hunted last (`isSavedForRogue`): he has no anger and never roams, so nothing makes the
+party fight him but the hunt list, and he stays off it while any other boss is wanted (growing
+ones aren't), and on the rogue's turn until the rogue is in view or `CRYPT.rogueWaitMs` passes, so
+a failed deploy can't stall the run. Meanwhile the party waits at the entrance rather than
+patrolling, since two empty laps would close the run. The tanker publishes the hunt list, not
+`wanted`, as the followers' `wanted`.
+
+**The rogue walks the crypt smoked (2026-11-18, the user's call).** `getRogueCast`'s trip branch
+calls `smokeCryptTrip`: in the crypt, stealth off and ready, it smokes. It sits in the action
+loop because mid-trip the strategy chain doesn't re-run the trip's owner. The server's `is_invis`
+hides a smoked player from everyone, party included (`server_functions.js`; the sight loop has no
+party exception), and slows it to max(speed×0.6, speed−25). So `isSavedForRogue` also takes the
+rogue's own published `in` as "here", and a smoked rogue still drops out of `fight.party` and
+`isWholeDungeonPartyHere` until it hits something: the others can't close a run around it, but
+the rogue, seeing all of them, can.
+
+**The hold model judges the gear the tank would wear (2026-11-18).** `wanted` and the hold checks
+read the holder's live armor and resistance, so a boss out of view was judged against whatever
+the priest wore for the last fight: Marceline (physical) came out unholdable at level 1 while the
+priest was in Spike's (magical) gear, though they would meet her in ~700 armor. Once per
+instance the tanker runs `pickTankGear`'s own score (damage taken per heal) against a
+level 1 boss of each damage type through `pickGearByScore`, and publishes the projected armor and
+resistance as `cryptGuard`; `cryptBossDps` judges the holder at the better of that and what it
+wears (`guardedCryptHolder`). Heal output still comes from `healerHps`' peak, not the projected
+set.
 
 **`wanted` judges a sighted boss at its sighted level (2026-11-18).** `getWantedCryptBosses` used
 `agedBoss` only, while `planCryptFight` judges the live entity. Instances wait hours in the
@@ -6225,12 +6298,12 @@ computer reaches the NPC from wherever he stands.
 **One bookkeeping for every keyed dungeon, the crypt included.** `DUNGEONS` is read from G: the
 door is the spot the server measures `enter` from (`G.maps[from].spawns[door[6]]`, within 120),
 bosses are the `respawn: -1` packs plus phase chains (`respawn_as`). Storage keys are
-`${id}Visits`, `${id}Instance`, `${id}Run:<name>`, `${id}ClearMs`; with id `crypt` they are the
+`${id}Visits`, `${id}Instance`, `${id}Run:<name>`; with id `crypt` they are the
 crypt's old keys, so crypts already ageing carry over. One run at a time across all dungeons:
 `startNextDungeonRun` starts the oldest ready visit of any dungeon (the user's call: "equal with
 the crypt"). Kills are ledgered for every dungeon by the one `death` listener.
 
-**Opening (`DUNGEON_OPENING`, the user's call 2026-11-16).** Spider Den and Tomb: autoOpen 2, ageMs 0;
+**Opening (`DUNGEON_OPENING`, the user's call 2026-11-16).** Spider Den and Tomb: autoOpen 2;
 the Dark Mage's lair 0/0 (hardest). `autoOpen` caps instances open and not finished (waiting +
 running) per dungeon, so with no age one waits while one runs. For the crypt this is a change: its
 cap used to count only the ageing ones. Always the merchant opens; bosses don't attack until hit
@@ -6238,7 +6311,7 @@ cap used to count only the ageing ones. Always the merchant opens; bosses don't 
 
 **Server facts the model leans on** (GitHub server.js, which lags live):
 - Untargeted, non-stationary monsters level in every instance (same formula as the crypt), so the
-  Tomb and the lair are run at once. Spider queens are `stationary`: never level (`agedBoss`).
+  Tomb and the lair are run at once. Spider queens are `stationary`: never level (`bossAgeAt`).
 - `anger` / `deepfreeze` / `warpstomp` pick a random player within their radius (300/300/160 for
   xmagex, 100 for gpurplepro). Whoever can do their job from outside it (range x 0.95 past the
   radius + 40; the healer also needs the boss's range on top) is not a victim; everyone else is,
@@ -6280,8 +6353,7 @@ everyone back to the entrance; nothing left to hold closes the run, kept with it
 slow on purpose: kill time is summed over the members in view and alive, and one damage dealer
 dead or out of sight for a tick pushed `killS` past `maxKillS`. Only the tanker closes, and only
 after the verdict has held for `giveUpAfterMs` of consecutive ticks; until then everyone waits at
-the entrance. `${id}ClearMs` takes real clears only, since a give-up folded in as a clear raised
-the merchant's waiting cap.
+the entrance.
 `checkDungeon(id)` prints the odds per boss for the party in view, before opening keys.
 
 ### Warpstomp, field generators and the lair's stock (2026-11-16)

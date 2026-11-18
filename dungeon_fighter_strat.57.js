@@ -1,12 +1,15 @@
 // Keyed dungeons: shared run bookkeeping, boss model and fight moves
 
-/** Merchant opening per dungeon; autoOpen 0 opens none */
+/**
+ * Merchant opening per dungeon; autoOpen 0 opens none. ripenLevels: bosses
+ * left alive until they reach that level (drop chance scales with it), the
+ * kept visit resumed once they have.
+ */
 const DUNGEON_OPENING = {
-  // Lestat L3 (3x his drop table): 10,260,000 + 18,947,312 ms, plus the server's ±50s per level
-  crypt: { autoOpen: 10, ageMs: 29_400_000, clearMs: 3_600_000 },
-  spider: { autoOpen: 0, ageMs: 0 },
-  tomb: { autoOpen: 0, ageMs: 0 },
-  darkMage: { autoOpen: 0, ageMs: 0, needs: { fieldgen0: 10 } },
+  crypt: { autoOpen: 2, ripenLevels: { a3: 6, a2: 4 } },
+  spider: { autoOpen: 0 },
+  tomb: { autoOpen: 0 },
+  darkMage: { autoOpen: 0, needs: { fieldgen0: 10 } },
 };
 
 /** Fight tunables; distances in px */
@@ -170,7 +173,7 @@ const isDungeonMap = (map) =>
 const getDungeonOfMap = (map) =>
   Object.values(DUNGEONS).find((dungeon) => dungeon.map === map);
 
-/** @returns {{instance: string, openedAt: number, realm: string, startedAt?: number, leftAt?: number}[]} */
+/** @returns {{instance: string, openedAt: number, realm: string, leftAt?: number, shelvedAt?: number, bossAges?: Object<string, number>}[]} */
 const getDungeonVisits = (id) => get(`${id}Visits`) ?? [];
 
 const getDungeonInstance = (id) => get(`${id}Instance`);
@@ -191,7 +194,24 @@ function isDungeonRunHere(id = getRunningDungeonId()) {
   return !realm || realm === getCurrentServer();
 }
 
-/** Starts the oldest ready visit, one run at a time */
+/** @returns {number|undefined} a held boss's idle age now, from what the kept visit left */
+function keptBossAge(visit, mtype) {
+  const leftAge = visit.bossAges?.[mtype];
+  return leftAge === undefined ? undefined : leftAge + Date.now() - visit.leftAt;
+}
+
+/** @returns {boolean} whether a kept visit has a boss grown, since we left, to its ripen level */
+function isDungeonVisitRipe(id, visit) {
+  const ripenLevels = DUNGEON_OPENING[id].ripenLevels ?? {};
+  return Object.entries(ripenLevels).some(
+    ([mtype, target]) =>
+      visit.bossAges?.[mtype] !== undefined &&
+      bossLevelAt(mtype, visit.bossAges[mtype]) < target &&
+      bossLevelAt(mtype, keptBossAge(visit, mtype)) >= target,
+  );
+}
+
+/** Starts the oldest ready visit, a fresh one or a ripe kept one, one run at a time */
 function startNextDungeonRun() {
   if (getRunningDungeonId()) return;
 
@@ -201,9 +221,8 @@ function startNextDungeonRun() {
         getDungeonVisits(id)
           .filter(
             (visit) =>
-              !visit.leftAt &&
+              (!visit.leftAt || isDungeonVisitRipe(id, visit)) &&
               visit.realm === getCurrentServer() &&
-              Date.now() - visit.openedAt >= DUNGEON_OPENING[id].ageMs &&
               Date.now() - (visit.shelvedAt ?? 0) >= DUNGEON.supplyRetryMs,
           )
           .map((visit) => [id, visit]),
@@ -214,14 +233,6 @@ function startNextDungeonRun() {
   if (!partyMems.every((name) => get_entity(name) || parent.party?.[name]))
     return;
 
-  set(
-    `${id}Visits`,
-    getDungeonVisits(id).map((other) =>
-      other.instance === visit.instance
-        ? { ...other, startedAt: Date.now() }
-        : other,
-    ),
-  );
   set(`${id}Instance`, visit.instance);
 }
 
@@ -232,7 +243,7 @@ function shelveDungeonRun(id) {
     `${id}Visits`,
     getDungeonVisits(id).map((visit) =>
       visit.instance === instance
-        ? { ...visit, startedAt: undefined, shelvedAt: Date.now() }
+        ? { ...visit, shelvedAt: Date.now() }
         : visit,
     ),
   );
@@ -290,13 +301,6 @@ function writeDungeonRun(id, change) {
 function closeDungeonRun(id, { isGone = false, kept } = {}) {
   const instance = getDungeonInstance(id);
   const visit = getActiveDungeonVisit(id);
-
-  if (visit?.startedAt && !visit.leftAt && !isGone && !kept) {
-    const took = Date.now() - visit.startedAt;
-    const average = get(`${id}ClearMs`);
-    set(`${id}ClearMs`, average ? average * 0.7 + took * 0.3 : took);
-  }
-
   const keptVisits =
     visit && kept && !isGone
       ? [
@@ -334,21 +338,25 @@ game.on("death", ({ id }) => {
 });
 
 /**
- * @param {string} mtype
- * @param {number} ageMs - since the instance opened
- * @returns {Object} the boss at its server-levelled stats
+ * The server's idle level timer: the idle age a boss reaches `level` at.
+ * Stationary bosses never level.
+ * @returns {number} ms
  */
-function agedBoss(mtype, ageMs) {
-  const def = G.monsters[mtype];
-  let level = 1;
-
-  for (let left = def.stationary ? 0 : ageMs; level < 100; level++) {
-    const hp = def.hp * (1 + (level - 1) / 2);
-    const stepMs = Math.max(180_000, hp * 30) * 2 ** ((level - 1) * 0.3);
-    if (left < stepMs) break;
-    left -= stepMs;
+function bossAgeAt(mtype, level) {
+  if (G.monsters[mtype].stationary) return level > 1 ? Infinity : 0;
+  let age = 0;
+  for (let at = 1; at < level; at++) {
+    const hp = G.monsters[mtype].hp * (1 + (at - 1) / 2);
+    age += Math.max(180_000, hp * 30) * 2 ** ((at - 1) * 0.3);
   }
-  return leveledBoss(mtype, level);
+  return age;
+}
+
+/** @returns {number} the level a boss idle for `ageMs` has */
+function bossLevelAt(mtype, ageMs) {
+  let level = 1;
+  while (level < 100 && bossAgeAt(mtype, level + 1) <= ageMs) level++;
+  return level;
 }
 
 /**
@@ -657,7 +665,8 @@ function judgeDungeonBosses(dungeon, fight) {
     .filter(({ mtype }) => mtype)
     .map(({ mtype, spot }) => {
       const entity = get_nearest_monster({ type: mtype });
-      const boss = entity ?? agedBoss(mtype, Date.now() - openedAt);
+      const boss =
+        entity ?? leveledBoss(mtype, bossLevelAt(mtype, Date.now() - openedAt));
       return {
         mtype,
         spot,

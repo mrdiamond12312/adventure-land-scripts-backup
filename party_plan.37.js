@@ -397,6 +397,12 @@ const DYNAMIC_PARTY_PRESETS = {
     return [WARRIOR, PRIEST, ROGUE];
   },
 
+  // The crypt's last bosses (CRYPT.rogueBosses), Spike: the rogue in the mage's place
+  cryptRogue: () => {
+    HEALER = PRIEST;
+    return [WARRIOR, PRIEST, ROGUE];
+  },
+
   witch: {
     EUII: () => {
       RANGER = RANGER2;
@@ -453,9 +459,12 @@ function pickPartyMembers(status = server.status, realm = getCurrentServer()) {
   const liveEvents = Object.keys(DYNAMIC_PARTY_PRESETS).filter(
     (name) => status[name]?.live,
   );
-  const isLairRun =
-    getRunningDungeonId() === "darkMage" &&
-    (getActiveDungeonVisit("darkMage")?.realm ?? realm) === realm;
+  const isRunHere = (id) =>
+    getRunningDungeonId() === id &&
+    (getActiveDungeonVisit(id)?.realm ?? realm) === realm;
+  const isLairRun = isRunHere("darkMage");
+  const isCryptRogueRun =
+    isRunHere("crypt") && !!readDungeonRun("crypt").isRogueTurn;
   const activeEvent =
     USE_CAVE_STRATEGY && isCaveUnderway()
       ? "cave"
@@ -466,7 +475,7 @@ function pickPartyMembers(status = server.status, realm = getCurrentServer()) {
           liveEvents.includes(name),
         ) ??
         liveEvents[0] ??
-        (isLairRun ? "darkMage" : "default");
+        (isLairRun ? "darkMage" : isCryptRogueRun ? "cryptRogue" : "default");
 
   return getPresetMembers(DYNAMIC_PARTY_PRESETS[activeEvent], realm);
 }

@@ -307,20 +307,13 @@ function maybeOpenDungeon() {
   if (!isAtHomeServer()) return;
 
   const id = Object.keys(DUNGEONS).find((id) => {
-    const { autoOpen, ageMs, clearMs } = DUNGEON_OPENING[id];
-    if (!autoOpen) return false;
-
+    const { autoOpen } = DUNGEON_OPENING[id];
     const open = getDungeonVisits(id).filter(
       (visit) => visit.realm === getCurrentServer() && !visit.leftAt,
     );
-    const waiting = open.filter((visit) => !visit.startedAt).length;
-    const waitingCap = ageMs
-      ? Math.max(1, Math.ceil(ageMs / (get(`${id}ClearMs`) ?? clearMs)))
-      : autoOpen;
     const { key } = DUNGEONS[id];
     return (
       open.length < autoOpen &&
-      waiting < waitingCap &&
       hasDungeonNeeds(id) &&
       (locate_item(key) !== -1 || getItemBankSlots(key, true).length > 0)
     );

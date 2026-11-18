@@ -101,7 +101,10 @@ function aimAt(target) {
 
 /** @returns {(() => Promise)|undefined} the swing to take now, if any */
 function getRogueCast() {
-  if (isOnTrip()) return getEnRouteCast();
+  if (isOnTrip()) {
+    smokeCryptTrip();
+    return getEnRouteCast();
+  }
 
   const { attackTarget } = planFight(fightTarget);
   if (!attackTarget || attackTarget.dead || !shouldAttack(attackTarget)) return;
