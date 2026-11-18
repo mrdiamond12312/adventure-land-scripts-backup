@@ -45,6 +45,8 @@ async function useTombStrategy() {
   if (!isOurDungeonRun("tomb")) return undefined;
   const dungeon = DUNGEONS.tomb;
   if (character.map !== dungeon.map) return approachDungeon(dungeon);
+  const stale = leaveStaleDungeonInstance(dungeon);
+  if (stale) return stale;
 
   const fight = getDungeonFight();
   const bosses = noteDungeonBosses(dungeon);

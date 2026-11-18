@@ -369,7 +369,8 @@ function isCryptKillable(boss, bosses, party) {
 
 /**
  * Boss types still worth going after: alive, holdable and killable on their
- * own. Supporters are only killed off a partner, so they never count.
+ * own, at their sighted level, else the one their age gives. Supporters are
+ * only killed off a partner, so they never count.
  * @returns {string[]}
  */
 function getWantedCryptBosses(run, fight) {
@@ -382,7 +383,10 @@ function getWantedCryptBosses(run, fight) {
       if (killed.includes(mtype) || CRYPT_MOBS.supporters.includes(mtype))
         return false;
 
-      const boss = agedBoss(mtype, ageMs);
+      const level = cryptMemory.sightings[mtype]?.level;
+      const boss = level
+        ? leveledBoss(mtype, level)
+        : agedBoss(mtype, ageMs);
       return (
         canHoldCryptBosses([boss], fight, []) &&
         isCryptKillable(boss, [], fight.party)
@@ -1049,6 +1053,9 @@ async function useCryptStrategy() {
     advanceSmartMove({ ...CRYPT_JUNCTION[0] });
     return travelling();
   }
+
+  const stale = leaveStaleDungeonInstance(DUNGEONS.crypt);
+  if (stale) return stale;
 
   if (cryptMemory.instance !== instance) resetCryptMemory(instance);
 

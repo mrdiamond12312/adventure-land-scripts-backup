@@ -6068,6 +6068,25 @@ resumes a `leftAt` visit: they moved on to the next pre-opened instance. The ser
 one (an empty instance is only paused; only solo ones are destroyed). The crypt's "cleared" and
 "nothing left to fight", and `giveUpDungeonFight`, now wait for every member in view.
 
+**Stranded in a closed run's instance (2026-11-18).** A run closed with Marceline at level 5 left
+alive (kept, `leftAt`), and `startNextDungeonRun` started the next pre-opened crypt 1ms later. The
+strategy only checked `character.map`, so the priest and warrior stayed in the old instance,
+reset their memory to the new id and wrote the old instance's facts into the new run's records
+(`isMinionsSwept`, Marceline's sighting, a7/a1 gone); the mage died, respawned and entered the new
+one alone, and with the party never in view together neither run could close. Every dungeon
+strategy (crypt, spider, tomb, dark mage) now calls `leaveStaleDungeonInstance` right after its
+map check: off the run's instance it walks out by the door, before anything is noted or
+written, and the next tick enters the run by name. The server's `leave` only works from jail,
+cyberland or solo instances (`cant_escape` otherwise), so it is the door, not `leave()`; each
+dungeon map's only door leads back to `dungeon.door`.
+
+**`wanted` judges a sighted boss at its sighted level (2026-11-18).** `getWantedCryptBosses` used
+`agedBoss` only, while `planCryptFight` judges the live entity. Instances wait hours in the
+merchant's backlog and the server's levelling has a ±50s jitter and an `accel` factor the age
+model lacks, so the model said level ~3 while she was 5: wanted, never holdable, a retreat and
+re-hunt loop until two empty laps closed the run. The age model is now only the fallback for a
+boss nobody has seen (`leveledBoss` builds the stats for a known level).
+
 **Spike's bats.** His `nerfedbat` spawns land beside whoever damaged him and go for that player,
 so they crowd his hitters. Everyone engages him pinned (`isSpawnPinned`), so the class target
 pick never swaps to a bat; the bats die to the splash. The tanker orbits him at

@@ -341,15 +341,24 @@ game.on("death", ({ id }) => {
 function agedBoss(mtype, ageMs) {
   const def = G.monsters[mtype];
   let level = 1;
-  let hp = def.hp;
 
   for (let left = def.stationary ? 0 : ageMs; level < 100; level++) {
+    const hp = def.hp * (1 + (level - 1) / 2);
     const stepMs = Math.max(180_000, hp * 30) * 2 ** ((level - 1) * 0.3);
     if (left < stepMs) break;
     left -= stepMs;
-    hp += def.hp / 2;
   }
+  return leveledBoss(mtype, level);
+}
 
+/**
+ * @param {string} mtype
+ * @param {number} level
+ * @returns {Object} the boss at that level's server stats
+ */
+function leveledBoss(mtype, level) {
+  const def = G.monsters[mtype];
+  const hp = def.hp * (1 + (level - 1) / 2);
   const scale = level > 1 ? Math.min(level, 12) : 0;
   return {
     ...def,
@@ -1011,6 +1020,20 @@ function isOurDungeonRun(id) {
   const runningId = getRunningDungeonId();
   if (!runningId) dungeonState.supplyWaitSince = undefined;
   return runningId === id && isDungeonRunHere(id);
+}
+
+/** @returns {Object|undefined} travelling out by the door while in an instance of the map that isn't the run's */
+function leaveStaleDungeonInstance(dungeon) {
+  if (
+    character.map !== dungeon.map ||
+    character.in === getDungeonInstance(dungeon.id)
+  )
+    return undefined;
+
+  changeToNormalStrategies();
+  dungeonLog(dungeon.id, "in a closed run's instance, walking out");
+  advanceSmartMove({ ...dungeon.door }, { useScare: true }).catch(() => {});
+  return travelling();
 }
 
 /** @returns {Object} travelling to the door, or in */
