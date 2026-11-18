@@ -6113,7 +6113,8 @@ near, and neither can be outrun once charging (Bill 96, Lestat 80). Bill also po
 risk to the mage, so only he gets this (the user's call; Lestat's 1520 hits are left to the
 usual back-off once he is on us). It is read from G (`poisonous`; Bill is the crypt's only
 poisoner) rather than listed: while he is held, the party turns from him within
-`CRYPT.safeDistance` (450, past his 300 anger), before he angers. Since he roams and can sit on
+`CRYPT.poisonerDistance` (300, the user's call, his anger radius; `safeDistance`, 150, is only
+for junctions and patrol). Since he roams and can sit on
 the nest or a corridor the run needs, backing off him for `CRYPT.ripenPatienceMs` in a row (each
 back-off renews his `memoryMs` block, so a lapsed block restarts the count) sets
 `isRipenDropped:a2` in the run record (a boolean, so `readDungeonRun` merges it), and he is

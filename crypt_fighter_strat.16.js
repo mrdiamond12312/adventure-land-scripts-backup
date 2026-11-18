@@ -1,7 +1,8 @@
 /** Tunables; distances in px */
 const CRYPT = {
   bossRange: 300, // a boss on an ally this close is waited at from its back
-  safeDistance: 450, // a junction is clear with no boss this close
+  safeDistance: 150, // a junction is clear with no boss this close
+  poisonerDistance: 300, // a growing poisoner (Bill) this close to any of us is backed off from
   arrival: 100,
   reach: 200, // nest, bait stops, follow gap, clearance from the pack when tagging
   supportHealRange: 120, // server: a supporter heals its focus within this
@@ -555,7 +556,7 @@ function planCryptFight(bosses, fight, wanted, isHunting) {
       (willEngage(boss) ||
         (isPoisoner(boss) &&
           fight.party.some(
-            (member) => distance(member, boss) < CRYPT.safeDistance,
+            (member) => distance(member, boss) < CRYPT.poisonerDistance,
           ))),
   );
   if (growing.length) {
