@@ -247,6 +247,59 @@ function checkShotGaps(seconds = 60) {
   });
 }
 
+/**
+ * Damage landing on a boss in view, per hitter and source, against what goes
+ * into its spawns, with the kill time at that pace.
+ * @param {string} [mtype]
+ * @param {number} [seconds]
+ */
+function checkBossDamage(mtype = "a1", seconds = 60) {
+  runDebugCheck("checkBossDamage", seconds, ({ on }) => {
+    const spawnTypes = (G.monsters[mtype]?.spawns ?? []).map(([, type]) => type);
+    const onBoss = {};
+    const onSpawns = {};
+    const startedAt = Date.now();
+    const startHp = get_nearest_monster({ type: mtype })?.hp;
+
+    on("hit", (hit) => {
+      const victim = parent.entities[hit.id];
+      if (!victim || !hit.damage) return;
+      const hitter = hit.hid ?? "?";
+      if (victim.mtype === mtype) {
+        const bySource = (onBoss[hitter] ??= {});
+        bySource[hit.source ?? "attack"] =
+          (bySource[hit.source ?? "attack"] ?? 0) + hit.damage;
+      } else if (spawnTypes.includes(victim.mtype))
+        onSpawns[hitter] = (onSpawns[hitter] ?? 0) + hit.damage;
+    });
+
+    return (label) => {
+      const sec = (Date.now() - startedAt) / 1000;
+      const dps = (amount) => Math.round(amount / sec);
+      const hitters = new Set([...Object.keys(onBoss), ...Object.keys(onSpawns)]);
+      let total = 0;
+      for (const hitter of hitters) {
+        const sources = Object.entries(onBoss[hitter] ?? {});
+        const sum = sources.reduce((acc, [, amount]) => acc + amount, 0);
+        total += sum;
+        console.warn(
+          `checkBossDamage ${label}: ${hitter} ${dps(sum)}/s on ${mtype} (${sources
+            .map(([source, amount]) => `${source} ${dps(amount)}`)
+            .join(", ")}) | ${dps(onSpawns[hitter] ?? 0)}/s on spawns`,
+        );
+      }
+      const boss = get_nearest_monster({ type: mtype });
+      const netDps =
+        boss && startHp !== undefined ? (startHp - boss.hp) / sec : total / sec;
+      console.warn(
+        `checkBossDamage ${label}: party ${dps(total)}/s, net ${Math.round(netDps)}/s over ${Math.round(sec)}s | ${
+          boss ? `${boss.hp} hp left, ~${Math.round(boss.hp / Math.max(netDps, 1) / 60)} min` : "boss out of view"
+        }`,
+      );
+    };
+  });
+}
+
 /** Rogue: the target's burn against the refuel line */
 function checkRogueBurn() {
   withItemInfoMemo(() => {

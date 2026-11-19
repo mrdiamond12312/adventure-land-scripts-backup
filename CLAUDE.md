@@ -89,7 +89,7 @@ basic_function.7.js          [SHARED — the core library]
                                  getCharacterInfo): sessionStorage under caracAL, the character's
                                  iframe in the browser, so readers don't branch
     debug_scripts.44.js          checks called by name from the Hub, results in console.warn
-                                 (checkFrequency, checkAttacks, checkEnergize, checkPiercingSwap,
+                                 (checkFrequency, checkAttacks, checkEnergize, checkPiercingSwap, checkBossDamage,
                                  checkShotGaps, checkRogueBurn, checkRogueWeapons, checkRealmMobs,
                                  checkDungeon)
   A part never runs code at load: a definition moved below a slot load would vanish for any
