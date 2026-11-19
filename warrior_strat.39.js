@@ -184,7 +184,7 @@ function getSafeCleaveWeapon(strategyName) {
   const mobsList = Object.values(parent.entities).filter(
     (mob) =>
       mob.type === "monster" &&
-      !isCaveFriendly(mob) &&
+      !isHandsOffMob(mob) &&
       distance(mob, character) < G.skills["cleave"].range + character.xrange,
   );
 
@@ -268,7 +268,7 @@ function mobsLeftAfterCleave(mobs) {
   return mobs.filter(
     (mob) =>
       mob.target ||
-      isCaveFriendly(mob) ||
+      isHandsOffMob(mob) ||
       distance(mob, character) >= cleaveRange,
   );
 }

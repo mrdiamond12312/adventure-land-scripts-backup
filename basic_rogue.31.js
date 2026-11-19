@@ -54,7 +54,7 @@ function planFight(target) {
       (entity) =>
         entity.type === "monster" &&
         !entity.dead &&
-        !isCaveFriendly(entity) &&
+        !isHandsOffMob(entity) &&
         (party.has(entity.target) || (entity.cooperative && entity.target)) &&
         !MELEE_IGNORE_LIST.includes(entity.mtype) &&
         inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
@@ -230,7 +230,7 @@ function getMentalBurstKill() {
         !mob.cooperative &&
         !mob.immune &&
         !mob["1hp"] &&
-        !isCaveFriendly(mob) &&
+        !isHandsOffMob(mob) &&
         (isMonsterEngaged(mob) || isHarmlessMob(mob)) &&
         is_in_range(mob, "mentalburst") &&
         shouldAttack(mob) &&

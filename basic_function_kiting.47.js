@@ -74,7 +74,7 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
-            !isCaveFriendly(entity) &&
+            !isHandsOffMob(entity) &&
             entity.target &&
             party.has(entity.target) &&
             entity.target !== character.name &&
@@ -96,7 +96,7 @@ function getTarget() {
         .filter(
           (entity) =>
             entity.type === "monster" &&
-            !isCaveFriendly(entity) &&
+            !isHandsOffMob(entity) &&
             entity.target &&
             party.has(entity.target) &&
             !isInMerchantDrag(entity) &&

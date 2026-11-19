@@ -208,12 +208,16 @@ const MELEE_IGNORE_LIST = ["porcupine"];
 const CAVE_SIDES_TO_LEAVE = ["neutral", "ally", "victim"];
 
 /**
- * Whether a cave run forbids swinging at this one. False outside a run.
+ * Whether nobody may swing at this one: a cave run's side to leave, or a crypt boss left to grow.
  * @param {object} entity
  * @returns {boolean}
  */
-function isCaveFriendly(entity) {
-  return CAVE_SIDES_TO_LEAVE.includes(entity?.cave?.side);
+function isHandsOffMob(entity) {
+  return (
+    CAVE_SIDES_TO_LEAVE.includes(entity?.cave?.side) ||
+    (typeof isCryptBossLeftToGrow === "function" &&
+      isCryptBossLeftToGrow(entity))
+  );
 }
 
 /** How close a player wakes a cave camp */

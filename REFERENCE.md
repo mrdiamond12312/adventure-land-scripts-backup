@@ -6089,8 +6089,7 @@ aged every boss, and Marceline (unholdable even at L1 on our kit) and Angel (L1 
 reach, which kept every run open with her alive. Now `DUNGEON_OPENING.crypt` has no `ageMs` and
 `autoOpen: 2` (one running, one ready, so a waiting instance can't age), and
 `ripenLevels` (Lestat 6, ~50h; Bill 4, ~21h, the hold model allowing him up to 5 with his
-poison) names the bosses left alive. A growing boss is out of `wanted`, and one coming at the
-party is backed off from (`retreatFrom`), so the first visit kills the rest and closes kept with
+poison) names the bosses left alive. A growing boss is out of `wanted` (see the growing angerers below), so the first visit kills the rest and closes kept with
 `bossAges`. `startNextDungeonRun` resumes a kept visit once a boss it left below its ripen level
 has reached it (`isDungeonVisitRipe`); the resumed run stores an age at or past the target, so a
 ripe boss we still can't take is not resumed again.
@@ -6108,18 +6107,37 @@ retries. Ten percent behind (not a server rate: targeted time is minutes) degrad
 every 30 min. A kill of one of ours levels a boss ahead, which a sighting lifts the age to.
 Returns go oldest-first, so a fresh instance can wait while ripe returns stack (sim: ~2h max).
 
-Lestat and Bill both have `anger` (300, every 8s) and roam, so a held one comes at whoever walks
-near, and neither can be outrun once charging (Bill 96, Lestat 80). Bill also poisons, which is a
-risk to the mage, so only he gets this (the user's call; Lestat's 1520 hits are left to the
-usual back-off once he is on us). It is read from G (`poisonous`; Bill is the crypt's only
-poisoner) rather than listed: while he is held, the party turns from him within
-`CRYPT.poisonerDistance` (300, the user's call, his anger radius; `safeDistance`, 150, is only
-for junctions and patrol). Since he roams and can sit on
-the nest or a corridor the run needs, backing off him for `CRYPT.ripenPatienceMs` in a row (each
-back-off renews his `memoryMs` block, so a lapsed block restarts the count) sets
-`isRipenDropped:a2` in the run record (a boolean, so `readDungeonRun` merges it), and he is
-killed that run at his level then; the key loses its Bill return only. Patience 0 kills him the
-moment he is in the way.
+**Growing angerers: dodge, lure, absorb (2026-11-19, the user's call).** Lestat and Bill both
+have `anger` (radius 300, cooldown 8s) and roam. Server facts (node/server.js): anger picks a
+random player inside its radius when its timer runs out, skipped while the boss is `is_disabled`
+(stunned, fingered, stoned, deepfreezed, sleeping; crypt bosses have no `sleeping` ability, so
+that never happens). The timer lives in `monster.s.anger` (`ability: true`) and is sent with the
+boss; the client counts it down and drops it at 0 until the refresh, so a missing timer reads as
+due. `roam` is a random walk over the whole map, so a boss parked anywhere drifts back.
+Levelling only runs with no target, and `target_player` and `stop_pursuit` both set
+`last_level` to now ±50s, so any aggro (anger, hit, lure, scare) restarts the climb to the next
+level; levels already gained stay. The user accepted that cost: on a first run the climb is
+cheap next to the whole ripen.
+- No party retreat any more: growing bosses are left out of `planCryptFight`, trip stops and the
+  busy-boss wait. The tanker scares one off itself.
+- `dodgeCryptAnger`: each character steps out of the radius (+`angerMargin`) only when the timer
+  will run out before it could walk out (`isInAngerReach`, plus `angerLeadMs`); otherwise it
+  goes about its business.
+- `getCryptLure`: the priest tags one more than `lureGap` (200) off Lestat's spawn
+  (`CRYPT.lureHome`) and drags it there with `dragToSpot` (`cryptPlan.isLure`), only while no
+  other boss is on the party and she can hold it alone; once it is inside the gap it is no longer
+  excluded from her scare, which drops it there.
+- A snatched damage dealer (one on them while a priest is in view) walks to her instead of
+  scaring; her `getAbsorbTarget` takes it back through `canAbsorbInCrypt`.
+- `isRipenDropped` / `ripenPatienceMs` / `poisonerDistance` are gone.
+- Nobody aims at a growing boss: `isCryptBossLeftToGrow` feeds `isHandsOffMob` (was `isCaveFriendly`,
+  the hands-off check every target, taunt, shot and en-route picker already filters on), plus
+  `shouldAttack`, so nothing chases or taunts it; AoE (cleave, cburst) may still graze it, being
+  far from lethal (the user's call). The only aimed hit is the priest's lure tag, while the boss
+  is not yet on her.
+- A sighting of one targeted stores `aggroAt`, so `getCryptBossAge` restarts its age at its
+  level's floor from then (still capped `ripenRetryMs` short of the next level), and the kept
+  `bossAges` time the return from the reset rather than ahead of it.
 Empty instances keep levelling (`pause_instance` only sets a flag the level timer never reads);
 a server restart loses the instance, and entering it then fails `invalid`, which drops the
 visit. Visits kept before 2026-11-18 carry no `bossAges` and are never resumed.

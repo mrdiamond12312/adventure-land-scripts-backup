@@ -66,7 +66,7 @@ function getOffTankTauntTarget() {
     .filter(
       (entity) =>
         entity.type === "monster" &&
-        !isCaveFriendly(entity) &&
+        !isHandsOffMob(entity) &&
         !entity.cooperative &&
         entity.damage_type === "physical" &&
         allies.includes(entity.target) &&
@@ -98,7 +98,7 @@ function planFight(target) {
   const candidates = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
-      !isCaveFriendly(entity) &&
+      !isHandsOffMob(entity) &&
       !entity.s?.fullguardx &&
       !MELEE_IGNORE_LIST.includes(entity.mtype) &&
       entity.target &&
@@ -226,7 +226,7 @@ function getTauntTarget() {
     .filter(
       (entity) =>
         entity.type === "monster" &&
-        !isCaveFriendly(entity) &&
+        !isHandsOffMob(entity) &&
         myCharacters.some(
           (ally) => ally !== character.name && entity.target === ally,
         ) &&

@@ -37,7 +37,7 @@ function planFight(target) {
   const aggroedMobs = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
-      !isCaveFriendly(entity) &&
+      !isHandsOffMob(entity) &&
       entity.target &&
       !entity.dead &&
       !entity.s?.fullguardx &&

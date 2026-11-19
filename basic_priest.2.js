@@ -66,7 +66,7 @@ function refineTarget(target) {
   const mobsInSearchRange = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
-      !isCaveFriendly(entity) &&
+      !isHandsOffMob(entity) &&
       !entity.dead &&
       inRange(entity, TARGET_SEARCH_RANGE_MULTIPLIER),
   );
@@ -259,7 +259,7 @@ function getCurseTarget() {
       .filter(
         (mob) =>
           mob.type === "monster" &&
-          !isCaveFriendly(mob) &&
+          !isHandsOffMob(mob) &&
           !mob.dead &&
           !mob.s.cursed &&
           !mob.immune &&
@@ -400,7 +400,7 @@ function getZapTarget() {
   const targetsInRange = Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
-      !isCaveFriendly(entity) &&
+      !isHandsOffMob(entity) &&
       is_in_range(entity, "zapperzap") &&
       !entity.immune &&
       !entity["1hp"] &&

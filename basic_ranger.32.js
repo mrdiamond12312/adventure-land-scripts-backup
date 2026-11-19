@@ -79,7 +79,7 @@ function getPotentialTargets() {
     .filter(
       (entity) =>
         entity.type === "monster" &&
-        !isCaveFriendly(entity) &&
+        !isHandsOffMob(entity) &&
         !entity.dead &&
         !entity.rip &&
         inRange(entity) &&
@@ -348,7 +348,7 @@ function getHuntersMarkTarget() {
       .filter(
         (entity) =>
           entity.type === "monster" &&
-          !isCaveFriendly(entity) &&
+          !isHandsOffMob(entity) &&
           !entity.dead &&
           !entity.s?.marked &&
           !entity["1hp"] &&

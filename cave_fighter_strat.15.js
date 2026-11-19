@@ -432,7 +432,7 @@ function isCaveMageInRun() {
  */
 function getCaveDarkMage() {
   const seen = get_nearest_monster({ type: CAVE_DARKMAGE });
-  if (seen && !isCaveFriendly(seen)) {
+  if (seen && !isHandsOffMob(seen)) {
     set(CAVE_DARKMAGE_KEY, {
       run: character.cave.run,
       map: character.map,
@@ -805,7 +805,7 @@ function getCaveEscort(pending) {
           other !== ally &&
           other.cave?.room === ally.cave.room &&
           !other.dead &&
-          !isCaveFriendly(other),
+          !isHandsOffMob(other),
       ),
   );
 }

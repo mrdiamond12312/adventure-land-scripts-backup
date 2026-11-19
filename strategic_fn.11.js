@@ -89,7 +89,7 @@ function mobsListAroundTarget(target, blastRadius = BLAST_RADIUS) {
   return Object.values(parent.entities).filter(
     (entity) =>
       entity.type === "monster" &&
-      !isCaveFriendly(entity) &&
+      !isHandsOffMob(entity) &&
       distance(target, entity) < blastRadius &&
       isMonsterEngaged(entity),
   );
@@ -268,7 +268,7 @@ function hasUntargetedMonsterAround(
   return Object.values(parent.entities).some(
     (entity) =>
       entity.type === "monster" &&
-      !isCaveFriendly(entity) &&
+      !isHandsOffMob(entity) &&
       !isMonsterEngaged(entity) &&
       distance(target, entity) < blastRadius &&
       counts(entity),
@@ -2790,7 +2790,7 @@ function getEnRouteTarget(skill = "attack") {
     (mob) =>
       mob.type === "monster" &&
       !mob.dead &&
-      !isCaveFriendly(mob) &&
+      !isHandsOffMob(mob) &&
       is_in_range(mob, skill) &&
       shouldAttack(mob),
   );
@@ -2899,7 +2899,7 @@ function shouldAttack(target = get_target()) {
   // PvP: players are always worth shooting, priest or not
   if (target?.type === "character") return true;
 
-  if (isBaitHeld(target)) return false;
+  if (isBaitHeld(target) || isHandsOffMob(target)) return false;
 
   if (isDungeonMap(character.map)) {
     return !!partyHealer && !partyHealer.rip;
