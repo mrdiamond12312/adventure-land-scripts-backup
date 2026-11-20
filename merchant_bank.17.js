@@ -883,14 +883,14 @@ async function runBankStoreRoutine(forced) {
       if (!isEquipable && isBagSupply(item)) return false;
 
       const isRare = item_grade(item) >= 2;
-      const isHighLevel =
-        item.level >= (itemsHighestLevel[itemKey]?.level ?? 1) - 1;
       const isStoreable = STORE_ABLE.includes(item.name);
       const shouldIgnore = IGNORE.includes(item.name);
 
+      // The keep threshold, through isWorkable, guards the best copies
       return (
         (!shouldIgnore &&
-          (isRare || (isEquipable && (forced || isHighLevel || !isWorkable)))) ||
+          ((isRare && !isEquipable) ||
+            (isEquipable && (forced || !isWorkable)))) ||
         (!isEquipable && !isBagSupply(item)) ||
         isStoreable ||
         lastRetrieved.has(itemKey)
