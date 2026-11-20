@@ -106,6 +106,7 @@ function resetCryptMemory(instance) {
 
 const isCryptBoss = (mob) => CRYPT_MOBS.bosses.includes(mob?.mtype);
 const isCryptMinion = (mob) => CRYPT_MOBS.minions.includes(mob?.mtype);
+const isCryptMinionType = (mtype) => CRYPT_MOBS.minions.includes(mtype);
 const isCryptSupporter = (mob) => CRYPT_MOBS.supporters.includes(mob.mtype);
 const isCryptBlocked = (mtype) =>
   (cryptMemory.blockedUntil[mtype] ?? 0) > Date.now();
@@ -206,7 +207,7 @@ function noteCryptMobs() {
     if (mob.type !== "monster" || mob.dead) continue;
     if (!isCryptBoss(mob) && !isCryptMinion(mob)) continue;
 
-    noteDungeonMob(mob);
+    noteDungeonMob();
     if (!isCryptBoss(mob)) continue;
 
     bosses.push(mob);
@@ -977,7 +978,7 @@ async function retreatInCrypt(cluster) {
     return travelling();
   }
 
-  log("Crypt: backing off");
+  dungeonLog("crypt retreat", `backing off from ${cluster.map((boss) => boss.mtype).join(",")}`);
   const spot = getClearCryptJunction([], character) ?? CRYPT_JUNCTION[0];
   setDungeonGoal(spot);
   if (distance(character, spot) > CRYPT.arrival)
@@ -1005,8 +1006,11 @@ function pickCryptMinion(fight, wanted) {
   );
 
   if (!minions.length) {
-    if (distance(character, CRYPT_MOBS.nest) < CRYPT.reach)
+    if (distance(character, CRYPT_MOBS.nest) < CRYPT.reach) {
+      const vbats = Object.values(readCryptRun().killed).filter(isCryptMinionType).length;
+      dungeonLog("crypt nest", `swept by ${character.name}, ${vbats} vbat kills recorded`);
       writeDungeonRun("crypt", (record) => (record.isMinionsSwept = true));
+    }
     else walkToCryptNest(wanted);
     return undefined;
   }
@@ -1097,7 +1101,7 @@ function patrolCrypt(wanted) {
   const stop = getCryptPatrolStop(wanted);
   if (!stop) {
     if (!isWholeDungeonPartyHere(getCryptFight())) return;
-    log("Crypt: nothing left to fight");
+    dungeonLog("crypt close", `nothing left to fight, ${describeCryptLeft(wanted)}`);
     closeCryptRun();
     return;
   }
@@ -1181,7 +1185,7 @@ function baitCryptSupporter(plan) {
 
   change_target(plan.target);
   const giveUp = () => {
-    log("Crypt: giving the supporter up");
+    dungeonLog("crypt support", "giving the supporter up");
     writeDungeonRun("crypt", (record) => (record.isSupportGivenUp = true));
   };
 
@@ -1271,6 +1275,20 @@ function smokeCryptTrip() {
   use_skill("invis").catch(() => {});
 }
 
+/** @returns {string} the bosses left alive, each with its level, growing flag and last sighting */
+function describeCryptLeft(wanted) {
+  const killed = Object.values(readCryptRun().killed);
+  const sightings = knownCryptSightings();
+  const left = CRYPT_MOBS.bosses
+    .filter((mtype) => !killed.includes(mtype))
+    .map((mtype) => {
+      const seen = sightings[mtype];
+      const seenS = seen ? Math.round((Date.now() - seen.at) / 1000) : "-";
+      return `${mtype} lv${getCryptBossLevel(mtype)}${isCryptBossGrowing(mtype) ? " growing" : ""} seen ${seenS}s${seen?.isGone ? " gone" : ""}`;
+    });
+  return `by ${character.name}, wanted [${wanted.join(",")}], left [${left.join("; ")}]`;
+}
+
 /** Ends the run, kept with its kills and the bosses' idle ages while mobs remain */
 function closeCryptRun() {
   const visit = getActiveDungeonVisit("crypt");
@@ -1349,7 +1367,7 @@ async function useCryptStrategy() {
   }
   if (lure) {
     const home = CRYPT_MOBS.spawnSpots[CRYPT.lureHome];
-    log(`Crypt: luring ${lure.mtype} to ${CRYPT.lureHome}'s spawn`);
+    dungeonLog("crypt lure", `luring ${lure.mtype} to ${CRYPT.lureHome}'s spawn`);
     cryptPlan = { target: lure, dragTo: home, isLure: true, at: Date.now() };
     setDungeonGoal(home);
     changeToNormalStrategies();
@@ -1384,11 +1402,14 @@ async function useCryptStrategy() {
   const hunted = wanted.filter(
     (mtype) => !isSavedForRogue(mtype, wanted, fight),
   );
-  if (isAssignedAsTanker()) cryptMemory.wanted = hunted;
+  if (isAssignedAsTanker()) {
+    cryptMemory.wanted = hunted;
+    dungeonLog("crypt wanted", `[${hunted.join(",")}], ${minionsLeft} minions left`);
+  }
 
   // Judged by whoever is in view, so only the whole party may call the run done
   if (!minionsLeft && !wanted.length && isWholeDungeonPartyHere(fight)) {
-    log("Crypt: cleared");
+    dungeonLog("crypt close", `cleared, ${describeCryptLeft(wanted)}`);
     closeCryptRun();
     return undefined;
   }

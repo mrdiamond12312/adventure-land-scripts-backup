@@ -350,6 +350,7 @@ async function openDungeonInstance(id) {
         realm: getCurrentServer(),
       },
     ]);
+    dungeonLog(`${id} run`, `opened ${character.in} on ${getCurrentServer()}`);
   } finally {
     releaseDuty(lock);
   }

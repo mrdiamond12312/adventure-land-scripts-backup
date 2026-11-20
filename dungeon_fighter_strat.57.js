@@ -6,7 +6,7 @@
  * kept visit resumed once they have.
  */
 const DUNGEON_OPENING = {
-  crypt: { autoOpen: 2, ripenLevels: { a3: 6, a2: 4 } },
+  crypt: { autoOpen: 2, ripenLevels: { a3: 7, a2: 5 } },
   spider: { autoOpen: 0 },
   tomb: { autoOpen: 0 },
   darkMage: { autoOpen: 0, needs: { fieldgen0: 10 } },
@@ -99,7 +99,6 @@ let dungeonState = freshDungeonState();
 function freshDungeonState(instance) {
   return {
     instance,
-    seenTypes: {}, // monster id -> mtype
     publishedAt: 0,
     snowballAt: {}, // boss id -> time
     fieldAt: 0,
@@ -234,11 +233,16 @@ function startNextDungeonRun() {
     return;
 
   set(`${id}Instance`, visit.instance);
+  dungeonLog(
+    `${id} run`,
+    `starting ${visit.instance} on ${visit.realm}, ${visit.leftAt ? "kept visit, ripe" : "fresh"}`,
+  );
 }
 
 /** Puts the run back among the waiting visits, retried after supplyRetryMs */
 function shelveDungeonRun(id) {
   const instance = getDungeonInstance(id);
+  dungeonLog(`${id} run`, `shelving ${instance}, waiting for supplies`);
   set(
     `${id}Visits`,
     getDungeonVisits(id).map((visit) =>
@@ -301,6 +305,10 @@ function writeDungeonRun(id, change) {
 function closeDungeonRun(id, { isGone = false, kept } = {}) {
   const instance = getDungeonInstance(id);
   const visit = getActiveDungeonVisit(id);
+  dungeonLog(
+    `${id} run`,
+    `closing ${instance} by ${character.name}: ${isGone ? "instance gone" : kept ? `kept, ages ${JSON.stringify(kept.bossAges ?? {})}` : "done"}`,
+  );
   const keptVisits =
     visit && kept && !isGone
       ? [
@@ -320,21 +328,44 @@ function closeDungeonRun(id, { isGone = false, kept } = {}) {
   set(`${id}Instance`, undefined);
 }
 
-/** Remembers a mob's type for deaths out of view */
-function noteDungeonMob(mob) {
+/** Starts a fresh dungeonState once a dungeon mob is seen in a new instance */
+function noteDungeonMob() {
   if (dungeonState.instance !== character.in)
     dungeonState = freshDungeonState(character.in);
-  dungeonState.seenTypes[mob.id] = mob.mtype;
 }
 
-game.on("death", ({ id }) => {
-  const dungeon = getDungeonOfMap(character.map);
-  if (!dungeon || character.in !== getDungeonInstance(dungeon.id)) return;
+const MTYPE_BY_NAME = Object.fromEntries(
+  Object.values(DUNGEONS).flatMap(({ types }) =>
+    types.map((mtype) => [G.monsters[mtype].name, mtype]),
+  ),
+);
 
-  const mtype = parent.entities[id]?.mtype ?? dungeonState.seenTypes[id];
-  if (!dungeon.types.includes(mtype)) return;
+/** Server: every kill goes to the killer's party as a server.kill.* game_log; the priest alone records them */
+parent.socket.on("game_log", (data) => {
+  if (character.name !== PRIEST) return;
+  if (!data?.phrase?.startsWith("server.kill.")) return;
+  const { player = character.name, monster } = data.phrase_args ?? {};
+  const mtype = MTYPE_BY_NAME[monster];
+  if (!mtype) return;
 
-  writeDungeonRun(dungeon.id, (record) => (record.killed[id] = mtype));
+  const killer =
+    player === character.name
+      ? character
+      : getCharacterInfo(player) ?? parent.party?.[player];
+  const dungeon = getDungeonOfMap(killer?.map);
+  const instance = dungeon && getDungeonInstance(dungeon.id);
+  if (!dungeon || killer.in !== instance) {
+    dungeonLog(
+      "kill dropped",
+      `${mtype} by ${player} on ${killer?.map} in ${killer?.in}, current run ${instance ?? "none"}`,
+    );
+    return;
+  }
+
+  dungeonLog(`${dungeon.id} kill`, `${mtype} by ${player}`);
+  writeDungeonRun(dungeon.id, (record) => {
+    record.killed[`${player}:${Date.now()}`] = mtype;
+  });
 });
 
 /**
@@ -693,7 +724,7 @@ function noteDungeonBosses(dungeon) {
   const bossTypes = dungeon.bosses.flatMap(({ phases }) => phases);
   return Object.values(parent.entities).filter((mob) => {
     if (mob.type !== "monster" || mob.dead) return false;
-    if (dungeon.types.includes(mob.mtype)) noteDungeonMob(mob);
+    if (dungeon.types.includes(mob.mtype)) noteDungeonMob();
     return bossTypes.includes(mob.mtype);
   });
 }
