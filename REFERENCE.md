@@ -673,33 +673,6 @@ needing it for the report. It must live in exactly one file: slot 7 and slot 24 
 the same global scope on the merchant, so a second `const` of that name is a redeclaration error
 that takes the whole merchant down.
 
-## Self-rescheduling loop discipline (`dragEnt`/`lureMechaGnome`, merchant_luring.24.js)
-
-These loops keep themselves alive via `setTimeout(self, delay)`. Debugging "dragEnt stopped but
-lureMechaGnome kept going" (2026-07-17) established the failure taxonomy:
-
-- **Any throw on a code path that doesn't reach the reschedule kills the loop permanently and
-  silently** (async function → unhandled rejection, no crash, no retry). The original layout had
-  the guard *outside* the `try`, so a throw while merely *evaluating* the guard (e.g. the old
-  unguarded `parent.caracAL.siblings` in-browser, or a corrupt `get("mageLocation")`) was fatal.
-  The guard now lives inside the `try` so `finally` always reschedules. Diagnosis shortcut: if
-  the loop is dead but flags read `false`, it died on an unprotected path; if flags read `true`,
-  it's hung inside an iteration on a never-settling await.
-- **The reschedule must be the last statement of `finally`** — anything before it that can throw
-  (the `set("luringMobType", undefined)` call is the suspect) kills the loop *after* clearing the
-  flags, producing exactly the "sibling loop healthy, this loop dead" symptom.
-- **Load-order race (caracAL only)**: gone as of 2026-08-02, `load_scripts` is synchronous — see
-  "Script loading is synchronous in both environments" below. It is worth knowing this failure
-  mode existed: a loop that never started looks exactly like a loop whose reschedule died.
-- **KNOWN ISSUE (open as of 2026-07-17)**: moving the guard inside `try` means a guard-*blocked*
-  tick now also runs `finally`, which unconditionally clears `onDuty`/`isLuringMobs`/
-  `isDraggingMobs` and `luringMobType` — flags that tick never acquired and that the cm duty
-  handler or the sibling lure may own at that moment (violates the "never touch `onDuty` you
-  didn't take" rule above). Fix: track an `acquiredLocks` boolean set after passing the guard and
-  only clear the flags in `finally` when it's set (the reschedule itself stays unconditional).
-  `dragEnt` has the guard-inside-try change; `lureMechaGnome` still has its guard outside the
-  `try` and needs the same treatment, with the same lock-ownership care.
-
 ### Death mid-lure used to freeze `dragEnt` permanently (fixed 2026-08-06)
 
 `walkEntsToSpawn` always checked `character.rip`, but the two phases before it did not, and a
@@ -879,50 +852,6 @@ equip, `use_skill("shelter")` and the swap back to the old offhand all go out to
 an `undefined` slot instead of emptying it. The priest fires it on the warrior's hardshell danger
 check (more than 500 average damage taken and under 50% hp), never on a trip. A +0 shield is on
 both fighters' keep lists, so a merchant handoff doesn't ship it back.
-
-## Attack cooldown reduction after `attack()` (`reduceCd`, basic_warrior.9.js)
-
-Findings from the "warrior attacks slower than his frequency" session (2026-07-24):
-
-- **`next_skill.attack` is set ~1 ping *after* the `attack()` call, not synchronously.**
-  `attack()` only `socket.emit("attack")`; the server replies with a `skill_timeout` event and
-  the client sets `next_skill.attack = now + ms` (or `1000/frequency` if the server omits `ms`)
-  in that handler. So the `.then()` on the attack promise fires right as the fresh cooldown lands
-  — which is the correct place to `reduce_cooldown`, and why a probe reads `ms_to_next("attack")`
-  ≈ `cycle − reduction` immediately after.
-- **Reduce by ~full RTT (`character.ping * 0.95`), not `ping/2` and not `Math.min(...parent.pings)`.**
-  `character.ping` is the full round trip. The two one-way `ping/2` legs cancel (you lose `ping/2`
-  waiting for `skill_timeout`, but gain `ping/2` because your next attack packet reaches the
-  server that much before the client-side timer says it can) → net acceptable re-fire is at
-  `t0 + cooldown`, i.e. a full-ping-early send. `Math.min(...parent.pings)` (your *best-ever* ping)
-  under-compensates: whenever live ping rises above that floor the packet lands late. So the attack
-  `.then` uses `reduceCd("attack", false)` (the `character.ping * 0.95` branch, same "full
-  reduction" warcry/taunt use). Trade-off: over-reducing risks a `"cooldown"` rejection handled in
-  `attackErrorHandler`; there was headroom because no such rejections were occurring.
-
-- **Anything sharing the attack cooldown must reduce the `"attack"` key, not its own name.** The
-  priest's heal `.then` used `reduceCd("heal")`, which writes to `parent.next_skill.heal` — a timer
-  the server never sets (heal's `skill_timeout` is registered under `attack`, see "heal *shares* the
-  attack cooldown" below) and that `ms_to_next_skill` reports as 0 for. So the shave landed nowhere
-  and every heal cycle ran a full ping longer than every attack cycle — the priest looked like he
-  hesitated before healing while his attacks kept pace. Now `reduceCd("attack", false)`, matching
-  every other class's shared-cooldown action.
-
-- **The candy swap re-bases the attack cooldown server-side and WIPES the client-side reduction —
-  so the ping shave has to be re-applied in the swap-back, not (only) the attack `.then`.** Server
-  mechanic (from the server source): every equip runs `calculate_player_stats`, and when
-  `attack_ms` changes it emits `skill_timeout {name:"attack", ms: new_attack_ms − mssince(last.attack),
-  reason:"attack_ms"}`. So the cooldown is *not* frozen at attack time — it floats with the weapon
-  you currently hold, always measured from your last attack. Damage, by contrast, is locked to the
-  weapon equipped when the attack is processed (that's what makes "hit big, swap" work). For the
-  candy-swap warrior this means: attack fires (fireblade CD) → `.then` shaves ping → ~150ms later
-  the swap-back to fireblade emits an `attack_ms` correction that resets `next_skill.attack` to the
-  full `fireblade_ms − elapsed`, silently reverting the ping shave → `dt`-between-attacks ends up at
-  the *full* cycle (measured: `dt≈692` vs `expected=686`, not `expected − ping ≈ 603`). Fix:
-  `reduceCd("attack", false)` is re-applied in `maybeCandySwap`'s `swapBackAfterHit`, chained
-  *after* the re-equip resolves (i.e. after the server's authoritative correction lands). This also
-  makes `attackSpeedCompensate` redundant for the candy case — the server already re-bases on the
-  swap itself, and the client compensate is overwritten (it read `refunded=false` every tick).
 
 ## `strategic_fn.11.js` math conventions
 
@@ -1123,26 +1052,9 @@ From `add_condition(target, "burned")` (server_functions.js) and the condition t
 - No mob has `firesistance` in `G`, so the cap only differs from 1.5x when a mob burns a player.
   The 0.9 in the padding is the low end of the 0.9–1.1 damage roll, kept on purpose.
 
-## Frozen/poisoned don't slow a player's attacks (`attackFrequency`)
+## Frozen/poisoned and player attack speed
 
-Found 2026-10-11, a mage swapping to pinkie on the icegolem. In the server's
-`calculate_player_stats` (`node/server.js`, upstream `2148cf2`), `player.attack_ms` is computed
-from `frequency` (~line 1627) *before* `calculate_common_stats` applies `frozen` x0.3 and
-`poisoned` x0.9 (~line 1716). The attack cooldown is `attack_ms`, so a frozen player attacks at
-full speed while `character.frequency` reports 0.3x. Monsters are not affected the same way:
-their attack gate reads `monster.frequency`, so freezing a mob does slow it.
-
-The icegolem's `multi_freeze` (every 2s, 5s duration, hits everyone who damaged it within 480)
-keeps the whole party frozen, so every `character.frequency` read was ~0.3x. `rankMageWeapons`
-then added the wand's flat `frequency: +60` class bonus to that shrunken base: 1.035 vs 0.435
-(2.38x) instead of 2.05 vs 1.45 (1.41x), and pinkie won every time.
-
-Fixed upstream 2026-10-19 (FreezePhoenix, `cd86f47`, PR #31): `attack_ms` now follows
-`calculate_common_stats`, so a frozen player really attacks at 0.3x. On 2026-10-21 the
-`attackFrequency` wrapper and its `PLAYER_COOLDOWN_SKIPS_FREQUENCYM` switch were removed, and
-every read uses `frequency` as the server reports it. `rankMageWeapons` still scales a weapon's
-frequency delta by `conditionFrequencyScale(character)`, because the condition multiplies the
-whole frequency, the weapon's share included. Without it the pinkie bias above comes back.
+Upstream fixed `attack_ms` to follow `calculate_common_stats` (2026-10-19, `cd86f47`), so a frozen player really attacks at 0.3x. The `attackFrequency` wrapper is gone; every read uses `frequency` as reported. `rankMageWeapons` scales a weapon's frequency delta by `conditionFrequencyScale(character)`, since the condition multiplies the whole frequency.
 
 ## `getLoopInterval` under 250ms cycles (2026-10-11)
 
@@ -3015,6 +2927,17 @@ the bottom (`findAndUpgrade` already takes the lowest copy, and pulls take the l
 past the top `keep`), stopping once its survivors fall to `keep`. A pile with no outlier behaves
 as before. `bankStoreRoutine` stores a bag copy the gate blocks instead of holding it as fodder;
 targeted craft climbs skip the gate as before.
+
+### The store pass keeps workable top copies (`bankStoreRoutine`, debugged 2026-11-20)
+
+Symptom: 19 `vattire` at `+4` in the bank, keep 6, never upgraded; the pull fetched them and the
+next store pass put them straight back. Two clauses stored any equipable regardless of work:
+`isRare` (vattire grades are `[0,0,9,10]`, so every copy is grade 2 from `+0`) and `isHighLevel`
+(level >= the line's highest - 1, which is every copy of a flat pile). So a line whose copies all
+sat at its top level could never climb. Now an equipable is stored only when `forced` or
+`!isWorkable`; `isWorkable` goes through `canSpareUpgrade`/`canSpareCompound`, so the best `keep`
+copies are still protected. Rare non-equipables still store as before. `lastRetrieved` still
+returns a pull on the next visit, so a pulled copy gets one bank-loop interval to be worked.
 
 ### `map` before `every`
 
@@ -5858,13 +5781,7 @@ Diagnosed from the code against the server's call limit (200 cost per 4s, a `mov
 the client only knows what is in view. What makes a ledger exact instead: every crypt mob has
 `respawn: -1`, and the spawn table (`G.maps.crypt.monsters`) gives the counts and types.
 
-**Kills come from the `death` game event, keyed by monster id.** `target_hit` with `kill` only fires
-for our own direct hit. The party-wide `game_log` kill line (`server.kill.player.*`) reaches all three
-characters and carries a display name but no id, so shared storage would count it three times.
-`death` reaches everyone in view with the id; each character writes its own `cryptRun:<name>` record
-(`{ instance, killed: { id: mtype }, isMinionsSwept }`) and `readCryptRun` merges them by id. Own keys
-mean no read-modify-write race, and the `instance` field (a random 24-char name per opening) retires
-old records without the merchant resetting anything.
+**Kills come from the party `game_log` kill line, recorded by the priest alone** (see "Dungeon kills, debug logs and ripen targets" at the end). The old `death`-event ledger needed the mob in view.
 
 **One model for all eight bosses** (`canHoldCryptBosses`, `isCryptKillable`). Nothing is listed as
 killable; a boss is wanted when its dps on the tanker stays under `CRYPT.holdShare` of the party's
@@ -6426,3 +6343,28 @@ sums their dps against the heal).
   rogue; live events still win), and the party waits at the door until all of it is on the realm.
 - The field generator is in `parent.entities` (the user confirmed), so the tanker's cover check
   reads it there; the lifetime estimate is gone.
+
+## Dungeon kills, debug logs and ripen targets (2026-11-20)
+
+- **Kills come from the party kill log, written by the priest alone.** The server sends every kill
+  to the killer's party as a `game_log` with phrase `server.kill.*` and `phrase_args.{player,monster}`
+  (`kill_monster` -> `party_emit`, node/server.js), wherever each member stands. Only `PRIEST`
+  records: it maps the monster's display name back to an mtype (`MTYPE_BY_NAME`, dungeon types
+  only) and credits the run only when the killer's `in` (from `getCharacterInfo`, else
+  `parent.party`) is the current instance. Keys are `<killer>:<time>`; readers only count values.
+  The old `game.on("death")` needed the mob in view and dropped kills by anyone outside the current
+  run. Merchants are left out of `party_to_client`, so a merchant kill may never be credited.
+- **Debug output is `dungeonLog` only** (`console.warn`, gated by `DUNGEON.debug`). The game's
+  `log()` writes to the in-game window and never reaches caracAL's logs. Lifecycle lines: `opened`
+  (merchant), `starting`, `shelving`, `closing ... done|instance gone|kept`; crypt adds `nest swept`
+  with the recorded vbat count, the tanker's `wanted` list, and `close` with every living boss's
+  modelled level, growing flag and last sighting (`describeCryptLeft`).
+- **Ripen targets are Lestat 7, Bill 5** (the user's call). Bill is `poisonous`: heals on a poisoned
+  target land at 25%, potions at 50%, and `pnresistance` is rolled per hit (server_functions.js
+  `add_condition`), so a 5s poison under ~7 Bill hits is avoided only at about `r^7`, not `r` as
+  `poisonHealShare` models. Measured hold margin at Bill L4 was ~1.2-1.4x.
+- **A kept visit is ripe only for a boss that was below target when left and has reached it since**
+  (`isDungeonVisitRipe`). A run that re-enters and closes with that boss alive at or above target
+  takes the visit out of rotation for that boss; it waits on the others.
+- **caracAL storage is per-process with async IPC sync** (`ipcStorage.js`). Every character
+  rewrites the whole `cryptVisits` array from its own copy, so concurrent closes can lose updates.

@@ -1100,7 +1100,8 @@ function getCryptPatrolStop(sought, reach = CRYPT.arrival) {
 function patrolCrypt(wanted) {
   const stop = getCryptPatrolStop(wanted);
   if (!stop) {
-    if (!isWholeDungeonPartyHere(getCryptFight())) return;
+    if (!isAssignedAsTanker() || !isWholeDungeonPartyHere(getCryptFight()))
+      return;
     dungeonLog("crypt close", `nothing left to fight, ${describeCryptLeft(wanted)}`);
     closeCryptRun();
     return;
@@ -1387,7 +1388,9 @@ async function useCryptStrategy() {
   }
 
   const run = readCryptRun();
-  const wanted = getWantedCryptBosses(run, fight);
+  const wanted = isAssignedAsTanker()
+    ? getWantedCryptBosses(run, fight)
+    : getPartyWantedCryptBosses(run);
   const minionsLeft = getCryptMinionsLeft(run);
   // Latched for the rest of the run, read by pickPartyMembers
   if (
@@ -1407,8 +1410,13 @@ async function useCryptStrategy() {
     dungeonLog("crypt wanted", `[${hunted.join(",")}], ${minionsLeft} minions left`);
   }
 
-  // Judged by whoever is in view, so only the whole party may call the run done
-  if (!minionsLeft && !wanted.length && isWholeDungeonPartyHere(fight)) {
+  // Only the tanker, with the whole party in view, calls the run done
+  if (
+    isAssignedAsTanker() &&
+    !minionsLeft &&
+    !wanted.length &&
+    isWholeDungeonPartyHere(fight)
+  ) {
     dungeonLog("crypt close", `cleared, ${describeCryptLeft(wanted)}`);
     closeCryptRun();
     return undefined;
