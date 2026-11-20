@@ -16,12 +16,8 @@ const CRYPT = {
   batOrbitRate: 0.4, // tanker's orbit on a boss whose spawns fight (Spike), share of its range
   // Hunt order once the vbats are done; a supporter in sight goes before all of them
   bossOrder: ["a3", "a7", "a2", "a8", "a4", "a6", "a1"],
-  rogueBosses: ["a1"], // hunted last, once the rogue has taken the mage's place
-  rogueWaitMs: 600_000, // for the rogue's deploy and walk in, before they are taken without it
-  lureHome: "a3", // growing angerers are walked to this boss's spawn by the priest
-  lureGap: 200, // ... once this far off it
-  angerMargin: 40, // past the anger radius, for the boss's own step
-  angerLeadMs: 1000, // ping and slack before the anger timer runs out
+  rogueBosses: ["a1"], // engaging one deploys the rogue until it dies
+  nestCenter: 100, // the tanker confirms an empty nest this close to its centre
   ripenRetryMs: 1_800_000, // a growing boss seen behind the server's timer is tried again this much later
 };
 
@@ -100,7 +96,7 @@ function resetCryptMemory(instance) {
     writtenWanted: undefined, // JSON of the last wanted written
     unwritten: {}, // boss type -> sightings not yet in our run record
     guard: undefined, // the tanker's own projectCryptGuard
-    rogueTurnAt: undefined, // when we first saw the run's rogue turn
+    emptyNestAt: undefined, // when the tanker first confirmed the nest empty
   };
 }
 
@@ -142,8 +138,19 @@ function nearestCryptSpot(from, spots) {
 /** @returns {{killed: Object<string, string>, isMinionsSwept?: boolean, isSupportGivenUp?: boolean, isRogueTurn?: boolean}} */
 const readCryptRun = () => readDungeonRun("crypt");
 
+/** @returns {boolean} the tanker's word on this run's nest, else the kept visit's */
+function isCryptNestSwept() {
+  const record = get(`cryptRun:${TANKER}`);
+  if (
+    record?.instance === getDungeonInstance("crypt") &&
+    record.isMinionsSwept !== undefined
+  )
+    return record.isMinionsSwept;
+  return !!getActiveDungeonVisit("crypt")?.isMinionsSwept;
+}
+
 function getCryptMinionsLeft(run) {
-  if (run.isMinionsSwept) return 0;
+  if (isCryptNestSwept()) return 0;
   const killed = Object.values(run.killed).filter((mtype) =>
     CRYPT_MOBS.minions.includes(mtype),
   ).length;
@@ -208,7 +215,11 @@ function noteCryptMobs() {
     if (!isCryptBoss(mob) && !isCryptMinion(mob)) continue;
 
     noteDungeonMob();
-    if (!isCryptBoss(mob)) continue;
+    if (!isCryptBoss(mob)) {
+      if (isAssignedAsTanker() && isCryptNestSwept())
+        writeDungeonRun("crypt", (record) => (record.isMinionsSwept = false));
+      continue;
+    }
 
     bosses.push(mob);
     // Server: a target or a scare restarts the climb to its next level
@@ -487,114 +498,15 @@ const getCryptBossLevel = (mtype) => bossLevelAt(mtype, getCryptBossAge(mtype));
 const isCryptBossGrowing = (mtype) =>
   getCryptBossLevel(mtype) < (DUNGEON_OPENING.crypt.ripenLevels?.[mtype] ?? 0);
 
-/** @returns {boolean} whether it is a growing boss with anger (Bill, Lestat) */
-const isRipeningAngerer = (boss) =>
-  !!G.monsters[boss.mtype].abilities?.anger && isCryptBossGrowing(boss.mtype);
-
 /**
- * Server: anger skips a disabled boss (is_disabled), else picks a random
- * player inside its radius when its timer, sent in `s.anger`, runs out; the
- * client drops the timer at 0 until the server's refresh.
- * @returns {boolean} whether `who` can't walk out of the radius before it fires
- */
-function isInAngerReach(boss, who) {
-  if (
-    ["stunned", "fingered", "stoned", "deepfreezed", "sleeping"].some(
-      (condition) => boss.s?.[condition],
-    )
-  )
-    return false;
-  const radius =
-    G.monsters[boss.mtype].abilities.anger.radius + CRYPT.angerMargin;
-  const outMs = ((radius - distance(who, boss)) / who.speed) * 1000;
-  return outMs > 0 && (boss.s?.anger?.ms ?? 0) < outMs + CRYPT.angerLeadMs;
-}
-
-/**
- * Steps out of a growing angerer's radius just before it fires; the one on us
- * and the one we lure are left be.
- * @returns {Object|undefined} travelling while stepping out
- */
-function dodgeCryptAnger(bosses, lure) {
-  // no need to dodge
-  return undefined;
-  // const boss = nearestCryptSpot(
-  //   character,
-  //   bosses.filter(
-  //     (mob) =>
-  //       mob.id !== lure?.id &&
-  //       mob.target !== character.name &&
-  //       isRipeningAngerer(mob) &&
-  //       isInAngerReach(mob, character),
-  //   ),
-  // );
-  // if (!boss) return undefined;
-
-  // const radius =
-  //   G.monsters[boss.mtype].abilities.anger.radius + 2 * CRYPT.angerMargin;
-  // const gap = distance(character, boss) || 1;
-  // const away = {
-  //   x: boss.x + ((character.real_x - boss.x) / gap) * radius,
-  //   y: boss.y + ((character.real_y - boss.y) / gap) * radius,
-  // };
-  // if (can_move_to(away.x, away.y)) parkAt(away);
-  // else {
-  //   const spot = nearestCryptSpot(
-  //     character,
-  //     CRYPT_JUNCTION.filter((junction) => distance(junction, boss) > radius),
-  //   );
-  //   if (spot) parkAt(spot);
-  // }
-  // return travelling();
-}
-
-/**
- * Read by isHandsOffMob: a growing boss is never hit, save the lurer's tag
- * before it is on her.
+ * Read by isHandsOffMob: a growing boss is never hit.
  * @returns {boolean}
  */
 function isCryptBossLeftToGrow(mob) {
-  if (character.map !== "crypt" || !isCryptBoss(mob)) return false;
-  if (!isCryptBossGrowing(mob.mtype)) return false;
-  const isLureTag =
-    cryptPlan?.isLure &&
-    cryptPlan.target.id === mob.id &&
-    mob.target !== character.name;
-  return !isLureTag;
-}
-
-/** @returns {Object|undefined} a priest of ours in view, who lures and absorbs */
-const getCryptLurer = () =>
-  partyMems
-    .map((name) => get_entity(name))
-    .find((member) => member && !member.rip && member.ctype === "priest");
-
-/**
- * The priest walks a growing angerer CRYPT.lureGap off CRYPT.lureHome's spawn
- * back there, while no other boss is on us and she can take it alone.
- * @returns {Object|undefined} the boss to lure
- */
-function getCryptLure(bosses, fight) {
-  return undefined; // turn off
-  if (character.ctype !== "priest") return undefined;
-  if (
-    bosses.some(
-      (boss) =>
-        !isCryptBossGrowing(boss.mtype) && partyMems.includes(boss.target),
-    )
-  )
-    return undefined;
-
-  const home = CRYPT_MOBS.spawnSpots[CRYPT.lureHome];
-  return nearestCryptSpot(
-    character,
-    bosses.filter(
-      (boss) =>
-        isRipeningAngerer(boss) &&
-        (!boss.target || partyMems.includes(boss.target)) &&
-        distance(boss, home) > CRYPT.lureGap &&
-        canHoldCryptBosses([boss], { ...fight, holder: character }, []),
-    ),
+  return (
+    character.map === "crypt" &&
+    isCryptBoss(mob) &&
+    isCryptBossGrowing(mob.mtype)
   );
 }
 
@@ -626,23 +538,6 @@ function getWantedCryptBosses(run, fight) {
 }
 
 /**
- * A rogue boss is hunted last: not while any other boss is wanted, and on the
- * rogue's turn not before the rogue is in view or CRYPT.rogueWaitMs has passed.
- * @returns {boolean}
- */
-function isSavedForRogue(mtype, wanted, fight) {
-  if (!CRYPT.rogueBosses.includes(mtype)) return false;
-  if (wanted.some((other) => !CRYPT.rogueBosses.includes(other))) return true;
-
-  // A smoked rogue is hidden from the party too, so its own word counts
-  const isRogueHere =
-    fight.party.some((member) => member.name === ROGUE) ||
-    getCharacterInfo(ROGUE)?.in === character.in;
-  const waitedMs = Date.now() - (cryptMemory.rogueTurnAt ?? Date.now());
-  return !isRogueHere && waitedMs < CRYPT.rogueWaitMs;
-}
-
-/**
  * Decides this tick's boss fight: kill what the party can hold, pull one boss
  * out of a cluster it can't, or back off.
  * @param {Object[]} bosses - the bosses in view
@@ -653,10 +548,9 @@ function isSavedForRogue(mtype, wanted, fight) {
  */
 function planCryptFight(bosses, fight, wanted, isHunting) {
   // Server: an idle boss only comes at us by anger (ticks idle too) or by natural aggro, ~64px in front
-  const angerReach = (boss) =>
-    G.monsters[boss.mtype].abilities?.anger?.radius ?? 0;
   const minionBossThreatRange = 200;
   const willEngage = (boss) => {
+    if (isCryptBossGrowing(boss.mtype)) return false;
     if (partyMems.includes(boss.target)) return true;
     const range = isHunting
       ? G.monsters[boss.mtype].abilities?.anger?.radius ?? 0
@@ -670,6 +564,7 @@ function planCryptFight(bosses, fight, wanted, isHunting) {
     ? bosses
         .filter(
           (boss) =>
+            !isCryptBossGrowing(boss.mtype) &&
             (isCryptSupporter(boss) || wanted.includes(boss.mtype)) &&
             !isCryptBlocked(boss.mtype),
         )
@@ -759,7 +654,7 @@ function getCryptKiteAnchor(target) {
   if (character.map !== "crypt") return undefined;
   if (!cryptPlan || Date.now() - cryptPlan.at > CRYPT.planStaleMs)
     return undefined;
-  if (!isAssignedAsTanker() && !cryptPlan.isEscape && !cryptPlan.isLure)
+  if (!isAssignedAsTanker() && !cryptPlan.isEscape)
     return undefined;
   if (target?.id !== cryptPlan.target.id) return undefined;
 
@@ -791,7 +686,7 @@ const isCryptBossOnUs = () => shouldStopCryptTrip([]);
 /**
  * What the tanker last judged worth hunting, shared because a follower out of
  * the healer's view can't judge it; before any word, CRYPT.bossOrder's bosses
- * left, the growing ones and the rogue's aside.
+ * left, growing ones aside.
  * @returns {string[]}
  */
 function getPartyWantedCryptBosses(run = readCryptRun()) {
@@ -800,10 +695,7 @@ function getPartyWantedCryptBosses(run = readCryptRun()) {
   if (record?.instance === cryptMemory.instance && record.wanted)
     return record.wanted.filter((mtype) => !killed.includes(mtype));
   return CRYPT.bossOrder.filter(
-    (mtype) =>
-      !killed.includes(mtype) &&
-      !isCryptBossGrowing(mtype) &&
-      !CRYPT.rogueBosses.includes(mtype),
+    (mtype) => !killed.includes(mtype) && !isCryptBossGrowing(mtype),
   );
 }
 
@@ -1013,7 +905,7 @@ async function retreatInCrypt(cluster) {
 
 /**
  * @returns {Object|undefined} the minion to hit; none in view walks to the nest,
- * and an empty nest ends the minion phase
+ * and an empty nest ends the minion phase only once confirmed by the tanker
  */
 function pickCryptMinion(fight, wanted) {
   const minions = Object.values(parent.entities).filter(
@@ -1021,18 +913,36 @@ function pickCryptMinion(fight, wanted) {
   );
 
   if (!minions.length) {
-    if (distance(character, CRYPT_MOBS.nest) < CRYPT.reach) {
-      const vbats = Object.values(readCryptRun().killed).filter(
-        isCryptMinionType,
-      ).length;
+    const vbatsKilled = Object.values(readCryptRun().killed).filter(
+      isCryptMinionType,
+    ).length;
+    const isAtCenter = distance(character, CRYPT_MOBS.nest) < CRYPT.nestCenter;
+
+    if (isAtCenter) {
+      cryptMemory.emptyNestAt ??= Date.now();
+    } else {
+      cryptMemory.emptyNestAt = undefined;
+    }
+
+    const isConfirmedEmpty =
+      isAtCenter && Date.now() - cryptMemory.emptyNestAt > 2000;
+
+    if (
+      isAssignedAsTanker() &&
+      (vbatsKilled >= CRYPT_MOBS.minionCount || isConfirmedEmpty)
+    ) {
       dungeonLog(
         "crypt nest",
-        `swept by ${character.name}, ${vbats} vbat kills recorded`,
+        `swept by ${character.name}, ${vbatsKilled} vbat kills recorded`,
       );
       writeDungeonRun("crypt", (record) => (record.isMinionsSwept = true));
-    } else walkToCryptNest(wanted);
+    } else if (!isAtCenter) {
+      walkToCryptNest(wanted);
+    }
     return undefined;
   }
+
+  cryptMemory.emptyNestAt = undefined;
 
   const nearest = nearestCryptSpot(character, minions);
   if (isAssignedAsTanker()) {
@@ -1329,7 +1239,7 @@ function closeCryptRun() {
     kept: visit &&
       hasMobsLeft && {
         killed: run.killed,
-        isMinionsSwept: run.isMinionsSwept,
+        isMinionsSwept: isCryptNestSwept(),
         bossAges: Object.fromEntries(
           CRYPT_MOBS.bosses
             .filter((mtype) => !killed.includes(mtype))
@@ -1362,21 +1272,8 @@ async function useCryptStrategy() {
   const bosses = noteCryptMobs();
   const fightable = bosses.filter((boss) => !isCryptBossGrowing(boss.mtype));
 
-  // Growing/ripening bosses are ignored for luring and scared off by the tanker
-  const lure = isAssignedAsTanker() ? undefined : getCryptLure(bosses, fight);
-  const lurer = getCryptLurer();
-  const snatched =
-    !isAssignedAsTanker() &&
-    lurer &&
-    lurer.name !== character.name &&
-    bosses.find(
-      (boss) => boss.target === character.name && isRipeningAngerer(boss),
-    );
-
   // Damage dealers shake off anything; the tanker zappers, growing bosses, what it can't hold, and spawns once no boss is on it
-  const mobsOnMe = listOfMonsterAttacking(character).filter(
-    (mob) => mob.id !== lure?.id && mob.id !== snatched?.id,
-  );
+  const mobsOnMe = listOfMonsterAttacking(character);
   const bossesOnMe = mobsOnMe.filter(isCryptBoss);
   const shouldScare = isAssignedAsTanker()
     ? mobsOnMe.some((mob) => G.monsters[mob.mtype]?.abilities?.zap) ||
@@ -1386,26 +1283,6 @@ async function useCryptStrategy() {
         mobsOnMe.some((mob) => CRYPT_MOBS.spawned.includes(mob.mtype)))
     : mobsOnMe.length > 0;
   if (shouldScare) await scareAwayMobs();
-
-  if (snatched) {
-    changeToNormalStrategies();
-    parkAt(lurer);
-    return travelling();
-  }
-  if (lure) {
-    const home = CRYPT_MOBS.spawnSpots[CRYPT.lureHome];
-    dungeonLog(
-      "crypt lure",
-      `luring ${lure.mtype} to ${CRYPT.lureHome}'s spawn`,
-    );
-    cryptPlan = { target: lure, dragTo: home, isLure: true, at: Date.now() };
-    setDungeonGoal(home);
-    changeToNormalStrategies();
-    change_target(lure);
-    return engage(lure);
-  }
-  const dodge = dodgeCryptAnger(bosses, lure);
-  if (dodge) return dodge;
 
   // Nothing is judged without the tanker and the healer in view
   if (!fight.isReady) {
@@ -1421,19 +1298,7 @@ async function useCryptStrategy() {
     ? getWantedCryptBosses(run, fight)
     : getPartyWantedCryptBosses(run);
   const minionsLeft = getCryptMinionsLeft(run);
-  // Latched for the rest of the run, read by pickPartyMembers
-  if (
-    isAssignedAsTanker() &&
-    !run.isRogueTurn &&
-    !minionsLeft &&
-    wanted.length &&
-    wanted.every((mtype) => CRYPT.rogueBosses.includes(mtype))
-  )
-    writeDungeonRun("crypt", (record) => (record.isRogueTurn = true));
-  if (run.isRogueTurn) cryptMemory.rogueTurnAt ??= Date.now();
-  const hunted = wanted.filter(
-    (mtype) => !isSavedForRogue(mtype, wanted, fight),
-  );
+  const hunted = wanted;
   if (isAssignedAsTanker()) {
     cryptMemory.wanted = hunted;
     dungeonLog(
@@ -1463,6 +1328,14 @@ async function useCryptStrategy() {
   let target = plan?.target;
   let isSpawnPinned = false;
   if (target) {
+    if (
+      isAssignedAsTanker() &&
+      CRYPT.rogueBosses.includes(target.mtype) &&
+      !run.isRogueTurn
+    ) {
+      writeDungeonRun("crypt", (record) => (record.isRogueTurn = true));
+    }
+
     cryptPlan = { ...plan, at: Date.now() };
     setDungeonGoal(plan.dragTo ?? target, "fight");
     changeToNormalStrategies();
@@ -1515,14 +1388,6 @@ async function useCryptStrategy() {
     if (!target) return travelling();
     setDungeonGoal(target, "fight");
     changeToPullStrategies();
-  } else if (!hunted.length) {
-    // Only what is saved for the rogue is left: it comes in by the entrance
-    changeToNormalStrategies();
-    const entrance = CRYPT_JUNCTION[0];
-    setDungeonGoal(entrance);
-    if (distance(character, entrance) > CRYPT.arrival)
-      advanceSmartMove({ ...entrance }, { useScare: true }).catch(() => {});
-    return travelling();
   } else {
     changeToNormalStrategies();
     patrolCrypt(hunted);

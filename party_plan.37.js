@@ -463,8 +463,12 @@ function pickPartyMembers(status = server.status, realm = getCurrentServer()) {
     getRunningDungeonId() === id &&
     (getActiveDungeonVisit(id)?.realm ?? realm) === realm;
   const isLairRun = isRunHere("darkMage");
+  const cryptRun = isRunHere("crypt") ? readDungeonRun("crypt") : undefined;
   const isCryptRogueRun =
-    isRunHere("crypt") && !!readDungeonRun("crypt").isRogueTurn;
+    !!cryptRun?.isRogueTurn &&
+    CRYPT.rogueBosses.some(
+      (mtype) => !Object.values(cryptRun.killed).includes(mtype),
+    );
   const activeEvent =
     USE_CAVE_STRATEGY && isCaveUnderway()
       ? "cave"
