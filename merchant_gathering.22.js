@@ -90,13 +90,11 @@ async function walkAndGather(skill, location, toolId) {
 
     if (character.mp > 120) {
       log(skill === "fishing" ? "Fishin!" : "Mining!");
-      return await Promise.all([
-        equipBatch({
-          mainhand: toolId,
-          offhand: undefined,
-        }),
-        use_skill(skill),
-      ]);
+      await equipBatch({
+        mainhand: toolId,
+        offhand: undefined,
+      });
+      return await use_skill(skill);
     }
   } finally {
     if (gatherStartedAt === startedAt) gatherStartedAt = undefined;
