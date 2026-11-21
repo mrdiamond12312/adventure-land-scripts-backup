@@ -10,6 +10,9 @@ const UPGRADE_CONFIG = {
   fireblade: { graceFromLevel: 7 },
   firestaff: { graceFromLevel: 7 },
   firebow: { graceFromLevel: 7 },
+  vattire: { graceFromLevel: 4, value: 4_000_000 },
+  vhammer: { graceFromLevel: 4, value: 10_000_000 },
+  vdagger: { graceFromLevel: 4, value: 12_000_000 },
 };
 
 /** Vendor item failed on purpose */
@@ -186,7 +189,10 @@ function estimateGraceNum(item, chance, scrollGrade, usePrimling) {
 
   for (let i = 0; i < 40; i++) {
     const mid = (low + high) / 2;
-    if (modelUpgradeChance(item, mid, scrollGrade, usePrimling) >= chance - 1e-9)
+    if (
+      modelUpgradeChance(item, mid, scrollGrade, usePrimling) >=
+      chance - 1e-9
+    )
       high = mid;
     else low = mid;
   }
@@ -207,10 +213,7 @@ function isGraceUpgrade(item, targeted) {
 
 /** @returns {number} primlings in the bag and the bank */
 function countPrimlings() {
-  return [
-    ...character.items,
-    ...getItemBankSlots("offeringp", true),
-  ].reduce(
+  return [...character.items, ...getItemBankSlots("offeringp", true)].reduce(
     (sum, item) => sum + (item?.name === "offeringp" ? item.q ?? 1 : 0),
     0,
   );
@@ -233,9 +236,16 @@ function pickUpgradeSend(item, worth, graceNum, primlings) {
     scrollGrade++
   ) {
     for (const usePrimling of primlings > 0 ? [false, true] : [false]) {
-      const chance = modelUpgradeChance(item, graceNum, scrollGrade, usePrimling);
+      const chance = modelUpgradeChance(
+        item,
+        graceNum,
+        scrollGrade,
+        usePrimling,
+      );
       const spend =
-        worth + getScrollPrice(scrollGrade) + (usePrimling ? PRIMLING_VALUE : 0);
+        worth +
+        getScrollPrice(scrollGrade) +
+        (usePrimling ? PRIMLING_VALUE : 0);
       if (!best || spend / chance < best.spend / best.chance)
         best = { scrollGrade, usePrimling, chance, spend };
     }
@@ -285,9 +295,9 @@ function getFailstackCost(state, send) {
     modelUpgradeChance(item, grace, send.scrollGrade, send.usePrimling);
 
   // A fodder success wipes the stack
-  const gain = failChance * (chanceAt(graceNum + FAILSTACK_GRACE) - send.chance);
-  const risk =
-    (1 - failChance) * (send.chance - chanceAt(state.floorGraceNum));
+  const gain =
+    failChance * (chanceAt(graceNum + FAILSTACK_GRACE) - send.chance);
+  const risk = (1 - failChance) * (send.chance - chanceAt(state.floorGraceNum));
   if (gain < risk) return Infinity;
 
   let best = Infinity;
@@ -468,7 +478,9 @@ function isPoolFodder(item, newLevel) {
   const def = G.items[item.name];
   if (!def?.upgrade || UPGRADE_CONFIG[item.name]) return false;
   if (IGNORE.includes(item.name) || isCraftIngredient(item.name)) return false;
-  return FAILSTACK_POOL.sets.includes(def.set) || !!findVendorMerchantOf(item.name);
+  return (
+    FAILSTACK_POOL.sets.includes(def.set) || !!findVendorMerchantOf(item.name)
+  );
 }
 
 /**
@@ -511,7 +523,8 @@ function listPoolFodder(newLevel, excludeSlot) {
   const copies = [];
   const consider = (item, where, slot, pack, floor) => {
     if (!isPoolFodder(item, newLevel) || gear.has(item.name)) return;
-    const chance = G.upgrades[item_grade({ name: item.name, level: 0 })]?.[newLevel];
+    const chance =
+      G.upgrades[item_grade({ name: item.name, level: 0 })]?.[newLevel];
     if (!chance) return;
     copies.push({
       item,
@@ -637,10 +650,9 @@ async function runFailstackStep(newLevel, excludeSlot) {
   const production = getLeakSafeProduction(fodder);
   if (production) activateMassProduction(production === "pp");
 
-  const result = await (
-    attempt < newLevel
-      ? upgradeInLuckySlot(slot, scrollSlot)
-      : upgrade(slot, scrollSlot)
+  const result = await (attempt < newLevel
+    ? upgradeInLuckySlot(slot, scrollSlot)
+    : upgrade(slot, scrollSlot)
   ).catch(() => null);
   if (!result) return true;
 
@@ -728,9 +740,12 @@ async function shouldHoldCompound(slots, scrollSlot, offeringSlot) {
   const item = character.items[slots[0]];
   const key = `${getItemKey(item)}:${item.level ?? 0}`;
 
-  const reading = await compound(...slots, scrollSlot, offeringSlot, true).catch(
-    () => null,
-  );
+  const reading = await compound(
+    ...slots,
+    scrollSlot,
+    offeringSlot,
+    true,
+  ).catch(() => null);
   const warm = modelCompoundChance(
     item,
     (reading?.grace ?? 0) + COMPOUND_WARM_OGRACE,
@@ -751,7 +766,9 @@ async function shouldHoldCompound(slots, scrollSlot, offeringSlot) {
   if (isNewHold)
     console.log(
       `grace: holding ${item.name}+${item.level ?? 0} set at ` +
-        `${(reading.chance * 100).toFixed(2)}%, warm at ${(warm * 100).toFixed(2)}%`,
+        `${(reading.chance * 100).toFixed(2)}%, warm at ${(warm * 100).toFixed(
+          2,
+        )}%`,
     );
   return true;
 }
