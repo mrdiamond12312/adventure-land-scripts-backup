@@ -336,6 +336,20 @@ function logGracePlan(item, plan, graceNum, worth) {
   );
 }
 
+/**
+ * Max tracked fails for `newLevel`, scaled by how likely a grade-0 helmet
+ * is to fail at that target level in `upgrades[0]`.
+ */
+function getMaxStackFails(newLevel) {
+  const chance = getBaseUpgradeChance(FAILSTACK_FODDER, newLevel);
+  if (!chance) return 0;
+
+  if (newLevel < 6) return 2;
+
+  const failChance = 1 - chance; // e.g., 0.60 at +6, 0.75 at +7, 0.85 at +8, 0.93 at +9
+  return Math.max(2, Math.min(18, Math.round(failChance * 15)));
+}
+
 /** Feeds or stacks when that is cheaper (`sent`), else returns the slots to upgrade with */
 async function planGraceStep(itemIndex) {
   const item = character.items[itemIndex];
@@ -384,7 +398,7 @@ async function planGraceStep(itemIndex) {
     canFeed:
       hasPrimling && !graceFeedCapped[key] && itemGrace + igrace < newLevel + 1,
     canStack:
-      fails < FAILSTACK_MAX_FAILS &&
+      fails < getMaxStackFails(newLevel) &&
       character.gold >= FAILSTACK_GOLD_FLOOR &&
       !!getBaseUpgradeChance(FAILSTACK_FODDER, newLevel),
   });
