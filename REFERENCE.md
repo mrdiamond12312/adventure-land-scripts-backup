@@ -6031,7 +6031,7 @@ already killed `DUNGEON.ripenKillSlack` (1) level under its target, never under
 `DUNGEON.ripenKillMinLevel` (2). Both apply to every
 `ripenLevels` boss.
 
-**Growing angerers: dodge, lure, absorb (2026-11-19, the user's call).** Lestat and Bill both
+**Growing angerers (2026-11-19; the lure and dodge were dropped 2026-11-21 for "don't care, scare").** Lestat and Bill both
 have `anger` (radius 300, cooldown 8s) and roam. Server facts (node/server.js): anger picks a
 random player inside its radius when its timer runs out, skipped while the boss is `is_disabled`
 (stunned, fingered, stoned, deepfreezed, sleeping; crypt bosses have no `sleeping` ability, so
@@ -6042,23 +6042,14 @@ Levelling only runs with no target, and `target_player` and `stop_pursuit` both 
 `last_level` to now ±50s, so any aggro (anger, hit, lure, scare) restarts the climb to the next
 level; levels already gained stay. The user accepted that cost: on a first run the climb is
 cheap next to the whole ripen.
-- No party retreat any more: growing bosses are left out of `planCryptFight`, trip stops and the
-  busy-boss wait. The tanker scares one off itself.
-- `dodgeCryptAnger`: each character steps out of the radius (+`angerMargin`) only when the timer
-  will run out before it could walk out (`isInAngerReach`, plus `angerLeadMs`); otherwise it
-  goes about its business.
-- `getCryptLure`: the priest tags one more than `lureGap` (200) off Lestat's spawn
-  (`CRYPT.lureHome`) and drags it there with `dragToSpot` (`cryptPlan.isLure`), only while no
-  other boss is on the party and she can hold it alone; once it is inside the gap it is no longer
-  excluded from her scare, which drops it there.
-- A snatched damage dealer (one on them while a priest is in view) walks to her instead of
-  scaring; her `getAbsorbTarget` takes it back through `canAbsorbInCrypt`.
-- `isRipenDropped` / `ripenPatienceMs` / `poisonerDistance` are gone.
+- No party retreat: growing bosses are left out of `planCryptFight`, trip stops and the
+  busy-boss wait. Whoever one lands on scares it off (the tanker too).
 - Nobody aims at a growing boss: `isCryptBossLeftToGrow` feeds `isHandsOffMob` (was `isCaveFriendly`,
   the hands-off check every target, taunt, shot and en-route picker already filters on), plus
   `shouldAttack`, so nothing chases or taunts it; AoE (cleave, cburst) may still graze it, being
-  far from lethal (the user's call). The only aimed hit is the priest's lure tag, while the boss
-  is not yet on her.
+  far from lethal (the user's call).
+- A boss done growing is a threat once it is on us, or one of us is inside its anger radius or
+  its natural aggro reach (`CRYPT.aggroReach`, 64), in either phase.
 - A sighting of one targeted stores `aggroAt`, so `getCryptBossAge` restarts its age at its
   level's floor from then (still capped `ripenRetryMs` short of the next level), and the kept
   `bossAges` time the return from the reset rather than ahead of it.
@@ -6066,20 +6057,17 @@ Empty instances keep levelling (`pause_instance` only sets a flag the level time
 a server restart loses the instance, and entering it then fails `invalid`, which drops the
 visit. Visits kept before 2026-11-18 carry no `bossAges` and are never resumed.
 
-**The rogue for Spike (2026-11-18, the user's call).** Spike's 18.7M hp is a rogue job. Once the
-minions are done and only `CRYPT.rogueBosses` (`a1`) are left in the tanker's `wanted`, the
-tanker latches `isRogueTurn` in its run record, and `pickPartyMembers` picks the `cryptRogue`
-preset (warrior, priest, rogue) while that run is under way on our realm; the merchant's
-`deployCharacters` then shuts the mage down and deploys the rogue. The latch is needed because
-`wanted` is judged on the party in view: mid-swap the mage's freeze is gone and Spike could drop
-out of `wanted`, flipping the roster back. It lives on the run's records, so the next run starts
-on the default roster. The priest still tanks: `assignRoles` makes them tanker in the crypt.
-Spike is hunted last (`isSavedForRogue`): he has no anger and never roams, so nothing makes the
-party fight him but the hunt list, and he stays off it while any other boss is wanted (growing
-ones aren't), and on the rogue's turn until the rogue is in view or `CRYPT.rogueWaitMs` passes, so
-a failed deploy can't stall the run. Meanwhile the party waits at the entrance rather than
-patrolling, since two empty laps would close the run. The tanker publishes the hunt list, not
-`wanted`, as the followers' `wanted`.
+**The rogue for Spike (2026-11-18, the user's call; reworked 2026-11-21).** Spike's 18.7M hp is a
+rogue job. Once the minions are done and the tanker targets one of `CRYPT.rogueBosses` (`a1`),
+it latches `isRogueTurn` in its run record, and `pickPartyMembers` picks the `cryptRogue` preset
+(warrior, priest, rogue) while that run is under way on our realm and a rogue boss is still
+alive; the merchant's `deployCharacters` then shuts the mage down and deploys the rogue. The
+latch is needed because `wanted` is judged on the party in view: mid-swap the mage's freeze is
+gone and Spike could drop out of `wanted`, flipping the roster back. Not latched during the vbat
+phase, so a Spike wandering onto the sweep doesn't swap the mage out early. The priest still
+tanks: `assignRoles` makes them tanker in the crypt. Spike is last in `CRYPT.bossOrder` and is
+never walked to Elena: a boss with spawns skips the supporter bait, and so does any boss while
+Elena has no live sighting.
 
 **The rogue no longer walks the crypt smoked (2026-11-24, the user's call).** Invis slowed it to
 max(speed×0.6, speed−25) (server `is_invis`) and hid it from the party, so `fight.party` and

@@ -175,6 +175,7 @@ function publishCryptKit() {
     cryptScare:
       locate_item("jacko") !== -1 || character.slots.orb?.name === "jacko",
     cryptGuard: isAssignedAsTanker() ? cryptMemory.guard : undefined,
+    courage: character.courage,
   });
 
   const seen = cryptMemory.unwritten;
@@ -1167,14 +1168,21 @@ function freezeCryptBosses(bosses, target) {
 
 /**
  * Read by the priest's absorb picker: only a pile we can hold on top of what
- * is on us is taken; the ally scares the rest.
+ * is on us is taken; the ally scares the rest. Spawns alone wait until they
+ * reach the ally's courage (server: fear past it; only its owner is sent it).
  * @returns {boolean}
  */
 function canAbsorbInCrypt(ally) {
-  const pile = [
-    ...listOfMonsterAttacking(character),
-    ...listOfMonsterAttacking(ally),
-  ];
+  const onAlly = listOfMonsterAttacking(ally);
+  const courage =
+    getCharacterInfo(ally.name)?.courage ?? G.classes[ally.ctype]?.courage ?? 0;
+  if (
+    onAlly.length < courage &&
+    onAlly.every((mob) => CRYPT_MOBS.spawned.includes(mob.mtype))
+  )
+    return false;
+
+  const pile = [...listOfMonsterAttacking(character), ...onAlly];
   return canHoldCryptBosses(
     pile.filter(isCryptBoss),
     getCryptFight(),
