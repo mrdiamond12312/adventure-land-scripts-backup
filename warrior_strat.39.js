@@ -53,7 +53,7 @@ function getWarriorAmulet(feelingLucky, isTanker) {
 function getWarriorChest(feelingLucky, isTanker) {
   if (feelingLucky) return "cdragon";
   if (isTankingCrypt() || isTanker) return "vattire";
-  return "coat1";
+  return "vattire";
 }
 
 function calculateWarriorItems() {

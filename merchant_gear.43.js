@@ -118,7 +118,7 @@ function calculateMerchantEquipments(state = getMerchantGearState()) {
     ring2: isDraggingEnt ? "armorring" : "canopener",
     shoes: "eslippers",
     gloves: "gloves1",
-    belt: "sbelt",
+    belt: "mbelt",
     earring1: feelingLucky ? "cloverstud" : "dexearring",
     earring2: feelingLucky ? "cloverstud" : "dexearring",
   };
