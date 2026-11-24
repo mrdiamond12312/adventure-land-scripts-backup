@@ -5862,6 +5862,9 @@ priest inside the crypt: a ranged tank can kite, a melee one cannot. Server fact
 - **Zappers and bats only land on players in the boss's `points`**, and any hit of 1 or more adds
   one (a snowball counts). So the tanker never damages a zapper boss: it holds it by absorb alone,
   never gets a zapper, and never has to scare the boss off itself.
+  The hold does not spare anyone zaps (checked 2026-11-25): `zap` hits every player within its
+  300px radius whoever damaged Orlok. Its worth is the scare: scare removes the scarer's own spawns
+  but also drops Orlok, and the tanker's zappers otherwise live ~64s on degen.
 - **Spike was held the same way (2026-11-16), undone 2026-11-18.** Bats on a priest that hit Spike
   piled up until the emergency scare, which also drops Spike onto a damage dealer. The user wants
   the priest hitting him; a bat is 50 attack at 0.7/s (~16/s on 600 armor), so the pile is cheap
