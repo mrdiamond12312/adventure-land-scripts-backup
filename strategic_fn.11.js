@@ -1925,9 +1925,13 @@ function impactPiercingValue(targets, gain) {
  * @param {boolean} options.canMoveWeapons - whether the hands may be swapped
  * @param {Object<string, boolean>} options.procs - ability → false to leave it out
  * @param {boolean} options.piercing - whether piercing counts
+ * @param {string[]} [options.swapWeapons] - bag weapons that may swap in; any if omitted
  * @returns {{slot: string, num: number, value: number, ability: (string|undefined), isTwoHanded: boolean}[]} best first
  */
-function getImpactSwapIns(targets, { rolls, canMoveWeapons, procs, piercing }) {
+function getImpactSwapIns(
+  targets,
+  { rolls, canMoveWeapons, procs, piercing, swapWeapons },
+) {
   const [, pierce] = mitigationStats(damageTypeOf(character));
   const classData = G.classes[character.ctype];
   const procShots = Object.fromEntries(
@@ -1986,6 +1990,8 @@ function getImpactSwapIns(targets, { rolls, canMoveWeapons, procs, piercing }) {
     const item = getServerItem(num);
     const info = item_info(item);
     if (!info) return;
+    if (info.type === "weapon" && swapWeapons && !swapWeapons.includes(item.name))
+      return;
     if (!(info.ability in IMPACT_PROCS) && !piercingOf(info, "mainhand"))
       return;
 
@@ -2018,6 +2024,7 @@ function getImpactSwapIns(targets, { rolls, canMoveWeapons, procs, piercing }) {
  * @param {Object} [options]
  * @param {number} [options.rolls] - hits that roll the procs; defaults to the mobs shot
  * @param {string[]} [options.weaponsFrom] - held weapons a hand swap may ride on; any if omitted
+ * @param {string[]} [options.swapWeapons] - bag weapons that may swap in; any if omitted
  * @param {Object<string, boolean>} [options.procs] - ability → false to leave it out
  * @param {string[]} [options.prefer] - abilities whose swap-ins take a slot first
  * @param {boolean} [options.piercing] - false leaves piercing out
@@ -2032,6 +2039,7 @@ function maybeImpactSwap(
   {
     rolls,
     weaponsFrom,
+    swapWeapons,
     procs = {},
     prefer = [],
     piercing = true,
@@ -2049,6 +2057,7 @@ function maybeImpactSwap(
       rolls:
         rolls ?? shotTargets.filter((mob) => mob.type === "monster").length,
       canMoveWeapons: !weaponsFrom || isHoldingOnly(weaponsFrom),
+      swapWeapons,
       procs,
       piercing,
     }),

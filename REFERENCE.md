@@ -6024,6 +6024,13 @@ retries. Ten percent behind (not a server rate: targeted time is minutes) degrad
 every 30 min. A kill of one of ours levels a boss ahead, which a sighting lifts the age to.
 Returns go oldest-first, so a fresh instance can wait while ripe returns stack (sim: ~2h max).
 
+**Ripen slack (2026-11-24, the user's call).** Returns for Lestat at 7 found him at 6: the model
+runs ahead whenever an unseen aggro restarted his climb. So a kept visit is resumed only
+`DUNGEON.ripenWaitMs` (2h) past the modelled ripen age, and in the run a ripening boss is
+already killed `DUNGEON.ripenKillSlack` (1) level under its target, never under
+`DUNGEON.ripenKillMinLevel` (2). Both apply to every
+`ripenLevels` boss.
+
 **Growing angerers: dodge, lure, absorb (2026-11-19, the user's call).** Lestat and Bill both
 have `anger` (radius 300, cooldown 8s) and roam. Server facts (node/server.js): anger picks a
 random player inside its radius when its timer runs out, skipped while the boss is `is_disabled`
@@ -6074,14 +6081,9 @@ a failed deploy can't stall the run. Meanwhile the party waits at the entrance r
 patrolling, since two empty laps would close the run. The tanker publishes the hunt list, not
 `wanted`, as the followers' `wanted`.
 
-**The rogue walks the crypt smoked (2026-11-18, the user's call).** `getRogueCast`'s trip branch
-calls `smokeCryptTrip`: in the crypt, stealth off and ready, it smokes. It sits in the action
-loop because mid-trip the strategy chain doesn't re-run the trip's owner. The server's `is_invis`
-hides a smoked player from everyone, party included (`server_functions.js`; the sight loop has no
-party exception), and slows it to max(speed×0.6, speed−25). So `isSavedForRogue` also takes the
-rogue's own published `in` as "here", and a smoked rogue still drops out of `fight.party` and
-`isWholeDungeonPartyHere` until it hits something: the others can't close a run around it, but
-the rogue, seeing all of them, can.
+**The rogue no longer walks the crypt smoked (2026-11-24, the user's call).** Invis slowed it to
+max(speed×0.6, speed−25) (server `is_invis`) and hid it from the party, so `fight.party` and
+`isWholeDungeonPartyHere` lost it mid-trip. It now walks in plain; invis stays only on the attack.
 
 **The hold model judges the gear the tank would wear (2026-11-18).** `wanted` and the hold checks
 read the holder's live armor and resistance, so a boss out of view was judged against whatever

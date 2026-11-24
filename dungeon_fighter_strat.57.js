@@ -15,6 +15,9 @@ const DUNGEON_OPENING = {
 /** Fight tunables; distances in px */
 const DUNGEON = {
   debug: true,
+  ripenKillSlack: 1, // levels under its ripen level a boss is already killed at
+  ripenKillMinLevel: 2, // ... never under this
+  ripenWaitMs: 7_200_000, // past the modelled ripen age before a kept visit is resumed
   holdShare: 0.9, // of party hps
   burstShare: 0.6, // of max hp per hit
   maxKillS: 900,
@@ -206,7 +209,8 @@ function isDungeonVisitRipe(id, visit) {
     ([mtype, target]) =>
       visit.bossAges?.[mtype] !== undefined &&
       bossLevelAt(mtype, visit.bossAges[mtype]) < target &&
-      bossLevelAt(mtype, keptBossAge(visit, mtype)) >= target,
+      bossLevelAt(mtype, keptBossAge(visit, mtype) - DUNGEON.ripenWaitMs) >=
+        target,
   );
 }
 

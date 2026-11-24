@@ -166,6 +166,7 @@ function getWarriorCast() {
         !isCleaveDue() &&
           maybeImpactSwap(attackTarget, {
             weaponsFrom: IMPACT_SWAP_WEAPON_ALLOW_LIST,
+            swapWeapons: ["candycanesword"],
             prefer: ["frenzy"],
           }),
       ].filter(Boolean),
