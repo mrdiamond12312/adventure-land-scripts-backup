@@ -13,6 +13,25 @@ const MAGE_MAINHAND_SLOT = /^mainhand$/;
 const MAGE_WEAPON_SLOT = /^(mainhand|offhand)$/;
 /** The crypt's single-target weapons once the froststaff has frozen the target */
 const MAGE_CRYPT_STAFFS = ["froststaff", "firestaff"];
+/** Share of the priest's heal the tanker's pile may take before the crypt freezes it */
+const MAGE_FREEZE_HEAL_SHARE = 0.75;
+
+/** @returns {boolean} whether the tanker's pile, the target in it, outpaces the priest's heal, a poisoner's cut included */
+function isCryptFreezeNeeded(target) {
+  const healer = get_entity(HEALER);
+  const tanker = get_entity(TANKER);
+  if (healer?.ctype !== "priest" || !tanker) return true;
+
+  const pile = [...new Set([...listOfMonsterAttacking(tanker), target])];
+  const healShare = Math.min(
+    1,
+    ...pile.map((mob) => poisonHealShare(mob, tanker)),
+  );
+  return (
+    totalMobDps(pile, tanker) >=
+    healerHps(healer) * healShare * MAGE_FREEZE_HEAL_SHARE
+  );
+}
 
 /** @returns {number} mp the gear choice leaves alone: a magiport and the blinks */
 const mageMpReserve = (stats = character) =>
@@ -103,7 +122,11 @@ function recentDamageRate(player) {
   const pdps = player.pdps ?? 0;
   const watch = energizeDamageWatch[player.name];
   if (!watch || pdps < watch.pdps) {
-    energizeDamageWatch[player.name] = { pdps, at: now, rate: watch?.rate ?? 0 };
+    energizeDamageWatch[player.name] = {
+      pdps,
+      at: now,
+      rate: watch?.rate ?? 0,
+    };
     return watch?.rate ?? 0;
   }
   if (now - watch.at >= ENERGIZE_WATCH_MS) {
@@ -323,8 +346,7 @@ function burnProcDps(hit, stats, target, procsPerSecond, rivals) {
   const crit = Math.min(stats.crit ?? 0, 100) / 100;
   const raisedBy = (roll) => Math.max(old, carryOver * old + roll);
   const raised =
-    (1 - crit) * raisedBy(hit) +
-    crit * raisedBy(hit * critMultiplier(stats));
+    (1 - crit) * raisedBy(hit) + crit * raisedBy(hit * critMultiplier(stats));
   const secondsLeft = (burn.ms ?? 0) / 1000;
   const lapseChance = Math.exp(-secondsLeft / rivals.refreshEverySeconds);
   const earnedSeconds =
@@ -517,7 +539,7 @@ function pickMageGear(target, blasterAllowed, fixed) {
   );
   const cryptStaffs = owned.filter((name) => MAGE_CRYPT_STAFFS.includes(name));
   const weapons =
-    character.map !== "crypt"
+    character.map !== "crypt" || !isCryptFreezeNeeded(target)
       ? owned
       : !target.s?.frozen && owned.includes("froststaff")
       ? ["froststaff"]
@@ -625,6 +647,7 @@ function getMonstersToCBurst() {
       (mob) =>
         mob.type === "monster" &&
         !mob.immune &&
+        !isHandsOffMob(mob) &&
         is_in_range(mob, "cburst") &&
         !MELEE_IGNORE_LIST.includes(mob.mtype) &&
         calculateDamage(mob, partyTanker) < MAX_MOB_DPS &&

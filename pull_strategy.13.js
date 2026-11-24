@@ -95,6 +95,7 @@ async function usePullSkills() {
         (isAssignedAsTanker() || isPullAbsorbable) &&
         !havePulledEnoughMobs &&
         !formidableMonsterAppeared &&
+        !mobsInAgitateRange.some(isHandsOffMob) &&
         character.mp >= warriorAoeMpFloor() &&
         !is_on_cooldown("agitate");
 
@@ -186,6 +187,7 @@ async function usePullSkills() {
                 healReceivableAmount &&
               is_in_range(mob, "taunt") &&
               !isBaitHeld(mob) &&
+              !isHandsOffMob(mob) &&
               (!mob.target ||
                 partyMems
                   .filter((id) => id !== character.name)

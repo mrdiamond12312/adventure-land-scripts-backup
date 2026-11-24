@@ -2374,13 +2374,14 @@ function healerHps(healer = get_entity(HEALER) ?? get_entity(RANGER)) {
 /**
  * @param {Object[]} mobs - every mob that would be on toEntity
  * @param {Object} [toEntity]
+ * @param {number} [mobCount] - mobs on toEntity for the mobbing bonus, when `mobs` is a subset
  * @returns {number} their dps on toEntity, mobbing bonus included
  */
-function totalMobDps(mobs, toEntity = character) {
+function totalMobDps(mobs, toEntity = character, mobCount = mobs.length) {
   return mobs.reduce(
     (accumulator, mob) =>
       accumulator +
-      calculateDamage(mob, toEntity) * mobbingMultiplier(mobs.length, mob),
+      calculateDamage(mob, toEntity) * mobbingMultiplier(mobCount, mob),
     0,
   );
 }
@@ -2442,13 +2443,8 @@ function avgDmgTaken(characterEntity, dmgType = null) {
     : 0;
 
   return (
-    listOfAttackingMobs.reduce(
-      (accumulator, mob) =>
-        accumulator +
-        calculateDamage(mob, characterEntity) *
-          mobbingMultiplier(numberOfAttackingMobs, mob),
-      0,
-    ) + Math.max(currentBurnIntensity, burnPadding)
+    totalMobDps(listOfAttackingMobs, characterEntity, numberOfAttackingMobs) +
+    Math.max(currentBurnIntensity, burnPadding)
   );
 }
 
