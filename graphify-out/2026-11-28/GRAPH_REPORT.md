@@ -1,12 +1,12 @@
 # Graph Report - adventure-land-scripts-backup  (2026-11-28)
 
 ## Corpus Check
-- 67 files · ~192,273 words
+- 67 files · ~192,357 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 2 file(s) not represented in the graph (top: (none) 2)
 
 ## Summary
-- 1712 nodes · 3390 edges · 82 communities (66 shown, 16 thin omitted)
+- 1713 nodes · 3393 edges · 70 communities (55 shown, 15 thin omitted)
 - Extraction: 96% EXTRACTED · 4% INFERRED · 0% AMBIGUOUS · INFERRED: 137 edges (avg confidence: 0.83)
 - Token cost: 392,176 input · 0 output
 
@@ -33,7 +33,7 @@
 - Core Config Helpers
 - Merchant Home & Stand
 - Upgrade & Compound
-- Per-skill loops (runSkillLoop)
+- basic_function_loop.45.js
 - Live Events & Witch Gather
 - Trips, Info & Impact Notes
 - StrategicSmartMove Class
@@ -46,7 +46,7 @@
 - Lucky Slot Finder
 - Server Hop Planning
 - Grow Spawn Tracker
-- Witch Cipher Brewing
+- merchant_gear.43.js
 - Projectiles & Heal Targets
 - Warrior Cleave
 - Rogue Skills
@@ -62,12 +62,9 @@
 - Equip Batching
 - Home Server Settling
 - Special Mob Strategy
-- Farms & Anchor Spots
-- Witch Brew Timing
 - Ranger Gear & Cupid
 - Frenzy Amulet Scoring
 - Hop Rules & Lineup
-- Trick or Treat Doors
 - Farming Strategy
 - Merchant Scouting
 - Pull Target Ranking
@@ -81,15 +78,6 @@
 - Manual Base Script
 - Manual Follow Script
 - basic_warrior.9.js
-- dungeonLog
-- basic_function_loop.45.js
-- getHealShare
-- claimStandSpot
-- judgeDungeonBosses
-- waitForDungeonParty
-- moveHome
-- getAlliedNames
-- Merchant cm handler trust boundary (OPEN_DUTIES / OWNED_DUTIES)
 
 ## God Nodes (most connected - your core abstractions)
 1. `StrategicSmartMove` - 32 edges
@@ -106,14 +94,14 @@
 ## Surprising Connections (you probably didn't know these)
 - `Lantern shield's shelter as a swap-in skill (useShelter)` --references--> `useShelter()`  [EXTRACTED]
   REFERENCE.md → strategic_fn.11.js
-- `Witch's Cipher gathering (getWitchGatherPlan)` --references--> `getWitchGatherPlan()`  [EXTRACTED]
-  REFERENCE.md → basic_function_events.53.js
 - `One impact swap for every class on slot leases (maybeImpactSwap)` --references--> `maybeImpactSwap()`  [EXTRACTED]
   REFERENCE.md → strategic_fn.11.js
 - `Handing a seasonal boss to leeches (getBaitedBoss)` --references--> `getBaitedBoss()`  [EXTRACTED]
   REFERENCE.md → strategic_fn.11.js
 - `Tanking priest scores gear by heal time (pickTankGear)` --references--> `pickTankGear()`  [EXTRACTED]
   REFERENCE.md → strategic_fn.11.js
+- `Midas loot as a trip sets off (lootBeforeTrip)` --references--> `lootBeforeTrip()`  [EXTRACTED]
+  REFERENCE.md → basic_function_loot.48.js
 
 ## Import Cycles
 - None detected.
@@ -126,15 +114,15 @@
 - **Keyed dungeon runs (crypt, spider den, tomb, dark mage)** — reference_keyed_dungeons, reference_crypt_strategy, reference_crypt_ripening, reference_field_generator, reference_dungeon_per_file, reference_dungeon_kill_log [EXTRACTED 1.00]
 - **Witch's Cipher gathering, brewing and hop flow** — reference_witch_gathering, reference_witch_brewing, reference_witch_first_stalled_board, reference_early_hop, reference_hop_rules [EXTRACTED 1.00]
 
-## Communities (82 total, 16 thin omitted)
+## Communities (70 total, 15 thin omitted)
 
 ### Community 0 - "Merchant Bank Storage"
 Cohesion: 0.06
 Nodes (70): assignDrainSlots(), BAG_SUPPLY_TYPES, BAG_WORK_TYPES, BANK_FLOORS, bankLoop(), bankStoreRoutine(), buildStackDrain(), countSharedEmptySlots() (+62 more)
 
 ### Community 1 - "dungeon_fighter_strat.57.js"
-Cohesion: 0.10
-Nodes (25): canKeepAway(), dampenDungeonBoss(), describeDungeon(), DUNGEON, DUNGEON_GOAL_RANK, DUNGEON_MAPS, DUNGEON_NEED_ITEMS, DUNGEON_OPENING (+17 more)
+Cohesion: 0.06
+Nodes (70): approachDungeon(), bossAgeAt(), bossLevelAt(), burnDps(), canAbsorbInDungeon(), canFightDungeonGroup(), canHoldDungeonBosses(), canKeepAway() (+62 more)
 
 ### Community 2 - "Combat Calc & Roles"
 Cohesion: 0.04
@@ -145,12 +133,12 @@ Cohesion: 0.07
 Nodes (67): approachCave(), blinkToDarkMageRange(), buyFromCaveShop(), canResumeCaveRun(), CAVE_ITEMS_TO_SKIP, CAVE_OPTIONS_TO_REFUSE, CAVE_PARTY, CAVE_ROGUE_RESCUES (+59 more)
 
 ### Community 4 - "Events & Warrior Gear"
-Cohesion: 0.08
-Nodes (38): acquireEventDuty(), bossConfigs, canSnipe(), fightCurrentEvent(), getCoveringHealer(), getEventHpRatio(), getEventToJoin(), getPredictedHp() (+30 more)
+Cohesion: 0.07
+Nodes (43): acquireEventDuty(), bossConfigs, canSnipe(), fightCurrentEvent(), getCoveringHealer(), getEventHpRatio(), getEventToJoin(), getPredictedHp() (+35 more)
 
 ### Community 5 - "Merchant Duties & Ent Lure"
-Cohesion: 0.06
-Nodes (45): Cross-character coordination over code-messages (cm), DISMANTLE_LIST, equipBroom(), goFishing(), goMining(), isGatherPreempted(), walkAndGather(), aggroEnt() (+37 more)
+Cohesion: 0.05
+Nodes (46): isOwnedCharacter(), Cross-character coordination over code-messages (cm), DISMANTLE_LIST, equipBroom(), goFishing(), goMining(), isGatherPreempted(), walkAndGather() (+38 more)
 
 ### Community 6 - "Crypt Fight"
 Cohesion: 0.10
@@ -186,26 +174,26 @@ Nodes (24): Adventure Land - The Code MMORPG, adventureland_mongodb server repo,
 
 ### Community 14 - "Core Config Helpers"
 Cohesion: 0.06
-Nodes (14): CAVE_SIDES_TO_LEAVE, CODE_SLOTS, DEFAULT_HOME_SERVER, get_tracktrix_data(), getMaxScore(), HOME_SERVERS, knownTankers, MELEE_IGNORE_LIST (+6 more)
+Nodes (19): CAVE_SIDES_TO_LEAVE, CODE_SLOTS, DEFAULT_HOME_SERVER, get_tracktrix_data(), getAlliedNames(), getCavePartyInView(), getMaxScore(), getMyCharacters() (+11 more)
 
 ### Community 15 - "Merchant Home & Stand"
-Cohesion: 0.11
-Nodes (15): DUTY, fishingLocation, FIXED_MAIN_NPCS, getMluckTarget(), homeLocation, ITEM_NEEDED, matchesWantedItem(), MERRIT_SPOT_BLOCKERS (+7 more)
+Cohesion: 0.09
+Nodes (30): canUseNpcsRemotely(), claimStandSpot(), distanceToSpot(), DUTY, findStandSpot(), fishingLocation, FIXED_MAIN_NPCS, getMluckTarget() (+22 more)
 
 ### Community 16 - "Upgrade & Compound"
 Cohesion: 0.13
 Nodes (35): activateMassProduction(), canSpareCompound(), canSpareUpgrade(), compoundInv(), countCompoundableCopies(), countKeyAtOrAbove(), ensureOffering(), ensureScroll() (+27 more)
 
-### Community 17 - "Per-skill loops (runSkillLoop)"
-Cohesion: 0.15
-Nodes (6): isHandsOffMob(), equipClassGear(), useNormalStrategy(), usePullSkills(), usePullStrategies(), Pull strategy (monster stacking)
+### Community 17 - "basic_function_loop.45.js"
+Cohesion: 0.09
+Nodes (22): isHandsOffMob(), getKissTarget(), getLoopInterval(), hasCosmeticSkill(), INTERVAL_BREAKPOINTS, kissedAt, leadSkillTimeout(), ms_to_next_skill() (+14 more)
 
 ### Community 18 - "Live Events & Witch Gather"
-Cohesion: 0.09
-Nodes (21): canAnniversaryVisit(), doorWalkRetryAt, getAnniversaryEvent(), getFighterWitchPlan(), getWitchGatherPlan(), getWitchGatherSpot(), getWitchRoundKey(), getWitchStock() (+13 more)
+Cohesion: 0.06
+Nodes (43): canAnniversaryVisit(), canBrewWitchCipher(), canWitchDayBrewOn(), doorWalkRetryAt, getAnniversaryEvent(), getDoorFront(), getFighterWitchPlan(), getKnockLimitKey() (+35 more)
 
 ### Community 19 - "Trips, Info & Impact Notes"
-Cohesion: 0.10
+Cohesion: 0.08
 Nodes (14): abandonTrip(), advanceSmartMove(), isOnTrip(), isTripHeld(), lockInventory(), sortInv(), unlockInventory(), characterInfoCache (+6 more)
 
 ### Community 21 - "Impact Swap & Leases"
@@ -241,12 +229,12 @@ Cohesion: 0.11
 Nodes (18): Server hopping for bosses, FATIGUE_EXEMPT_BOSSES, getExemptHopTarget(), HOP_BOSSES, HOP_REGIONS, HOP_RULES, hopAlone(), hopAloneTo() (+10 more)
 
 ### Community 29 - "Grow Spawn Tracker"
-Cohesion: 0.14
+Cohesion: 0.18
 Nodes (20): classifyBurst(), getAccountedPermanents(), getGroupLive(), getGrowthGroupOf(), getGrowthGroups(), getSwingKills(), getWasteCause(), growthDamageRank() (+12 more)
 
-### Community 30 - "Witch Cipher Brewing"
-Cohesion: 0.17
-Nodes (19): approachWitch(), attendWitchGathering(), brewWitchCipher(), brewWitchMix(), canAffordMix(), countRightPlaces(), countWitchStock(), finishWitchBrewing() (+11 more)
+### Community 30 - "merchant_gear.43.js"
+Cohesion: 0.21
+Nodes (14): calculateMerchantEquipments(), canWarpTo(), findSpareWarpVest(), getAttackWeaponReach(), getBestQuiver(), getCarriedItems(), getMaxAttackWeaponRange(), getMerchantAmulet() (+6 more)
 
 ### Community 31 - "Projectiles & Heal Targets"
 Cohesion: 0.13
@@ -277,7 +265,7 @@ Cohesion: 0.18
 Nodes (16): CRYPT_JUNCTION, CRYPT_STARTING_LOCATION, DEFEATABLE_BOSSES, getNearestJunction(), handleBossPhase(), handleClassSkills(), handleCombatReactions(), handlePriestSkills() (+8 more)
 
 ### Community 38 - "Dungeon Strat Chain"
-Cohesion: 0.15
+Cohesion: 0.18
 Nodes (10): Fighter targeting chain (selectFightTarget order), useDarkMageStrategy(), isDungeonBossOnUs(), planSpiderDenFight(), SPIDER_DEN, useSpiderDenStrategy(), planTombFights(), planTombTick() (+2 more)
 
 ### Community 39 - "Debug Checks"
@@ -308,14 +296,6 @@ Nodes (8): getBeanSpot(), getHomeServer(), getHomeSetRetryDelay(), isAtHomeServe
 Cohesion: 0.33
 Nodes (10): CONTESTED_SPECIAL_MOB_IDS, forgetSpecialMobSighting(), getScoutReports(), getSpecialMobInVision(), getSpecialMobSighting(), isLeftToOthers(), isTakenBySomeoneElse(), reportSpecialMobInSight() (+2 more)
 
-### Community 46 - "Farms & Anchor Spots"
-Cohesion: 0.24
-Nodes (5): FARMS, farmSpotCache, getAnchorSpot(), getFarm(), resolveFarm()
-
-### Community 47 - "Witch Brew Timing"
-Cohesion: 0.28
-Nodes (9): canBrewWitchCipher(), canWitchDayBrewOn(), getWitchBoardQuietMs(), getWitchDay(), getWitchRealmStatuses(), isLastWitchRoundOfDay(), isWitchBoardWorthStriking(), isWitchBrewDue() (+1 more)
-
 ### Community 48 - "Ranger Gear & Cupid"
 Cohesion: 0.36
 Nodes (8): calculateRangerItems(), chooseBowForSplashing(), equipRangerItems(), getCupidHealees(), isNegligibleMob(), isSafeToShoot(), RANGER_INV_ITEMS, Ranger cupid party healing
@@ -323,10 +303,6 @@ Nodes (8): calculateRangerItems(), chooseBowForSplashing(), equipRangerItems(), 
 ### Community 49 - "Frenzy Amulet Scoring"
 Cohesion: 0.25
 Nodes (9): conditionFrequencyScale(), frenzyFrequency(), gearAbilityWith(), impactProcShots(), impactSwapRoom(), pickAmuletWithFrenzy(), poisonFrequencyScale(), shotCycleMs() (+1 more)
-
-### Community 51 - "Trick or Treat Doors"
-Cohesion: 0.43
-Nodes (8): getDoorFront(), getKnockLimitKey(), getNextTrickOrTreatDoor(), getRealmHour(), getSettledDoors(), getUtcDay(), isKnockLimitReached(), knockNextDoor()
 
 ### Community 52 - "Farming Strategy"
 Cohesion: 0.43
@@ -360,42 +336,10 @@ Nodes (4): reportCave(), reportCaveEntities(), reportLoop(), reportMap()
 Cohesion: 0.17
 Nodes (11): aimAt(), getOffTankTauntTarget(), getTauntTarget(), getWarriorCast(), getWarriorHeldMobs(), IMPACT_SWAP_WEAPON_ALLOW_LIST, inRange(), mainLoop() (+3 more)
 
-### Community 73 - "dungeonLog"
-Cohesion: 0.20
-Nodes (19): approachDungeon(), closeDungeonRun(), dungeonLog(), getActiveDungeonVisit(), getDungeonInstance(), getDungeonVisits(), getRunningDungeonId(), giveUpDungeonFight() (+11 more)
-
-### Community 74 - "basic_function_loop.45.js"
-Cohesion: 0.19
-Nodes (16): getKissTarget(), getLoopInterval(), hasCosmeticSkill(), INTERVAL_BREAKPOINTS, kissedAt, leadSkillTimeout(), ms_to_next_skill(), pickRestoreSkill() (+8 more)
-
-### Community 75 - "getHealShare"
-Cohesion: 0.30
-Nodes (12): burnDps(), canAbsorbInDungeon(), canFightDungeonGroup(), canHoldDungeonBosses(), dungeonBossDps(), getBossVictims(), getDungeonFight(), getDungeonOdds() (+4 more)
-
-### Community 76 - "claimStandSpot"
-Cohesion: 0.27
-Nodes (10): claimStandSpot(), distanceToSpot(), findStandSpot(), isAwaitingParcel(), isHoldingHome(), isHomeRefused(), isInXynReach(), isPreferredSpot() (+2 more)
-
-### Community 77 - "judgeDungeonBosses"
-Cohesion: 0.29
-Nodes (7): bossAgeAt(), bossLevelAt(), getDungeonKillS(), isDungeonVisitRipe(), judgeDungeonBosses(), keptBossAge(), leveledBoss()
-
-### Community 78 - "waitForDungeonParty"
-Cohesion: 0.38
-Nodes (7): clearDungeonGoal(), gatherInDungeon(), getDungeonGatherPoint(), isDungeonTankerDown(), setDungeonGoal(), waitForDungeonParty(), walkToDungeonBoss()
-
-### Community 79 - "moveHome"
-Cohesion: 0.40
-Nodes (5): canUseNpcsRemotely(), haveAComputer(), isLuring(), isOnDuty(), moveHome()
-
-### Community 80 - "getAlliedNames"
-Cohesion: 0.40
-Nodes (5): getAlliedNames(), getCavePartyInView(), getMyCharacters(), isCaveMobAwake(), isMonsterEngaged()
-
 ## Knowledge Gaps
 - **8 isolated node(s):** `adventureland_mongodb server repo`, `graphify usage rules`, `Leader sends party invites (partyMems[0])`, `Server hopping for bosses`, `Ranger cupid party healing` (+3 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 366 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
-- **16 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
@@ -406,10 +350,10 @@ _Questions this graph is uniquely positioned to answer:_
   _8 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Merchant Bank Storage` be split into smaller, more focused modules?**
   _Cohesion score 0.06101914962674456 - nodes in this community are weakly interconnected._
-- **Why does `The crypt run is judged, not listed (crypt_fighter_strat.16.js)` connect `Dungeon Strat Chain` to `Crypt Fight`, `Daily Event Bosses`, `basic_warrior.9.js`, `Kiting & Targeting`, `Trips, Info & Impact Notes`?**
-  _High betweenness centrality (0.096) - this node is a cross-community bridge._
+- **Why does `The crypt run is judged, not listed (crypt_fighter_strat.16.js)` connect `dungeon_fighter_strat.57.js` to `Crypt Fight`, `Daily Event Bosses`, `basic_warrior.9.js`, `Dungeon Strat Chain`, `Kiting & Targeting`, `Trips, Info & Impact Notes`?**
+  _High betweenness centrality (0.092) - this node is a cross-community bridge._
 - **Should `dungeon_fighter_strat.57.js` be split into smaller, more focused modules?**
-  _Cohesion score 0.09885057471264368 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.05927405927405927 - nodes in this community are weakly interconnected._
 - **Should `Combat Calc & Roles` be split into smaller, more focused modules?**
   _Cohesion score 0.04 - nodes in this community are weakly interconnected._
 - **Should `Cave Run Strategy` be split into smaller, more focused modules?**

@@ -30,6 +30,10 @@ const REALM_PINGS_LS_KEY = "realmPings";
 /** Saved ping history older than this is dropped at load */
 const REALM_PING_KEEP_MS = 10 * 60_000;
 
+/** Pings kept per realm (~40 min at one per server_info); the hop check averages the latest REALM_PING_WINDOW */
+const REALM_PING_HISTORY = 100;
+const REALM_PING_WINDOW = 5;
+
 /** Retry cadence while get_servers() is still empty */
 const REALM_INIT_RETRY_MS = 15000;
 
@@ -54,9 +58,9 @@ class ServerRealmData {
     /** @type {Object<string, {region: string, name: string, S: object, at: number}>} */
     this.realms = {};
     this.sockets = {};
-    /** @type {Object<string, number[]>} last 5 round trips per realm, ms, one per status push */
+    /** @type {Object<string, number[]>} last REALM_PING_HISTORY round trips per realm, ms, one per status push */
     this.pingSamples = {};
-    /** @type {Object<string, number>} average of pingSamples per realm, ms, set once all 5 are in */
+    /** @type {Object<string, number>} average of the latest REALM_PING_WINDOW samples per realm, ms, set once that many are in */
     this.pings = {};
     for (const [key, { samples, at }] of Object.entries(
       readStore(REALM_PINGS_LS_KEY),
@@ -65,11 +69,12 @@ class ServerRealmData {
     this._init();
   }
 
-  /** @param {string} key @param {number[]} samples the last 5 at most */
+  /** @param {string} key @param {number[]} samples oldest first */
   _setPings(key, samples) {
-    this.pingSamples[key] = samples;
-    if (samples.length === 5)
-      this.pings[key] = samples.reduce((a, b) => a + b) / samples.length;
+    this.pingSamples[key] = samples.slice(-REALM_PING_HISTORY);
+    const recent = samples.slice(-REALM_PING_WINDOW);
+    if (recent.length === REALM_PING_WINDOW)
+      this.pings[key] = recent.reduce((a, b) => a + b) / recent.length;
   }
 
   /** Opens one unauthenticated socket per realm: `welcome` once, then `server_info` every ~24s */
@@ -113,12 +118,14 @@ class ServerRealmData {
 
     const ping = () => socket.emit("ping_trig", { at: Date.now() });
     socket.on("ping_ack", (data) => {
-      const samples = [
-        ...(this.pingSamples[key] ?? []).slice(-4),
+      this._setPings(key, [
+        ...(this.pingSamples[key] ?? []),
         Date.now() - data.at,
-      ];
-      this._setPings(key, samples);
-      updateStoreEntry(REALM_PINGS_LS_KEY, key, { samples, at: Date.now() });
+      ]);
+      updateStoreEntry(REALM_PINGS_LS_KEY, key, {
+        samples: this.pingSamples[key],
+        at: Date.now(),
+      });
     });
 
     socket.on("welcome", (data) => {

@@ -4,7 +4,7 @@ const HOP_REGIONS = ["US", "ASIA", "EU"];
 /** Realms we never hop to, e.g. "ASIAI", unless a HOP_BOSSES entry gives its own `ignoredRealms` */
 const IGNORED_REALMS = [];
 
-/** Realms whose average observer-socket round trip (last 5 pings) exceeds this are skipped, like IGNORED_REALMS */
+/** Realms whose average observer-socket round trip (latest REALM_PING_WINDOW pings) exceeds this are skipped, like IGNORED_REALMS */
 const MAX_REALM_PING_MS = 600;
 
 /** Bosses hopped to at first sighting, ranked first, and stayed for while live here */
