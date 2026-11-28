@@ -24,6 +24,12 @@ const KILL_TIME_SAMPLES = 5;
 /** localStorage key for home-boss kill times */
 const HOME_BOSS_KILLS_LS_KEY = "homeBossKills";
 
+/** localStorage key: realm -> {samples, at}, so a hop or restart keeps settled pings */
+const REALM_PINGS_LS_KEY = "realmPings";
+
+/** Saved ping history older than this is dropped at load */
+const REALM_PING_KEEP_MS = 10 * 60_000;
+
 /** Retry cadence while get_servers() is still empty */
 const REALM_INIT_RETRY_MS = 15000;
 
@@ -48,7 +54,22 @@ class ServerRealmData {
     /** @type {Object<string, {region: string, name: string, S: object, at: number}>} */
     this.realms = {};
     this.sockets = {};
+    /** @type {Object<string, number[]>} last 5 round trips per realm, ms, one per status push */
+    this.pingSamples = {};
+    /** @type {Object<string, number>} average of pingSamples per realm, ms, set once all 5 are in */
+    this.pings = {};
+    for (const [key, { samples, at }] of Object.entries(
+      readStore(REALM_PINGS_LS_KEY),
+    ))
+      if (Date.now() - at <= REALM_PING_KEEP_MS) this._setPings(key, samples);
     this._init();
+  }
+
+  /** @param {string} key @param {number[]} samples the last 5 at most */
+  _setPings(key, samples) {
+    this.pingSamples[key] = samples;
+    if (samples.length === 5)
+      this.pings[key] = samples.reduce((a, b) => a + b) / samples.length;
   }
 
   /** Opens one unauthenticated socket per realm: `welcome` once, then `server_info` every ~24s */
@@ -90,12 +111,26 @@ class ServerRealmData {
     // The server spotlights observers onto live fights every ~13s; PvP is never hopped to
     const wantsEntities = entry.name !== "PVP";
 
+    const ping = () => socket.emit("ping_trig", { at: Date.now() });
+    socket.on("ping_ack", (data) => {
+      const samples = [
+        ...(this.pingSamples[key] ?? []).slice(-4),
+        Date.now() - data.at,
+      ];
+      this._setPings(key, samples);
+      updateStoreEntry(REALM_PINGS_LS_KEY, key, { samples, at: Date.now() });
+    });
+
     socket.on("welcome", (data) => {
+      ping();
       this._absorb(key, entry, data?.S);
       // Makes us an observer, so the server feeds us entities
       if (wantsEntities) socket.emit("loaded", {});
     });
-    socket.on("server_info", (data) => this._absorb(key, entry, data));
+    socket.on("server_info", (data) => {
+      ping();
+      this._absorb(key, entry, data);
+    });
 
     if (wantsEntities) {
       socket.on("new_map", (data) =>
@@ -464,8 +499,14 @@ function realmOf(candidate) {
  */
 function isReachableRealm(candidate, type) {
   const ignored = HOP_BOSSES[type]?.ignoredRealms ?? IGNORED_REALMS;
+  const realmData = getRealmData();
+  const ping = realmData?.pings[realmOf(candidate)];
   return (
     !ignored.includes(realmOf(candidate)) &&
+    // a socket owner waits for a settled ping, except for the realm it is on; other characters have no pings
+    (!realmData ||
+      realmOf(candidate) === getCurrentServer() ||
+      ping <= MAX_REALM_PING_MS) &&
     candidate.serverIdentifier !== "PVP" &&
     HOP_REGIONS.includes(candidate.serverRegion)
   );

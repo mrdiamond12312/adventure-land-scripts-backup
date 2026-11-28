@@ -324,8 +324,7 @@ async function resolveKiteTarget(target) {
   const kaneSpot = typeof getKaneParkSpot === "function" && getKaneParkSpot();
   if (kaneSpot) return withParkSpot(target, kaneSpot);
 
-  const cryptAnchor =
-    typeof getCryptKiteAnchor === "function" && getCryptKiteAnchor(target);
+  const cryptAnchor = getCryptKiteAnchor(target);
   if (cryptAnchor)
     return cryptAnchor.isDrag
       ? dragToSpot(target, cryptAnchor.spot, get_entity(target.id))

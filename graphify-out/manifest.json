@@ -1,0 +1,404 @@
+{
+  ".claude/settings.json": {
+    "mtime": 1795850047.4299436,
+    "seen": 1795850846.6461232,
+    "ast_hash": "470d7b7eb4a4aeb8314b321b2d159f43",
+    "semantic_hash": "470d7b7eb4a4aeb8314b321b2d159f43"
+  },
+  "advance_smart_move.20.js": {
+    "mtime": 1794848908.457039,
+    "seen": 1795850846.6461232,
+    "ast_hash": "a22aa05b2dd83bc6d9c477766536fd00",
+    "semantic_hash": "a22aa05b2dd83bc6d9c477766536fd00"
+  },
+  "archive.60.js": {
+    "mtime": 1793128025.3859856,
+    "seen": 1795850846.6461232,
+    "ast_hash": "f4c06b3feb1268f4117c3dee38df9bdb",
+    "semantic_hash": "f4c06b3feb1268f4117c3dee38df9bdb"
+  },
+  "bank_sort.49.js": {
+    "mtime": 1784294529.1479156,
+    "seen": 1795850846.6461232,
+    "ast_hash": "dac624b6dcab175eb60d3681d12a4397",
+    "semantic_hash": "dac624b6dcab175eb60d3681d12a4397"
+  },
+  "basic_archer.3.js": {
+    "mtime": 1793734592.9813173,
+    "seen": 1795850846.6461232,
+    "ast_hash": "2c002b1a7e2c0463bca553081fe31123",
+    "semantic_hash": "2c002b1a7e2c0463bca553081fe31123"
+  },
+  "basic_function.7.js": {
+    "mtime": 1795101595.4975615,
+    "seen": 1795850846.6461232,
+    "ast_hash": "88330853af425ebf2e1f9d1e33dafc9f",
+    "semantic_hash": "88330853af425ebf2e1f9d1e33dafc9f"
+  },
+  "basic_function_events.53.js": {
+    "mtime": 1794685595.1697783,
+    "seen": 1795850846.6461232,
+    "ast_hash": "a5b29d55e29f30ec89dfc65bdcc855a3",
+    "semantic_hash": "a5b29d55e29f30ec89dfc65bdcc855a3"
+  },
+  "basic_function_farms.54.js": {
+    "mtime": 1794949079.5138023,
+    "seen": 1795850846.6471233,
+    "ast_hash": "35f1707bd267e26c9ab32245595c9291",
+    "semantic_hash": "35f1707bd267e26c9ab32245595c9291"
+  },
+  "basic_function_kiting.47.js": {
+    "mtime": 1795851390.8334782,
+    "seen": 1795851400.5831788,
+    "ast_hash": "0fcfacf8f7a7b0718b6c9d1f5feb8fb1",
+    "semantic_hash": ""
+  },
+  "basic_function_loop.45.js": {
+    "mtime": 1794419166.0554073,
+    "seen": 1795850846.6471233,
+    "ast_hash": "0d241fda29121f7cfdad9a29b57ee25d",
+    "semantic_hash": "0d241fda29121f7cfdad9a29b57ee25d"
+  },
+  "basic_function_loot.48.js": {
+    "mtime": 1793734592.0320146,
+    "seen": 1795850846.6471233,
+    "ast_hash": "af5f5422aee1b907c201dd769ddac098",
+    "semantic_hash": "af5f5422aee1b907c201dd769ddac098"
+  },
+  "basic_function_trips.46.js": {
+    "mtime": 1793127802.4011805,
+    "seen": 1795850846.6471233,
+    "ast_hash": "47a91f90f584fb1e807f05d12344df30",
+    "semantic_hash": "47a91f90f584fb1e807f05d12344df30"
+  },
+  "basic_mage.4.js": {
+    "mtime": 1795101583.549654,
+    "seen": 1795850846.6471233,
+    "ast_hash": "c1ccd8d48c41bd57b6cd446ccb4b0888",
+    "semantic_hash": "c1ccd8d48c41bd57b6cd446ccb4b0888"
+  },
+  "basic_merchant.5.js": {
+    "mtime": 1794930562.8123574,
+    "seen": 1795850846.6471233,
+    "ast_hash": "5ec47d8ec71031153fa29e271cc3de5c",
+    "semantic_hash": "5ec47d8ec71031153fa29e271cc3de5c"
+  },
+  "basic_priest.2.js": {
+    "mtime": 1795101583.5741599,
+    "seen": 1795850846.6471233,
+    "ast_hash": "bb4348eb6176a82013c4e23ccae87c40",
+    "semantic_hash": "bb4348eb6176a82013c4e23ccae87c40"
+  },
+  "basic_ranger.32.js": {
+    "mtime": 1795101583.5981574,
+    "seen": 1795850846.6471233,
+    "ast_hash": "6c95c0d7b5334f321f68d1e90ac853f3",
+    "semantic_hash": "6c95c0d7b5334f321f68d1e90ac853f3"
+  },
+  "basic_rogue.31.js": {
+    "mtime": 1795517453.2150776,
+    "seen": 1795850846.6471233,
+    "ast_hash": "2761ffa60b8741f3e673988b0d42683d",
+    "semantic_hash": "2761ffa60b8741f3e673988b0d42683d"
+  },
+  "basic_warrior.9.js": {
+    "mtime": 1795517172.3684983,
+    "seen": 1795850846.6471233,
+    "ast_hash": "ce8e6ad671a1be8e73b771c4fa4fbf85",
+    "semantic_hash": "ce8e6ad671a1be8e73b771c4fa4fbf85"
+  },
+  "basic_with_regen.s.1.js": {
+    "mtime": 1747466650.7212982,
+    "seen": 1795850846.6471233,
+    "ast_hash": "dcca46f453134a766e07fca2855282d6",
+    "semantic_hash": "dcca46f453134a766e07fca2855282d6"
+  },
+  "cave_fighter_strat.15.js": {
+    "mtime": 1795101583.7007618,
+    "seen": 1795850846.6471233,
+    "ast_hash": "0944720fae31a7f3fabad9c664bebac2",
+    "semantic_hash": "0944720fae31a7f3fabad9c664bebac2"
+  },
+  "character_info.55.js": {
+    "mtime": 1794029187.875931,
+    "seen": 1795850846.6471233,
+    "ast_hash": "07f4195a850d725d764e8cc7b834b5c9",
+    "semantic_hash": "07f4195a850d725d764e8cc7b834b5c9"
+  },
+  "crypt_fighter_strat.16.js": {
+    "mtime": 1795554636.2866566,
+    "seen": 1795850846.6471233,
+    "ast_hash": "35805c7b44e8ac2f85f6fe86c9de1855",
+    "semantic_hash": "35805c7b44e8ac2f85f6fe86c9de1855"
+  },
+  "crypt_strategy.16 - Copy.js": {
+    "mtime": 1763693300.5606623,
+    "seen": 1795850846.6471233,
+    "ast_hash": "41337528bfbe783878888c859cf95d3c",
+    "semantic_hash": "41337528bfbe783878888c859cf95d3c"
+  },
+  "daily_event_fighter_strat.26.js": {
+    "mtime": 1794420369.2466319,
+    "seen": 1795850846.6471233,
+    "ast_hash": "b71479da9f2839be79d9cb2b5099b658",
+    "semantic_hash": "b71479da9f2839be79d9cb2b5099b658"
+  },
+  "dark_mage_fighter_strat.61.js": {
+    "mtime": 1795014328.4258542,
+    "seen": 1795850846.6471233,
+    "ast_hash": "9160d79a544c5c3f04ce5959d0ece66f",
+    "semantic_hash": "9160d79a544c5c3f04ce5959d0ece66f"
+  },
+  "debug_scripts.44.js": {
+    "mtime": 1795102049.001878,
+    "seen": 1795850846.6471233,
+    "ast_hash": "a33eefba7da3039ead6efe5edf5592d1",
+    "semantic_hash": "a33eefba7da3039ead6efe5edf5592d1"
+  },
+  "dungeon_fighter_strat.57.js": {
+    "mtime": 1795517572.4904833,
+    "seen": 1795850846.6471233,
+    "ast_hash": "93fc484204f61b3562a7a61d25745f81",
+    "semantic_hash": "93fc484204f61b3562a7a61d25745f81"
+  },
+  "farming_fighter_strat.27.js": {
+    "mtime": 1793717782.5350368,
+    "seen": 1795850846.6471233,
+    "ast_hash": "71381bed34e761335ffeb51e40881658",
+    "semantic_hash": "71381bed34e761335ffeb51e40881658"
+  },
+  "growth_tracker.34.js": {
+    "mtime": 1793717792.902541,
+    "seen": 1795850846.6471233,
+    "ast_hash": "7a048538402a612de926b6ca51d89eed",
+    "semantic_hash": "7a048538402a612de926b6ca51d89eed"
+  },
+  "mage_strat.38.js": {
+    "mtime": 1795554329.2057567,
+    "seen": 1795850846.6471233,
+    "ast_hash": "1db462f9788b82d47b3f16269c56017d",
+    "semantic_hash": "1db462f9788b82d47b3f16269c56017d"
+  },
+  "manually_base.50.js": {
+    "mtime": 1789664963.422696,
+    "seen": 1795850846.6471233,
+    "ast_hash": "9c3e95b9f757371e580e149fbfb4a363",
+    "semantic_hash": "9c3e95b9f757371e580e149fbfb4a363"
+  },
+  "manually_cave_report.52.js": {
+    "mtime": 1789664931.3116794,
+    "seen": 1795850846.6471233,
+    "ast_hash": "ccad60453687e15ae025c3015d57621a",
+    "semantic_hash": "ccad60453687e15ae025c3015d57621a"
+  },
+  "manually_follow.51.js": {
+    "mtime": 1789664931.6817713,
+    "seen": 1795850846.6471233,
+    "ast_hash": "139c9e94f82829ef544b257e313b4725",
+    "semantic_hash": "139c9e94f82829ef544b257e313b4725"
+  },
+  "merchant_bank.17.js": {
+    "mtime": 1795191457.4231286,
+    "seen": 1795850846.6471233,
+    "ast_hash": "e45596549802d0b976ae8a2e0be6b56d",
+    "semantic_hash": "e45596549802d0b976ae8a2e0be6b56d"
+  },
+  "merchant_cavalry.35.js": {
+    "mtime": 1794746460.0599327,
+    "seen": 1795850846.6471233,
+    "ast_hash": "d7ce81e58195036b17e6d0f960cbe3fb",
+    "semantic_hash": "d7ce81e58195036b17e6d0f960cbe3fb"
+  },
+  "merchant_craft.18.js": {
+    "mtime": 1794748002.3708339,
+    "seen": 1795850846.6471233,
+    "ast_hash": "c55486b7fb4a0f4c8efe04221ccdd774",
+    "semantic_hash": "c55486b7fb4a0f4c8efe04221ccdd774"
+  },
+  "merchant_exchange.23.js": {
+    "mtime": 1794748002.368838,
+    "seen": 1795850846.6471233,
+    "ast_hash": "5be5f1875392a95517fac6fd813afdcb",
+    "semantic_hash": "5be5f1875392a95517fac6fd813afdcb"
+  },
+  "merchant_frenzinesss.100.js": {
+    "mtime": 1793026460.841494,
+    "seen": 1795850846.6471233,
+    "ast_hash": "7b63121b3e89d9c398408b1d0520ef34",
+    "semantic_hash": "7b63121b3e89d9c398408b1d0520ef34"
+  },
+  "merchant_gathering.22.js": {
+    "mtime": 1795239859.3201177,
+    "seen": 1795850846.6471233,
+    "ast_hash": "9d4a4efe63e8ebe01253b278897f10cc",
+    "semantic_hash": "9d4a4efe63e8ebe01253b278897f10cc"
+  },
+  "merchant_gear.43.js": {
+    "mtime": 1795510697.9841993,
+    "seen": 1795850846.6471233,
+    "ast_hash": "cbc1185ee6198e70f73cda1ec590431e",
+    "semantic_hash": "cbc1185ee6198e70f73cda1ec590431e"
+  },
+  "merchant_grace.56.js": {
+    "mtime": 1795240976.7019136,
+    "seen": 1795850846.6471233,
+    "ast_hash": "ceea9ee302176c41b69063dbea3a0029",
+    "semantic_hash": "ceea9ee302176c41b69063dbea3a0029"
+  },
+  "merchant_lucky_slot_finder.30.js": {
+    "mtime": 1794412653.220415,
+    "seen": 1795850846.6471233,
+    "ast_hash": "6572ba12977807ad886d927c1757a7a7",
+    "semantic_hash": "6572ba12977807ad886d927c1757a7a7"
+  },
+  "merchant_luring.24.js": {
+    "mtime": 1794935889.6318116,
+    "seen": 1795850846.6471233,
+    "ast_hash": "e47753d777da09c13cc65a0fa1882902",
+    "semantic_hash": "e47753d777da09c13cc65a0fa1882902"
+  },
+  "merchant_scout.29.js": {
+    "mtime": 1793725787.0722117,
+    "seen": 1795850846.6471233,
+    "ast_hash": "233c52cd1182de6b6c12e0d9321393e1",
+    "semantic_hash": "233c52cd1182de6b6c12e0d9321393e1"
+  },
+  "merchant_service.19.js": {
+    "mtime": 1795190345.8019173,
+    "seen": 1795850846.6471233,
+    "ast_hash": "4e9ca8befb51d0bb1547a012d5b1d79a",
+    "semantic_hash": "4e9ca8befb51d0bb1547a012d5b1d79a"
+  },
+  "merchant_upgrade.10.js": {
+    "mtime": 1794942124.2309272,
+    "seen": 1795850846.6471233,
+    "ast_hash": "3b398da8622589bdd8c32a184afbff35",
+    "semantic_hash": "3b398da8622589bdd8c32a184afbff35"
+  },
+  "merchant_witch.36.js": {
+    "mtime": 1794411292.3875973,
+    "seen": 1795850846.6471233,
+    "ast_hash": "e355bac173ed68b6cef7690d36f31496",
+    "semantic_hash": "e355bac173ed68b6cef7690d36f31496"
+  },
+  "normal_strategy.12.js": {
+    "mtime": 1793125735.1708717,
+    "seen": 1795850846.6471233,
+    "ast_hash": "36198642789b48a8eb8436199565494b",
+    "semantic_hash": "36198642789b48a8eb8436199565494b"
+  },
+  "other_class_msg_listener.8.js": {
+    "mtime": 1794943835.4017234,
+    "seen": 1795850846.6471233,
+    "ast_hash": "c7dae3b0fc17a3f82d334ca211d3bafe",
+    "semantic_hash": "c7dae3b0fc17a3f82d334ca211d3bafe"
+  },
+  "party_plan.37.js": {
+    "mtime": 1795210254.8661911,
+    "seen": 1795850846.6471233,
+    "ast_hash": "7415d1c849d84f20c1d83c90317a7005",
+    "semantic_hash": "7415d1c849d84f20c1d83c90317a7005"
+  },
+  "priest_strat.41.js": {
+    "mtime": 1793976599.7242935,
+    "seen": 1795850846.6471233,
+    "ast_hash": "7790ecff13699e3438935e9d590951ac",
+    "semantic_hash": "7790ecff13699e3438935e9d590951ac"
+  },
+  "pull_strategy.13.js": {
+    "mtime": 1795553946.3985772,
+    "seen": 1795850846.6471233,
+    "ast_hash": "d14043466bf284df054c4134cf949fe9",
+    "semantic_hash": "d14043466bf284df054c4134cf949fe9"
+  },
+  "ranger_strat.40.js": {
+    "mtime": 1794419165.6827843,
+    "seen": 1795850846.6471233,
+    "ast_hash": "1d72b6fa085a4ddd3c91c4cfbe1516fd",
+    "semantic_hash": "1d72b6fa085a4ddd3c91c4cfbe1516fd"
+  },
+  "rogue_strat.42.js": {
+    "mtime": 1794419165.8062196,
+    "seen": 1795850846.6471233,
+    "ast_hash": "535b5d8b036d6f9d22c244070f1cae2e",
+    "semantic_hash": "535b5d8b036d6f9d22c244070f1cae2e"
+  },
+  "server_hop.14.js": {
+    "mtime": 1795853895.6036184,
+    "seen": 1795853900.2839365,
+    "ast_hash": "4c94fbf9ddd404d2f80b567d391a1296",
+    "semantic_hash": ""
+  },
+  "server_hop_utilities.25.js": {
+    "mtime": 1795854449.1586864,
+    "seen": 1795854453.7604308,
+    "ast_hash": "74b0589cc11968a1e35fa58955ac58f2",
+    "semantic_hash": ""
+  },
+  "sort_inv.6.js": {
+    "mtime": 1747466650.7304406,
+    "seen": 1795850846.6471233,
+    "ast_hash": "360f46c03df342298d17b3af6d202ccd",
+    "semantic_hash": "360f46c03df342298d17b3af6d202ccd"
+  },
+  "special_mob_fighter_strat.28.js": {
+    "mtime": 1793722165.95247,
+    "seen": 1795850846.6471233,
+    "ast_hash": "7854fdfe952b758b261219a5fd45e61d",
+    "semantic_hash": "7854fdfe952b758b261219a5fd45e61d"
+  },
+  "spider_den_fighter_strat.58.js": {
+    "mtime": 1795014326.707961,
+    "seen": 1795850846.6471233,
+    "ast_hash": "d5afee2319260658ef7343d08e750748",
+    "semantic_hash": "d5afee2319260658ef7343d08e750748"
+  },
+  "strategic_fn.11.js": {
+    "mtime": 1795554215.0917363,
+    "seen": 1795850846.6471233,
+    "ast_hash": "f28754b2f6fa02c8ac921f8aa0cde5bd",
+    "semantic_hash": "f28754b2f6fa02c8ac921f8aa0cde5bd"
+  },
+  "strategic_smart_move.21.js": {
+    "mtime": 1794939458.7294023,
+    "seen": 1795850846.6471233,
+    "ast_hash": "6a0e99f72a23784eab284a23e6f4995d",
+    "semantic_hash": "6a0e99f72a23784eab284a23e6f4995d"
+  },
+  "taut_path.33.js": {
+    "mtime": 1791480102.2896545,
+    "seen": 1795850846.6471233,
+    "ast_hash": "188393faf9d2811f501b3b403353aa3a",
+    "semantic_hash": "188393faf9d2811f501b3b403353aa3a"
+  },
+  "tomb_fighter_strat.59.js": {
+    "mtime": 1795014327.564581,
+    "seen": 1795850846.6471233,
+    "ast_hash": "5a53cb511171135d5538814730a1ff02",
+    "semantic_hash": "5a53cb511171135d5538814730a1ff02"
+  },
+  "warrior_strat.39.js": {
+    "mtime": 1795510727.020551,
+    "seen": 1795850846.6471233,
+    "ast_hash": "053573313b5c51234588ccfe8c4f21e4",
+    "semantic_hash": "053573313b5c51234588ccfe8c4f21e4"
+  },
+  "CLAUDE.md": {
+    "mtime": 1795850047.3733697,
+    "seen": 1795850846.6471233,
+    "ast_hash": "be9a71871266d34c2ed4c60b25ffc367",
+    "semantic_hash": "be9a71871266d34c2ed4c60b25ffc367"
+  },
+  "README.md": {
+    "mtime": 1791299938.5138104,
+    "seen": 1795850846.6471233,
+    "ast_hash": "73ae27343e9d993e8c19e7d85fc057cd",
+    "semantic_hash": "73ae27343e9d993e8c19e7d85fc057cd"
+  },
+  "REFERENCE.md": {
+    "mtime": 1795554644.749965,
+    "seen": 1795850846.6471233,
+    "ast_hash": "b78fe6fd7198e0032539f0f6bc0dea93",
+    "semantic_hash": "b78fe6fd7198e0032539f0f6bc0dea93"
+  }
+}
