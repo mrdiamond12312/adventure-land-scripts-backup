@@ -23,7 +23,7 @@ var TANKER =
   partyMems.find((id) => [HEALER, WARRIOR].includes(id)) ?? partyMems[0];
 // var TANKER = "CowTheMooh";
 
-const MIDAS_CHARACTER = [MAGE, "CrownPriest"];
+const MIDAS_CHARACTER = [MAGE, ROGUE, "CrownPriest"];
 
 // Outsiders we team up with — their tank changes what the party can hold
 const trustedPartners = ["earthPri", "earthWar"];

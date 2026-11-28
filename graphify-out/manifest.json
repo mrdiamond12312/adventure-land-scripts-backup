@@ -30,10 +30,10 @@
     "semantic_hash": "2c002b1a7e2c0463bca553081fe31123"
   },
   "basic_function.7.js": {
-    "mtime": 1795101595.4975615,
-    "seen": 1795850846.6461232,
-    "ast_hash": "88330853af425ebf2e1f9d1e33dafc9f",
-    "semantic_hash": "88330853af425ebf2e1f9d1e33dafc9f"
+    "mtime": 1795862908.2288058,
+    "seen": 1795862919.7462232,
+    "ast_hash": "e8a4a90fd5c943136cf785dbde884e12",
+    "semantic_hash": ""
   },
   "basic_function_events.53.js": {
     "mtime": 1794685595.1697783,
@@ -318,10 +318,10 @@
     "semantic_hash": "1d72b6fa085a4ddd3c91c4cfbe1516fd"
   },
   "rogue_strat.42.js": {
-    "mtime": 1794419165.8062196,
-    "seen": 1795850846.6471233,
-    "ast_hash": "535b5d8b036d6f9d22c244070f1cae2e",
-    "semantic_hash": "535b5d8b036d6f9d22c244070f1cae2e"
+    "mtime": 1795862909.1616554,
+    "seen": 1795862919.7472203,
+    "ast_hash": "c60b1778f0bcebe7f3e8c5266af223bb",
+    "semantic_hash": ""
   },
   "server_hop.14.js": {
     "mtime": 1795854724.782748,

@@ -290,7 +290,8 @@ function calculateRogueItemsCached(target) {
       at: now,
       gear: withItemInfoMemo(() => calculateRogueItems(target)),
     };
-  return { ...lastRogueGear.gear };
+  const items = { ...lastRogueGear.gear };
+  return wantsMidasGear() ? { ...items, ...MIDAS_GEAR } : items;
 }
 
 /** Damage gear, fuel gear on a boss under our burn, luck/xp gear on top but the weapons */

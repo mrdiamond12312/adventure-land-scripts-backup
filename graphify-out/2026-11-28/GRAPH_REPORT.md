@@ -1,7 +1,7 @@
 # Graph Report - adventure-land-scripts-backup  (2026-11-28)
 
 ## Corpus Check
-- 67 files · ~192,357 words
+- 67 files · ~192,385 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 2 file(s) not represented in the graph (top: (none) 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 392,176 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1d543aca`
+- Built from commit: `45b7f396`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -94,14 +94,14 @@
 ## Surprising Connections (you probably didn't know these)
 - `Lantern shield's shelter as a swap-in skill (useShelter)` --references--> `useShelter()`  [EXTRACTED]
   REFERENCE.md → strategic_fn.11.js
+- `Per-skill loops (runSkillLoop canUse/cast/whileMoving)` --references--> `runSkillLoop()`  [EXTRACTED]
+  README.md → basic_function_loop.45.js
 - `One impact swap for every class on slot leases (maybeImpactSwap)` --references--> `maybeImpactSwap()`  [EXTRACTED]
   REFERENCE.md → strategic_fn.11.js
+- `Warp vest (useWarp)` --references--> `useWarp()`  [EXTRACTED]
+  REFERENCE.md → merchant_gear.43.js
 - `Handing a seasonal boss to leeches (getBaitedBoss)` --references--> `getBaitedBoss()`  [EXTRACTED]
   REFERENCE.md → strategic_fn.11.js
-- `Tanking priest scores gear by heal time (pickTankGear)` --references--> `pickTankGear()`  [EXTRACTED]
-  REFERENCE.md → strategic_fn.11.js
-- `Midas loot as a trip sets off (lootBeforeTrip)` --references--> `lootBeforeTrip()`  [EXTRACTED]
-  REFERENCE.md → basic_function_loot.48.js
 
 ## Import Cycles
 - None detected.
@@ -337,7 +337,7 @@ Cohesion: 0.17
 Nodes (11): aimAt(), getOffTankTauntTarget(), getTauntTarget(), getWarriorCast(), getWarriorHeldMobs(), IMPACT_SWAP_WEAPON_ALLOW_LIST, inRange(), mainLoop() (+3 more)
 
 ## Knowledge Gaps
-- **8 isolated node(s):** `adventureland_mongodb server repo`, `graphify usage rules`, `Leader sends party invites (partyMems[0])`, `Server hopping for bosses`, `Ranger cupid party healing` (+3 more)
+- **8 isolated node(s):** `adventureland_mongodb server repo`, `graphify usage rules`, `Leader sends party invites (partyMems[0])`, `Per-skill loops (runSkillLoop canUse/cast/whileMoving)`, `Server hopping for bosses` (+3 more)
   These have ≤1 connection - possible missing edges or undocumented components. (Counts symbols only; 366 node(s) total have ≤1 connection when file, concept and rationale nodes are included.)
 - **15 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
@@ -345,13 +345,13 @@ Nodes (11): aimAt(), getOffTankTauntTarget(), getTauntTarget(), getWarriorCast()
 _Questions this graph is uniquely positioned to answer:_
 
 - **Why does `Native town() settles on landing (useTownWithRetry)` connect `Pathing & Taut Path` to `Merchant Home & Stand`?**
-  _High betweenness centrality (0.121) - this node is a cross-community bridge._
+  _High betweenness centrality (0.139) - this node is a cross-community bridge._
 - **What connects `adventureland_mongodb server repo`, `graphify usage rules`, `Leader sends party invites (partyMems[0])` to the rest of the system?**
   _8 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Merchant Bank Storage` be split into smaller, more focused modules?**
   _Cohesion score 0.06101914962674456 - nodes in this community are weakly interconnected._
 - **Why does `The crypt run is judged, not listed (crypt_fighter_strat.16.js)` connect `dungeon_fighter_strat.57.js` to `Crypt Fight`, `Daily Event Bosses`, `basic_warrior.9.js`, `Dungeon Strat Chain`, `Kiting & Targeting`, `Trips, Info & Impact Notes`?**
-  _High betweenness centrality (0.092) - this node is a cross-community bridge._
+  _High betweenness centrality (0.094) - this node is a cross-community bridge._
 - **Should `dungeon_fighter_strat.57.js` be split into smaller, more focused modules?**
   _Cohesion score 0.05927405927405927 - nodes in this community are weakly interconnected._
 - **Should `Combat Calc & Roles` be split into smaller, more focused modules?**

@@ -1,7 +1,7 @@
 # Graph Report - adventure-land-scripts-backup  (2026-11-28)
 
 ## Corpus Check
-- 67 files · ~192,385 words
+- 67 files · ~192,397 words
 - Verdict: corpus is large enough that graph structure adds value.
 - Unclassified: 2 file(s) not represented in the graph (top: (none) 2)
 
@@ -11,7 +11,7 @@
 - Token cost: 392,176 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `45b7f396`
+- Built from commit: `0536a4d0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -344,14 +344,14 @@ Nodes (11): aimAt(), getOffTankTauntTarget(), getTauntTarget(), getWarriorCast()
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Native town() settles on landing (useTownWithRetry)` connect `Pathing & Taut Path` to `Merchant Home & Stand`?**
-  _High betweenness centrality (0.139) - this node is a cross-community bridge._
+- **Why does `The crypt run is judged, not listed (crypt_fighter_strat.16.js)` connect `dungeon_fighter_strat.57.js` to `Crypt Fight`, `Daily Event Bosses`, `basic_warrior.9.js`, `Dungeon Strat Chain`, `Kiting & Targeting`, `Trips, Info & Impact Notes`?**
+  _High betweenness centrality (0.122) - this node is a cross-community bridge._
 - **What connects `adventureland_mongodb server repo`, `graphify usage rules`, `Leader sends party invites (partyMems[0])` to the rest of the system?**
   _8 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Merchant Bank Storage` be split into smaller, more focused modules?**
   _Cohesion score 0.06101914962674456 - nodes in this community are weakly interconnected._
-- **Why does `The crypt run is judged, not listed (crypt_fighter_strat.16.js)` connect `dungeon_fighter_strat.57.js` to `Crypt Fight`, `Daily Event Bosses`, `basic_warrior.9.js`, `Dungeon Strat Chain`, `Kiting & Targeting`, `Trips, Info & Impact Notes`?**
-  _High betweenness centrality (0.094) - this node is a cross-community bridge._
+- **Why does `Native town() settles on landing (useTownWithRetry)` connect `Pathing & Taut Path` to `Merchant Home & Stand`?**
+  _High betweenness centrality (0.095) - this node is a cross-community bridge._
 - **Should `dungeon_fighter_strat.57.js` be split into smaller, more focused modules?**
   _Cohesion score 0.05927405927405927 - nodes in this community are weakly interconnected._
 - **Should `Combat Calc & Roles` be split into smaller, more focused modules?**
